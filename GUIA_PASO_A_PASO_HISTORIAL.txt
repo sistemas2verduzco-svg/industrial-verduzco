@@ -1,0 +1,337 @@
+═══════════════════════════════════════════════════════════════════════════════
+                    GUÍA PASO A PASO: HISTORIAL DE PRECIOS
+                     (Múltiples Precios por Proveedor)
+═══════════════════════════════════════════════════════════════════════════════
+
+¿QUÉ NECESITO?
+
+Para agregar múltiples precios a un proveedor:
+1. Acceso al Panel Admin (usuario: admin, contraseña: admin123)
+2. Un producto ya creado
+3. Un proveedor ya asignado al producto
+4. Diferentes fechas para diferentes precios
+
+───────────────────────────────────────────────────────────────────────────────
+
+PASO 1: ACCEDER AL PANEL ADMIN
+
+1. Abre tu navegador
+2. Escribe: http://localhost/admin
+3. Ingresa:
+   Usuario: admin
+   Contraseña: admin123
+4. Haz clic en "Entrar"
+
+Resultado: ✅ Estás en el Panel de Administración
+
+───────────────────────────────────────────────────────────────────────────────
+
+PASO 2: BUSCAR EL PRODUCTO
+
+1. Haz clic en la pestaña "📦 PRODUCTOS"
+2. Verás una tabla con todos tus productos
+3. Busca el producto al que quieres agregar proveedores
+
+   Ejemplo: "Motor 2000W"
+
+4. Haz clic en el botón "✏️ EDITAR" de ese producto
+
+Resultado: ✅ Se abre la modal de edición
+
+───────────────────────────────────────────────────────────────────────────────
+
+PASO 3: VER LA SECCIÓN DE PROVEEDORES
+
+En la modal de edición, baja hasta encontrar:
+
+    🏢 ASIGNAR PROVEEDORES
+
+Aquí verás dos partes:
+
+A) PARTE SUPERIOR: Para asignar un nuevo proveedor
+   ┌────────────────────────────────────┐
+   │ Seleccionar Proveedor: [▼ Dropdown]│
+   │ Precio: [________]                 │
+   │ Fecha:  [________]                 │
+   │ [➕ Asignar Proveedor]             │
+   └────────────────────────────────────┘
+
+B) PARTE INFERIOR: Proveedores ya asignados
+   ┌────────────────────────────────────┐
+   │ Proveedores Asignados:             │
+   │ • Proveedor A [📊] [✕]            │  ← Botón 📊 NUEVO
+   │ • Proveedor B [📊] [✕]            │
+   └────────────────────────────────────┘
+
+───────────────────────────────────────────────────────────────────────────────
+
+PASO 4: HACER CLIC EN EL BOTÓN 📊
+
+Ahora aquí está la NUEVA FUNCIONALIDAD:
+
+1. Localiza el proveedor al que quieres agregar precios históricos
+   Ejemplo: "Proveedor A"
+
+2. Haz clic en el botón 📊 (al lado izquierdo de ✕)
+
+3. ¡Se abre una nueva MODAL DE HISTORIAL DE PRECIOS!
+
+Resultado: ✅ Modal de historial abierta
+
+───────────────────────────────────────────────────────────────────────────────
+
+PASO 5: AGREGAR NUEVO PRECIO
+
+La modal muestra:
+
+    ╔═════════════════════════════════════════╗
+    ║ 📊 Historial de Precios: Proveedor A   ║
+    ╠═════════════════════════════════════════╣
+    ║                                         ║
+    ║ Agregar Nuevo Precio:                   ║
+    ║ ─────────────────────────────────────   ║
+    ║ Precio:  [500.00_____________]         ║
+    ║ Fecha:   [2025-11-10________]          ║
+    ║ Notas:   [________________]            ║
+    ║                                         ║
+    ║ [➕ AGREGAR PRECIO]                     ║
+    ║                                         ║
+    ╚═════════════════════════════════════════╝
+
+LLENADO DE CAMPOS:
+
+1. PRECIO (Requerido):
+   • Haz clic en el campo de Precio
+   • Borra lo que haya
+   • Escribe el precio: 500.00
+   • Ejemplo: 450.00, 500.00, 480.00, etc.
+
+2. FECHA (Requerido):
+   • Haz clic en el campo de Fecha
+   • Se abre un calendario
+   • Selecciona la fecha: 2025-11-10
+   • IMPORTANTE: Puede ser cualquier fecha, no solo hoy
+   • Ejemplos:
+     - Fecha de hoy: 2025-11-10
+     - Fecha de la semana pasada: 2025-11-03
+     - Fecha de hace 2 meses: 2025-09-10
+     - Fecha antigua: 2025-06-01
+
+3. NOTAS (Opcional):
+   • Escribe una explicación (puede estar vacío)
+   • Ejemplos:
+     "Precio inicial"
+     "Descuento especial"
+     "Compra en volumen (mín 100)"
+     "Promoción de agosto"
+     "Precio de hace 2 meses"
+
+───────────────────────────────────────────────────────────────────────────────
+
+PASO 6: AGREGAR MÚLTIPLES PRECIOS
+
+Ahora agregaremos 3 precios históricos para el mismo proveedor:
+
+PRIMER PRECIO (Precio actual):
+   Precio: 550.00
+   Fecha:  2025-11-10
+   Notas:  (dejar vacío)
+   → Clic [➕ AGREGAR PRECIO]
+   → Mensaje: "✅ Precio agregado al historial"
+
+SEGUNDO PRECIO (Precio de hace una semana):
+   Precio: 500.00
+   Fecha:  2025-11-03
+   Notas:  Precio anterior
+   → Clic [➕ AGREGAR PRECIO]
+   → Mensaje: "✅ Precio agregado al historial"
+
+TERCER PRECIO (Precio de hace un mes):
+   Precio: 480.00
+   Fecha:  2025-10-10
+   Notas:  Descuento especial
+   → Clic [➕ AGREGAR PRECIO]
+   → Mensaje: "✅ Precio agregado al historial"
+
+───────────────────────────────────────────────────────────────────────────────
+
+PASO 7: VER HISTORIAL COMPLETO
+
+Después de agregar los precios, en la MISMA MODAL verás:
+
+    ╔════════════════════════════════════════════════════╗
+    ║ 📊 Historial de Precios: Proveedor A              ║
+    ╠════════════════════════════════════════════════════╣
+    ║                                                    ║
+    ║ Historial de Precios:                              ║
+    ║ ────────────────────────────────────────────────   ║
+    ║                                                    ║
+    ║ ┌──────────────────────────────────────────────┐  ║
+    ║ │ $550.00                               [🗑️]   │  ║
+    ║ │ 📅 2025-11-10                                │  ║
+    ║ │ (Más reciente - Precio actual)               │  ║
+    ║ ├──────────────────────────────────────────────┤  ║
+    ║ │ $500.00                               [🗑️]   │  ║
+    ║ │ 📅 2025-11-03                                │  ║
+    ║ │ "Precio anterior"                            │  ║
+    ║ ├──────────────────────────────────────────────┤  ║
+    ║ │ $480.00                               [🗑️]   │  ║
+    ║ │ 📅 2025-10-10                                │  ║
+    ║ │ "Descuento especial"                         │  ║
+    ║ └──────────────────────────────────────────────┘  ║
+    ║                                                    ║
+    ╚════════════════════════════════════════════════════╝
+
+CARACTERÍSTICAS VISIBLES:
+✅ Precios ordenados: más reciente arriba
+✅ Cada precio muestra fecha, notas y botón de eliminar
+✅ Puedes ver la evolución del precio
+✅ Puedes eliminar cualquier precio con [🗑️]
+
+───────────────────────────────────────────────────────────────────────────────
+
+PASO 8: CERRAR MODAL Y GUARDAR
+
+1. Cierra la modal de historial (botón X arriba a la derecha)
+2. Verás nuevamente la modal de edición del producto
+3. En la lista de proveedores, ahora verás actualizado:
+
+   Proveedor A
+   Precio Actual: $550.00 | Fecha: 2025-11-10
+   [📊] [✕]
+
+   ↑ El precio cambió de 500 a 550 automáticamente
+
+4. Haz clic en "Guardar Cambios" al final del formulario
+
+Resultado: ✅ Todos los cambios guardados en la base de datos
+
+───────────────────────────────────────────────────────────────────────────────
+
+PASO 9: VERIFICACIÓN
+
+Para verificar que funcionó:
+
+1. Cierra el formulario
+2. Vuelve a editar el mismo producto
+3. Haz clic nuevamente en 📊 del mismo proveedor
+4. Deberías ver los 3 precios que agregaste
+
+Resultado: ✅ Los precios se guardaron correctamente
+
+───────────────────────────────────────────────────────────────────────────────
+
+CASOS DE USO PRÁCTICOS
+
+CASO 1: Registrar cambios de precio mensuales
+────────────────────────────────────────────
+Proveedor: "Proveedores ABC"
+Producto: "Tornillo M8"
+
+Precios mensuales:
+   Octubre:   $2.50 → 2025-10-31
+   Noviembre: $2.60 → 2025-11-30
+   Diciembre: $2.70 → 2025-12-31 (proyectado)
+
+Beneficio: Ver tendencia al alza
+
+───────────────────────────────────────────────────────────────────────────────
+
+CASO 2: Precios por volumen del MISMO proveedor
+────────────────────────────────────────────────
+Proveedor: "Industrias XYZ"
+Producto: "Motor 2000W"
+
+Precios por cantidad:
+   Cantidad 1-9:    $550.00 → Notas: "Precio unitario"
+   Cantidad 10-49:  $500.00 → Notas: "Precio por 10+"
+   Cantidad 50+:    $480.00 → Notas: "Precio mayorista"
+
+Beneficio: Registrar toda la estructura de precios
+          e indicar qué cantidad corresponde
+
+───────────────────────────────────────────────────────────────────────────────
+
+CASO 3: Seguimiento de negociación
+──────────────────────────────────
+Proveedor: "Distribuidora del Centro"
+Producto: "Válvula de 1 pulgada"
+
+Historial de negociación:
+   Propuesta inicial:  $120.00 → 2025-11-01 → "Precio inicial"
+   Primera negociación: $110.00 → 2025-11-05 → "Primera rebaja"
+   Segunda negociación: $105.00 → 2025-11-08 → "Segunda rebaja"
+   Precio final:        $100.00 → 2025-11-10 → "Acuerdo final"
+
+Beneficio: Ver toda la evolución de la negociación
+
+───────────────────────────────────────────────────────────────────────────────
+
+ELIMINAR UN PRECIO DEL HISTORIAL
+
+Si necesitas eliminar un precio:
+
+1. Abre la modal de historial (botón 📊)
+2. Encuentra el precio a eliminar
+3. Haz clic en el botón [🗑️] del precio
+4. Confirma la eliminación cuando te lo pida
+5. El precio se elimina del historial
+
+IMPORTANTE: No elimina otros precios, solo ese
+
+───────────────────────────────────────────────────────────────────────────────
+
+PREGUNTAS FRECUENTES
+
+P: ¿El historial de precios se guarda automáticamente?
+R: Sí, cuando haces clic en [➕ AGREGAR PRECIO], se guarda inmediatamente.
+
+P: ¿Puedo agregar precios con fechas futuras?
+R: Sí, el sistema permite cualquier fecha, pasada o futura.
+
+P: ¿Se pierde el historial si elimino el proveedor del producto?
+R: Sí, al desasignar (botón ✕), se elimina el proveedor Y su historial.
+
+P: ¿Puedo tener diferentes históricos para cada proveedor?
+R: Sí, cada proveedor tiene su propio historial independiente.
+
+P: ¿Cuántos precios puedo agregar?
+R: Sin límite, puedes agregar tantos como necesites.
+
+P: ¿Se actualiza el precio actual al agregar un nuevo precio?
+R: Sí, el nuevo precio pasa a ser el "Precio Actual" automáticamente.
+
+───────────────────────────────────────────────────────────────────────────────
+
+RESUMEN DE LA FUNCIONALIDAD
+
+✅ Agregar múltiples precios para el MISMO proveedor
+✅ Control total de fechas (manual, no solo hoy)
+✅ Notas explicativas para cada precio
+✅ Ver historial completo ordenado
+✅ Eliminar precios individuales
+✅ Actualización automática del precio actual
+✅ Todo guardado en la base de datos
+✅ Interfaz intuitiva y fácil de usar
+
+───────────────────────────────────────────────────────────────────────────────
+
+¿NECESITAS AYUDA?
+
+Si tienes problemas:
+1. Recarga la página (Ctrl+F5)
+2. Verifica que Docker esté corriendo (docker-compose ps)
+3. Abre la consola del navegador (F12) para ver errores
+4. Consulta la documentación completa en HISTORIAL_PRECIOS_PROVEEDORES.md
+
+───────────────────────────────────────────────────────────────────────────────
+
+¡LISTO! Ya sabes cómo usar el historial de precios.
+
+Accede a: http://localhost/admin
+Usuario: admin
+Contraseña: admin123
+
+¡Comienza a agregar precios históricos! 😊
+
+═══════════════════════════════════════════════════════════════════════════════

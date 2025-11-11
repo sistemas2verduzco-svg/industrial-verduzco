@@ -1,0 +1,194 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                    🚀 PANEL ADMINISTRADOR MEJORADO 🚀                      ║
+║                           CATALOGO WEB v2.0                                ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+┌─ ACCESO RÁPIDO ─────────────────────────────────────────────────────────────┐
+│                                                                             │
+│  🖥️  PC LOCAL        →  http://localhost/admin                            │
+│  🌐 OTRA COMPUTADORA →  http://192.168.0.94/admin                         │
+│                                                                             │
+│  CREDENCIALES:  admin / admin123                                          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ESTRUCTURA DEL PANEL ──────────────────────────────────────────────────────┐
+│                                                                             │
+│  [📦 PRODUCTOS] [📊 ESTADÍSTICAS] [⚙️ HERRAMIENTAS]                       │
+│  ═══════════════════════════════════════════════════════════════════      │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────┐      │
+│  │ 📦 SECCIÓN 1: PRODUCTOS                                         │      │
+│  ├─────────────────────────────────────────────────────────────────┤      │
+│  │                                                                 │      │
+│  │ 📝 AGREGAR NUEVO PRODUCTO                                      │      │
+│  │ ┌──────────────────────────────────────────────────────────┐  │      │
+│  │ │ Nombre: [__________]      Descripción: [___________]   │  │      │
+│  │ │ Precio: [______]          Cantidad: [__]              │  │      │
+│  │ │ Categoría: [__________]   URL Imagen: [__________]    │  │      │
+│  │ │                    [Agregar Producto]                 │  │      │
+│  │ └──────────────────────────────────────────────────────────┘  │      │
+│  │                                                                 │      │
+│  │ 🔍 BÚSQUEDA Y FILTROS                                         │      │
+│  │ ┌──────────────────────────────────────────────────────────┐  │      │
+│  │ │ Buscar: [__________]  Categoría: [__________]         │  │      │
+│  │ │ Precio Min: [____]    Precio Max: [____]              │  │      │
+│  │ │        [Buscar]  [Exportar CSV]  [Limpiar]            │  │      │
+│  │ └──────────────────────────────────────────────────────────┘  │      │
+│  │                                                                 │      │
+│  │ 📋 TABLA DE PRODUCTOS                                         │      │
+│  │ ┌──────────────────────────────────────────────────────────┐  │      │
+│  │ │ ID │ Nombre │ Categoría │ Precio │ Stock │ Acciones   │  │      │
+│  │ ├────┼────────┼───────────┼────────┼───────┼────────────┤  │      │
+│  │ │ 1  │ JG204  │ MOTOR     │ 12000  │ 1     │ [E] [X]   │  │      │
+│  │ └──────────────────────────────────────────────────────────┘  │      │
+│  └─────────────────────────────────────────────────────────────────┘      │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────┐      │
+│  │ 📊 SECCIÓN 2: ESTADÍSTICAS                                      │      │
+│  ├─────────────────────────────────────────────────────────────────┤      │
+│  │                                                                 │      │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐          │      │
+│  │  │ 📦 TOTAL    │  │ 💰 VALOR    │  │ 📊 STOCK    │          │      │
+│  │  │ PRODUCTOS   │  │ INVENTARIO  │  │ TOTAL       │          │      │
+│  │  │     1       │  │   $12,000   │  │     1       │          │      │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘          │      │
+│  │                                                                 │      │
+│  │  ┌─────────────┐  ┌─────────────┐                            │      │
+│  │  │ ⚠️  BAJO     │  │ 💎 MÁS CARO │  💰 MÁS BARATO          │      │
+│  │  │ STOCK       │  │ JG204 ($12K)│  JG204 ($12K)            │      │
+│  │  │     0       │  │             │                            │      │
+│  │  └─────────────┘  └─────────────┘                            │      │
+│  │                                                                 │      │
+│  │ 📈 PRODUCTOS POR CATEGORÍA                                    │      │
+│  │  ┌─────────────────────────────────────┐                     │      │
+│  │  │ MOTOR          [1]                  │                     │      │
+│  │  │ ELECTRÓNICA    [0]                  │                     │      │
+│  │  │ OTROS          [0]                  │                     │      │
+│  │  └─────────────────────────────────────┘                     │      │
+│  │                                                                 │      │
+│  └─────────────────────────────────────────────────────────────────┘      │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────┐      │
+│  │ ⚙️ SECCIÓN 3: HERRAMIENTAS AVANZADAS                            │      │
+│  ├─────────────────────────────────────────────────────────────────┤      │
+│  │                                                                 │      │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐        │      │
+│  │  │ 📥 EXPORTAR  │  │ ⚠️  BAJO     │  │ 🔄 SINCRO   │        │      │
+│  │  │ CATÁLOGO     │  │ STOCK        │  │ NIZAR BD    │        │      │
+│  │  │ [CSV]        │  │ [REPORTE]    │  │ [SYNC]      │        │      │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘        │      │
+│  │                                                                 │      │
+│  │  ┌──────────────┐                                             │      │
+│  │  │ 🗑️  VACIAR   │                                             │      │
+│  │  │ BÚSQUEDA     │                                             │      │
+│  │  │ [LIMPIAR]    │                                             │      │
+│  │  └──────────────┘                                             │      │
+│  │                                                                 │      │
+│  │ ℹ️ INFORMACIÓN DEL SISTEMA                                    │      │
+│  │  ┌─────────────────────────────────────┐                     │      │
+│  │  │ Versión:            1.0.0           │                     │      │
+│  │  │ Base de Datos:      PostgreSQL 15   │                     │      │
+│  │  │ Servidor:           Gunicorn+Nginx  │                     │      │
+│  │  │ Última actualiz.:   10/11 16:20     │                     │      │
+│  │  └─────────────────────────────────────┘                     │      │
+│  │                                                                 │      │
+│  └─────────────────────────────────────────────────────────────────┘      │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                           🎯 FLUJO DE TRABAJO                             ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+1️⃣  LOGIN
+    └─→ Abre admin panel
+    └─→ Ingresa: admin / admin123
+
+2️⃣  REVISAR ESTADÍSTICAS (Pestañ 📊)
+    └─→ Ves estado general del inventario
+    └─→ Identificas bajo stock
+    └─→ Analizas tendencias por categoría
+
+3️⃣  AGREGAR/EDITAR PRODUCTOS (Pestaña 📦)
+    └─→ Agrega nuevos productos
+    └─→ Busca y filtra para editar
+    └─→ Elimina si es necesario
+
+4️⃣  USAR HERRAMIENTAS (Pestaña ⚙️)
+    └─→ Exporta backups regularmente
+    └─→ Monitorea bajo stock
+    └─→ Sincroniza cuando sea necesario
+
+5️⃣  CERRAR SESIÓN
+    └─→ Haz clic en "Cerrar Sesión"
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                        📊 CARACTERÍSTICAS NUEVAS                          ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+✅ BÚSQUEDA AVANZADA
+   • Por nombre con palabras clave
+   • Por categoría exacta
+   • Por rango de precio (mín y máx)
+   • Combinación de filtros
+
+✅ ESTADÍSTICAS EN TIEMPO REAL
+   • Total de productos
+   • Valor total del inventario
+   • Stock total disponible
+   • Cantidad de bajo stock
+   • Productos más caro/barato
+   • Desglose por categoría
+
+✅ EXPORTACIÓN DE DATOS
+   • Descarga CSV compatible con Excel
+   • Backup completo del catálogo
+   • Nombre de archivo con fecha
+
+✅ HERRAMIENTAS ÚTILES
+   • Reporte de bajo stock
+   • Sincronización de BD
+   • Limpiar filtros rápidamente
+   • Información del sistema
+
+✅ INTERFAZ MEJORADA
+   • Diseño responsivo (funciona en móvil)
+   • Navegación con tabs
+   • Colores profesionales
+   • Animaciones suaves
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                           🔧 REQUISITOS TÉCNICOS                         ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+✓ Docker Container: Guncorn + Flask
+✓ Base de Datos:   PostgreSQL 15
+✓ Servidor Web:    Nginx (reverse proxy)
+✓ API REST:        Endpoints JSON
+✓ Autenticación:   Contraseña hasheada
+✓ Persistencia:    Volumen Docker
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                         💾 ARCHIVOS CREADOS/MODIFICADOS                   ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+📝 Archivos Nuevos:
+   • static/admin-plus.css      → Estilos para tabs y nuevas secciones
+   • static/admin-plus.js       → JavaScript para interactividad
+   • GUIA_ADMIN_MEJORADO.md     → Esta guía completa
+
+📝 Archivos Modificados:
+   • templates/admin.html       → Estructura HTML de tabs y contenido
+   • app.py                     → Nuevos endpoints API (buscar, exportar, etc.)
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                         🎉 ¡LISTO PARA USAR! 🎉                          ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+📍 IP LOCAL:      http://localhost/admin
+📍 DESDE RED:     http://192.168.0.94/admin
+👤 USUARIO:       admin
+🔑 CONTRASEÑA:    admin123
+
+¡Disfruta tu nuevo panel administrador! 🚀

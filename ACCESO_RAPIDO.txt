@@ -1,0 +1,56 @@
+# 🚀 ACCESO DESDE OTRA PC - GUÍA RÁPIDA
+
+## Tu IP de Servidor
+
+```
+192.168.0.94
+```
+
+## URLs para acceder desde otra PC en tu red
+
+```
+Catálogo:  http://192.168.0.94
+Admin:     http://192.168.0.94/admin
+API:       http://192.168.0.94/api/productos
+```
+
+## Credenciales Admin
+
+```
+Usuario:      admin
+Contraseña:   admin123
+```
+
+## Pasos Rápidos
+
+1. ✅ Asegúrate que Docker esté corriendo (icono en bandeja)
+2. ✅ Verifica que ambas PCs estén en la **MISMA RED**
+3. ✅ Abre navegador en la otra PC
+4. ✅ Escribe: `http://192.168.0.94`
+5. ✅ Presiona Enter
+
+## Verificar conexión
+
+```powershell
+# Desde la otra PC, ejecuta:
+ping 192.168.0.94
+Test-NetConnection -ComputerName 192.168.0.94 -Port 80
+```
+
+## Si no funciona
+
+```powershell
+# En tu servidor, verifica que Docker está arriba:
+docker-compose ps
+
+# Si no ves 3 servicios "Up", reinicia:
+docker-compose down
+docker-compose up -d
+
+# Permite puerto 80 en firewall:
+New-NetFirewallRule -DisplayName "Allow HTTP" -Direction Inbound -LocalPort 80 -Protocol TCP -Action Allow
+```
+
+---
+
+✅ **¡Listo! Accesible desde tu red ahora** 🎉

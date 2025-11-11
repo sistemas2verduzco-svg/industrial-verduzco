@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Administración</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='admin-plus.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <h1 class="logo">📦 Mi Catálogo</h1>
+            <ul class="nav-links">
+                <li><a href="/" class="btn-nav">Catálogo</a></li>
+                <li><a href="/admin" class="btn-nav">Administrar</a></li>
+                <li><a href="/proveedores" class="btn-nav" title="Gestionar Proveedores">🏢 Proveedores</a></li>
+                <li><a href="/logout" class="btn-logout">Cerrar Sesión</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="admin-container">
+            <h2>Panel de Administración</h2>
+
+            <!-- Tabs de navegación -->
+            <div class="admin-tabs">
+                <button class="tab-btn active" onclick="cambiarTab('productos')">📦 Productos</button>
+                <button class="tab-btn" onclick="cambiarTab('estadisticas')">📊 Estadísticas</button>
+                <button class="tab-btn" onclick="cambiarTab('herramientas')">⚙️ Herramientas</button>
+            </div>
+
+            <!-- TAB 1: PRODUCTOS -->
+            <div id="tab-productos" class="tab-content active">
+
+            <!-- Formulario para agregar productos -->
+            <div class="form-section">
+                <h3>Agregar Nuevo Producto</h3>
+                <form id="formulario-producto" class="form-producto">
+                    <div class="form-group">
+                        <label for="nombre">Nombre *</label>
+                        <input type="text" id="nombre" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="descripcion">Descripción</label>
+                        <textarea id="descripcion" rows="3"></textarea>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="precio">Precio *</label>
+                            <input type="number" id="precio" step="0.01" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="cantidad">Cantidad</label>
+                            <input type="number" id="cantidad" value="0">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="categoria">Categoría</label>
+                            <input type="text" id="categoria">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="imagen_file">📁 Cargar Imagen (Recomendado)</label>
+                        <input type="file" id="imagen_file" accept="image/*" style="padding: 0.5rem;">
+                        <small style="color: #666; display: block; margin-top: 0.3rem;">Formatos: PNG, JPG, GIF, WEBP (máx 5MB)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="imagen_url">O URL de Imagen (Alternativa)</label>
+                        <input type="url" id="imagen_url" placeholder="https://ejemplo.com/imagen.jpg">
+                    </div>
+
+                    <div id="preview-imagen" style="display: none; margin: 1rem 0;">
+                        <p style="font-weight: 600; margin-bottom: 0.5rem;">Vista previa:</p>
+                        <img id="preview-img" src="" alt="Preview" style="max-width: 200px; max-height: 200px; border-radius: 6px;">
+                    </div>
+
+                    <div style="background: #e3f2fd; border-left: 4px solid #2196F3; padding: 1rem; border-radius: 6px; margin: 1rem 0;">
+                        <p style="margin: 0; color: #1565c0; font-weight: 500;">
+                            💡 <strong>Nota:</strong> Después de crear el producto, podrás asignarle proveedores 
+                            haciendo clic en el botón <strong>✏️ Editar</strong> en la tabla de "Productos Existentes"
+                        </p>
+                    </div>
+
+                    <!-- Sección: Asignar proveedores durante la creación (opcional) -->
+                    <div style="background: #f9f9f9; border: 1px dashed #ddd; padding: 1rem; border-radius: 6px; margin: 1rem 0;">
+                        <h4 style="margin-top: 0; color: #333;">🏢 Asignar Proveedores (Opcional)</h4>
+
+                        <div class="form-group">
+                            <label for="select-proveedor-nuevo">Seleccionar Proveedor</label>
+                            <div style="display:flex; gap:8px; align-items:center;">
+                                <select id="select-proveedor-nuevo" style="flex:1; padding: 0.6rem; border: 1px solid #ddd; border-radius: 6px;">
+                                <option value="">-- Selecciona un proveedor --</option>
+                                </select>
+                                <button type="button" class="btn btn-secondary" onclick="cargarProveedoresParaCrear()" title="Recargar proveedores" style="white-space:nowrap;">🔄</button>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="precio-proveedor-nuevo">Precio del Proveedor</label>
+                                <input type="number" id="precio-proveedor-nuevo" step="0.01" placeholder="Precio">
+                            </div>
+                            <div class="form-group">
+                                <label for="fecha-precio-nuevo">Fecha del Precio</label>
+                                <input type="date" id="fecha-precio-nuevo">
+                            </div>
+                        </div>
+
+                        <button type="button" class="btn btn-success" onclick="agregarProveedorNuevo()" style="width: 100%; margin-bottom: 0.75rem;">
+                            ➕ Agregar proveedor a este producto
+                        </button>
+
+                        <div id="lista-proveedores-nuevo" style="margin-top: 0.5rem;">
+                            <p style="color: #999; font-size: 0.9rem; margin: 0;">Aquí aparecerán los proveedores que vas agregando antes de crear el producto.</p>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Agregar Producto</button>
+                    <span id="mensaje-form" class="mensaje"></span>
+                </form>
+            </div>
+
+            <hr>
+
+            <!-- Tabla de productos -->
+            <div class="tabla-section">>
+                <h3>Productos Existentes</h3>
+                
+                <!-- Búsqueda y filtros -->
+                <div class="filtros-section">
+                    <input type="text" id="buscar-producto" placeholder="🔍 Buscar por nombre..." class="filtro-input">
+                    <input type="text" id="filtro-categoria" placeholder="🏷️ Filtrar por categoría..." class="filtro-input">
+                    <input type="number" id="filtro-precio-min" placeholder="Precio mínimo" step="0.01" class="filtro-input">
+                    <input type="number" id="filtro-precio-max" placeholder="Precio máximo" step="0.01" class="filtro-input">
+                    <button class="btn btn-primary" onclick="aplicarFiltros()">🔎 Buscar</button>
+                    <button class="btn btn-success" onclick="exportarCSV()">📥 Exportar CSV</button>
+                </div>
+
+                <div id="tabla-container" class="tabla-scroll">
+                    <table id="tabla-productos" class="tabla-productos">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nombre</th>
+                                <th>Categoría</th>
+                                <th>Precio</th>
+                                <th>Stock</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-body">
+                            <tr><td colspan="7" class="loading">Cargando productos...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            </div>
+
+            <!-- TAB 2: ESTADÍSTICAS -->
+            <div id="tab-estadisticas" class="tab-content">
+                <h2>📊 Estadísticas del Catálogo</h2>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>📦 Total de Productos</h3>
+                        <div class="stat-value" id="stat-total">0</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h3>💰 Valor Total Inventario</h3>
+                        <div class="stat-value" id="stat-valor">$0.00</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h3>📊 Stock Total</h3>
+                        <div class="stat-value" id="stat-stock">0</div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <h3>⚠️ Bajo Stock</h3>
+                        <div class="stat-value alert" id="stat-bajo">0</div>
+                    </div>
+                </div>
+
+                <div class="stats-advanced">
+                    <div class="advanced-card">
+                        <h3>💎 Producto Más Caro</h3>
+                        <div id="stats-mas-caro" class="advanced-info">-</div>
+                    </div>
+                    
+                    <div class="advanced-card">
+                        <h3>🤑 Producto Más Barato</h3>
+                        <div id="stats-mas-barato" class="advanced-info">-</div>
+                    </div>
+                </div>
+
+                <div class="categorias-chart">
+                    <h3>📈 Productos por Categoría</h3>
+                    <div id="stats-categorias" class="categorias-list"></div>
+                </div>
+            </div>
+
+            <!-- TAB 3: HERRAMIENTAS -->
+            <div id="tab-herramientas" class="tab-content">
+                <h2>⚙️ Herramientas Avanzadas</h2>
+                
+                <div class="herramientas-grid">
+                    <div class="herramienta-card">
+                        <h3>📥 Exportar Catálogo</h3>
+                        <p>Descargar todos los productos en formato CSV</p>
+                        <button class="btn btn-primary" onclick="exportarCSV()">Exportar CSV</button>
+                    </div>
+                    
+                    <div class="herramienta-card">
+                        <h3>🏢 Gestionar Proveedores</h3>
+                        <p>Agregar, editar o eliminar proveedores</p>
+                        <button class="btn btn-primary" onclick="window.location.href='/proveedores'">Ir a Proveedores</button>
+                    </div>
+                    
+                    <div class="herramienta-card">
+                        <h3>⚠️ Productos con Bajo Stock</h3>
+                        <p>Ver productos con menos de 5 unidades</p>
+                        <button class="btn btn-warning" onclick="verBajoStock()">Ver Bajo Stock</button>
+                    </div>
+                    
+                    <div class="herramienta-card">
+                        <h3>🔄 Sincronizar BD</h3>
+                        <p>Recargar datos desde la base de datos</p>
+                        <button class="btn btn-success" onclick="sincronizarBD()">Sincronizar</button>
+                    </div>
+                    
+                    <div class="herramienta-card">
+                        <h3>🗑️ Vaciar Búsqueda</h3>
+                        <p>Limpiar todos los filtros aplicados</p>
+                        <button class="btn btn-secondary" onclick="limpiarFiltros()">Limpiar</button>
+                    </div>
+                </div>
+
+                <div class="info-section">
+                    <h3>ℹ️ Información del Sistema</h3>
+                    <table class="info-table">
+                        <tr>
+                            <td><strong>Versión:</strong></td>
+                            <td>1.0.0</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Base de Datos:</strong></td>
+                            <td>PostgreSQL 15</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Servidor:</strong></td>
+                            <td>Gunicorn + Nginx</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Última actualización:</strong></td>
+                            <td id="ultima-sync">-</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+    </div>
+
+    <!-- Modal para editar producto -->
+    <div id="modal-editar" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Editar Producto</h2>
+            <form id="formulario-editar" class="form-producto">
+                <input type="hidden" id="editar-id">
+                
+                <div class="form-group">
+                    <label for="editar-nombre">Nombre</label>
+                    <input type="text" id="editar-nombre" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="editar-descripcion">Descripción</label>
+                    <textarea id="editar-descripcion" rows="3"></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editar-precio">Precio</label>
+                        <input type="number" id="editar-precio" step="0.01" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="editar-cantidad">Cantidad</label>
+                        <input type="number" id="editar-cantidad">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="editar-categoria">Categoría</label>
+                        <input type="text" id="editar-categoria">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="editar-imagen_url">URL de Imagen</label>
+                    <input type="url" id="editar-imagen_url">
+                </div>
+
+                <hr style="margin: 1.5rem 0; border: none; border-top: 1px solid #e0e0e0;">
+
+                <!-- Sección de Proveedores -->
+                <h4 style="color: var(--color-primary); margin-top: 1.5rem;">🏢 Asignar Proveedores</h4>
+                
+                <div class="form-group">
+                    <label for="select-proveedor">Seleccionar Proveedor</label>
+                    <select id="select-proveedor" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px;">
+                        <option value="">-- Selecciona un proveedor --</option>
+                    </select>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="precio-proveedor">Precio del Proveedor</label>
+                        <input type="number" id="precio-proveedor" step="0.01" placeholder="Precio">
+                    </div>
+                    <div class="form-group">
+                        <label for="fecha-precio">Fecha del Precio</label>
+                        <input type="date" id="fecha-precio">
+                    </div>
+                </div>
+
+                <button type="button" class="btn btn-success" onclick="asignarProveedorModal()" style="width: 100%; margin-bottom: 1rem;">
+                    ➕ Asignar Proveedor
+                </button>
+
+                <div id="lista-proveedores-producto" style="margin-top: 1rem;">
+                    <p style="color: #999; font-size: 0.9rem;">Los proveedores asignados aparecerán aquí</p>
+                </div>
+
+                <hr style="margin: 1.5rem 0; border: none; border-top: 1px solid #e0e0e0;">
+
+                <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+            </form>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2025 Catálogo Web. Todos los derechos reservados.</p>
+    </footer>
+
+    <script src="{{ url_for('static', filename='admin.js') }}"></script>
+    <script src="{{ url_for('static', filename='admin-plus.js') }}"></script>
+    <script src="{{ url_for('static', filename='proveedores-admin.js') }}"></script>
+    <script src="{{ url_for('static', filename='historial-precios.js') }}"></script>
+
+    <script>
+        // Marcar el enlace activo en el nav según la ruta
+        (function(){
+            const links = document.querySelectorAll('.nav-links a.btn-nav');
+            const path = window.location.pathname || '/';
+            links.forEach(a => {
+                try {
+                    const href = a.getAttribute('href');
+                    if (href === path) {
+                        a.classList.add('active');
+                    } else {
+                        a.classList.remove('active');
+                    }
+                } catch(e){ }
+            });
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,405 @@
+// Variables globales
+let productoEnEdicion = null;
+// Proveedores añadidos en el formulario de creación (temporales hasta que se cree el producto)
+let proveedoresEnCreacion = [];
+// Cache local de proveedores (id -> objeto) para mostrar nombres sin hacer llamadas extra
+let proveedoresCache = [];
+
+// Elementos del DOM
+const formulario = document.getElementById('formulario-producto');
+const formularioEditar = document.getElementById('formulario-editar');
+const tablaBody = document.getElementById('tabla-body');
+const modal = document.getElementById('modal-editar');
+const closeBtn = document.querySelector('.close');
+const mensajeForm = document.getElementById('mensaje-form');
+const inputImagenFile = document.getElementById('imagen_file');
+const previewDiv = document.getElementById('preview-imagen');
+const previewImg = document.getElementById('preview-img');
+let imagenSubidaUrl = null;
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    cargarProductos();
+    formulario.addEventListener('submit', agregarProducto);
+    formularioEditar.addEventListener('submit', guardarEdicion);
+    closeBtn.addEventListener('click', cerrarModal);
+    window.addEventListener('click', function(event) {
+        if (event.target === modal) {
+            cerrarModal();
+        }
+    });
+    
+    // Event listener para vista previa de imagen
+    if (inputImagenFile) {
+        inputImagenFile.addEventListener('change', mostrarPreviewImagen);
+    }
+    // Cargar proveedores para el formulario de creación (si existe el select)
+    cargarProveedoresParaCrear();
+    // Si el usuario enfoca o hace click en el select, recargar proveedores (útil si agregó uno en otra pestaña)
+    const selectNuevo = document.getElementById('select-proveedor-nuevo');
+    if (selectNuevo) {
+        // Solo recargar si todavía no hay opciones (evita que al hacer click se reemplacen opciones y no se pueda seleccionar)
+        selectNuevo.addEventListener('focus', function() { if (selectNuevo.options.length <= 1) cargarProveedoresParaCrear(); });
+        selectNuevo.addEventListener('click', function() { if (selectNuevo.options.length <= 1) cargarProveedoresParaCrear(); });
+    }
+
+    // Si la pestaña recupera visibilidad (volviste desde /proveedores en otra pestaña), recargar proveedores
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+            const selectNuevo = document.getElementById('select-proveedor-nuevo');
+            if (selectNuevo && selectNuevo.options.length <= 1) {
+                cargarProveedoresParaCrear();
+            }
+        }
+    });
+});
+
+// Cargar lista de proveedores en el select del formulario de creación
+function cargarProveedoresParaCrear() {
+    const selectNuevo = document.getElementById('select-proveedor-nuevo');
+    if (!selectNuevo) return;
+    // Mejor manejo de errores: comprobar status y tipo de contenido
+    fetch('/api/proveedores')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                // Probablemente redirigido al login (HTML)
+                throw new Error('No autenticado o respuesta inesperada (no JSON)');
+            }
+            return response.json();
+        })
+        .then(proveedores => {
+            // Guardar en cache para mostrar nombre en la lista local
+            proveedoresCache = proveedores || [];
+
+            // limpiar opciones previas (excepto la primera)
+            while (selectNuevo.options.length > 1) {
+                selectNuevo.remove(1);
+            }
+
+            proveedores.forEach(prov => {
+                const option = document.createElement('option');
+                option.value = prov.id;
+                option.textContent = prov.nombre;
+                selectNuevo.appendChild(option);
+            });
+            // si ya hay proveedores en la lista local, re-renderizar para mostrar nombres
+            renderListaProveedoresNuevos();
+        })
+        .catch(error => {
+            console.error('Error cargando proveedores:', error);
+            // Mostrar mensaje amigable en el select contenedor
+            const cont = document.getElementById('lista-proveedores-nuevo');
+            if (cont) {
+                cont.innerHTML = '<p style="color:#b71c1c;">No se pudieron cargar los proveedores. Asegúrate de haber iniciado sesión. <a href="/login">Iniciar sesión</a> o ve a <a href="/proveedores">Proveedores</a>.</p>';
+            }
+        });
+}
+
+// Agregar proveedor a la lista local antes de crear el producto
+function agregarProveedorNuevo() {
+    const proveedorId = document.getElementById('select-proveedor-nuevo').value;
+    const precio = document.getElementById('precio-proveedor-nuevo').value;
+    const fecha = document.getElementById('fecha-precio-nuevo').value;
+
+    if (!proveedorId) { alert('❌ Selecciona un proveedor'); return; }
+    if (!precio) { alert('❌ Ingresa un precio'); return; }
+    if (!fecha) { alert('❌ Selecciona una fecha'); return; }
+
+    const prov = {
+        id: parseInt(proveedorId),
+        precio: parseFloat(precio),
+        fecha: fecha
+    };
+
+    // evitar duplicados: si ya existe el proveedor en la lista, preguntar y reemplazar
+    const idx = proveedoresEnCreacion.findIndex(p => p.id === prov.id);
+    if (idx !== -1) {
+        if (!confirm('Este proveedor ya está en la lista. ¿Deseas reemplazar el precio/fecha?')) return;
+        proveedoresEnCreacion[idx] = prov;
+    } else {
+        proveedoresEnCreacion.push(prov);
+    }
+
+    // limpiar inputs
+    document.getElementById('select-proveedor-nuevo').value = '';
+    document.getElementById('precio-proveedor-nuevo').value = '';
+    document.getElementById('fecha-precio-nuevo').value = '';
+
+    renderListaProveedoresNuevos();
+}
+
+function renderListaProveedoresNuevos() {
+    const cont = document.getElementById('lista-proveedores-nuevo');
+    if (!cont) return;
+
+    if (proveedoresEnCreacion.length === 0) {
+        cont.innerHTML = '<p style="color: #999; font-size: 0.9rem; margin: 0;">Aquí aparecerán los proveedores que vas agregando antes de crear el producto.</p>';
+        return;
+    }
+
+    cont.innerHTML = '<h5 style="margin: 0 0 0.5rem 0; color: var(--color-primary);">Proveedores a asignar:</h5>';
+    cont.innerHTML += proveedoresEnCreacion.map(p => {
+        const provObj = proveedoresCache.find(x => x.id === p.id);
+        const nombre = provObj ? provObj.nombre : `ID:${p.id}`;
+        return `
+        <div style="background: #f0f0f0; padding: 0.6rem; border-radius: 6px; margin-bottom: 0.5rem; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+                <strong>${nombre}</strong><br>
+                <small style="color:#666;">Precio: $${p.precio.toFixed(2)} | Fecha: ${p.fecha}</small>
+            </div>
+            <div style="display:flex; gap:6px;">
+                <button type="button" class="btn btn-small" onclick="eliminarProveedorNuevo(${p.id})">✕</button>
+            </div>
+        </div>
+    `}).join('');
+}
+
+function eliminarProveedorNuevo(id) {
+    proveedoresEnCreacion = proveedoresEnCreacion.filter(p => p.id !== id);
+    renderListaProveedoresNuevos();
+}
+
+// ==================== VISTA PREVIA DE IMAGEN ====================
+function mostrarPreviewImagen(event) {
+    const file = event.target.files[0];
+    
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            previewImg.src = e.target.result;
+            previewDiv.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+// ==================== SUBIR IMAGEN ====================
+function subirImagen(file) {
+    return new Promise((resolve, reject) => {
+        const formData = new FormData();
+        formData.append('imagen', file);
+        
+        fetch('/api/productos/upload-imagen', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                reject(data.error);
+            } else {
+                resolve(data.url);
+            }
+        })
+        .catch(error => reject(error));
+    });
+}
+
+// ==================== CARGAR PRODUCTOS ====================
+function cargarProductos() {
+    fetch('/api/productos')
+        .then(response => response.json())
+        .then(productos => {
+            tablaBody.innerHTML = '';
+            
+            if (productos.length === 0) {
+                tablaBody.innerHTML = '<tr><td colspan="6" class="text-center">No hay productos</td></tr>';
+                return;
+            }
+            
+            productos.forEach(producto => {
+                const fila = document.createElement('tr');
+                fila.innerHTML = `
+                    <td>${producto.id}</td>
+                    <td>${producto.nombre}</td>
+                    <td>${producto.categoria || '-'}</td>
+                    <td>$${producto.precio.toFixed(2)}</td>
+                    <td>${producto.cantidad}</td>
+                    <td class="acciones">
+                        <button class="btn btn-warning" onclick="abrirEdicion(${producto.id})" title="Editar producto y asignar proveedores">✏️ Editar</button>
+                        <button class="btn btn-danger" onclick="eliminarProducto(${producto.id})">🗑️ Eliminar</button>
+                    </td>
+                `;
+                tablaBody.appendChild(fila);
+            });
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            mostrarMensaje('Error al cargar productos', 'error');
+        });
+}
+
+// ==================== AGREGAR PRODUCTO ====================
+async function agregarProducto(event) {
+    event.preventDefault();
+    
+    try {
+        // Verificar si hay imagen para subir
+        let urlImagen = document.getElementById('imagen_url').value;
+        
+        if (inputImagenFile && inputImagenFile.files.length > 0) {
+            mostrarMensaje('📤 Subiendo imagen...', 'info');
+            urlImagen = await subirImagen(inputImagenFile.files[0]);
+        }
+        
+        const producto = {
+            nombre: document.getElementById('nombre').value,
+            descripcion: document.getElementById('descripcion').value,
+            precio: parseFloat(document.getElementById('precio').value),
+            cantidad: parseInt(document.getElementById('cantidad').value) || 0,
+            categoria: document.getElementById('categoria').value,
+            imagen_url: urlImagen
+        };
+        
+        const response = await fetch('/api/productos', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(producto)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            // Si el usuario añadió proveedores en el formulario de creación, asignarlos ahora
+            if (proveedoresEnCreacion.length > 0) {
+                for (const p of proveedoresEnCreacion) {
+                    try {
+                        await fetch(`/api/productos/${result.id}/proveedores`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ proveedor_id: p.id, precio_proveedor: p.precio, fecha_precio: p.fecha })
+                        });
+                    } catch (err) {
+                        console.error('Error asignando proveedor tras creación:', err);
+                    }
+                }
+            }
+
+            mostrarMensaje('✓ Producto agregado correctamente', 'success');
+            setTimeout(() => {
+                // Si ya se asignaron proveedores, mostrar mensaje directo
+                if (proveedoresEnCreacion.length > 0) {
+                    alert('✅ Producto creado y proveedores asignados correctamente.\n\nPuedes editar para ver o ajustar el historial de precios.');
+                } else {
+                    alert('✅ Producto creado exitosamente!\n\n📌 PRÓXIMO PASO:\nHaz clic en ✏️ EDITAR en la tabla para:\n  • Asignar proveedores\n  • Configurar precios por proveedor\n  • Establecer historial de precios');
+                }
+            }, 500);
+
+            // limpiar lista local de proveedores añadidos
+            proveedoresEnCreacion = [];
+            renderListaProveedoresNuevos();
+
+            formulario.reset();
+            previewDiv.style.display = 'none';
+            imagenSubidaUrl = null;
+            cargarProductos();
+        } else {
+            const msg = result && result.error ? result.error : 'Error al agregar producto';
+            mostrarMensaje(`✗ ${msg}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        mostrarMensaje(`✗ Error: ${error}`, 'error');
+    }
+}
+
+// ==================== EDITAR PRODUCTO ====================
+function abrirEdicion(id) {
+    fetch(`/api/productos/${id}`)
+        .then(response => response.json())
+        .then(producto => {
+            productoEnEdicion = producto.id;
+            document.getElementById('editar-id').value = producto.id;
+            document.getElementById('editar-nombre').value = producto.nombre;
+            document.getElementById('editar-descripcion').value = producto.descripcion || '';
+            document.getElementById('editar-precio').value = producto.precio;
+            document.getElementById('editar-cantidad').value = producto.cantidad;
+            document.getElementById('editar-categoria').value = producto.categoria || '';
+            document.getElementById('editar-imagen_url').value = producto.imagen_url || '';
+            
+            modal.classList.add('show');
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error al cargar producto');
+        });
+}
+
+function guardarEdicion(event) {
+    event.preventDefault();
+    
+    const id = document.getElementById('editar-id').value;
+    const producto = {
+        nombre: document.getElementById('editar-nombre').value,
+        descripcion: document.getElementById('editar-descripcion').value,
+        precio: parseFloat(document.getElementById('editar-precio').value),
+        cantidad: parseInt(document.getElementById('editar-cantidad').value) || 0,
+        categoria: document.getElementById('editar-categoria').value,
+        imagen_url: document.getElementById('editar-imagen_url').value
+    };
+    
+    fetch(`/api/productos/${id}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(producto)
+    })
+    .then(response => {
+        if (response.ok) {
+            mostrarMensaje('✓ Producto actualizado correctamente', 'success');
+            cerrarModal();
+            cargarProductos();
+        } else {
+            mostrarMensaje('✗ Error al actualizar producto', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        mostrarMensaje('✗ Error en la solicitud', 'error');
+    });
+}
+
+function cerrarModal() {
+    modal.classList.remove('show');
+    productoEnEdicion = null;
+}
+
+// ==================== ELIMINAR PRODUCTO ====================
+function eliminarProducto(id) {
+    if (!confirm('¿Estás seguro de que quieres eliminar este producto?')) {
+        return;
+    }
+    
+    fetch(`/api/productos/${id}`, {
+        method: 'DELETE'
+    })
+    .then(response => {
+        if (response.ok) {
+            mostrarMensaje('✓ Producto eliminado correctamente', 'success');
+            cargarProductos();
+        } else {
+            mostrarMensaje('✗ Error al eliminar producto', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        mostrarMensaje('✗ Error en la solicitud', 'error');
+    });
+}
+
+// ==================== UTILIDADES ====================
+function mostrarMensaje(texto, tipo) {
+    mensajeForm.textContent = texto;
+    mensajeForm.className = `mensaje ${tipo}`;
+    
+    setTimeout(() => {
+        mensajeForm.className = 'mensaje';
+    }, 3000);
+}

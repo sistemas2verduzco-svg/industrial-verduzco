@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    container_name: catalogo_db
+    environment:
+      POSTGRES_USER: catalogo_user
+      POSTGRES_PASSWORD: catalogo_pass
+      POSTGRES_DB: catalogo_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - catalogo_network
+    healthcheck:
+      # Check readiness against the actual database name to avoid pg_isready trying
+      # to connect to a database named after the user (which caused repeated FATAL logs).
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432 -U catalogo_user -d catalogo_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  app:
+    build: .
+    container_name: catalogo_app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      FLASK_APP: app.py
+      FLASK_ENV: production
+      DATABASE_URL: postgresql://catalogo_user:catalogo_pass@db:5432/catalogo_db
+    volumes:
+      - .:/app
+    networks:
+      - catalogo_network
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:stable-alpine
+    container_name: catalogo_nginx
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./static:/app/static:ro
+    networks:
+      - catalogo_network
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: catalogo_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "False"
+      PGADMIN_CONFIG_COOKIE_DEFAULT: 86400
+      PGADMIN_CONFIG_CONSOLE_LOG_LEVEL: 10
+      SCRIPT_NAME: /pgadmin4
+    ports:
+      - "5050:80"
+    networks:
+      - catalogo_network
+    restart: unless-stopped
+    depends_on:
+      - db
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+
+networks:
+  catalogo_network:
+    driver: bridge

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catálogo de Productos</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <h1 class="logo">📦 Mi Catálogo</h1>
+            <ul class="nav-links">
+                <li><a href="/" class="btn-nav">Catálogo</a></li>
+                <li><a href="/admin" class="btn-nav">Administrar</a></li>
+                <li><a href="/proveedores" class="btn-nav" title="Gestionar Proveedores">🏢 Proveedores</a></li>
+                <li><a href="/logout" class="btn-logout">Cerrar Sesión</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="page-header">
+            <h2>Catálogo de Productos</h2>
+            <p id="estadisticas" class="stats"></p>
+        </div>
+
+        <div id="productos-container" class="productos-grid">
+            <!-- Los productos se cargarán aquí con JavaScript -->
+            <div class="loading">Cargando productos...</div>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2025 Catálogo Web. Todos los derechos reservados.</p>
+    </footer>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script>
+        // Cargar productos al iniciar
+        document.addEventListener('DOMContentLoaded', function() {
+            cargarProductos();
+            cargarEstadisticas();
+        });
+
+        function cargarProductos() {
+            fetch('/api/productos')
+                .then(response => response.json())
+                .then(productos => {
+                    const container = document.getElementById('productos-container');
+                    
+                    if (productos.length === 0) {
+                        container.innerHTML = '<div class="empty-state">No hay productos disponibles</div>';
+                        return;
+                    }
+                    
+                    container.innerHTML = '';
+                    productos.forEach(producto => {
+                        const card = document.createElement('div');
+                        card.className = 'producto-card';
+                        card.innerHTML = `
+                            <div class="producto-imagen">
+                                ${producto.imagen_url ? `<img src="${producto.imagen_url}" alt="${producto.nombre}">` : '<div class="no-image">Sin imagen</div>'}
+                            </div>
+                            <div class="producto-info">
+                                <h3>${producto.nombre}</h3>
+                                <p class="categoria">${producto.categoria || 'Sin categoría'}</p>
+                                <p class="descripcion">${producto.descripcion || 'Sin descripción'}</p>
+                                <div class="precio-stock">
+                                    <span class="precio">$${producto.precio.toFixed(2)}</span>
+                                    <span class="stock">Stock: ${producto.cantidad}</span>
+                                </div>
+                            </div>
+                        `;
+                        container.appendChild(card);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error cargando productos:', error);
+                    document.getElementById('productos-container').innerHTML = '<div class="error">Error al cargar productos</div>';
+                });
+        }
+
+        function cargarEstadisticas() {
+            fetch('/api/estadisticas')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('estadisticas').innerHTML = `
+                        Total de productos: <strong>${data.total_productos}</strong> | 
+                        Valor total: <strong>$${data.valor_total_inventario.toFixed(2)}</strong>
+                    `;
+                });
+        }
+    </script>
++    <script>
++        // Activar el enlace del nav correspondiente según la ruta
++        (function(){
++            const links = document.querySelectorAll('.nav-links a.btn-nav');
++            const path = window.location.pathname || '/';
++            links.forEach(a => {
++                try {
++                    const href = a.getAttribute('href');
++                    if (href === path) {
++                        a.classList.add('active');
++                    } else {
++                        a.classList.remove('active');
++                    }
++                } catch(e){}
++            });
++        })();
++    </script>
+</body>
+</html>
