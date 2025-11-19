@@ -11,7 +11,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - pgadmin_data:/var/lib/pgadmin
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - catalogo_network
     healthcheck:
@@ -66,4 +66,5 @@ services:
     restart: unless-stopped
     depends_on:
       - db
-    volumes
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
