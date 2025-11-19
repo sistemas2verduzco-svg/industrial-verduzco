@@ -26,18 +26,15 @@ services:
   app:
     build: .
     container_name: catalogo_app
-    depends_on:
-      db:
-        condition: service_healthy
+    network_mode: "host"
     environment:
       FLASK_APP: app.py
       FLASK_ENV: production
       DATABASE_URL: postgresql://catalogo_user:catalogo_pass@db:5432/catalogo_db
     volumes:
       - .:/app
-    networks:
-      - catalogo_network
     restart: unless-stopped
+    command: gunicorn -w 4 -b 192.168.0.139:5000 app:app
 
   nginx:
     image: nginx:stable-alpine
