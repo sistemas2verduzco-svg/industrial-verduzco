@@ -122,6 +122,31 @@
             display: block;
         }
 
+        /* Nedry-style playful message for failed login */
+        .nedry-box {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            display: none;
+            text-align: center;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        .nedry-box.show {
+            display: block;
+            animation: wiggle 0.8s ease-in-out;
+        }
+
+        @keyframes wiggle {
+            0% { transform: translateX(-6px); }
+            50% { transform: translateX(6px); }
+            100% { transform: translateX(0); }
+        }
+
         .login-footer {
             text-align: center;
             margin-top: 2rem;
@@ -173,6 +198,7 @@
 
         {% if error %}
         <div class="error show">{{ error }}</div>
+        <div class="nedry-box show">¡AH AH AH! — <span style="text-transform:uppercase;">NO DIJISTE LA PALABRA MÁGICA</span></div>
         {% endif %}
 
         
