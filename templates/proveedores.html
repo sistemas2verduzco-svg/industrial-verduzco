@@ -279,12 +279,22 @@
     </footer>
 
     <script>
+        // Helper: parse JSON safely checking content-type
+        async function parseJsonSafe(response) {
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                const text = await response.text();
+                throw new Error('Respuesta no JSON: ' + text);
+            }
+            return response.json();
+        }
+
         let proveedorEditando = null;
 
         // Cargar proveedores al abrir la página
         function cargarProveedores() {
             fetch('/api/proveedores')
-                .then(response => response.json())
+                .then(response => parseJsonSafe(response))
                 .then(data => {
                     const lista = document.getElementById('lista-proveedores');
                     
@@ -337,7 +347,7 @@
                 },
                 body: JSON.stringify(proveedor)
             })
-            .then(response => response.json())
+            .then(response => parseJsonSafe(response))
             .then(data => {
                 if (data.error) {
                     document.getElementById('mensaje-prov').textContent = '❌ ' + data.error;
@@ -358,7 +368,7 @@
         // Abrir modal de edición
         function abrirEdicion(id) {
             fetch(`/api/proveedores/${id}`)
-                .then(response => response.json())
+                .then(response => parseJsonSafe(response))
                 .then(data => {
                     proveedorEditando = id;
                     document.getElementById('edit-prov-nombre').value = data.nombre;
@@ -400,7 +410,7 @@
                 },
                 body: JSON.stringify(proveedor)
             })
-            .then(response => response.json())
+            .then(response => parseJsonSafe(response))
             .then(data => {
                 cerrarModal();
                 cargarProveedores();
@@ -414,7 +424,7 @@
                 fetch(`/api/proveedores/${id}`, {
                     method: 'DELETE'
                 })
-                .then(response => response.json())
+                .then(response => parseJsonSafe(response))
                 .then(data => {
                     cargarProveedores();
                     alert('✅ Proveedor eliminado');

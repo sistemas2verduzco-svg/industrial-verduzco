@@ -1,11 +1,21 @@
 // Script para gestión de proveedores en el panel admin
 
+// Helper: parse JSON safely checking content-type
+async function parseJsonSafe(response) {
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+        const text = await response.text();
+        throw new Error('Respuesta no JSON: ' + text);
+    }
+    return response.json();
+}
+
 let productoActualConProveedores = null;
 
 // Cargar proveedores en el select cuando se abre el modal
 function cargarProveedoresEnSelect() {
     fetch('/api/proveedores')
-        .then(response => response.json())
+        .then(response => parseJsonSafe(response))
         .then(proveedores => {
             const select = document.getElementById('select-proveedor');
             // Limpiar opciones previas (excepto la primera)
@@ -28,7 +38,7 @@ function cargarProveedoresProducto(productoId) {
     productoActualConProveedores = productoId;
     
     fetch(`/api/productos/${productoId}/proveedores`)
-        .then(response => response.json())
+        .then(response => parseJsonSafe(response))
         .then(proveedores => {
             const lista = document.getElementById('lista-proveedores-producto');
             
@@ -94,7 +104,7 @@ function asignarProveedorModal() {
         },
         body: JSON.stringify(data)
     })
-    .then(response => response.json())
+    .then(response => parseJsonSafe(response))
     .then(data => {
         if (data.error) {
             alert('❌ Error: ' + data.error);
@@ -118,7 +128,7 @@ function desasignarProveedor(productoId, proveedorId) {
         fetch(`/api/productos/${productoId}/proveedores/${proveedorId}`, {
             method: 'DELETE'
         })
-        .then(response => response.json())
+        .then(response => parseJsonSafe(response))
         .then(data => {
             alert('✅ Proveedor desasignado');
             cargarProveedoresProducto(productoId);

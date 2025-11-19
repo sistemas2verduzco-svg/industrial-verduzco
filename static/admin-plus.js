@@ -2,6 +2,16 @@
    ADMIN PLUS - EXTENDED ADMIN PANEL SCRIPTS
    ======================================== */
 
+// Helper: parse JSON safely checking content-type
+async function parseJsonSafe(response) {
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+        const text = await response.text();
+        throw new Error('Respuesta no JSON: ' + text);
+    }
+    return response.json();
+}
+
 // TAB SWITCHING FUNCTION
 function cambiarTab(tabName) {
     // Hide all tab contents
@@ -37,7 +47,7 @@ function cambiarTab(tabName) {
 // LOAD STATISTICS
 function cargarEstadisticas() {
     fetch('/api/estadisticas')
-        .then(response => response.json())
+        .then(response => parseJsonSafe(response))
         .then(data => {
             // Update main stats
             document.getElementById('stat-total').textContent = data.total_productos || 0;
@@ -94,7 +104,7 @@ function aplicarFiltros() {
 
     // Fetch filtered products
     fetch(`/api/productos/buscar?${params.toString()}`)
-        .then(response => response.json())
+        .then(response => parseJsonSafe(response))
         .then(data => {
             // Update table with results
             const tbody = document.querySelector('table tbody');
@@ -155,7 +165,7 @@ function exportarCSV() {
 // VIEW LOW STOCK PRODUCTS
 function verBajoStock() {
     fetch('/api/productos/bajo-stock')
-        .then(response => response.json())
+        .then(response => parseJsonSafe(response))
         .then(data => {
             if (data.length === 0) {
                 alert('No hay productos con bajo stock');
@@ -244,7 +254,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // Helper function - Load products (already exists in admin.js but ensuring it's available)
 function cargarProductos() {
     fetch('/api/productos')
-        .then(response => response.json())
+        .then(response => parseJsonSafe(response))
         .then(data => {
             const tbody = document.querySelector('table tbody');
             if (!tbody) return;

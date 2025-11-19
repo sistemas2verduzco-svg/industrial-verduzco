@@ -54,6 +54,16 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
+// Helper: parse JSON safely checking content-type
+async function parseJsonSafe(response) {
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+        const text = await response.text();
+        throw new Error('Respuesta no JSON: ' + text);
+    }
+    return response.json();
+}
+
 // Cargar lista de proveedores en el select del formulario de creación
 function cargarProveedoresParaCrear() {
     const selectNuevo = document.getElementById('select-proveedor-nuevo');
@@ -69,7 +79,7 @@ function cargarProveedoresParaCrear() {
                 // Probablemente redirigido al login (HTML)
                 throw new Error('No autenticado o respuesta inesperada (no JSON)');
             }
-            return response.json();
+            return parseJsonSafe(response);
         })
         .then(proveedores => {
             // Guardar en cache para mostrar nombre en la lista local
@@ -187,7 +197,7 @@ function subirImagen(file) {
             method: 'POST',
             body: formData
         })
-        .then(response => response.json())
+        .then(response => parseJsonSafe(response))
         .then(data => {
             if (data.error) {
                 reject(data.error);
@@ -202,7 +212,7 @@ function subirImagen(file) {
 // ==================== CARGAR PRODUCTOS ====================
 function cargarProductos() {
     fetch('/api/productos')
-        .then(response => response.json())
+        .then(response => parseJsonSafe(response))
         .then(productos => {
             tablaBody.innerHTML = '';
             
@@ -263,7 +273,7 @@ async function agregarProducto(event) {
             body: JSON.stringify(producto)
         });
 
-        const result = await response.json();
+        const result = await parseJsonSafe(response);
 
         if (response.ok) {
             // Si el usuario añadió proveedores en el formulario de creación, asignarlos ahora
@@ -312,7 +322,7 @@ async function agregarProducto(event) {
 // ==================== EDITAR PRODUCTO ====================
 function abrirEdicion(id) {
     fetch(`/api/productos/${id}`)
-        .then(response => response.json())
+        .then(response => parseJsonSafe(response))
         .then(producto => {
             productoEnEdicion = producto.id;
             document.getElementById('editar-id').value = producto.id;

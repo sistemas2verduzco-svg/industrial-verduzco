@@ -3,6 +3,16 @@
 let productoActualHistorial = null;
 let proveedorActualHistorial = null;
 
+// Helper: parse JSON safely checking content-type
+async function parseJsonSafe(response) {
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+        const text = await response.text();
+        throw new Error('Respuesta no JSON: ' + text);
+    }
+    return response.json();
+}
+
 // Mostrar modal para agregar precio histórico
 function mostrarModalHistorialPrecios(productoId, proveedorId, nombreProveedor) {
     productoActualHistorial = productoId;
@@ -76,7 +86,7 @@ function cerrarModalHistorial() {
 // Cargar historial de precios
 function cargarHistorialPrecios(productoId, proveedorId) {
     fetch(`/api/productos/${productoId}/proveedores/${proveedorId}/historial`)
-        .then(response => response.json())
+        .then(response => parseJsonSafe(response))
         .then(historial => {
             const lista = document.getElementById('lista-historial-precios');
             
@@ -136,7 +146,7 @@ function agregarPrecioHistorico() {
         },
         body: JSON.stringify(data)
     })
-    .then(response => response.json())
+    .then(response => parseJsonSafe(response))
     .then(result => {
         if (result.error) {
             alert('❌ Error: ' + result.error);
@@ -168,7 +178,7 @@ function eliminarPrecioHistorico(precioId, productoId, proveedorId) {
         fetch(`/api/historial-precios/${precioId}`, {
             method: 'DELETE'
         })
-        .then(response => response.json())
+        .then(response => parseJsonSafe(response))
         .then(data => {
             alert('✅ Precio eliminado');
             

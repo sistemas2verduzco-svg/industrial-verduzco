@@ -37,15 +37,41 @@
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
     <script>
-        // Cargar productos al iniciar
+        // Helper: parse JSON safely checking content-type
+        async function parseJsonSafe(response) {
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                const text = await response.text();
+                throw new Error('Respuesta no JSON: ' + text);
+            }
+            return response.json();
+        }
+
+        // Cargar productos y estadísticas al iniciar
         document.addEventListener('DOMContentLoaded', function() {
             cargarProductos();
             cargarEstadisticas();
+
+            // Activar el enlace del nav correspondiente según la ruta
+            (function(){
+                const links = document.querySelectorAll('.nav-links a.btn-nav');
+                const path = window.location.pathname || '/';
+                links.forEach(a => {
+                    try {
+                        const href = a.getAttribute('href');
+                        if (href === path) {
+                            a.classList.add('active');
+                        } else {
+                            a.classList.remove('active');
+                        }
+                    } catch(e){}
+                });
+            })();
         });
 
         function cargarProductos() {
             fetch('/api/productos')
-                .then(response => response.json())
+                .then(response => parseJsonSafe(response))
                 .then(productos => {
                     const container = document.getElementById('productos-container');
                     
@@ -83,31 +109,15 @@
 
         function cargarEstadisticas() {
             fetch('/api/estadisticas')
-                .then(response => response.json())
+                .then(response => parseJsonSafe(response))
                 .then(data => {
                     document.getElementById('estadisticas').innerHTML = `
                         Total de productos: <strong>${data.total_productos}</strong> | 
                         Valor total: <strong>$${data.valor_total_inventario.toFixed(2)}</strong>
                     `;
-                });
+                })
+                .catch(err => console.error('Error cargando estadísticas:', err));
         }
     </script>
-+    <script>
-+        // Activar el enlace del nav correspondiente según la ruta
-+        (function(){
-+            const links = document.querySelectorAll('.nav-links a.btn-nav');
-+            const path = window.location.pathname || '/';
-+            links.forEach(a => {
-+                try {
-+                    const href = a.getAttribute('href');
-+                    if (href === path) {
-+                        a.classList.add('active');
-+                    } else {
-+                        a.classList.remove('active');
-+                    }
-+                } catch(e){}
-+            });
-+        })();
-+    </script>
 </body>
 </html>
