@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario
 from auth import AuthManager
 import os
 from dotenv import load_dotenv
@@ -32,11 +32,25 @@ app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
-auth_manager = AuthManager()
 
 # Crear tablas
 with app.app_context():
     db.create_all()
+    # Crear usuario admin por defecto si no existe
+    if not Usuario.query.filter_by(username='admin').first():
+        admin_user = Usuario(
+            username='admin',
+            correo='admin@example.com',
+            es_admin=True,
+            activo=True
+        )
+        admin_user.set_password('admin123')
+        db.session.add(admin_user)
+        db.session.commit()
+        print("✓ Usuario admin por defecto creado.")
+
+# Inicializar AuthManager con BD
+auth_manager = AuthManager(db=db)
 
 # ==================== DECORADOR DE AUTENTICACIÓN ====================
 
