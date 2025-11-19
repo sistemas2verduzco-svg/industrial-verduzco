@@ -15,8 +15,6 @@ services:
     networks:
       - catalogo_network
     healthcheck:
-      # Check readiness against the actual database name to avoid pg_isready trying
-      # to connect to a database named after the user (which caused repeated FATAL logs).
       test: ["CMD-SHELL", "pg_isready -h localhost -p 5432 -U catalogo_user -d catalogo_db"]
       interval: 10s
       timeout: 5s
@@ -26,7 +24,8 @@ services:
   app:
     build: .
     container_name: catalogo_app
-    network_mode: "host"
+    networks:
+      - catalogo_network
     environment:
       FLASK_APP: app.py
       FLASK_ENV: production
@@ -34,7 +33,7 @@ services:
     volumes:
       - .:/app
     restart: unless-stopped
-    command: gunicorn -w 4 -b 192.168.0.192:5000 app:app
+    command: gunicorn -w 4 -b 0.0.0.0:5000 app:app  # <-- atencion al 0.0.0.0
 
   nginx:
     image: nginx:stable-alpine
@@ -42,7 +41,7 @@ services:
     depends_on:
       - app
     ports:
-      - "80:80"
+      - "80:80"   # acceso externo por navegador
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - ./static:/app/static:ro
@@ -61,19 +60,10 @@ services:
       PGADMIN_CONFIG_CONSOLE_LOG_LEVEL: 10
       SCRIPT_NAME: /pgadmin4
     ports:
-      - "5050:80"
+      - "5050:80"  # para acceder desde otra PC
     networks:
       - catalogo_network
     restart: unless-stopped
     depends_on:
       - db
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-
-volumes:
-  postgres_data:
-  pgadmin_data:
-
-networks:
-  catalogo_network:
-    driver: bridge
+    volumes
