@@ -25,6 +25,31 @@
             <p id="estadisticas" class="stats"></p>
         </div>
 
+        <!-- Sección de filtros y búsqueda -->
+        <div class="filtros-section" style="background: #f9f9f9; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem; box-shadow: 0 2px 4px rgba(0,0,0,0.08);">
+            <h3 style="margin-top: 0; color: #333;">🔍 Buscar y Filtrar Productos</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto auto; gap: 1rem; align-items: end;">
+                <div class="form-group">
+                    <label style="font-weight: 600; margin-bottom: 0.5rem; display: block; color: #555;">Nombre o descripción</label>
+                    <input type="text" id="buscar-producto" placeholder="🔍 Buscar..." class="filtro-input" style="width: 100%; padding: 0.6rem; border: 1px solid #ddd; border-radius: 6px;">
+                </div>
+                <div class="form-group">
+                    <label style="font-weight: 600; margin-bottom: 0.5rem; display: block; color: #555;">Categoría</label>
+                    <input type="text" id="filtro-categoria" placeholder="🏷️ Categoría..." class="filtro-input" style="width: 100%; padding: 0.6rem; border: 1px solid #ddd; border-radius: 6px;">
+                </div>
+                <div class="form-group">
+                    <label style="font-weight: 600; margin-bottom: 0.5rem; display: block; color: #555;">Precio mín.</label>
+                    <input type="number" id="filtro-precio-min" placeholder="Min" step="0.01" class="filtro-input" style="width: 100%; padding: 0.6rem; border: 1px solid #ddd; border-radius: 6px;">
+                </div>
+                <div class="form-group">
+                    <label style="font-weight: 600; margin-bottom: 0.5rem; display: block; color: #555;">Precio máx.</label>
+                    <input type="number" id="filtro-precio-max" placeholder="Máx" step="0.01" class="filtro-input" style="width: 100%; padding: 0.6rem; border: 1px solid #ddd; border-radius: 6px;">
+                </div>
+                <button class="btn btn-primary" onclick="aplicarFiltros()" style="padding: 0.6rem 1.2rem;">🔎 Buscar</button>
+                <button class="btn btn-secondary" onclick="limpiarFiltros()" style="padding: 0.6rem 1.2rem; background: #666; color: white; border: none; border-radius: 6px; cursor: pointer;">🔄 Limpiar</button>
+            </div>
+        </div>
+
         <div id="productos-container" class="productos-grid">
             <!-- Los productos se cargarán aquí con JavaScript -->
             <div class="loading">Cargando productos...</div>
@@ -118,6 +143,87 @@
                 })
                 .catch(err => console.error('Error cargando estadísticas:', err));
         }
+
+        // Aplicar filtros
+        function aplicarFiltros() {
+            const buscar = document.getElementById('buscar-producto').value.trim();
+            const categoria = document.getElementById('filtro-categoria').value.trim();
+            const precioMin = document.getElementById('filtro-precio-min').value.trim();
+            const precioMax = document.getElementById('filtro-precio-max').value.trim();
+
+            const params = new URLSearchParams();
+            if (buscar) params.append('q', buscar);
+            if (categoria) params.append('categoria', categoria);
+            if (precioMin) params.append('precio_min', precioMin);
+            if (precioMax) params.append('precio_max', precioMax);
+
+            const url = '/api/productos/buscar' + (params.toString() ? '?' + params.toString() : '');
+
+            fetch(url)
+                .then(response => parseJsonSafe(response))
+                .then(productos => {
+                    const container = document.getElementById('productos-container');
+                    
+                    if (productos.length === 0) {
+                        container.innerHTML = '<div class="empty-state">No se encontraron productos con esos filtros</div>';
+                        return;
+                    }
+                    
+                    container.innerHTML = '';
+                    productos.forEach(producto => {
+                        const card = document.createElement('div');
+                        card.className = 'producto-card';
+                        card.innerHTML = `
+                            <div class="producto-imagen">
+                                ${producto.imagen_url ? `<img src="${producto.imagen_url}" alt="${producto.nombre}">` : '<div class="no-image">Sin imagen</div>'}
+                            </div>
+                            <div class="producto-info">
+                                <h3>${producto.nombre}</h3>
+                                <p class="categoria">${producto.categoria || 'Sin categoría'}</p>
+                                <p class="descripcion">${producto.descripcion || 'Sin descripción'}</p>
+                                <div class="precio-stock">
+                                    <span class="precio">$${producto.precio.toFixed(2)}</span>
+                                    <span class="stock">Stock: ${producto.cantidad}</span>
+                                </div>
+                            </div>
+                        `;
+                        container.appendChild(card);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error aplicando filtros:', error);
+                    document.getElementById('productos-container').innerHTML = '<div class="error">Error al filtrar productos: ' + error.message + '</div>';
+                });
+        }
+
+        // Limpiar filtros
+        function limpiarFiltros() {
+            document.getElementById('buscar-producto').value = '';
+            document.getElementById('filtro-categoria').value = '';
+            document.getElementById('filtro-precio-min').value = '';
+            document.getElementById('filtro-precio-max').value = '';
+            cargarProductos();
+        }
+
+        // Permitir Enter en los inputs de búsqueda
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInputs = [
+                document.getElementById('buscar-producto'),
+                document.getElementById('filtro-categoria'),
+                document.getElementById('filtro-precio-min'),
+                document.getElementById('filtro-precio-max')
+            ];
+            
+            searchInputs.forEach(input => {
+                if (input) {
+                    input.addEventListener('keypress', function(e) {
+                        if (e.key === 'Enter') {
+                            aplicarFiltros();
+                        }
+                    });
+                }
+            });
+        });
     </script>
 </body>
 </html>
