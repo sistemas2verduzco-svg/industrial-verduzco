@@ -413,3 +413,124 @@ function mostrarMensaje(texto, tipo) {
         mensajeForm.className = 'mensaje';
     }, 3000);
 }
+
+// ==================== EXPORTAR E IMPORTAR ====================
+function exportarExcel() {
+    fetch('/api/productos/exportar-excel')
+        .then(response => {
+            if (!response.ok) throw new Error('Error en la descarga');
+            return response.blob();
+        })
+        .then(blob => {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'catalogo_productos.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            mostrarMensaje('✓ Catálogo exportado correctamente', 'success');
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            mostrarMensaje('✗ Error al exportar catálogo', 'error');
+        });
+}
+
+function exportarCSV() {
+    fetch('/api/productos/exportar')
+        .then(response => {
+            if (!response.ok) throw new Error('Error en la descarga');
+            return response.text();
+        })
+        .then(csv => {
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'productos.csv';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            mostrarMensaje('✓ Catálogo exportado como CSV', 'success');
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            mostrarMensaje('✗ Error al exportar CSV', 'error');
+        });
+}
+
+// Manejador para importar Excel
+document.addEventListener('DOMContentLoaded', function() {
+    const inputArchivo = document.getElementById('archivo-importar');
+    if (inputArchivo) {
+        inputArchivo.addEventListener('change', function(e) {
+            const archivo = e.target.files[0];
+            if (archivo) {
+                document.getElementById('archivo-nombre').textContent = `Cargando: ${archivo.name}...`;
+                importarExcel(archivo);
+            }
+        });
+    }
+});
+
+function importarExcel(archivo) {
+    const formData = new FormData();
+    formData.append('file', archivo);
+    
+    fetch('/api/productos/importar-excel', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            mostrarMensaje(`✗ Error: ${data.error}`, 'error');
+        } else {
+            const resumen = `Importación completada:\n✓ ${data.creados} creados\n✓ ${data.actualizados} actualizados\n✗ ${data.errores} errores`;
+            mostrarMensaje(resumen, 'success');
+            console.log('Detalles:', data.detalles);
+            cargarProductos(); // Recargar tabla
+            document.getElementById('archivo-nombre').textContent = '';
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        mostrarMensaje('✗ Error al importar Excel', 'error');
+        document.getElementById('archivo-nombre').textContent = '';
+    });
+}
+
+function verBajoStock() {
+    fetch('/api/productos/bajo-stock')
+        .then(response => response.json())
+        .then(productos => {
+            if (productos.length === 0) {
+                mostrarMensaje('✓ No hay productos con bajo stock', 'success');
+                return;
+            }
+            alert(`Productos con bajo stock (< 5 unidades):\n\n${productos.map(p => `${p.nombre}: ${p.cantidad} uds`).join('\n')}`);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            mostrarMensaje('✗ Error al obtener bajo stock', 'error');
+        });
+}
+
+function sincronizarBD() {
+    mostrarMensaje('⟳ Sincronizando base de datos...', 'info');
+    cargarProductos();
+    setTimeout(() => {
+        mostrarMensaje('✓ Base de datos sincronizada', 'success');
+    }, 500);
+}
+
+function limpiarFiltros() {
+    document.getElementById('filtro-nombre').value = '';
+    document.getElementById('filtro-categoria').value = '';
+    cargarProductos();
+    mostrarMensaje('✓ Filtros limpiados', 'success');
+}
+

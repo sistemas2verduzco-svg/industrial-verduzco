@@ -376,6 +376,209 @@ def exportar_productos():
     response.headers['Content-Type'] = 'text/csv'
     return response
 
+
+@app.route('/api/productos/exportar-excel', methods=['GET'])
+@login_required
+def exportar_excel():
+    """Exportar productos a XLSX con imágenes incrustadas"""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.drawing.image import Image as XLImage
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from io import BytesIO
+        import requests
+        from PIL import Image
+    except ImportError:
+        return jsonify({'error': 'Dependencias faltantes (openpyxl, Pillow)'}), 500
+
+    productos = Producto.query.all()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Catálogo"
+
+    # Header con estilos
+    headers = ['ID', 'Nombre', 'Descripción', 'Categoría', 'Precio', 'Stock', 'Imagen', 'Fecha Creación']
+    ws.append(headers)
+    header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+    header_font = Font(bold=True, color='FFFFFF')
+
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+
+    # Anchos de columnas
+    ws.column_dimensions['A'].width = 8
+    ws.column_dimensions['B'].width = 25
+    ws.column_dimensions['C'].width = 35
+    ws.column_dimensions['D'].width = 15
+    ws.column_dimensions['E'].width = 12
+    ws.column_dimensions['F'].width = 10
+    ws.column_dimensions['G'].width = 20
+    ws.column_dimensions['H'].width = 18
+
+    # Datos
+    for idx, p in enumerate(productos, start=2):
+        ws[f'A{idx}'] = p.id
+        ws[f'B{idx}'] = p.nombre
+        ws[f'C{idx}'] = p.descripcion or ''
+        ws[f'D{idx}'] = p.categoria or ''
+        ws[f'E{idx}'] = p.precio
+        ws[f'F{idx}'] = p.cantidad
+        ws[f'H{idx}'] = p.fecha_creacion.isoformat() if p.fecha_creacion else ''
+
+        # Descargar e insertar imagen si existe
+        if p.imagen_url:
+            try:
+                # Si es URL completa, descargar; si es ruta local, usarla directo
+                if p.imagen_url.startswith('http'):
+                    img_response = requests.get(p.imagen_url, timeout=5)
+                    img_data = BytesIO(img_response.content)
+                else:
+                    # Ruta local (relative a UPLOAD_FOLDER)
+                    img_path = os.path.join(UPLOAD_FOLDER, os.path.basename(p.imagen_url))
+                    if os.path.exists(img_path):
+                        img_data = img_path
+                    else:
+                        img_data = None
+
+                if img_data:
+                    # Insertar imagen redimensionada
+                    if isinstance(img_data, BytesIO):
+                        pil_img = Image.open(img_data)
+                    else:
+                        pil_img = Image.open(img_data)
+
+                    # Redimensionar a máx 200x200 para que quepan en Excel
+                    pil_img.thumbnail((200, 200), Image.Resampling.LANCZOS)
+
+                    # Guardar en BytesIO
+                    img_bytes = BytesIO()
+                    pil_img.save(img_bytes, format='PNG')
+                    img_bytes.seek(0)
+
+                    # Insertar en Excel
+                    xl_img = XLImage(img_bytes)
+                    xl_img.width = 150
+                    xl_img.height = 150
+                    ws.add_image(xl_img, f'G{idx}')
+                    ws.row_dimensions[idx].height = 120
+            except Exception as e:
+                # Si falla descargar, dejar URL como texto
+                ws[f'G{idx}'] = p.imagen_url
+                print(f"Warning: No se pudo insertar imagen de {p.nombre}: {e}")
+        else:
+            ws[f'G{idx}'] = 'Sin imagen'
+
+    # Guardar a BytesIO
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    response = make_response(output.getvalue())
+    response.headers['Content-Disposition'] = 'attachment; filename=catalogo_productos.xlsx'
+    response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    return response
+
+
+@app.route('/api/productos/importar-excel', methods=['POST'])
+@login_required
+def importar_excel():
+    """Importar productos desde Excel (CLAVES.xlsx)
+    Mapea: Columna C (Clave) -> nombre, Columna F (Producto) -> descripción
+    """
+    if not is_admin_user():
+        return jsonify({'error': 'Solo admins pueden importar'}), 403
+    
+    try:
+        import openpyxl
+    except ImportError:
+        return jsonify({'error': 'openpyxl no instalado'}), 500
+    
+    # Verificar si hay archivo en request
+    if 'file' not in request.files:
+        return jsonify({'error': 'No se encontró archivo'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'Archivo vacío'}), 400
+    
+    if not file.filename.lower().endswith('.xlsx'):
+        return jsonify({'error': 'Solo se aceptan archivos .xlsx'}), 400
+    
+    try:
+        # Cargar workbook
+        wb = openpyxl.load_workbook(file)
+        ws = wb.active
+        
+        # Mapear columnas: Clave (C=3), Producto (F=6)
+        # Row 1 es encabezado, comenzar desde row 2
+        
+        stats = {
+            'creados': 0,
+            'actualizados': 0,
+            'errores': 0,
+            'detalles': []
+        }
+        
+        for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            try:
+                # row es tupla con valores: índice 2 = columna C (Clave), índice 5 = columna F (Producto)
+                clave = row[2]  # Columna C
+                descripcion = row[5]  # Columna F
+                
+                # Validar que ambos campos existan
+                if not clave or not descripcion:
+                    stats['detalles'].append(f"Fila {row_num}: Falta Clave o Producto")
+                    continue
+                
+                # Convertir a string y limpiar
+                clave = str(clave).strip()
+                descripcion = str(descripcion).strip()
+                
+                # Buscar si el producto ya existe por nombre (clave)
+                producto = Producto.query.filter_by(nombre=clave).first()
+                
+                if producto:
+                    # ACTUALIZAR
+                    producto.descripcion = descripcion
+                    stats['actualizados'] += 1
+                    stats['detalles'].append(f"Actualizado: {clave}")
+                else:
+                    # CREAR NUEVO
+                    nuevo_producto = Producto(
+                        nombre=clave,
+                        descripcion=descripcion,
+                        precio=0.0,
+                        cantidad=0,
+                        categoria='Importado',
+                        imagen_url=None
+                    )
+                    db.session.add(nuevo_producto)
+                    stats['creados'] += 1
+                    stats['detalles'].append(f"Creado: {clave}")
+                
+            except Exception as e:
+                stats['errores'] += 1
+                stats['detalles'].append(f"Fila {row_num}: Error - {str(e)}")
+                continue
+        
+        # Guardar cambios
+        try:
+            db.session.commit()
+            stats['mensaje'] = 'Importación completada'
+        except Exception as e:
+            db.session.rollback()
+            stats['mensaje'] = f'Error al guardar: {str(e)}'
+            stats['errores'] += 1
+        
+        return jsonify(stats), 200
+    
+    except Exception as e:
+        return jsonify({'error': f'Error procesando Excel: {str(e)}'}), 500
+
+
 @app.route('/api/productos/bajo-stock', methods=['GET'])
 @login_required
 def bajo_stock():

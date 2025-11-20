@@ -215,8 +215,16 @@
                 <div class="herramientas-grid">
                     <div class="herramienta-card">
                         <h3>📥 Exportar Catálogo</h3>
-                        <p>Descargar todos los productos en formato CSV</p>
-                        <button class="btn btn-primary" onclick="exportarCSV()">Exportar CSV</button>
+                        <p>Descargar todos los productos en formato Excel con imágenes</p>
+                        <button class="btn btn-primary" onclick="exportarExcel()">Exportar Excel</button>
+                    </div>
+
+                    <div class="herramienta-card">
+                        <h3>📤 Importar desde Excel</h3>
+                        <p>Importar claves y descripciones desde CLAVES.xlsx</p>
+                        <input type="file" id="archivo-importar" accept=".xlsx" style="display:none;">
+                        <button class="btn btn-success" onclick="document.getElementById('archivo-importar').click()">Seleccionar Excel</button>
+                        <small id="archivo-nombre" style="display:block; margin-top:0.5rem; color:#666;"></small>
                     </div>
                     
                     <div class="herramienta-card">
