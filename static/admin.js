@@ -15,6 +15,10 @@ const mensajeForm = document.getElementById('mensaje-form');
 const inputImagenFile = document.getElementById('imagen_file');
 const previewDiv = document.getElementById('preview-imagen');
 const previewImg = document.getElementById('preview-img');
+// Para edición
+const editarInputImagenFile = document.getElementById('editar-imagen_file');
+const editarPreviewDiv = document.getElementById('editar-preview-imagen');
+const editarPreviewImg = document.getElementById('editar-preview-img');
 let imagenSubidaUrl = null;
 
 // Event listeners
@@ -29,9 +33,23 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Event listener para vista previa de imagen
+    // Event listener para vista previa de imagen (alta)
     if (inputImagenFile) {
         inputImagenFile.addEventListener('change', mostrarPreviewImagen);
+    }
+    // Event listener para vista previa de imagen (edición)
+    if (editarInputImagenFile) {
+        editarInputImagenFile.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    editarPreviewImg.src = e.target.result;
+                    editarPreviewDiv.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            }
+        });
     }
     // Cargar proveedores para el formulario de creación (si existe el select)
     cargarProveedoresParaCrear();
@@ -332,7 +350,10 @@ function abrirEdicion(id) {
             document.getElementById('editar-cantidad').value = producto.cantidad;
             document.getElementById('editar-categoria').value = producto.categoria || '';
             document.getElementById('editar-imagen_url').value = producto.imagen_url || '';
-            
+            // Limpiar input de archivo y preview
+            if (editarInputImagenFile) editarInputImagenFile.value = '';
+            if (editarPreviewDiv) editarPreviewDiv.style.display = 'none';
+            if (editarPreviewImg) editarPreviewImg.src = '';
             modal.classList.add('show');
         })
         .catch(error => {
@@ -365,37 +386,52 @@ function guardarEdicion(event) {
         if (response.ok) {
             mostrarMensaje('✓ Producto actualizado correctamente', 'success');
             cerrarModal();
-            cargarProductos();
-        } else {
-            mostrarMensaje('✗ Error al actualizar producto', 'error');
+            // Si hay archivo de imagen, subir primero
+            const file = editarInputImagenFile && editarInputImagenFile.files[0];
+            if (file) {
+                subirImagen(file).then(url => {
+                    enviarEdicionProducto(id, url);
+                }).catch(err => {
+                    mostrarMensaje('✗ Error al subir imagen', 'error');
+                });
+            } else {
+                const url = document.getElementById('editar-imagen_url').value;
+                enviarEdicionProducto(id, url);
+            }
         }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        mostrarMensaje('✗ Error en la solicitud', 'error');
-    });
-}
 
-function cerrarModal() {
-    modal.classList.remove('show');
-    productoEnEdicion = null;
-}
-
-// ==================== ELIMINAR PRODUCTO ====================
-function eliminarProducto(id) {
-    if (!confirm('¿Estás seguro de que quieres eliminar este producto?')) {
-        return;
-    }
-    
-    fetch(`/api/productos/${id}`, {
-        method: 'DELETE'
-    })
-    .then(response => {
-        if (response.ok) {
-            mostrarMensaje('✓ Producto eliminado correctamente', 'success');
-            cargarProductos();
-        } else {
-            mostrarMensaje('✗ Error al eliminar producto', 'error');
+        function enviarEdicionProducto(id, imagenUrl) {
+            const producto = {
+                nombre: document.getElementById('editar-nombre').value,
+                descripcion: document.getElementById('editar-descripcion').value,
+                precio: parseFloat(document.getElementById('editar-precio').value),
+                cantidad: parseInt(document.getElementById('editar-cantidad').value) || 0,
+                categoria: document.getElementById('editar-categoria').value,
+                imagen_url: imagenUrl
+            };
+            fetch(`/api/productos/${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(producto)
+            })
+            .then(response => parseJsonSafe(response))
+            .then(result => {
+                if (result && !result.error) {
+                    mostrarMensaje('✓ Producto actualizado', 'success');
+                    modal.classList.remove('show');
+                    cargarProductos();
+                } else {
+                    const msg = result && result.error ? result.error : 'Error al actualizar producto';
+                    mostrarMensaje(`✗ ${msg}`, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                mostrarMensaje('✗ Error al actualizar producto', 'error');
+            });
+        }
         }
     })
     .catch(error => {
