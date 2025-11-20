@@ -177,16 +177,18 @@
                 .then(response => parseJsonSafe(response))
                 .then(productos => {
                     const container = document.getElementById('productos-container');
-                    
                     if (productos.length === 0) {
                         container.innerHTML = '<div class="empty-state">No se encontraron productos con esos filtros</div>';
                         return;
                     }
-                    
                     container.innerHTML = '';
                     productos.forEach(producto => {
                         const card = document.createElement('div');
-                        card.className = 'producto-card';
+                        card.className = 'producto-card producto-clickeable';
+                        card.style.cursor = 'pointer';
+                        card.onclick = function() {
+                            window.location.href = `/producto/${producto.id}`;
+                        };
                         card.innerHTML = `
                             <div class="producto-imagen">
                                 ${producto.imagen_url ? `<img src="${producto.imagen_url}" alt="${producto.nombre}">` : '<div class="no-image">Sin imagen</div>'}
