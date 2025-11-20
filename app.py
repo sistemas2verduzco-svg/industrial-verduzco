@@ -194,6 +194,13 @@ def index():
     """Página principal - Catálogo (privado)"""
     return render_template('index.html')
 
+
+@app.route('/producto/<int:producto_id>')
+@login_required
+def producto_detalle(producto_id):
+    producto = Producto.query.get_or_404(producto_id)
+    return render_template('producto_detalle.html', producto=producto)
+
 @app.route('/admin')
 @login_required
 def admin():

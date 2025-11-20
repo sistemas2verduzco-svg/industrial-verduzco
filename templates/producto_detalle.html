@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detalle de Producto</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <h1 class="logo">📦 Mi Catálogo</h1>
+            <ul class="nav-links">
+                <li><a href="/" class="btn-nav">Catálogo</a></li>
+                <li><a href="/admin" class="btn-nav">Administrar</a></li>
+                <li><a href="/proveedores" class="btn-nav">🏢 Proveedores</a></li>
+                <li><a href="/logout" class="btn-logout">Cerrar Sesión</a></li>
+            </ul>
+        </div>
+    </nav>
+    <div class="container" style="margin-top:2rem;">
+        <a href="/" class="btn btn-secondary">← Volver al catálogo</a>
+        <div class="detalle-producto-card">
+            <h2>{{ producto.nombre }}</h2>
+            {% if producto.imagen_url %}
+                <img src="{{ producto.imagen_url }}" alt="Imagen de {{ producto.nombre }}" style="max-width:220px; max-height:220px; border-radius:8px; margin-bottom:1rem;">
+            {% endif %}
+            <p><strong>Descripción:</strong> {{ producto.descripcion or 'Sin descripción' }}</p>
+            <p><strong>Categoría:</strong> {{ producto.categoria or 'Sin categoría' }}</p>
+            <p><strong>Precio:</strong> ${{ '%.2f'|format(producto.precio) }}</p>
+            <p><strong>Stock:</strong> {{ producto.cantidad }}</p>
+            <p><strong>Fecha de creación:</strong> {{ producto.fecha_creacion or 'N/A' }}</p>
+        </div>
+    </div>
+</body>
+</html>

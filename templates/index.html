@@ -101,16 +101,18 @@
                 .then(response => parseJsonSafe(response))
                 .then(productos => {
                     const container = document.getElementById('productos-container');
-                    
                     if (productos.length === 0) {
                         container.innerHTML = '<div class="empty-state">No hay productos disponibles</div>';
                         return;
                     }
-                    
                     container.innerHTML = '';
                     productos.forEach(producto => {
                         const card = document.createElement('div');
-                        card.className = 'producto-card';
+                        card.className = 'producto-card producto-clickeable';
+                        card.style.cursor = 'pointer';
+                        card.onclick = function() {
+                            window.location.href = `/producto/${producto.id}`;
+                        };
                         card.innerHTML = `
                             <div class="producto-imagen">
                                 ${producto.imagen_url ? `<img src="${producto.imagen_url}" alt="${producto.nombre}">` : '<div class="no-image">Sin imagen</div>'}
@@ -132,6 +134,16 @@
                     console.error('Error cargando productos:', error);
                     document.getElementById('productos-container').innerHTML = '<div class="error">Error al cargar productos</div>';
                 });
+                // Efecto visual para tarjetas clickeables
+                const style = document.createElement('style');
+                style.innerHTML = `
+                    .producto-clickeable:hover {
+                        box-shadow: 0 0 0 3px #1976d2, 0 2px 8px rgba(0,0,0,0.10);
+                        transform: translateY(-2px) scale(1.02);
+                        transition: box-shadow 0.2s, transform 0.2s;
+                    }
+                `;
+                document.head.appendChild(style);
         }
 
         function cargarEstadisticas() {
