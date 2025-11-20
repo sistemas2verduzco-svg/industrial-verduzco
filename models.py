@@ -91,8 +91,8 @@ class Producto(db.Model):
             'cantidad': self.cantidad,
             'imagen_url': self.imagen_url,
             'categoria': self.categoria,
-            'fecha_creacion': self.fecha_creacion.isoformat(),
-            'fecha_actualizacion': self.fecha_actualizacion.isoformat(),
+            'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,
+            'fecha_actualizacion': self.fecha_actualizacion.isoformat() if self.fecha_actualizacion else None,
             'proveedores': [pp.to_dict() for pp in self.proveedores]
         }
 
