@@ -27,7 +27,8 @@ services:
     environment:
       FLASK_APP: app.py
       FLASK_ENV: production
-      DATABASE_URL: postgresql://catalogo_user:catalogo_pass@db:5432/catalogo_db
+      DATABASE_URL: postgresql://catalogo_user:catalogo_pass@catalogo_db:5432/catalogo_db
+
     volumes:
       - .:/app
     restart: unless-stopped
