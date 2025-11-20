@@ -142,3 +142,28 @@ class HistorialPreciosProveedor(db.Model):
             'notas': self.notas,
             'fecha_creacion': self.fecha_creacion.isoformat()
         }
+
+
+class AccessLog(db.Model):
+    __tablename__ = 'access_logs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    ip = db.Column(db.String(100), nullable=True)
+    username = db.Column(db.String(100), nullable=True)
+    path = db.Column(db.String(500), nullable=False)
+    method = db.Column(db.String(10), nullable=False)
+    user_agent = db.Column(db.String(500), nullable=True)
+    referer = db.Column(db.String(500), nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'ip': self.ip,
+            'username': self.username,
+            'path': self.path,
+            'method': self.method,
+            'user_agent': self.user_agent,
+            'referer': self.referer,
+            'timestamp': self.timestamp.isoformat()
+        }

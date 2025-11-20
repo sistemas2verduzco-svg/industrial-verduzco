@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Puerta - Registros de Acceso</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .log-table { width:100%; border-collapse: collapse; }
+        .log-table th, .log-table td { padding:8px; border:1px solid #ddd; font-size:0.9rem; }
+        .small { font-size:0.85rem; color:#666; }
+        .toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; }
+        .btn { padding:6px 10px; border-radius:6px; text-decoration:none; }
+        .btn-primary { background:#2d7ef7; color:#fff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="toolbar">
+            <h2>Puerta - Registros de Acceso</h2>
+            <div>
+                <a class="btn btn-primary" href="{{ url_for('get_logs') }}?limit=500">Descargar JSON (últimos 500)</a>
+            </div>
+        </div>
+
+        <p class="small">Visible sólo para el usuario <strong>root</strong>. Muestra quién ha abierto la plataforma y la dirección IP del dispositivo.</p>
+
+        <table class="log-table">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Usuario</th>
+                    <th>IP</th>
+                    <th>Ruta</th>
+                    <th>Método</th>
+                    <th>User-Agent</th>
+                    <th>Referer</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for l in logs %}
+                <tr>
+                    <td>{{ l.timestamp }}</td>
+                    <td>{{ l.username or '-' }}</td>
+                    <td>{{ l.ip or '-' }}</td>
+                    <td>{{ l.path }}</td>
+                    <td>{{ l.method }}</td>
+                    <td style="max-width:300px;overflow:hidden;">{{ l.user_agent or '-' }}</td>
+                    <td style="max-width:200px;overflow:hidden;">{{ l.referer or '-' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7">No hay registros</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

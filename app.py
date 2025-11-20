@@ -64,6 +64,64 @@ with app.app_context():
 # Inicializar AuthManager con BD
 auth_manager = AuthManager(db=db)
 
+
+# Helper: check if session user is admin
+def is_admin_user():
+    username = session.get('admin_user')
+    if not username:
+        return False
+    try:
+        user = Usuario.query.filter_by(username=username).first()
+        return bool(user and user.es_admin)
+    except Exception:
+        return False
+
+
+def is_root_user():
+    """Return True only if logged-in user is 'root' (exact match)."""
+    username = session.get('admin_user')
+    return username == 'root'
+
+
+# Registrar accesos (IP, UA, path) en cada petición - evita estáticos
+@app.before_request
+def log_access():
+    try:
+        path = request.path
+        # skip static files and health checks
+        if path.startswith('/static') or path.startswith('/favicon'):
+            return
+
+        # get client ip (respect X-Forwarded-For when behind proxy)
+        if request.headers.get('X-Forwarded-For'):
+            client_ip = request.headers.get('X-Forwarded-For').split(',')[0].strip()
+        else:
+            client_ip = request.remote_addr
+
+        ua = request.headers.get('User-Agent')
+        referer = request.headers.get('Referer')
+        username = session.get('admin_user') if 'admin_user' in session else None
+
+        # Create log entry
+        from models import AccessLog
+        entry = AccessLog(
+            ip=client_ip,
+            username=username,
+            path=path,
+            method=request.method,
+            user_agent=ua,
+            referer=referer
+        )
+        db.session.add(entry)
+        db.session.commit()
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        # do not interrupt request flow on log error
+        return
+
 # ==================== DECORADOR DE AUTENTICACIÓN ====================
 
 def login_required(f):
@@ -332,6 +390,71 @@ def obtener_categorias():
         Producto.categoria != None
     ).all()
     return jsonify([cat[0] for cat in categorias])
+
+
+@app.route('/api/logs', methods=['GET'])
+@login_required
+def get_logs():
+    """Obtener logs de acceso (solo admin). Parámetro opcional: limit (default 50)"""
+    if not is_admin_user():
+        return jsonify({'error': 'Prohibido'}), 403
+
+    limit = min(int(request.args.get('limit', 50)), 500)
+    try:
+        logs = db.session.query('access_logs').from_statement(db.text('SELECT * FROM access_logs ORDER BY timestamp DESC LIMIT :lim')).params(lim=limit).all()
+        # Fallback to ORM query if direct text not supported
+    except Exception:
+        from models import AccessLog
+        logs = AccessLog.query.order_by(AccessLog.timestamp.desc()).limit(limit).all()
+
+    # Convert to dicts
+    result = []
+    for l in logs:
+        try:
+            result.append(l.to_dict())
+        except Exception:
+            # if row is a tuple from raw query, try mapping
+            try:
+                d = {
+                    'id': l.id,
+                    'ip': l.ip,
+                    'username': l.username,
+                    'path': l.path,
+                    'method': l.method,
+                    'user_agent': l.user_agent,
+                    'referer': l.referer,
+                    'timestamp': l.timestamp.isoformat() if hasattr(l, 'timestamp') else None
+                }
+                result.append(d)
+            except Exception:
+                continue
+
+    return jsonify(result)
+
+
+@app.route('/admin/puerta')
+@login_required
+def puerta():
+    """Vista web exclusiva para el usuario 'root' con registros de acceso."""
+    if not is_root_user():
+        return render_template('login.html', error='Acceso restringido'), 403
+
+    from models import AccessLog
+    limit = min(int(request.args.get('limit', 200)), 2000)
+    logs = AccessLog.query.order_by(AccessLog.timestamp.desc()).limit(limit).all()
+    # convert timestamps to ISO for template
+    logs_serialized = []
+    for l in logs:
+        logs_serialized.append({
+            'timestamp': l.timestamp.isoformat(),
+            'username': l.username,
+            'ip': l.ip,
+            'path': l.path,
+            'method': l.method,
+            'user_agent': l.user_agent,
+            'referer': l.referer
+        })
+    return render_template('puerta.html', logs=logs_serialized)
 
 # ==================== ENDPOINTS DE PROVEEDORES ====================
 
