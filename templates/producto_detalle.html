@@ -31,6 +31,46 @@
             <p><strong>Stock:</strong> {{ producto.cantidad }}</p>
             <p><strong>Fecha de creación:</strong> {{ producto.fecha_creacion or 'N/A' }}</p>
         </div>
+
+        <div class="detalle-proveedores" style="margin-top:2rem;">
+            <h3>Proveedores y Precios</h3>
+            {% if proveedores and proveedores|length > 0 %}
+                <table class="tabla-proveedores" style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr style="background:#e3f2fd;">
+                            <th>Proveedor</th>
+                            <th>Precio</th>
+                            <th>Fecha precio</th>
+                            <th>Cantidad mínima</th>
+                            <th>Historial de Precios</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in proveedores %}
+                        <tr>
+                            <td>{{ p.proveedor.nombre if p.proveedor else 'Sin proveedor' }}</td>
+                            <td>${{ '%.2f'|format(p.precio_proveedor) }}</td>
+                            <td>{{ p.fecha_precio or 'N/A' }}</td>
+                            <td>{{ p.cantidad_minima }}</td>
+                            <td>
+                                {% if p.historial_precios and p.historial_precios|length > 0 %}
+                                    <ul style="margin:0; padding-left:1em;">
+                                    {% for h in p.historial_precios %}
+                                        <li>${{ '%.2f'|format(h.precio) }} ({{ h.fecha_precio }})</li>
+                                    {% endfor %}
+                                    </ul>
+                                {% else %}
+                                    <span style="color:#888;">Sin historial</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p style="color:#888;">Este producto no tiene proveedores asignados.</p>
+            {% endif %}
+        </div>
     </div>
 </body>
 </html>

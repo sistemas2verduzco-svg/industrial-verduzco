@@ -199,7 +199,20 @@ def index():
 @login_required
 def producto_detalle(producto_id):
     producto = Producto.query.get_or_404(producto_id)
-    return render_template('producto_detalle.html', producto=producto)
+    # Traer proveedores y precios relacionados
+    proveedores = []
+    for pp in producto.proveedores:
+        prov = pp.proveedor.to_dict() if pp.proveedor else None
+        historial = [h.to_dict() for h in pp.historial_precios]
+        proveedores.append({
+            'asignacion_id': pp.id,
+            'proveedor': prov,
+            'precio_proveedor': pp.precio_proveedor,
+            'fecha_precio': pp.fecha_precio.isoformat() if pp.fecha_precio else None,
+            'cantidad_minima': pp.cantidad_minima,
+            'historial_precios': historial
+        })
+    return render_template('producto_detalle.html', producto=producto, proveedores=proveedores)
 
 @app.route('/admin')
 @login_required
