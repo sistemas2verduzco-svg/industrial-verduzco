@@ -7,6 +7,14 @@ from functools import wraps
 import secrets
 from werkzeug.utils import secure_filename
 from datetime import datetime
+from time import time
+
+# Simple in-memory login rate limiter
+# Keys: by IP address. Tracks [attempt_count, first_attempt_ts, locked_until_ts]
+FAILED_LOGINS = {}
+# Configurable via env
+MAX_LOGIN_ATTEMPTS = int(os.getenv('MAX_LOGIN_ATTEMPTS', '5'))
+LOCKOUT_SECONDS = int(os.getenv('LOCKOUT_SECONDS', '300'))  # default 5 minutes
 
 load_dotenv()
 
@@ -78,12 +86,39 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
+        # Rate-limit by IP
+        client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+        entry = FAILED_LOGINS.get(client_ip, [0, 0, 0])
+        attempt_count, first_ts, locked_until = entry
+        now = time()
+
+        # Clear window if older than lockout window
+        if first_ts and now - first_ts > LOCKOUT_SECONDS:
+            attempt_count, first_ts, locked_until = 0, 0, 0
+
+        if locked_until and now < locked_until:
+            remaining = int(locked_until - now)
+            return render_template('login.html', error=f'Too many attempts. Try again in {remaining} seconds.'), 429
         
         if auth_manager.verify_credentials(username, password):
+            # success: reset counter for this IP
+            if client_ip in FAILED_LOGINS:
+                FAILED_LOGINS.pop(client_ip, None)
             session['admin_user'] = username
             return redirect(url_for('admin'))
         else:
-            return render_template('login.html', error='Credenciales inválidas'), 401
+            # failure: increment
+            attempt_count += 1
+            if not first_ts:
+                first_ts = now
+            # Lock if exceeded
+            if attempt_count >= MAX_LOGIN_ATTEMPTS:
+                locked_until = now + LOCKOUT_SECONDS
+                FAILED_LOGINS[client_ip] = [attempt_count, first_ts, locked_until]
+                return render_template('login.html', error='Demasiados intentos. Intenta nuevamente más tarde.'), 429
+            else:
+                FAILED_LOGINS[client_ip] = [attempt_count, first_ts, 0]
+                return render_template('login.html', error='Credenciales inválidas'), 401
     
     return render_template('login.html')
 
