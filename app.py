@@ -235,6 +235,59 @@ def proveedores():
     """Página de gestión de proveedores"""
     return render_template('proveedores.html')
 
+
+# ========== Public read-only endpoints and consulta page ===========
+@app.route('/catalogo_consulta')
+def catalogo_consulta():
+    """Página pública de consulta para accesos directos (sin login)."""
+    return render_template('catalogo_consulta.html')
+
+
+def _producto_sanitizado(p):
+    return {
+        'id': p.id,
+        'nombre': p.nombre,
+        'descripcion': p.descripcion,
+        'precio': p.precio,
+        'cantidad': p.cantidad,
+        'imagen_url': p.imagen_url,
+        'categoria': p.categoria
+    }
+
+
+@app.route('/public/productos', methods=['GET'])
+def public_get_productos():
+    productos = Producto.query.all()
+    return jsonify([_producto_sanitizado(p) for p in productos])
+
+
+@app.route('/public/productos/buscar', methods=['GET'])
+def public_buscar_productos():
+    query = request.args.get('q', '').lower()
+    categoria = request.args.get('categoria', '').lower()
+
+    productos_q = Producto.query
+    if query:
+        productos_q = productos_q.filter(
+            db.or_(
+                Producto.nombre.ilike(f'%{query}%'),
+                Producto.descripcion.ilike(f'%{query}%')
+            )
+        )
+    if categoria:
+        productos_q = productos_q.filter(Producto.categoria.ilike(f'%{categoria}%'))
+
+    productos = productos_q.all()
+    return jsonify([_producto_sanitizado(p) for p in productos])
+
+
+@app.route('/public/categorias', methods=['GET'])
+def public_categorias():
+    cats = db.session.query(Producto.categoria).distinct().all()
+    # cats is list of tuples
+    lista = [c[0] for c in cats if c[0]]
+    return jsonify(sorted(lista))
+
 # ==================== API CRUD ====================
 
 # GET - Obtener todos los productos
