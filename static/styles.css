@@ -360,6 +360,34 @@ body {
     align-items: end;
 }
 
+/* Filtros section general styling */
+.filtros-section {
+    background: #f9f9f9;
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 2rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+}
+
+.filtro-input {
+    width: 100%;
+    padding: 0.6rem;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+}
+
+.btn-secondary {
+    background: #666;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.btn-secondary:hover {
+    background: #555;
+}
+
 /* Ensure buttons in filtros are sized nicely on small screens */
 .filtros-grid .btn {
     width: 100%;
