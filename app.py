@@ -255,38 +255,50 @@ def _producto_sanitizado(p):
     }
 
 
-@app.route('/public/productos', methods=['GET'])
-def public_get_productos():
-    productos = Producto.query.all()
-    return jsonify([_producto_sanitizado(p) for p in productos])
+@app.route('/public/categorias', methods=['GET'])
+def public_categorias():
+    """Public endpoint para obtener categorías distintas."""
+    try:
+        cats = db.session.query(Producto.categoria).filter(Producto.categoria != None).distinct().all()
+        # cats is list of tuples
+        lista = sorted([c[0] for c in cats if c[0]])
+        return jsonify(lista)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/public/productos/buscar', methods=['GET'])
 def public_buscar_productos():
-    query = request.args.get('q', '').lower()
-    categoria = request.args.get('categoria', '').lower()
+    """Public endpoint para buscar productos (sin login)."""
+    try:
+        query = request.args.get('q', '').lower()
+        categoria = request.args.get('categoria', '').lower()
 
-    productos_q = Producto.query
-    if query:
-        productos_q = productos_q.filter(
-            db.or_(
-                Producto.nombre.ilike(f'%{query}%'),
-                Producto.descripcion.ilike(f'%{query}%')
+        productos_q = Producto.query
+        if query:
+            productos_q = productos_q.filter(
+                db.or_(
+                    Producto.nombre.ilike(f'%{query}%'),
+                    Producto.descripcion.ilike(f'%{query}%')
+                )
             )
-        )
-    if categoria:
-        productos_q = productos_q.filter(Producto.categoria.ilike(f'%{categoria}%'))
+        if categoria:
+            productos_q = productos_q.filter(Producto.categoria.ilike(f'%{categoria}%'))
 
-    productos = productos_q.all()
-    return jsonify([_producto_sanitizado(p) for p in productos])
+        productos = productos_q.all()
+        return jsonify([_producto_sanitizado(p) for p in productos])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
-@app.route('/public/categorias', methods=['GET'])
-def public_categorias():
-    cats = db.session.query(Producto.categoria).distinct().all()
-    # cats is list of tuples
-    lista = [c[0] for c in cats if c[0]]
-    return jsonify(sorted(lista))
+@app.route('/public/productos', methods=['GET'])
+def public_get_productos():
+    """Public endpoint para listar todos los productos (sin login)."""
+    try:
+        productos = Producto.query.all()
+        return jsonify([_producto_sanitizado(p) for p in productos])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # ==================== API CRUD ====================
 
