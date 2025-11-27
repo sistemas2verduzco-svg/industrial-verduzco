@@ -19,26 +19,26 @@
         </div>
     </nav>
 
-    <div class="container" style="margin-top: 1.2rem;">
-        <div class="filtros-section" style="background: #fff;">
-            <h3 style="margin-top: 0; color: #333;">Consulta de Productos</h3>
+    <div class="container">
+        <div class="filtros-section">
+            <h3>Consulta de Productos</h3>
             <div class="filtros-grid">
                 <div class="form-group">
                     <label for="consulta-buscar">Buscar producto</label>
-                    <input id="consulta-buscar" type="search" placeholder="Producto...">
+                    <input id="consulta-buscar" type="search" placeholder="Producto..." class="filtro-input">
                 </div>
                 <div class="form-group">
                     <label for="consulta-categoria">Categoria</label>
-                    <select id="consulta-categoria">
+                    <select id="consulta-categoria" class="filtro-input">
                         <option value="">Todas las categorias</option>
                     </select>
                 </div>
                 <button id="consulta-buscar-btn" class="btn btn-primary">Buscar</button>
             </div>
-            <p style="margin-top:8px;color:#666;font-size:0.9rem;">Esta pantalla es solo de consulta; se actualiza desde el catalogo.</p>
+            <p class="consulta-info">Esta pantalla es solo de consulta; se actualiza desde el catalogo.</p>
         </div>
 
-        <div id="consulta-productos" class="productos-grid" style="margin-top:1rem;">
+        <div id="consulta-productos" class="productos-grid">
             <div class="loading">Cargando productos...</div>
         </div>
     </div>
