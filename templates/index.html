@@ -33,7 +33,19 @@
                 <div class="form-group" style="position: relative;">
                     <label for="buscar-producto">Nombre o descripcion</label>
                     <input type="text" id="buscar-producto" placeholder="Buscar..." class="filtro-input" style="padding-right: 2.5em;">
-                    <button type="button" id="clear-buscar" aria-label="Limpiar búsqueda" style="position: absolute; right: 0.5em; top: 2.2em; background: none; border: none; font-size: 1.3em; color: #888; cursor: pointer; display: none;">&times;</button>
+                    <button type="button" id="clear-buscar" aria-label="Limpiar búsqueda" style="position: absolute; right: 0.7em; top: 2.5em; background: none; border: none; font-size: 1.7em; color: #888; cursor: pointer; display: none; width: 1.5em; height: 1.5em; line-height: 1.5em; z-index: 2;">&times;</button>
+                    <style>
+                        @media (max-width: 600px) {
+                            #clear-buscar {
+                                top: 2.7em !important;
+                                right: 0.7em !important;
+                                font-size: 2em !important;
+                                width: 2em !important;
+                                height: 2em !important;
+                                line-height: 2em !important;
+                            }
+                        }
+                    </style>
                 </div>
                 <div class="form-group">
                     <label for="filtro-categoria">Categoria</label>
@@ -129,11 +141,20 @@
                 buscarInput.addEventListener('input', function() {
                     clearBtn.style.display = buscarInput.value ? 'block' : 'none';
                 });
-                clearBtn.addEventListener('click', function() {
+                clearBtn.addEventListener('touchstart', function(e) {
+                    e.preventDefault();
                     buscarInput.value = '';
-                    // Forzar el cambio en el input antes de recargar
+                    clearBtn.style.display = 'none';
                     setTimeout(function() {
-                        window.location.reload();
+                        window.location.href = window.location.pathname;
+                    }, 10);
+                });
+                clearBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    buscarInput.value = '';
+                    clearBtn.style.display = 'none';
+                    setTimeout(function() {
+                        window.location.href = window.location.pathname;
                     }, 10);
                 });
             }
