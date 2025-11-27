@@ -130,9 +130,7 @@
                     clearBtn.style.display = buscarInput.value ? 'block' : 'none';
                 });
                 clearBtn.addEventListener('click', function() {
-                    buscarInput.value = '';
-                    clearBtn.style.display = 'none';
-                    limpiarFiltros();
+                    window.location.reload();
                 });
             }
         });
