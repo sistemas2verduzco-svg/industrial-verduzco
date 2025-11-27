@@ -547,6 +547,53 @@ footer {
         display: inline-block;
     }
 
+    /* Drawer/backdrop for mobile */
+    .nav-drawer {
+        position: fixed;
+        left: 0;
+        top: 0;
+        height: 100%;
+        width: 260px;
+        max-width: 85%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1.25rem 0.75rem;
+        transform: translateX(-110%);
+        transition: transform 0.28s ease;
+        z-index: 1200;
+        box-shadow: 4px 0 18px rgba(0,0,0,0.18);
+        border-right: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .nav-drawer.open {
+        transform: translateX(0);
+    }
+
+    .nav-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.35);
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.18s ease, visibility 0.18s ease;
+        z-index: 1100;
+    }
+
+    .nav-backdrop.show {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    /* Drawer links style */
+    .nav-drawer .nav-links {
+        display: block;
+        gap: 0.5rem;
+        padding: 0;
+        margin: 1rem 0 0 0;
+    }
+
+    .nav-drawer .nav-links li { margin: 0.25rem 0; }
+    .nav-drawer .nav-links a { color: white; }
+
     .navbar .container {
         align-items: flex-start;
     }
