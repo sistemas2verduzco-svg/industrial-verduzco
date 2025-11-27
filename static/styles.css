@@ -725,6 +725,33 @@ footer {
     }
 
     .btn {
+
+/* Make filtros-grid stack nicely on small screens */
+@media (max-width: 720px) {
+    .filtros-grid {
+        grid-template-columns: 1fr;
+        gap: 0.6rem;
+        align-items: stretch;
+    }
+    .filtros-grid .form-group,
+    .filtros-grid input,
+    .filtros-grid select {
+        width: 100%;
+    }
+    /* Ensure buttons occupy full width and are visually separated */
+    .filtros-grid .btn {
+        width: 100%;
+        display: block;
+        padding: 0.7rem 0.9rem;
+        font-size: 1rem;
+    }
+    /* If buttons appear side-by-side, make them stacked and add small spacing */
+    .filtros-grid > .btn + .btn {
+        margin-top: 0.4rem;
+    }
+    /* Reduce padding inside filtros-section so it fits smaller screens */
+    .filtros-section { padding: 1rem; }
+}
         width: 100%;
         text-align: center;
     }
