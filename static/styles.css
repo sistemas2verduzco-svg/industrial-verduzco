@@ -50,6 +50,11 @@ body {
     gap: 2rem;
 }
 
+/* Allow nav links to wrap on narrow screens to avoid overflow */
+.nav-links {
+    flex-wrap: wrap;
+}
+
 /* Mobile nav toggle */
 .nav-toggle {
     display: none;
@@ -185,6 +190,27 @@ body {
     .bottom-nav { display: flex; }
     body { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
     .productos-grid { grid-auto-rows: auto; }
+}
+
+/* Mobile layout tweaks for product cards and grids */
+@media (max-width: 768px) {
+    .productos-grid {
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 1rem;
+        margin: 1rem 0;
+    }
+    .producto-imagen { height: 140px; }
+    .producto-info { padding: 1rem; }
+    .page-header { padding: 1rem; margin: 1rem 0; }
+    .nav-links a { padding: 0.4rem 0.6rem; font-size: 0.95rem; }
+}
+
+/* Very small screens adjustments */
+@media (max-width: 420px) {
+    .producto-imagen { height: 120px; }
+    .bottom-nav { height: 72px; }
+    body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+    .nav-links { gap: 0.6rem; }
 }
 
 .producto-card {
