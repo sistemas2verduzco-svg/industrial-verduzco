@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catálogo (Consulta)</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <meta name="theme-color" content="#1976d2">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <h1 class="logo">📦 Catálogo</h1>
+            <!-- minimal nav for public view -->
+            <ul class="nav-links">
+                <li><a href="/" class="btn-nav">Inicio</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container" style="margin-top: 1.2rem;">
+        <div class="consulta-panel" style="background:#fff; padding:1rem; border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.06);">
+            <div style="display:flex;gap:8px;align-items:center;">
+                <input id="consulta-buscar" type="search" placeholder="Buscar producto..." style="flex:1;padding:0.6rem;border:1px solid #ddd;border-radius:6px;">
+                <select id="consulta-categoria" style="padding:0.55rem;border:1px solid #ddd;border-radius:6px;min-width:140px;">
+                    <option value="">Todas las categorías</option>
+                </select>
+                <button id="consulta-buscar-btn" class="btn btn-primary" style="padding:0.55rem 0.9rem;">Buscar</button>
+            </div>
+            <p style="margin-top:8px;color:#666;font-size:0.9rem;">Esta pantalla es solo de consulta; se actualiza desde el catálogo.</p>
+        </div>
+
+        <div id="consulta-productos" class="productos-grid" style="margin-top:1rem;">
+            <div class="loading">Cargando productos...</div>
+        </div>
+    </div>
+
+    <footer>
+        <p style="text-align:center;color:#888;padding:1rem 0;">&copy; 2025 Catálogo - Consulta</p>
+    </footer>
+
+    <script>
+        async function fetchJson(url) {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('Error en la petición: ' + res.status);
+            return res.json();
+        }
+
+        function renderProductos(productos) {
+            const container = document.getElementById('consulta-productos');
+            if (!productos || productos.length === 0) {
+                container.innerHTML = '<div class="empty-state">No hay productos disponibles</div>';
+                return;
+            }
+            container.innerHTML = '';
+            productos.forEach(p => {
+                const card = document.createElement('div');
+                card.className = 'producto-card';
+                card.innerHTML = `
+                    <div class="producto-imagen">${p.imagen_url ? `<img src="${p.imagen_url}" alt="${p.nombre}">` : '<div class="no-image">Sin imagen</div>'}</div>
+                    <div class="producto-info">
+                        <h3>${p.nombre}</h3>
+                        <p class="categoria">${p.categoria || 'Sin categoría'}</p>
+                        <p class="descripcion">${p.descripcion || ''}</p>
+                        <div class="precio-stock"><span class="precio">$${(p.precio||0).toFixed(2)}</span></div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        async function cargarCategorias() {
+            try {
+                const cats = await fetchJson('/public/categorias');
+                const sel = document.getElementById('consulta-categoria');
+                cats.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c;
+                    opt.textContent = c;
+                    sel.appendChild(opt);
+                });
+            } catch (e) {
+                console.warn('No se pudieron cargar categorías (todavía).', e);
+            }
+        }
+
+        async function cargarProductosConsulta(params) {
+            try {
+                let url = '/public/productos';
+                if (params) url = '/public/productos/buscar?' + new URLSearchParams(params).toString();
+                const productos = await fetchJson(url);
+                renderProductos(productos);
+            } catch (e) {
+                console.error(e);
+                document.getElementById('consulta-productos').innerHTML = '<div class="error">Error cargando productos</div>';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function(){
+            cargarCategorias();
+            cargarProductosConsulta();
+
+            document.getElementById('consulta-buscar-btn').addEventListener('click', function(){
+                const q = document.getElementById('consulta-buscar').value.trim();
+                const cat = document.getElementById('consulta-categoria').value;
+                const params = {};
+                if (q) params.q = q;
+                if (cat) params.categoria = cat;
+                cargarProductosConsulta(params);
+            });
+
+            document.getElementById('consulta-buscar').addEventListener('keypress', function(e){ if (e.key === 'Enter') document.getElementById('consulta-buscar-btn').click(); });
+        });
+    </script>
+</body>
+</html>
