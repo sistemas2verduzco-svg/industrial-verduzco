@@ -530,24 +530,43 @@ footer {
     .nav-links {
         gap: 1rem;
         flex-direction: column;
-        position: absolute;
-        top: 64px;
-        right: 1rem;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 0.75rem;
-        border-radius: 8px;
-        box-shadow: 0 6px 18px rgba(0,0,0,0.12);
-        max-height: 0;
-        overflow: hidden;
-        transition: max-height 0.28s ease;
+        /* Use block flow so menu pushes content down instead of overlapping */
+        display: none;
+        width: 100%;
+        margin-top: 0.5rem;
+        background: transparent;
+        padding: 0.25rem 0;
+        transition: all 0.18s ease;
     }
 
     .nav-links.open {
-        max-height: 400px; /* enough for items */
+        display: block;
     }
 
     .nav-toggle {
         display: inline-block;
+    }
+
+    .navbar .container {
+        align-items: flex-start;
+    }
+
+    /* Style each nav item as block for comfortable touch */
+    .nav-links li {
+        list-style: none;
+        margin: 0.25rem 0;
+    }
+
+    .nav-links a {
+        display: block;
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        background: rgba(255,255,255,0.04);
+        width: 100%;
+    }
+
+    .nav-links a.btn-nav {
+        padding-left: 0.9rem;
     }
 
     .productos-grid {
