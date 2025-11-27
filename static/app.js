@@ -32,4 +32,26 @@ document.addEventListener('DOMContentLoaded', function() {
 			}
 		});
 	}
+
+	// Bottom nav: mark active item on small screens
+	const bnItems = document.querySelectorAll('.bottom-nav .bn-item');
+	if (bnItems && bnItems.length) {
+		const path = window.location.pathname || '/';
+		// prefer the longest matching data-path
+		let best = null;
+		bnItems.forEach(item => {
+			const dp = item.getAttribute('data-path') || '/';
+			// simple match: path starts with dp
+			if (path === dp || path.startsWith(dp)) {
+				if (!best || dp.length > best.getAttribute('data-path').length) {
+					best = item;
+				}
+			}
+		});
+		// fallback: root
+		if (!best) {
+			bnItems.forEach(item => { if (item.getAttribute('data-path') === '/') best = item; });
+		}
+		if (best) best.classList.add('active');
+	}
 });

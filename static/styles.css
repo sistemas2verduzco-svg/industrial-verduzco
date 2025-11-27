@@ -139,6 +139,54 @@ body {
     margin: 2rem 0;
 }
 
+/* Bottom navigation (mobile) */
+.bottom-nav {
+    display: none; /* shown only on small screens */
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 64px;
+    background: #ffffff;
+    border-top: 1px solid rgba(0,0,0,0.08);
+    box-shadow: 0 -4px 8px rgba(0,0,0,0.06);
+    z-index: 1200;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+}
+.bottom-nav .bn-item {
+    flex: 1 1 auto;
+    text-align: center;
+    color: #333;
+    text-decoration: none;
+    padding: 6px 0 6px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+}
+.bottom-nav .bn-icon {
+    font-size: 20px;
+    line-height: 1;
+}
+.bottom-nav .bn-label {
+    font-size: 11px;
+    margin-top: 4px;
+    opacity: 0.9;
+}
+.bottom-nav .bn-item.active {
+    color: #0d6efd;
+}
+
+/* ensure content is not hidden behind the bottom nav on small screens */
+@media (max-width: 768px) {
+    .bottom-nav { display: flex; }
+    body { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+    .productos-grid { grid-auto-rows: auto; }
+}
+
 .producto-card {
     background: white;
     border-radius: var(--border-radius);
