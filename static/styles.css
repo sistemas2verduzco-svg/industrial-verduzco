@@ -372,38 +372,41 @@ body {
 .filtros-grid {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 1.2rem;
     align-items: stretch;
-    max-width: 500px;
+    max-width: 100%;
+    width: 100%;
     margin: 0 auto;
 }
 
 .form-group {
     display: flex;
     flex-direction: column;
+    width: 100%;
 }
 
 .form-group label {
     color: white;
     font-weight: 600;
-    margin-bottom: 0.5rem;
-    font-size: 0.95rem;
+    margin-bottom: 0.7rem;
+    font-size: 1rem;
 }
 
 .filtro-input {
     width: 100%;
-    padding: 0.8rem 1rem;
+    padding: 1rem;
     border: none;
-    border-radius: 6px;
-    font-size: 1rem;
+    border-radius: 8px;
+    font-size: 1.05rem;
     font-family: inherit;
     box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-    transition: box-shadow 0.3s;
+    transition: box-shadow 0.3s, transform 0.2s;
 }
 
 .filtro-input:focus {
     outline: none;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    transform: translateY(-2px);
 }
 
 .consulta-info {
@@ -414,11 +417,15 @@ body {
 }
 
 .filtros-grid .btn {
-    padding: 0.9rem 1.5rem;
-    font-size: 1rem;
+    padding: 1rem 1.5rem;
+    font-size: 1.05rem;
     font-weight: 600;
     width: 100%;
     text-align: center;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s;
 }
 
 .btn-secondary {
