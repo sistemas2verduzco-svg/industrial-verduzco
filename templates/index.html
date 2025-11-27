@@ -130,7 +130,11 @@
                     clearBtn.style.display = buscarInput.value ? 'block' : 'none';
                 });
                 clearBtn.addEventListener('click', function() {
-                    window.location.reload();
+                    buscarInput.value = '';
+                    // Forzar el cambio en el input antes de recargar
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 10);
                 });
             }
         });
