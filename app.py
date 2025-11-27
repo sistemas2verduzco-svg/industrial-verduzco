@@ -85,7 +85,7 @@ def is_root_user():
 
 # Registrar accesos (IP, UA, path) en cada petición - evita estáticos
 @app.before_request
-def log_access():
+def log_access_y_cierre_por_hora():
     try:
         path = request.path
         # skip static files and health checks
@@ -122,6 +122,14 @@ def log_access():
         # do not interrupt request flow on log error
         return
 
+    # --- Cierre de sesión automático a las 19:00 (7pm) ---
+    hora_limite = 19  # 7pm
+    ahora = datetime.now().hour
+    # Si el usuario está logueado y es después de la hora límite, cerrar sesión
+    if 'admin_user' in session and ahora >= hora_limite:
+        session.clear()
+        return redirect(url_for('login', mensaje='La sesión ha sido cerrada automáticamente por horario de seguridad (después de las 19:00).'))
+
 # ==================== DECORADOR DE AUTENTICACIÓN ====================
 
 def login_required(f):
@@ -141,6 +149,7 @@ def login_required(f):
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     """Página de login para el admin"""
+    mensaje = request.args.get('mensaje')
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
@@ -156,7 +165,7 @@ def login():
 
         if locked_until and now < locked_until:
             remaining = int(locked_until - now)
-            return render_template('login.html', error=f'Too many attempts. Try again in {remaining} seconds.'), 429
+            return render_template('login.html', error=f'Too many attempts. Try again in {remaining} seconds.', mensaje=mensaje), 429
         
         if auth_manager.verify_credentials(username, password):
             # success: reset counter for this IP
@@ -173,12 +182,12 @@ def login():
             if attempt_count >= MAX_LOGIN_ATTEMPTS:
                 locked_until = now + LOCKOUT_SECONDS
                 FAILED_LOGINS[client_ip] = [attempt_count, first_ts, locked_until]
-                return render_template('login.html', error='Demasiados intentos. Intenta nuevamente más tarde.'), 429
+                return render_template('login.html', error='Demasiados intentos. Intenta nuevamente más tarde.', mensaje=mensaje), 429
             else:
                 FAILED_LOGINS[client_ip] = [attempt_count, first_ts, 0]
-                return render_template('login.html', error='Credenciales inválidas'), 401
+                return render_template('login.html', error='Credenciales inválidas', mensaje=mensaje), 401
     
-    return render_template('login.html')
+    return render_template('login.html', mensaje=mensaje)
 
 @app.route('/logout')
 def logout():

@@ -198,6 +198,11 @@
 
         {% if error %}
         <div class="error show">{{ error }}</div>
+        {% if mensaje %}
+        <div class="info show" style="background:#ffeeba;color:#856404;padding:10px 16px;border-radius:6px;margin-bottom:12px;border:1px solid #ffeeba;">
+            {{ mensaje }}
+        </div>
+        {% endif %}
         <div class="nedry-box show">
             <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
                 <div>¡AH AH AH! — <span style="text-transform:uppercase;">NO DIJISTE LA PALABRA MÁGICA</span></div>
