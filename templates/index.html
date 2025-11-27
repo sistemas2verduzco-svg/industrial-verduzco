@@ -30,9 +30,10 @@
         <div class="filtros-section">
             <h3>Buscar y Filtrar Productos</h3>
             <div class="filtros-grid">
-                <div class="form-group">
+                <div class="form-group" style="position: relative;">
                     <label for="buscar-producto">Nombre o descripcion</label>
-                    <input type="text" id="buscar-producto" placeholder="Buscar..." class="filtro-input">
+                    <input type="text" id="buscar-producto" placeholder="Buscar..." class="filtro-input" style="padding-right: 2.5em;">
+                    <button type="button" id="clear-buscar" aria-label="Limpiar búsqueda" style="position: absolute; right: 0.5em; top: 2.2em; background: none; border: none; font-size: 1.3em; color: #888; cursor: pointer; display: none;">&times;</button>
                 </div>
                 <div class="form-group">
                     <label for="filtro-categoria">Categoria</label>
@@ -120,6 +121,20 @@
                     } catch(e){}
                 });
             })();
+
+            // Mostrar/ocultar botón X en el input de búsqueda
+            const buscarInput = document.getElementById('buscar-producto');
+            const clearBtn = document.getElementById('clear-buscar');
+            if (buscarInput && clearBtn) {
+                buscarInput.addEventListener('input', function() {
+                    clearBtn.style.display = buscarInput.value ? 'block' : 'none';
+                });
+                clearBtn.addEventListener('click', function() {
+                    buscarInput.value = '';
+                    clearBtn.style.display = 'none';
+                    limpiarFiltros();
+                });
+            }
         });
 
         function cargarProductos() {
