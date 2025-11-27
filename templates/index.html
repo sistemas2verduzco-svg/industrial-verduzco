@@ -140,22 +140,24 @@
             if (buscarInput && clearBtn) {
                 buscarInput.addEventListener('input', function() {
                     clearBtn.style.display = buscarInput.value ? 'block' : 'none';
+                    // Búsqueda en tiempo real
+                    if (buscarInput.value) {
+                        aplicarFiltros();
+                    } else {
+                        limpiarFiltros();
+                    }
                 });
                 clearBtn.addEventListener('touchstart', function(e) {
                     e.preventDefault();
                     buscarInput.value = '';
                     clearBtn.style.display = 'none';
-                    setTimeout(function() {
-                        window.location.href = window.location.pathname;
-                    }, 10);
+                    limpiarFiltros();
                 });
                 clearBtn.addEventListener('click', function(e) {
                     e.preventDefault();
                     buscarInput.value = '';
                     clearBtn.style.display = 'none';
-                    setTimeout(function() {
-                        window.location.href = window.location.pathname;
-                    }, 10);
+                    limpiarFiltros();
                 });
             }
         });
