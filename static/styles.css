@@ -50,6 +50,18 @@ body {
     gap: 2rem;
 }
 
+/* Mobile nav toggle */
+.nav-toggle {
+    display: none;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.18);
+    color: white;
+    padding: 0.35rem 0.7rem;
+    font-size: 1.25rem;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
 .nav-links a {
     color: white;
     text-decoration: none;
@@ -504,6 +516,25 @@ footer {
 @media (max-width: 768px) {
     .nav-links {
         gap: 1rem;
+        flex-direction: column;
+        position: absolute;
+        top: 64px;
+        right: 1rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 0.75rem;
+        border-radius: 8px;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.28s ease;
+    }
+
+    .nav-links.open {
+        max-height: 400px; /* enough for items */
+    }
+
+    .nav-toggle {
+        display: inline-block;
     }
 
     .productos-grid {
@@ -548,4 +579,24 @@ footer {
     .tabla-scroll {
         font-size: 0.85rem;
     }
+}
+
+/* smaller image heights for narrow devices */
+@media (max-width: 420px) {
+    .producto-imagen {
+        height: 140px;
+    }
+    .producto-info h3 {
+        font-size: 1rem;
+    }
+    .precio {
+        font-size: 1.25rem;
+    }
+}
+
+/* Touch-friendly buttons */
+.btn, .nav-links a.btn-nav, .nav-toggle {
+    min-height: 44px;
+    padding-top: 0.6rem;
+    padding-bottom: 0.6rem;
 }
