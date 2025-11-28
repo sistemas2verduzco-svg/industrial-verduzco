@@ -8,6 +8,18 @@ import secrets
 from werkzeug.utils import secure_filename
 from datetime import datetime
 from time import time
+import logging
+
+# Configurar logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('catalogo_app.log'),
+        logging.StreamHandler()  # También mostrar en consola
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Simple in-memory login rate limiter
 # Keys: by IP address. Tracks [attempt_count, first_attempt_ts, locked_until_ts]
@@ -122,14 +134,6 @@ def log_access_y_cierre_por_hora():
         # do not interrupt request flow on log error
         return
 
-    # --- Cierre de sesión automático a las 19:00 (7pm) ---
-    hora_limite = 19  # 7pm
-    ahora = datetime.now().hour
-    # Si el usuario está logueado y es después de la hora límite, cerrar sesión
-    if 'admin_user' in session and ahora >= hora_limite:
-        session.clear()
-        return redirect(url_for('login', mensaje='La sesión ha sido cerrada automáticamente por horario de seguridad (después de las 19:00).'))
-
 # ==================== DECORADOR DE AUTENTICACIÓN ====================
 
 def login_required(f):
@@ -153,6 +157,8 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
+        logger.info(f"[LOGIN] Intento de login para usuario: {username}")
+        
         # Rate-limit by IP
         client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
         entry = FAILED_LOGINS.get(client_ip, [0, 0, 0])
@@ -165,6 +171,7 @@ def login():
 
         if locked_until and now < locked_until:
             remaining = int(locked_until - now)
+            logger.warning(f"[LOGIN] IP {client_ip} bloqueada temporalmente. Faltan {remaining}s")
             return render_template('login.html', error=f'Too many attempts. Try again in {remaining} seconds.', mensaje=mensaje), 429
         
         # Verificar credenciales dentro del contexto de BD
@@ -172,16 +179,26 @@ def login():
         try:
             # Intentar verificar en BD
             try:
+                logger.debug(f"[LOGIN] Consultando usuario '{username}' en BD...")
                 usuario = Usuario.query.filter_by(username=username, activo=True).first()
-                if usuario and usuario.check_password(password):
-                    credentials_valid = True
+                if usuario:
+                    logger.debug(f"[LOGIN] Usuario encontrado en BD. Verificando contraseña...")
+                    if usuario.check_password(password):
+                        credentials_valid = True
+                        logger.info(f"[LOGIN] ✓ Contraseña correcta para {username}")
+                    else:
+                        logger.warning(f"[LOGIN] ✗ Contraseña incorrecta para {username}")
+                else:
+                    logger.warning(f"[LOGIN] Usuario '{username}' no encontrado en BD")
             except Exception as bd_error:
-                print(f"[BD ERROR] Fallo al consultar Usuario: {bd_error}")
+                logger.error(f"[BD ERROR] Fallo al consultar Usuario: {bd_error}", exc_info=True)
                 # Si falla BD, intentar fallback
+                logger.info(f"[LOGIN] Intentando fallback hardcoded para {username}")
                 if username == 'admin' and password == 'admin123':
                     credentials_valid = True
+                    logger.info(f"[LOGIN] ✓ Fallback de credenciales funcionó para {username}")
         except Exception as e:
-            print(f"[LOGIN ERROR] Error general: {e}")
+            logger.error(f"[LOGIN ERROR] Error general en login: {e}", exc_info=True)
             return render_template('login.html', error='Error interno del servidor. Contacte al administrador.', mensaje=mensaje), 500
         
         if credentials_valid:
@@ -189,6 +206,7 @@ def login():
             if client_ip in FAILED_LOGINS:
                 FAILED_LOGINS.pop(client_ip, None)
             session['admin_user'] = username
+            logger.info(f"[LOGIN] ✓ Login exitoso para {username}")
             return redirect(url_for('admin'))
         else:
             # failure: increment
@@ -199,9 +217,11 @@ def login():
             if attempt_count >= MAX_LOGIN_ATTEMPTS:
                 locked_until = now + LOCKOUT_SECONDS
                 FAILED_LOGINS[client_ip] = [attempt_count, first_ts, locked_until]
+                logger.warning(f"[LOGIN] IP {client_ip} bloqueada por {MAX_LOGIN_ATTEMPTS} intentos fallidos")
                 return render_template('login.html', error='Demasiados intentos. Intenta nuevamente más tarde.', mensaje=mensaje), 429
             else:
                 FAILED_LOGINS[client_ip] = [attempt_count, first_ts, 0]
+                logger.warning(f"[LOGIN] Credenciales inválidas para {username} (intento {attempt_count}/{MAX_LOGIN_ATTEMPTS})")
                 return render_template('login.html', error='Credenciales inválidas', mensaje=mensaje), 401
     
     return render_template('login.html', mensaje=mensaje)
