@@ -4,7 +4,7 @@ Módulo de autenticación y utilidades de seguridad
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
 
-class AuthManager:
+class AuthManager(object):
     """Gestor de autenticación para el panel admin"""
 
     def __init__(self, db=None):
@@ -28,8 +28,11 @@ class AuthManager:
                 usuario = Usuario.query.filter_by(username=username, activo=True).first()
                 if usuario and usuario.check_password(password):
                     return True
+                return False
             except Exception as e:
                 print(f"Error verificando en BD: {e}")
+                # Si hay error en BD, no caer a fallback - retornar False
+                return False
         
         # Fallback: credenciales hardcodeadas (para compatibilidad)
         return (
