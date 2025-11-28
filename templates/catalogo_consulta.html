@@ -23,9 +23,20 @@
         <div class="filtros-section">
             <h3>Consulta de Productos</h3>
             <div class="filtros-grid">
-                <div class="form-group">
+                <div class="form-group" style="position: relative;">
                     <label for="consulta-buscar">Buscar producto</label>
-                    <input id="consulta-buscar" type="search" placeholder="Producto..." class="filtro-input">
+                    <input id="consulta-buscar" type="search" placeholder="Producto..." class="filtro-input" autocomplete="off" aria-autocomplete="list" aria-controls="consulta-sugerencias">
+                    <button type="button" id="consulta-clear" aria-label="Limpiar búsqueda" style="position: absolute; right: 0.6rem; top: 2.4rem; background: none; border: none; font-size: 1.4rem; color: #888; cursor: pointer; display: none; z-index: 2;">&times;</button>
+
+                    <ul id="consulta-sugerencias" role="listbox" aria-label="Sugerencias" style="position: absolute; left: 0; right: 0; top: calc(100% + 0.4rem); background: #fff; border: 1px solid #ddd; box-shadow: 0 2px 8px rgba(0,0,0,0.08); list-style: none; margin: 0; padding: 0; max-height: 12rem; overflow-y: auto; z-index: 3; display: none;">
+                    </ul>
+
+                    <style>
+                        @media (max-width:600px){ #consulta-clear{ top:2.6rem !important; font-size:1.8rem !important; } }
+                        #consulta-sugerencias li{ padding:0.6rem 0.8rem; border-bottom:1px solid #f0f0f0; cursor:pointer }
+                        #consulta-sugerencias li.selected{ background:#f5faff }
+                        #consulta-sugerencias .small{ display:block; color:#666; font-size:0.85rem; margin-top:0.15rem }
+                    </style>
                 </div>
                 <div class="form-group">
                     <label for="consulta-categoria">Categoria</label>
@@ -107,8 +118,13 @@
             cargarCategorias();
             cargarProductosConsulta();
 
-            document.getElementById('consulta-buscar-btn').addEventListener('click', function(){
-                const q = document.getElementById('consulta-buscar').value.trim();
+            const input = document.getElementById('consulta-buscar');
+            const btn = document.getElementById('consulta-buscar-btn');
+            const clearBtn = document.getElementById('consulta-clear');
+            const sugerencias = document.getElementById('consulta-sugerencias');
+
+            btn.addEventListener('click', function(){
+                const q = input.value.trim();
                 const cat = document.getElementById('consulta-categoria').value;
                 const params = {};
                 if (q) params.q = q;
@@ -116,7 +132,68 @@
                 cargarProductosConsulta(params);
             });
 
-            document.getElementById('consulta-buscar').addEventListener('keypress', function(e){ if (e.key === 'Enter') document.getElementById('consulta-buscar-btn').click(); });
+            // Debounce helper
+            let debounceTimer = null;
+            function debounce(fn, wait){ return function(...args){ clearTimeout(debounceTimer); debounceTimer = setTimeout(()=> fn.apply(this,args), wait); }; }
+
+            async function fetchSugerenciasConsulta(q){
+                try{
+                    const params = new URLSearchParams();
+                    if (q) params.append('q', q);
+                    params.append('limit', 8);
+                    const res = await fetch('/public/productos/buscar?' + params.toString());
+                    return await res.json();
+                }catch(e){ console.error('Error fetch sugerencias public:', e); return []; }
+            }
+
+            function renderSugerenciasConsulta(items){
+                sugerencias.innerHTML = '';
+                if (!items || items.length === 0){ sugerencias.style.display = 'none'; return; }
+                items.slice(0,8).forEach((p,i)=>{
+                    const li = document.createElement('li');
+                    li.dataset.index = i;
+                    li.innerHTML = `<strong>${escapeHtml(p.nombre)}</strong><span class="small">${escapeHtml(p.categoria||'')}</span>`;
+                    li.addEventListener('click', function(){ input.value = p.nombre; sugerencias.style.display = 'none'; btn.click(); });
+                    li.addEventListener('touchstart', function(e){ e.preventDefault(); input.value = p.nombre; sugerencias.style.display = 'none'; btn.click(); });
+                    sugerencias.appendChild(li);
+                });
+                sugerencias.style.display = 'block';
+            }
+
+            function escapeHtml(text){ if (!text) return ''; return text.replace(/[&<>"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[m]; }); }
+
+            const handleInput = debounce(async function(){
+                const q = input.value.trim();
+                clearBtn.style.display = q ? 'block' : 'none';
+                if (q){
+                    const results = await fetchSugerenciasConsulta(q);
+                    renderSugerenciasConsulta(results);
+                } else {
+                    renderSugerenciasConsulta([]);
+                    // mostrar todos
+                    cargarProductosConsulta();
+                }
+            }, 300);
+
+            input.addEventListener('input', handleInput);
+
+            // teclado para sugerencias
+            let selected = -1;
+            input.addEventListener('keydown', function(e){
+                const items = sugerencias.querySelectorAll('li');
+                if (!items.length) return;
+                if (e.key === 'ArrowDown'){ e.preventDefault(); selected = Math.min(selected+1, items.length-1); items.forEach(n=>n.classList.remove('selected')); items[selected].classList.add('selected'); items[selected].scrollIntoView({block:'nearest'}); }
+                else if (e.key === 'ArrowUp'){ e.preventDefault(); selected = Math.max(selected-1,0); items.forEach(n=>n.classList.remove('selected')); items[selected].classList.add('selected'); items[selected].scrollIntoView({block:'nearest'}); }
+                else if (e.key === 'Enter'){ const sel = sugerencias.querySelector('li.selected'); if (sel){ e.preventDefault(); sel.click(); } }
+                else if (e.key === 'Escape'){ sugerencias.style.display = 'none'; }
+            });
+
+            document.addEventListener('click', function(e){ if (!e.target.closest || (!e.target.closest('#consulta-sugerencias') && !e.target.closest('#consulta-buscar'))) sugerencias.style.display = 'none'; });
+
+            clearBtn.addEventListener('click', function(){ input.value = ''; clearBtn.style.display = 'none'; renderSugerenciasConsulta([]); cargarProductosConsulta(); });
+            clearBtn.addEventListener('touchstart', function(e){ e.preventDefault(); input.value = ''; clearBtn.style.display = 'none'; renderSugerenciasConsulta([]); cargarProductosConsulta(); });
+
+            input.addEventListener('keypress', function(e){ if (e.key === 'Enter') btn.click(); });
         });
     </script>
 </body>

@@ -32,19 +32,21 @@
             <div class="filtros-grid">
                 <div class="form-group" style="position: relative;">
                     <label for="buscar-producto">Nombre o descripcion</label>
-                    <input type="text" id="buscar-producto" placeholder="Buscar..." class="filtro-input" style="padding-right: 2.5em;">
+                    <input type="text" id="buscar-producto" placeholder="Buscar..." class="filtro-input" style="padding-right: 2.5em;" autocomplete="off" aria-autocomplete="list" aria-controls="sugerencias-busqueda">
                     <button type="button" id="clear-buscar" aria-label="Limpiar búsqueda" style="position: absolute; right: 0.7em; top: 2.5em; background: none; border: none; font-size: 1.7em; color: #888; cursor: pointer; display: none; width: 1.5em; height: 1.5em; line-height: 1.5em; z-index: 2;">&times;</button>
+
+                    <!-- Contenedor de sugerencias predictivas -->
+                    <ul id="sugerencias-busqueda" role="listbox" aria-label="Sugerencias" style="position: absolute; left: 0; right: 0; top: calc(100% + 0.4rem); background: #fff; border: 1px solid #ddd; box-shadow: 0 2px 8px rgba(0,0,0,0.08); list-style: none; margin: 0; padding: 0; max-height: 14rem; overflow-y: auto; z-index: 3; display: none;">
+                        <!-- items dinámicos -->
+                    </ul>
+
                     <style>
                         @media (max-width: 600px) {
-                            #clear-buscar {
-                                top: 2.7em !important;
-                                right: 0.7em !important;
-                                font-size: 2em !important;
-                                width: 2em !important;
-                                height: 2em !important;
-                                line-height: 2em !important;
-                            }
+                            #clear-buscar { top: 2.7em !important; right: 0.7em !important; font-size: 2em !important; width: 2em !important; height: 2em !important; line-height: 2em !important; }
                         }
+                        #sugerencias-busqueda li { padding: 0.6rem 0.8rem; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
+                        #sugerencias-busqueda li:active, #sugerencias-busqueda li.selected { background: #f5faff; }
+                        #sugerencias-busqueda .small { display: block; color: #666; font-size: 0.85rem; margin-top: 0.2rem; }
                     </style>
                 </div>
                 <div class="form-group">
@@ -138,27 +140,113 @@
             const buscarInput = document.getElementById('buscar-producto');
             const clearBtn = document.getElementById('clear-buscar');
             if (buscarInput && clearBtn) {
-                buscarInput.addEventListener('input', function() {
-                    clearBtn.style.display = buscarInput.value ? 'block' : 'none';
-                    // Búsqueda en tiempo real
-                    if (buscarInput.value) {
-                        aplicarFiltros();
-                    } else {
-                        limpiarFiltros();
+                    // Elementos relacionados con sugerencias
+                    const sugerenciasList = document.getElementById('sugerencias-busqueda');
+                    let debounceTimer = null;
+                    let selectedIndex = -1;
+
+                    function debounce(fn, wait) {
+                        return function(...args) {
+                            clearTimeout(debounceTimer);
+                            debounceTimer = setTimeout(() => fn.apply(this, args), wait);
+                        };
                     }
-                });
-                clearBtn.addEventListener('touchstart', function(e) {
-                    e.preventDefault();
-                    buscarInput.value = '';
-                    clearBtn.style.display = 'none';
-                    limpiarFiltros();
-                });
-                clearBtn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    buscarInput.value = '';
-                    clearBtn.style.display = 'none';
-                    limpiarFiltros();
-                });
+
+                    async function fetchSugerencias(q) {
+                        try {
+                            const params = new URLSearchParams();
+                            if (q) params.append('q', q);
+                            params.append('limit', 8);
+                            const res = await fetch('/api/productos/buscar?' + params.toString());
+                            const lista = await parseJsonSafe(res);
+                            return lista;
+                        } catch (err) {
+                            console.error('Error sugiriendo:', err);
+                            return [];
+                        }
+                    }
+
+                    function renderSugerencias(items) {
+                        sugerenciasList.innerHTML = '';
+                        if (!items || items.length === 0) {
+                            sugerenciasList.style.display = 'none';
+                            selectedIndex = -1;
+                            return;
+                        }
+                        items.slice(0, 8).forEach((p, i) => {
+                            const li = document.createElement('li');
+                            li.setAttribute('role', 'option');
+                            li.dataset.index = i;
+                            li.innerHTML = `<strong>${escapeHtml(p.nombre)}</strong><span class="small">${escapeHtml(p.categoria || '')}</span>`;
+                            li.addEventListener('click', function() {
+                                buscarInput.value = p.nombre;
+                                sugerenciasList.style.display = 'none';
+                                aplicarFiltros();
+                            });
+                            li.addEventListener('touchstart', function(e) { e.preventDefault(); buscarInput.value = p.nombre; sugerenciasList.style.display = 'none'; aplicarFiltros(); });
+                            sugerenciasList.appendChild(li);
+                        });
+                        sugerenciasList.style.display = 'block';
+                        selectedIndex = -1;
+                    }
+
+                    function escapeHtml(text) {
+                        if (!text) return '';
+                        return text.replace(/[&<>"']/g, function(m) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[m]; });
+                    }
+
+                    const handleInput = debounce(async function() {
+                        const q = buscarInput.value.trim();
+                        clearBtn.style.display = q ? 'block' : 'none';
+                        if (q) {
+                            const results = await fetchSugerencias(q);
+                            renderSugerencias(results);
+                        } else {
+                            renderSugerencias([]);
+                            // si está vacío, mostrar todos
+                            limpiarFiltros();
+                        }
+                    }, 300);
+
+                    buscarInput.addEventListener('input', handleInput);
+
+                    // Teclado: navegar por las sugerencias
+                    buscarInput.addEventListener('keydown', function(e) {
+                        const items = sugerenciasList.querySelectorAll('li');
+                        if (!items.length) return;
+                        if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+                            items.forEach(n => n.classList.remove('selected'));
+                            items[selectedIndex].classList.add('selected');
+                            items[selectedIndex].scrollIntoView({block: 'nearest'});
+                        } else if (e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            selectedIndex = Math.max(selectedIndex - 1, 0);
+                            items.forEach(n => n.classList.remove('selected'));
+                            items[selectedIndex].classList.add('selected');
+                            items[selectedIndex].scrollIntoView({block: 'nearest'});
+                        } else if (e.key === 'Enter') {
+                            const sel = sugerenciasList.querySelector('li.selected');
+                            if (sel) {
+                                e.preventDefault();
+                                sel.click();
+                            }
+                        } else if (e.key === 'Escape') {
+                            sugerenciasList.style.display = 'none';
+                        }
+                    });
+
+                    // ocultar sugerencias al clicar fuera
+                    document.addEventListener('click', function(e) {
+                        if (!e.target.closest || !e.target.closest('#sugerencias-busqueda') && !e.target.closest('#buscar-producto')) {
+                            if (sugerenciasList) sugerenciasList.style.display = 'none';
+                        }
+                    });
+
+                    // clear button behavior
+                    clearBtn.addEventListener('touchstart', function(e) { e.preventDefault(); buscarInput.value = ''; clearBtn.style.display = 'none'; renderSugerencias([]); limpiarFiltros(); });
+                    clearBtn.addEventListener('click', function(e) { e.preventDefault(); buscarInput.value = ''; clearBtn.style.display = 'none'; renderSugerencias([]); limpiarFiltros(); });
             }
         });
 
