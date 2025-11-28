@@ -878,3 +878,19 @@ footer {
     padding-top: 0.6rem;
     padding-bottom: 0.6rem;
 }
+
+/* Clear buttons for search inputs - override any global styles */
+#clear-buscar,
+#consulta-clear {
+    color: #555 !important;
+    background-color: transparent !important;
+    border: none !important;
+    font-size: 1.6rem !important;
+    font-weight: bold !important;
+}
+
+#clear-buscar:hover,
+#consulta-clear:hover {
+    color: #333 !important;
+    opacity: 0.8;
+}

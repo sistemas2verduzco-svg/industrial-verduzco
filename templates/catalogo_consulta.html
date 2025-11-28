@@ -190,8 +190,9 @@
 
             document.addEventListener('click', function(e){ if (!e.target.closest || (!e.target.closest('#consulta-sugerencias') && !e.target.closest('#consulta-buscar'))) sugerencias.style.display = 'none'; });
 
-            clearBtn.addEventListener('click', function(){ input.value = ''; clearBtn.style.display = 'none'; renderSugerenciasConsulta([]); cargarProductosConsulta(); });
-            clearBtn.addEventListener('touchstart', function(e){ e.preventDefault(); input.value = ''; clearBtn.style.display = 'none'; renderSugerenciasConsulta([]); cargarProductosConsulta(); });
+            function limpiarConsultaBuscador(){ input.value = ''; clearBtn.style.display = 'none'; renderSugerenciasConsulta([]); cargarProductosConsulta(); }
+            clearBtn.addEventListener('click', limpiarConsultaBuscador);
+            clearBtn.addEventListener('touchstart', function(e){ e.preventDefault(); limpiarConsultaBuscador(); });
 
             input.addEventListener('keypress', function(e){ if (e.key === 'Enter') btn.click(); });
         });
