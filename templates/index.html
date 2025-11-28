@@ -395,6 +395,34 @@
             });
         });
 
+        // Asegurar que la X quede perfectamente centrada respecto al input (corrección por navegador y estilos)
+        function alignClearButton(inputId, buttonId) {
+            const input = document.getElementById(inputId);
+            const btn = document.getElementById(buttonId);
+            if (!input || !btn) return;
+            // botón está posicionado absolutamente dentro de .form-group
+            const parent = input.closest('.form-group');
+            if (!parent) return;
+            // calcular top relativo al parent
+            const inputOffsetTop = input.offsetTop;
+            const inputMid = inputOffsetTop + Math.round(input.offsetHeight / 2);
+            btn.style.top = inputMid + 'px';
+            btn.style.transform = 'translateY(-50%)';
+        }
+
+        function alignAllClearButtons() {
+            alignClearButton('buscar-producto', 'clear-buscar');
+            alignClearButton('consulta-buscar', 'consulta-clear');
+        }
+
+        window.addEventListener('resize', function() {
+            // debounce ligero
+            clearTimeout(window._alignClearTimer);
+            window._alignClearTimer = setTimeout(alignAllClearButtons, 80);
+        });
+        // run once when script loads (after DOM ready handlers)
+        document.addEventListener('DOMContentLoaded', alignAllClearButtons);
+
         // Easter egg removed: moved behavior to login page only when login fails
     </script>
 </body>

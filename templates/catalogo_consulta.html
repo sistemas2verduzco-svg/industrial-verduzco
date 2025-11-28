@@ -199,6 +199,21 @@
 
             input.addEventListener('keypress', function(e){ if (e.key === 'Enter') btn.click(); });
         });
+
+        // Alinear la X respecto al input (para corregir desalineados en distintos navegadores)
+        function alignConsultaClearButton(){
+            const input = document.getElementById('consulta-buscar');
+            const btn = document.getElementById('consulta-clear');
+            if (!input || !btn) return;
+            const parent = input.closest('.form-group');
+            if (!parent) return;
+            const inputOffsetTop = input.offsetTop;
+            const inputMid = inputOffsetTop + Math.round(input.offsetHeight / 2);
+            btn.style.top = inputMid + 'px';
+            btn.style.transform = 'translateY(-50%)';
+        }
+        window.addEventListener('resize', function(){ clearTimeout(window._alignConsultaTimer); window._alignConsultaTimer = setTimeout(alignConsultaClearButton,80); });
+        document.addEventListener('DOMContentLoaded', alignConsultaClearButton);
     </script>
 </body>
 </html>
