@@ -25,14 +25,14 @@
             <div class="filtros-grid">
                 <div class="form-group" style="position: relative;">
                     <label for="consulta-buscar">Buscar producto</label>
-                    <input id="consulta-buscar" type="search" placeholder="Producto..." class="filtro-input" autocomplete="off" aria-autocomplete="list" aria-controls="consulta-sugerencias">
-                    <button type="button" id="consulta-clear" aria-label="Limpiar búsqueda" style="position: absolute; right: 0.6rem; top: 2.4rem; background: none; border: none; font-size: 1.4rem; color: #888; cursor: pointer; display: none; z-index: 2;">&times;</button>
+                    <input id="consulta-buscar" type="search" placeholder="Producto..." class="filtro-input" autocomplete="off" aria-autocomplete="list" aria-controls="consulta-sugerencias" style="padding-right: 2.2rem;">
+                    <button type="button" id="consulta-clear" aria-label="Limpiar búsqueda" style="position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 1.5rem; color: #999; cursor: pointer; display: none; width: 1.8rem; height: 1.8rem; z-index: 10; padding: 0; line-height: 1;">&times;</button>
 
                     <ul id="consulta-sugerencias" role="listbox" aria-label="Sugerencias" style="position: absolute; left: 0; right: 0; top: calc(100% + 0.4rem); background: #fff; border: 1px solid #ddd; box-shadow: 0 2px 8px rgba(0,0,0,0.08); list-style: none; margin: 0; padding: 0; max-height: 12rem; overflow-y: auto; z-index: 3; display: none;">
                     </ul>
 
                     <style>
-                        @media (max-width:600px){ #consulta-clear{ top:2.6rem !important; font-size:1.8rem !important; } }
+                        @media (max-width:600px){ #consulta-clear{ font-size:1.8rem !important; width:2rem !important; height:2rem !important; right:0.4rem !important; } }
                         #consulta-sugerencias li{ padding:0.6rem 0.8rem; border-bottom:1px solid #f0f0f0; cursor:pointer }
                         #consulta-sugerencias li.selected{ background:#f5faff }
                         #consulta-sugerencias .small{ display:block; color:#666; font-size:0.85rem; margin-top:0.15rem }
