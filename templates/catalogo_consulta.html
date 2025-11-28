@@ -33,6 +33,9 @@
 
                     <style>
                         @media (max-width:600px){ #consulta-clear{ font-size:1.8rem !important; width:2rem !important; height:2rem !important; right:0.4rem !important; } }
+                        /* Ocultar X nativa del input type=search */
+                        #consulta-buscar::-webkit-search-cancel-button { display: none; }
+                        #consulta-buscar::-moz-search-cancel-button { display: none; }
                         #consulta-sugerencias li{ padding:0.6rem 0.8rem; border-bottom:1px solid #f0f0f0; cursor:pointer }
                         #consulta-sugerencias li.selected{ background:#f5faff }
                         #consulta-sugerencias .small{ display:block; color:#666; font-size:0.85rem; margin-top:0.15rem }
