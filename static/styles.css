@@ -880,17 +880,37 @@ footer {
 }
 
 /* Clear buttons for search inputs - override any global styles */
+/* Clear buttons for search inputs - override any global styles */
 #clear-buscar,
 #consulta-clear {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     color: #555 !important;
     background-color: transparent !important;
     border: none !important;
     font-size: 1.6rem !important;
-    font-weight: bold !important;
+    font-weight: 700 !important;
+    width: 1.9rem !important;
+    height: 1.9rem !important;
+    padding: 0 !important;
+    line-height: 1 !important;
+    cursor: pointer !important;
+    z-index: 20 !important;
 }
 
 #clear-buscar:hover,
 #consulta-clear:hover {
-    color: #333 !important;
-    opacity: 0.8;
+    color: #222 !important;
+    opacity: 0.95;
+}
+
+/* Ensure search inputs reserve space for clear button */
+#buscar-producto,
+#consulta-buscar {
+    padding-right: 2.8rem !important;
 }
