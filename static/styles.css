@@ -355,25 +355,25 @@ body {
 /* Filtros section general styling */
 .filtros-section {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    padding: 2rem;
+    padding: 1rem;
     border-radius: 12px;
-    margin-bottom: 2rem;
+    margin-bottom: 1rem;
     box-shadow: 0 4px 12px rgba(0,0,0,0.12);
 }
 
 .filtros-section h3 {
     color: white;
-    margin-bottom: 1.5rem;
+    margin-bottom: 0.8rem;
     text-align: center;
-    font-size: 1.3rem;
+    font-size: 1rem;
 }
 
 /* Filters grid - centered vertical layout */
 .filtros-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 1.2rem;
-    align-items: stretch;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.6rem;
+    align-items: end;
     max-width: 100%;
     width: 100%;
     margin: 0 auto;
@@ -388,16 +388,16 @@ body {
 .form-group label {
     color: white;
     font-weight: 600;
-    margin-bottom: 0.7rem;
-    font-size: 1rem;
+    margin-bottom: 0.3rem;
+    font-size: 0.85rem;
 }
 
 .filtro-input {
     width: 100%;
-    padding: 1rem;
+    padding: 0.6rem;
     border: none;
-    border-radius: 8px;
-    font-size: 1.05rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
     font-family: inherit;
     box-shadow: 0 2px 6px rgba(0,0,0,0.1);
     transition: box-shadow 0.3s, transform 0.2s;
@@ -406,7 +406,7 @@ body {
 .filtro-input:focus {
     outline: none;
     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-    transform: translateY(-2px);
+    transform: translateY(-1px);
 }
 
 .consulta-info {
@@ -417,13 +417,13 @@ body {
 }
 
 .filtros-grid .btn {
-    padding: 1rem 1.5rem;
-    font-size: 1.05rem;
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
     font-weight: 600;
     width: 100%;
     text-align: center;
     border: none;
-    border-radius: 8px;
+    border-radius: 6px;
     cursor: pointer;
     transition: all 0.3s;
 }
@@ -812,8 +812,8 @@ footer {
 /* Make filtros-grid stack nicely on small screens */
 @media (max-width: 720px) {
     .filtros-grid {
-        flex-direction: column;
-        gap: 0.8rem;
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
         max-width: 100%;
     }
     .filtros-grid .form-group,
@@ -822,21 +822,21 @@ footer {
         width: 100%;
     }
     .filtro-input {
-        padding: 0.75rem 1rem;
-        font-size: 1rem;
+        padding: 0.5rem;
+        font-size: 0.85rem;
     }
     .filtros-grid .btn {
         width: 100%;
-        padding: 0.8rem 1rem;
-        font-size: 1rem;
+        padding: 0.5rem 0.8rem;
+        font-size: 0.85rem;
     }
     .filtros-section {
-        padding: 1.5rem 1rem;
-        margin-bottom: 1.5rem;
+        padding: 0.8rem;
+        margin-bottom: 0.8rem;
     }
     .filtros-section h3 {
-        font-size: 1.1rem;
-        margin-bottom: 1rem;
+        font-size: 0.95rem;
+        margin-bottom: 0.6rem;
     }
 }
         width: 100%;
