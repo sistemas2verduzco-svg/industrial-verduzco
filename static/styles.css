@@ -371,7 +371,7 @@ body {
 /* Filters grid - centered vertical layout */
 .filtros-grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     gap: 0.6rem;
     align-items: end;
     max-width: 100%;
@@ -428,6 +428,7 @@ body {
     transition: all 0.3s;
     align-self: flex-end;
     height: fit-content;
+    margin: 0;
 }
 
 /* Contenedor de botones */
@@ -822,27 +823,25 @@ footer {
 /* Make filtros-grid stack nicely on small screens */
 @media (max-width: 720px) {
     .filtros-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr 1fr;
         gap: 0.5rem;
         max-width: 100%;
-    }
-    .filtros-grid > div:last-child {
-        grid-column: auto;
-        display: flex;
-        gap: 0.5rem;
     }
     .filtros-grid .form-group,
     .filtros-grid input,
     .filtros-grid select {
         width: 100%;
     }
-    .filtro-input {
-        padding: 0.5rem;
-        font-size: 0.85rem;
+    .filtros-grid .form-group:first-child {
+        grid-column: span 2;
     }
     .filtros-grid .btn {
         width: 100%;
         padding: 0.5rem 0.8rem;
+        font-size: 0.85rem;
+    }
+    .filtro-input {
+        padding: 0.5rem;
         font-size: 0.85rem;
     }
     .filtros-section {
