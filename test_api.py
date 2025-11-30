@@ -16,7 +16,16 @@ def client():
     
     with app.app_context():
         db.create_all()
-        # app.py ya crea el usuario admin en el app_context(), no duplicar aquí
+        # Crear usuario admin para tests (la BD en memoria es nueva cada vez)
+        admin = Usuario(
+            username='admin',
+            correo='admin@test.com',
+            es_admin=True,
+            activo=True
+        )
+        admin.set_password('admin123')
+        db.session.add(admin)
+        db.session.commit()
 
     with app.test_client() as client:
         yield client
