@@ -143,46 +143,61 @@ class TestProtectedEndpoints:
 
 class TestAPIEndpoints:
     """Tests de APIs JSON"""
-    
+
     def test_api_productos_sin_auth(self, client):
         """✓ GET /api/productos sin autenticación falla"""
         response = client.get('/api/productos')
         assert response.status_code == 401
-    
+
     def test_api_productos_con_auth(self, client):
-        """✓ GET /api/productos con autenticación"""
-        # Loguear
-        client.post('/login', data={
-            'username': 'admin',
-            'password': 'admin123'
-        })
-        # Acceder a API
+        """✓ GET /api/productos con autenticación retorna lista"""
+        client.post('/login', data={'username': 'admin', 'password': 'admin123'})
         response = client.get('/api/productos')
         assert response.status_code == 200
-        assert response.content_type == 'application/json'
-    
+        data = response.get_json()
+        assert isinstance(data, list)
+
+    def test_api_productos_crear(self, client):
+        """✓ POST /api/productos crea nuevo producto"""
+        client.post('/login', data={'username': 'admin', 'password': 'admin123'})
+        response = client.post('/api/productos', json={
+            'nombre': 'Producto Test',
+            'descripcion': 'Test',
+            'precio': 99.99,
+            'cantidad': 10,
+            'categoria': 'Test'
+        })
+        assert response.status_code == 201
+        data = response.get_json()
+        assert data['nombre'] == 'Producto Test'
+        assert data['precio'] == 99.99
+
     def test_api_proveedores_sin_auth(self, client):
         """✓ GET /api/proveedores sin autenticación falla"""
         response = client.get('/api/proveedores')
         assert response.status_code == 401
-    
+
     def test_api_proveedores_con_auth(self, client):
-        """✓ GET /api/proveedores con autenticación"""
-        client.post('/login', data={
-            'username': 'admin',
-            'password': 'admin123'
-        })
+        """✓ GET /api/proveedores con autenticación retorna lista"""
+        client.post('/login', data={'username': 'admin', 'password': 'admin123'})
         response = client.get('/api/proveedores')
         assert response.status_code == 200
-        assert response.content_type == 'application/json'
-    
+        data = response.get_json()
+        assert isinstance(data, list)
+
+    def test_api_categorias(self, client):
+        """✓ GET /api/categorias retorna lista"""
+        response = client.get('/api/categorias')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert isinstance(data, list)
+
     def test_public_buscar_productos(self, client):
         """✓ GET /public/productos/buscar sin autenticación"""
         response = client.get('/public/productos/buscar?q=')
         assert response.status_code == 200
-        assert response.content_type == 'application/json'
-
-
+        data = response.get_json()
+        assert isinstance(data, list)
 class TestErrorHandling:
     """Tests de Manejo de Errores"""
     
