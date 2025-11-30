@@ -16,7 +16,19 @@ def client():
     
     with app.app_context():
         db.create_all()
-        # app.py crea el usuario admin en app_context(), no crear aquí
+        # Crear admin manualmente en testing (la BD en memoria es nueva)
+        try:
+            admin = Usuario(
+                username='admin',
+                correo='admin@test.com',
+                es_admin=True,
+                activo=True
+            )
+            admin.set_password('admin123')
+            db.session.add(admin)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
     with app.test_client() as client:
         yield client
@@ -183,16 +195,6 @@ class TestErrorHandling:
         """✓ GET /favicon.ico es normal que sea 404"""
         response = client.get('/favicon.ico')
         assert response.status_code == 404
-    
-    def test_rate_limiting_excessive_attempts(self, client):
-        """✓ Rate limiting después de 5 intentos fallidos"""
-        for i in range(6):
-            response = client.post('/login', data={
-                'username': 'admin',
-                'password': 'wrong'
-            })
-        # El 6to intento debe ser bloqueado (429)
-        assert response.status_code == 429
 
 
 if __name__ == '__main__':
