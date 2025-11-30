@@ -426,6 +426,8 @@ body {
     border-radius: 6px;
     cursor: pointer;
     transition: all 0.3s;
+    align-self: flex-end;
+    height: fit-content;
 }
 
 .btn-secondary {
