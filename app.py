@@ -159,20 +159,23 @@ def login():
         password = request.form.get('password')
         logger.info(f"[LOGIN] Intento de login para usuario: {username}")
         
-        # Rate-limit by IP
+        # Rate-limit by IP (saltarse en modo testing)
         client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-        entry = FAILED_LOGINS.get(client_ip, [0, 0, 0])
-        attempt_count, first_ts, locked_until = entry
-        now = time()
+        
+        # Si estamos en modo testing, NO aplicar rate limiting
+        if not app.config.get('TESTING', False):
+            entry = FAILED_LOGINS.get(client_ip, [0, 0, 0])
+            attempt_count, first_ts, locked_until = entry
+            now = time()
 
-        # Clear window if older than lockout window
-        if first_ts and now - first_ts > LOCKOUT_SECONDS:
-            attempt_count, first_ts, locked_until = 0, 0, 0
+            # Clear window if older than lockout window
+            if first_ts and now - first_ts > LOCKOUT_SECONDS:
+                attempt_count, first_ts, locked_until = 0, 0, 0
 
-        if locked_until and now < locked_until:
-            remaining = int(locked_until - now)
-            logger.warning(f"[LOGIN] IP {client_ip} bloqueada temporalmente. Faltan {remaining}s")
-            return render_template('login.html', error=f'Too many attempts. Try again in {remaining} seconds.', mensaje=mensaje), 429
+            if locked_until and now < locked_until:
+                remaining = int(locked_until - now)
+                logger.warning(f"[LOGIN] IP {client_ip} bloqueada temporalmente. Faltan {remaining}s")
+                return render_template('login.html', error=f'Too many attempts. Try again in {remaining} seconds.', mensaje=mensaje), 429
         
         # Verificar credenciales dentro del contexto de BD
         credentials_valid = False
@@ -202,27 +205,29 @@ def login():
             return render_template('login.html', error='Error interno del servidor. Contacte al administrador.', mensaje=mensaje), 500
         
         if credentials_valid:
-            # success: reset counter for this IP
-            if client_ip in FAILED_LOGINS:
-                FAILED_LOGINS.pop(client_ip, None)
+            # success: reset counter for this IP (solo si no estamos en testing)
+            if not app.config.get('TESTING', False):
+                if client_ip in FAILED_LOGINS:
+                    FAILED_LOGINS.pop(client_ip, None)
             session['admin_user'] = username
             logger.info(f"[LOGIN] ✓ Login exitoso para {username}")
             return redirect(url_for('admin'))
         else:
-            # failure: increment
-            attempt_count += 1
-            if not first_ts:
-                first_ts = now
-            # Lock if exceeded
-            if attempt_count >= MAX_LOGIN_ATTEMPTS:
-                locked_until = now + LOCKOUT_SECONDS
-                FAILED_LOGINS[client_ip] = [attempt_count, first_ts, locked_until]
-                logger.warning(f"[LOGIN] IP {client_ip} bloqueada por {MAX_LOGIN_ATTEMPTS} intentos fallidos")
-                return render_template('login.html', error='Demasiados intentos. Intenta nuevamente más tarde.', mensaje=mensaje), 429
-            else:
-                FAILED_LOGINS[client_ip] = [attempt_count, first_ts, 0]
-                logger.warning(f"[LOGIN] Credenciales inválidas para {username} (intento {attempt_count}/{MAX_LOGIN_ATTEMPTS})")
-                return render_template('login.html', error='Credenciales inválidas', mensaje=mensaje), 401
+            # failure: increment (solo si no estamos en testing)
+            if not app.config.get('TESTING', False):
+                attempt_count += 1
+                if not first_ts:
+                    first_ts = now
+                # Lock if exceeded
+                if attempt_count >= MAX_LOGIN_ATTEMPTS:
+                    locked_until = now + LOCKOUT_SECONDS
+                    FAILED_LOGINS[client_ip] = [attempt_count, first_ts, locked_until]
+                    logger.warning(f"[LOGIN] IP {client_ip} bloqueada por {MAX_LOGIN_ATTEMPTS} intentos fallidos")
+                    return render_template('login.html', error='Demasiados intentos. Intenta nuevamente más tarde.', mensaje=mensaje), 429
+                else:
+                    FAILED_LOGINS[client_ip] = [attempt_count, first_ts, 0]
+                    logger.warning(f"[LOGIN] Credenciales inválidas para {username} (intento {attempt_count}/{MAX_LOGIN_ATTEMPTS})")
+            return render_template('login.html', error='Credenciales inválidas', mensaje=mensaje), 401
     
     return render_template('login.html', mensaje=mensaje)
 
