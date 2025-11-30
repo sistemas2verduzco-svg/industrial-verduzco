@@ -371,7 +371,7 @@ body {
 /* Filters grid - centered vertical layout */
 .filtros-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    grid-template-columns: repeat(5, 1fr);
     gap: 0.6rem;
     align-items: end;
     max-width: 100%;
@@ -435,7 +435,7 @@ body {
     display: flex;
     gap: 0.6rem;
     align-items: flex-end;
-    grid-column: auto;
+    grid-column: 5;
 }
 
 .btn-secondary {
@@ -825,6 +825,11 @@ footer {
         grid-template-columns: 1fr;
         gap: 0.5rem;
         max-width: 100%;
+    }
+    .filtros-grid > div:last-child {
+        grid-column: auto;
+        display: flex;
+        gap: 0.5rem;
     }
     .filtros-grid .form-group,
     .filtros-grid input,
