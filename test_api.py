@@ -16,25 +16,14 @@ def client():
     
     with app.app_context():
         db.create_all()
-        # Crear usuario admin para pruebas
-        admin = Usuario(
-            username='admin',
-            correo='admin@test.com',
-            es_admin=True,
-            activo=True
-        )
-        admin.set_password('admin123')
-        db.session.add(admin)
-        db.session.commit()
-    
+        # app.py ya crea el usuario admin en el app_context(), no duplicar aquí
+
     with app.test_client() as client:
         yield client
-    
+
     with app.app_context():
         db.session.remove()
         db.drop_all()
-
-
 class TestAuthentication:
     """Tests de Autenticación"""
     
