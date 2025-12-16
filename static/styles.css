@@ -371,7 +371,7 @@ body {
 /* Filters grid - centered vertical layout */
 .filtros-grid {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(4, 1fr) auto auto;
     gap: 0.6rem;
     align-items: end;
     max-width: 100%;
@@ -420,7 +420,6 @@ body {
     padding: 0.6rem 1rem;
     font-size: 0.9rem;
     font-weight: 600;
-    width: 100%;
     text-align: center;
     border: none;
     border-radius: 6px;
@@ -429,6 +428,7 @@ body {
     align-self: flex-end;
     height: fit-content;
     margin: 0;
+    width: auto;
 }
 
 /* Contenedor de botones */
@@ -436,7 +436,6 @@ body {
     display: flex;
     gap: 0.6rem;
     align-items: flex-end;
-    grid-column: 5;
 }
 
 .btn-secondary {

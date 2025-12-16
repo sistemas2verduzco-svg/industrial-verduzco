@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Gestión de Tickets</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .admin-container {
+            max-width: 1600px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        .admin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #ddd;
+        }
+
+        .admin-header h1 {
+            margin: 0;
+            color: #333;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background-color: #0066cc;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #0052a3;
+        }
+
+        .btn-success {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background-color: #218838;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background-color: #5a6268;
+        }
+
+        .filters {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filter-group label {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .filter-group select {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .stat-numero {
+            font-size: 32px;
+            font-weight: bold;
+            color: #0066cc;
+            margin-bottom: 10px;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .table-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        .table thead {
+            background-color: #f8f9fa;
+            border-bottom: 2px solid #ddd;
+        }
+
+        .table th {
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .table td {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .table tbody tr:hover {
+            background-color: #f5f5f5;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-abierto {
+            background-color: #cce5ff;
+            color: #0066cc;
+        }
+
+        .badge-en_progreso {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .badge-en_espera {
+            background-color: #e2e3e5;
+            color: #383d41;
+        }
+
+        .badge-cerrado {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .badge-baja {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .badge-media {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .badge-alta {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .badge-critica {
+            background-color: #f5c6cb;
+            color: #721c24;
+        }
+
+        .btn-pequeño {
+            padding: 6px 12px;
+            font-size: 12px;
+            margin-right: 5px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 700px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 15px;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            color: #333;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 28px;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .close-btn:hover {
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .filters {
+                grid-template-columns: 1fr;
+            }
+
+            .table {
+                font-size: 12px;
+            }
+
+            .table th,
+            .table td {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <!-- Header -->
+        <div class="admin-header">
+            <h1>⚙️ Administración de Tickets</h1>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn btn-success" onclick="descargarTodos()">
+                    📥 Descargar Todos
+                </button>
+                <a href="{{ url_for('page_admin') }}" class="btn btn-secondary">
+                    Volver al Admin
+                </a>
+            </div>
+        </div>
+
+        <!-- Alertas -->
+        <div id="alertContainer"></div>
+
+        <!-- Filtros -->
+        <div class="filters">
+            <div class="filter-group">
+                <label>Estado:</label>
+                <select id="filtroEstado" onchange="aplicarFiltros()">
+                    <option value="">Todos</option>
+                    <option value="abierto">Abierto</option>
+                    <option value="en_progreso">En Progreso</option>
+                    <option value="en_espera">En Espera</option>
+                    <option value="cerrado">Cerrado</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Prioridad:</label>
+                <select id="filtroPrioridad" onchange="aplicarFiltros()">
+                    <option value="">Todas</option>
+                    <option value="baja">Baja</option>
+                    <option value="media">Media</option>
+                    <option value="alta">Alta</option>
+                    <option value="critica">Crítica</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Buscar:</label>
+                <input type="text" id="busqueda" placeholder="Número, usuario, título..." onkeyup="aplicarFiltros()">
+            </div>
+            <div class="filter-group" style="justify-content: flex-end;">
+                <button class="btn btn-secondary" onclick="limpiarFiltros()">Limpiar</button>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-numero" id="statTotal">0</div>
+                <div class="stat-label">Total</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-numero" id="statAbiertos">0</div>
+                <div class="stat-label">Abiertos</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-numero" id="statEnProgreso">0</div>
+                <div class="stat-label">En Progreso</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-numero" id="statEnEspera">0</div>
+                <div class="stat-label">En Espera</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-numero" id="statCerrados">0</div>
+                <div class="stat-label">Cerrados</div>
+            </div>
+        </div>
+
+        <!-- Tabla de tickets -->
+        <div class="table-container">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Número</th>
+                        <th>Título</th>
+                        <th>Usuario</th>
+                        <th>Ingeniero</th>
+                        <th>Prioridad</th>
+                        <th>Estado</th>
+                        <th>Categoría</th>
+                        <th>Creado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="ticketsBody">
+                    <tr><td colspan="9" style="text-align: center; padding: 40px;">Cargando...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Modal: Asignar ingeniero -->
+    <div id="asignarModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Asignar Ingeniero</h2>
+                <button class="close-btn" onclick="cerrarModal()">&times;</button>
+            </div>
+            <div class="form-group">
+                <label>Selecciona un ingeniero:</label>
+                <select id="selectIngeniero">
+                    <option value="">Cargando...</option>
+                </select>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button class="btn btn-secondary" onclick="cerrarModal()">Cancelar</button>
+                <button class="btn btn-primary" onclick="guardarAsignacion()">Asignar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Ver detalles -->
+    <div id="detalleModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Detalles del Ticket</h2>
+                <button class="close-btn" onclick="cerrarModal()">&times;</button>
+            </div>
+            <div id="detalleModalBody"></div>
+        </div>
+    </div>
+
+    <!-- Modal: Registrar Ingeniero -->
+    <div id="registrarIngenieroModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Registrar Nuevo Ingeniero</h2>
+                <button class="close-btn" onclick="cerrarModal()">&times;</button>
+            </div>
+            <div class="form-group">
+                <label>Selecciona un usuario:</label>
+                <select id="selectUsuarioIngeniero">
+                    <option value="">Cargando...</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Especialidad:</label>
+                <input type="text" id="especialidad" placeholder="Ej: Redes, Servidores, Hardware">
+            </div>
+            <div class="form-group">
+                <label>Teléfono:</label>
+                <input type="tel" id="telefonoIngeniero" placeholder="Número de teléfono">
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button class="btn btn-secondary" onclick="cerrarModal()">Cancelar</button>
+                <button class="btn btn-primary" onclick="guardarNuevoIngeniero()">Registrar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let todosTickets = [];
+        let ticketSeleccionadoId = null;
+        let ingenieros = [];
+
+        // Cargar al iniciar
+        document.addEventListener('DOMContentLoaded', () => {
+            cargarTodos();
+        });
+
+        // Cargar todos los tickets
+        async function cargarTodos() {
+            try {
+                const response = await fetch('/api/todos-tickets');
+                const data = await response.json();
+
+                if (!response.ok) {
+                    mostrarAlerta('Error al cargar tickets', 'error');
+                    return;
+                }
+
+                todosTickets = data.tickets || [];
+                aplicarFiltros();
+                cargarIngenieros();
+            } catch (error) {
+                console.error('Error:', error);
+                mostrarAlerta('Error de conexión', 'error');
+            }
+        }
+
+        // Cargar ingenieros
+        async function cargarIngenieros() {
+            try {
+                const response = await fetch('/api/ingenieros');
+                const data = await response.json();
+
+                if (response.ok) {
+                    ingenieros = data.ingenieros || [];
+                    actualizarSelectIngenieros();
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        // Actualizar select de ingenieros
+        function actualizarSelectIngenieros() {
+            const select = document.getElementById('selectIngeniero');
+            select.innerHTML = '<option value="">Sin asignar</option>' +
+                ingenieros.map(i => `<option value="${i.id}">${i.usuario_nombre} - ${i.especialidad || 'Sin esp'}</option>`).join('');
+        }
+
+        // Aplicar filtros
+        function aplicarFiltros() {
+            const estado = document.getElementById('filtroEstado').value;
+            const prioridad = document.getElementById('filtroPrioridad').value;
+            const busqueda = document.getElementById('busqueda').value.toLowerCase();
+
+            let filtrados = todosTickets.filter(t => {
+                const coincideEstado = !estado || t.estado === estado;
+                const coincidePrioridad = !prioridad || t.prioridad === prioridad;
+                const coincideBusqueda = !busqueda || 
+                    t.numero_ticket.toLowerCase().includes(busqueda) ||
+                    t.usuario_nombre.toLowerCase().includes(busqueda) ||
+                    t.titulo.toLowerCase().includes(busqueda);
+
+                return coincideEstado && coincidePrioridad && coincideBusqueda;
+            });
+
+            renderizarTabla(filtrados);
+        }
+
+        // Renderizar tabla
+        function renderizarTabla(tickets) {
+            const tbody = document.getElementById('ticketsBody');
+
+            if (!tickets || tickets.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 40px;">Sin resultados</td></tr>';
+                actualizarStats([]);
+                return;
+            }
+
+            tbody.innerHTML = tickets.map(ticket => `
+                <tr>
+                    <td><strong>${ticket.numero_ticket}</strong></td>
+                    <td>${ticket.titulo}</td>
+                    <td>${ticket.usuario_nombre}</td>
+                    <td>${ticket.ingeniero_nombre || '-'}</td>
+                    <td><span class="badge badge-${ticket.prioridad}">${ticket.prioridad.toUpperCase()}</span></td>
+                    <td><span class="badge badge-${ticket.estado}">${ticket.estado.replace('_', ' ').toUpperCase()}</span></td>
+                    <td>${ticket.categoria}</td>
+                    <td>${formatearFecha(ticket.fecha_creacion)}</td>
+                    <td>
+                        <button class="btn btn-primary btn-pequeño" onclick="abrirAsignar(${ticket.id})">Asignar</button>
+                        <button class="btn btn-secondary btn-pequeño" onclick="verDetalles(${ticket.id})">Detalles</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            actualizarStats(tickets);
+        }
+
+        // Actualizar estadísticas
+        function actualizarStats(tickets) {
+            const stats = {
+                total: todosTickets.length,
+                abiertos: todosTickets.filter(t => t.estado === 'abierto').length,
+                en_progreso: todosTickets.filter(t => t.estado === 'en_progreso').length,
+                en_espera: todosTickets.filter(t => t.estado === 'en_espera').length,
+                cerrados: todosTickets.filter(t => t.estado === 'cerrado').length
+            };
+
+            document.getElementById('statTotal').textContent = stats.total;
+            document.getElementById('statAbiertos').textContent = stats.abiertos;
+            document.getElementById('statEnProgreso').textContent = stats.en_progreso;
+            document.getElementById('statEnEspera').textContent = stats.en_espera;
+            document.getElementById('statCerrados').textContent = stats.cerrados;
+        }
+
+        // Asignar ingeniero
+        function abrirAsignar(ticketId) {
+            ticketSeleccionadoId = ticketId;
+            abrirModal('asignarModal');
+        }
+
+        async function guardarAsignacion() {
+            if (!ticketSeleccionadoId) return;
+
+            const ingenieroId = document.getElementById('selectIngeniero').value;
+
+            try {
+                const response = await fetch(`/api/tickets/${ticketSeleccionadoId}/asignar`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ ingeniero_id: ingenieroId || null })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    mostrarAlerta(data.error || 'Error', 'error');
+                    return;
+                }
+
+                mostrarAlerta('Ingeniero asignado. Se ha notificado por correo.', 'success');
+                cerrarModal();
+                cargarTodos();
+            } catch (error) {
+                console.error('Error:', error);
+                mostrarAlerta('Error de conexión', 'error');
+            }
+        }
+
+        // Ver detalles
+        async function verDetalles(ticketId) {
+            try {
+                const response = await fetch(`/api/tickets/${ticketId}`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    mostrarAlerta('Error', 'error');
+                    return;
+                }
+
+                const ticket = data.ticket;
+                const body = document.getElementById('detalleModalBody');
+
+                body.innerHTML = `
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                        <div><strong>Número:</strong> ${ticket.numero_ticket}</div>
+                        <div><strong>Usuario:</strong> ${ticket.usuario_nombre}</div>
+                        <div><strong>Email:</strong> ${ticket.usuario_correo}</div>
+                        <div><strong>Ingeniero:</strong> ${ticket.ingeniero_nombre || 'Sin asignar'}</div>
+                        <div><strong>Prioridad:</strong> <span class="badge badge-${ticket.prioridad}">${ticket.prioridad.toUpperCase()}</span></div>
+                        <div><strong>Estado:</strong> <span class="badge badge-${ticket.estado}">${ticket.estado.replace('_', ' ').toUpperCase()}</span></div>
+                    </div>
+
+                    <div style="margin: 20px 0;">
+                        <h3>${ticket.titulo}</h3>
+                        <p style="white-space: pre-wrap; color: #666;">${ticket.descripcion}</p>
+                    </div>
+
+                    ${ticket.notas_internas ? `
+                        <div style="background: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
+                            <strong>📝 Notas Internas:</strong>
+                            <pre style="white-space: pre-wrap; margin: 10px 0; font-size: 13px;">${ticket.notas_internas}</pre>
+                        </div>
+                    ` : ''}
+                `;
+
+                abrirModal('detalleModal');
+            } catch (error) {
+                console.error('Error:', error);
+                mostrarAlerta('Error', 'error');
+            }
+        }
+
+        // Descargar todos
+        function descargarTodos() {
+            window.location.href = '/api/tickets/descargar/excel?tipo=todos';
+        }
+
+        // Limpiar filtros
+        function limpiarFiltros() {
+            document.getElementById('filtroEstado').value = '';
+            document.getElementById('filtroPrioridad').value = '';
+            document.getElementById('busqueda').value = '';
+            aplicarFiltros();
+        }
+
+        // Funciones auxiliares
+        function abrirModal(modalId) {
+            document.getElementById(modalId).classList.add('active');
+        }
+
+        function cerrarModal() {
+            document.querySelectorAll('.modal').forEach(m => m.classList.remove('active'));
+        }
+
+        function mostrarAlerta(mensaje, tipo) {
+            const container = document.getElementById('alertContainer');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${tipo}`;
+            alert.textContent = mensaje;
+            container.appendChild(alert);
+
+            setTimeout(() => alert.remove(), 5000);
+        }
+
+        function formatearFecha(fecha) {
+            if (!fecha) return 'N/A';
+            const date = new Date(fecha);
+            return date.toLocaleString('es-MX', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        // Cerrar modal al hacer click fuera
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) {
+                e.target.classList.remove('active');
+            }
+        });
+    </script>
+</body>
+</html>

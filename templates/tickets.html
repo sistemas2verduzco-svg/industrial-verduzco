@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Tickets</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .tickets-container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        .tickets-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #ddd;
+        }
+
+        .tickets-header h1 {
+            margin: 0;
+            color: #333;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background-color: #0066cc;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #0052a3;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background-color: #5a6268;
+        }
+
+        .btn-success {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background-color: #218838;
+        }
+
+        .form-section {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: Arial, sans-serif;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .tickets-list {
+            display: grid;
+            gap: 20px;
+        }
+
+        .ticket-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-left: 5px solid #0066cc;
+            transition: all 0.3s ease;
+        }
+
+        .ticket-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .ticket-card.cerrado {
+            border-left-color: #28a745;
+            opacity: 0.8;
+        }
+
+        .ticket-card.en_progreso {
+            border-left-color: #ffc107;
+        }
+
+        .ticket-card.en_espera {
+            border-left-color: #6c757d;
+        }
+
+        .ticket-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 15px;
+        }
+
+        .ticket-numero {
+            font-weight: bold;
+            font-size: 16px;
+            color: #0066cc;
+        }
+
+        .ticket-titulo {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .ticket-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            color: #333;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-abierto {
+            background-color: #cce5ff;
+            color: #0066cc;
+        }
+
+        .badge-en_progreso {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .badge-en_espera {
+            background-color: #e2e3e5;
+            color: #383d41;
+        }
+
+        .badge-cerrado {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .badge-baja {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .badge-media {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .badge-alta {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .badge-critica {
+            background-color: #f5c6cb;
+            color: #721c24;
+        }
+
+        .ticket-descripcion {
+            color: #666;
+            margin-bottom: 15px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .ticket-acciones {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .btn-pequeño {
+            padding: 8px 15px;
+            font-size: 12px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 15px;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            color: #333;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 28px;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .close-btn:hover {
+            color: #333;
+        }
+
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #0066cc;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state h3 {
+            margin-bottom: 10px;
+            color: #666;
+        }
+
+        @media (max-width: 768px) {
+            .ticket-info {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .tickets-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="tickets-container">
+        <!-- Header -->
+        <div class="tickets-header">
+            <h1>📋 Sistema de Tickets</h1>
+            <div class="btn-group">
+                {% if es_ingeniero %}
+                <a href="{{ url_for('tickets_ingeniero_panel') }}" class="btn btn-secondary">Panel Ingeniero</a>
+                {% endif %}
+                <button class="btn btn-primary" onclick="mostrarFormularioNuevo()">
+                    ➕ Nuevo Ticket
+                </button>
+                <button class="btn btn-success" onclick="descargarExcel()">
+                    📥 Descargar Excel
+                </button>
+            </div>
+        </div>
+
+        <!-- Formulario nuevo ticket -->
+        <div id="formNuevoTicket" class="form-section" style="display: none;">
+            <h2>Crear Nuevo Ticket</h2>
+            <form id="nuevoTicketForm" onsubmit="crearTicket(event)">
+                <div class="form-group">
+                    <label for="titulo">Título del Problema:</label>
+                    <input type="text" id="titulo" name="titulo" required placeholder="Ej: No puedo acceder al correo">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="categoria">Categoría:</label>
+                        <select id="categoria" name="categoria" required>
+                            <option value="">Selecciona una categoría</option>
+                            <option value="hardware">Hardware</option>
+                            <option value="software">Software</option>
+                            <option value="red">Red/Conectividad</option>
+                            <option value="seguridad">Seguridad</option>
+                            <option value="impresoras">Impresoras</option>
+                            <option value="bases_datos">Bases de Datos</option>
+                            <option value="otro">Otro</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="prioridad">Prioridad:</label>
+                        <select id="prioridad" name="prioridad" required>
+                            <option value="baja">Baja</option>
+                            <option value="media" selected>Media</option>
+                            <option value="alta">Alta</option>
+                            <option value="critica">Crítica</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="descripcion">Descripción del Problema:</label>
+                    <textarea id="descripcion" name="descripcion" required placeholder="Describe detalladamente qué está sucediendo..."></textarea>
+                </div>
+
+                <div class="btn-group" style="justify-content: flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="ocultarFormularioNuevo()">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Crear Ticket</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Alertas -->
+        <div id="alertContainer"></div>
+
+        <!-- Filtros (opcional) -->
+        <div style="margin-bottom: 20px; display: flex; gap: 10px;">
+            <select id="filtroEstado" onchange="cargarMisTickets()" style="padding: 10px; border-radius: 4px; border: 1px solid #ddd;">
+                <option value="">Todos los estados</option>
+                <option value="abierto">Abierto</option>
+                <option value="en_progreso">En Progreso</option>
+                <option value="en_espera">En Espera</option>
+                <option value="cerrado">Cerrado</option>
+            </select>
+        </div>
+
+        <!-- Lista de tickets -->
+        <div id="ticketsContent">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>Cargando tickets...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para ver detalles -->
+    <div id="detalleModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="detalleModalTitulo">Detalles del Ticket</h2>
+                <button class="close-btn" onclick="cerrarModal()">&times;</button>
+            </div>
+            <div id="detalleModalBody"></div>
+        </div>
+    </div>
+
+    <script>
+        // Variables globales
+        let usuarioId = {{ usuario_id }};
+        let ticketsActuales = [];
+
+        // Cargar tickets al iniciar
+        document.addEventListener('DOMContentLoaded', () => {
+            cargarMisTickets();
+        });
+
+        // Cargar mis tickets
+        async function cargarMisTickets() {
+            const estado = document.getElementById('filtroEstado')?.value || '';
+            
+            try {
+                const response = await fetch('/api/mis-tickets');
+                const data = await response.json();
+
+                if (!response.ok) {
+                    mostrarAlerta('Error al cargar tickets', 'error');
+                    return;
+                }
+
+                let tickets = data.tickets || [];
+
+                // Filtrar por estado si es necesario
+                if (estado) {
+                    tickets = tickets.filter(t => t.estado === estado);
+                }
+
+                ticketsActuales = tickets;
+                renderizarTickets(tickets);
+            } catch (error) {
+                console.error('Error:', error);
+                mostrarAlerta('Error de conexión', 'error');
+            }
+        }
+
+        // Renderizar lista de tickets
+        function renderizarTickets(tickets) {
+            const container = document.getElementById('ticketsContent');
+
+            if (!tickets || tickets.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>📭 No hay tickets</h3>
+                        <p>Aún no has reportado ningún problema. ¡Crea tu primer ticket!</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = tickets.map(ticket => `
+                <div class="ticket-card ${ticket.estado}">
+                    <div class="ticket-header">
+                        <div>
+                            <div class="ticket-numero">${ticket.numero_ticket}</div>
+                            <div class="ticket-titulo">${ticket.titulo}</div>
+                        </div>
+                        <span class="badge badge-${ticket.estado}">${ticket.estado.replace('_', ' ').toUpperCase()}</span>
+                    </div>
+
+                    <div class="ticket-info">
+                        <div class="info-item">
+                            <span class="info-label">Categoría</span>
+                            <span class="info-value">${ticket.categoria}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Prioridad</span>
+                            <span class="badge badge-${ticket.prioridad}">${ticket.prioridad.toUpperCase()}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Creado</span>
+                            <span class="info-value">${formatearFecha(ticket.fecha_creacion)}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Ingeniero</span>
+                            <span class="info-value">${ticket.ingeniero_nombre || 'Sin asignar'}</span>
+                        </div>
+                    </div>
+
+                    <div class="ticket-descripcion">
+${ticket.descripcion}</div>
+
+                    <div class="ticket-acciones">
+                        <button class="btn btn-secondary btn-pequeño" onclick="verDetalles(${ticket.id})">
+                            Ver Detalles
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Crear nuevo ticket
+        async function crearTicket(event) {
+            event.preventDefault();
+
+            const datos = {
+                titulo: document.getElementById('titulo').value,
+                descripcion: document.getElementById('descripcion').value,
+                categoria: document.getElementById('categoria').value,
+                prioridad: document.getElementById('prioridad').value
+            };
+
+            try {
+                const response = await fetch('/api/tickets', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(datos)
+                });
+
+                const resultado = await response.json();
+
+                if (!response.ok) {
+                    mostrarAlerta(resultado.error || 'Error al crear ticket', 'error');
+                    return;
+                }
+
+                mostrarAlerta('Ticket creado exitosamente. ¡El equipo de sistemas ha sido notificado!', 'success');
+                document.getElementById('nuevoTicketForm').reset();
+                ocultarFormularioNuevo();
+                cargarMisTickets();
+            } catch (error) {
+                console.error('Error:', error);
+                mostrarAlerta('Error de conexión', 'error');
+            }
+        }
+
+        // Ver detalles de ticket
+        async function verDetalles(ticketId) {
+            try {
+                const response = await fetch(`/api/tickets/${ticketId}`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    mostrarAlerta('Error al cargar detalles', 'error');
+                    return;
+                }
+
+                const ticket = data.ticket;
+                const body = document.getElementById('detalleModalBody');
+
+                body.innerHTML = `
+                    <div class="form-section" style="box-shadow: none;">
+                        <div class="ticket-info">
+                            <div class="info-item">
+                                <span class="info-label">Número</span>
+                                <span class="info-value">${ticket.numero_ticket}</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Estado</span>
+                                <span class="badge badge-${ticket.estado}">${ticket.estado.replace('_', ' ').toUpperCase()}</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Prioridad</span>
+                                <span class="badge badge-${ticket.prioridad}">${ticket.prioridad.toUpperCase()}</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Categoría</span>
+                                <span class="info-value">${ticket.categoria}</span>
+                            </div>
+                        </div>
+
+                        <div style="margin: 20px 0;">
+                            <h3>${ticket.titulo}</h3>
+                            <p style="color: #666; white-space: pre-wrap;">${ticket.descripcion}</p>
+                        </div>
+
+                        <div class="ticket-info">
+                            <div class="info-item">
+                                <span class="info-label">Creado</span>
+                                <span class="info-value">${formatearFecha(ticket.fecha_creacion)}</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Actualizado</span>
+                                <span class="info-value">${formatearFecha(ticket.fecha_actualizacion)}</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Ingeniero Asignado</span>
+                                <span class="info-value">${ticket.ingeniero_nombre || 'Sin asignar'}</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Fecha Cierre</span>
+                                <span class="info-value">${ticket.fecha_cierre ? formatearFecha(ticket.fecha_cierre) : 'N/A'}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                abrirModal('detalleModal');
+            } catch (error) {
+                console.error('Error:', error);
+                mostrarAlerta('Error de conexión', 'error');
+            }
+        }
+
+        // Descargar en Excel
+        async function descargarExcel() {
+            try {
+                window.location.href = '/api/tickets/descargar/excel?tipo=mis';
+            } catch (error) {
+                console.error('Error:', error);
+                mostrarAlerta('Error al descargar', 'error');
+            }
+        }
+
+        // Funciones auxiliares UI
+        function mostrarFormularioNuevo() {
+            document.getElementById('formNuevoTicket').style.display = 'block';
+            document.getElementById('formNuevoTicket').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function ocultarFormularioNuevo() {
+            document.getElementById('formNuevoTicket').style.display = 'none';
+        }
+
+        function abrirModal(modalId) {
+            document.getElementById(modalId).classList.add('active');
+        }
+
+        function cerrarModal() {
+            document.querySelectorAll('.modal').forEach(m => m.classList.remove('active'));
+        }
+
+        function mostrarAlerta(mensaje, tipo) {
+            const container = document.getElementById('alertContainer');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${tipo}`;
+            alert.textContent = mensaje;
+            container.appendChild(alert);
+
+            setTimeout(() => {
+                alert.remove();
+            }, 5000);
+        }
+
+        function formatearFecha(fecha) {
+            if (!fecha) return 'N/A';
+            const date = new Date(fecha);
+            return date.toLocaleString('es-MX', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        // Cerrar modal al hacer click fuera
+        document.addEventListener('click', (e) => {
+            const modals = document.querySelectorAll('.modal');
+            modals.forEach(modal => {
+                if (e.target === modal) {
+                    modal.classList.remove('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

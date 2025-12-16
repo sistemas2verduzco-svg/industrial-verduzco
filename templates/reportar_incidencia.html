@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reportar Incidencia</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.3s ease;
+        }
+
+        input[type="text"]:focus,
+        input[type="email"]:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 120px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-submit {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            margin-top: 20px;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-submit:active {
+            transform: translateY(0);
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .required {
+            color: #dc3545;
+        }
+
+        .info-box {
+            background: #f0f4ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            color: #555;
+        }
+
+        .spinner {
+            display: none;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .success-box {
+            text-align: center;
+            display: none;
+        }
+
+        .success-icon {
+            font-size: 60px;
+            margin-bottom: 20px;
+        }
+
+        .success-box h2 {
+            color: #28a745;
+            margin-bottom: 10px;
+        }
+
+        .success-box p {
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .ticket-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+            font-family: monospace;
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 25px;
+            }
+
+            .header h1 {
+                font-size: 22px;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Formulario -->
+        <div id="formContainer">
+            <div class="header">
+                <h1>🔧 Reportar Incidencia</h1>
+                <p>Completa el formulario para reportar un problema técnico</p>
+            </div>
+
+            <div id="alertContainer"></div>
+
+            <div class="info-box">
+                ℹ️ Tu solicitud será recibida por el equipo de sistemas y asignada a uno de nuestros ingenieros.
+            </div>
+
+            <form id="ticketForm" onsubmit="crearTicket(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="nombre">Tu Nombre <span class="required">*</span></label>
+                        <input type="text" id="nombre" name="nombre" required placeholder="Juan Pérez">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="email">Tu Email <span class="required">*</span></label>
+                        <input type="email" id="email" name="email" required placeholder="juan@company.com">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="departamento">Departamento <span class="required">*</span></label>
+                    <select id="departamento" name="departamento" required>
+                        <option value="">Selecciona un departamento</option>
+                        <option value="Administración">Administración</option>
+                        <option value="Ventas">Ventas</option>
+                        <option value="Compras">Compras</option>
+                        <option value="Logística">Logística</option>
+                        <option value="Recursos Humanos">Recursos Humanos</option>
+                        <option value="Contabilidad">Contabilidad</option>
+                        <option value="Otro">Otro</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="categoria">Categoría <span class="required">*</span></label>
+                    <select id="categoria" name="categoria" required>
+                        <option value="">Selecciona una categoría</option>
+                        <option value="Hardware">Hardware (computadora, monitor, etc)</option>
+                        <option value="Software">Software (aplicación, instalación)</option>
+                        <option value="Red">Red / Conectividad (internet, WiFi)</option>
+                        <option value="Impresora">Impresora / Escanear</option>
+                        <option value="Acceso">Acceso / Permisos</option>
+                        <option value="Email">Email / Outlook</option>
+                        <option value="Otro">Otro problema</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="titulo">Título del Problema <span class="required">*</span></label>
+                    <input type="text" id="titulo" name="titulo" required placeholder="Ej: Mi computadora no enciende">
+                </div>
+
+                <div class="form-group">
+                    <label for="descripcion">Descripción Detallada <span class="required">*</span></label>
+                    <textarea id="descripcion" name="descripcion" required placeholder="Describe qué está sucediendo, cuándo empezó, qué intentaste hacer..."></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-submit">
+                    Enviar Reporte
+                    <span class="spinner" id="spinner"></span>
+                </button>
+            </form>
+        </div>
+
+        <!-- Éxito -->
+        <div id="successContainer" class="success-box">
+            <div class="success-icon">✅</div>
+            <h2>¡Reporte Recibido!</h2>
+            <p>Tu solicitud ha sido registrada correctamente.</p>
+            <div class="ticket-number" id="ticketNumber"></div>
+            <p>El equipo de sistemas revisará tu reporte y se asignará a uno de nuestros ingenieros.</p>
+            <p style="margin-top: 20px; font-size: 12px; color: #999;">
+                Puedes cerrar esta ventana. Te contactaremos cuando se asigne un ingeniero.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        async function crearTicket(event) {
+            event.preventDefault();
+
+            const spinner = document.getElementById('spinner');
+            spinner.style.display = 'inline-block';
+
+            const datos = {
+                nombre_solicitante: document.getElementById('nombre').value,
+                email_solicitante: document.getElementById('email').value,
+                departamento: document.getElementById('departamento').value,
+                categoria: document.getElementById('categoria').value,
+                titulo: document.getElementById('titulo').value,
+                descripcion: document.getElementById('descripcion').value,
+                prioridad: 'media'
+            };
+
+            try {
+                const response = await fetch('/api/tickets', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(datos)
+                });
+
+                const resultado = await response.json();
+
+                if (!response.ok) {
+                    mostrarAlerta(resultado.error || 'Error al crear el reporte', 'error');
+                    spinner.style.display = 'none';
+                    return;
+                }
+
+                // Mostrar éxito
+                document.getElementById('formContainer').style.display = 'none';
+                document.getElementById('successContainer').style.display = 'block';
+                document.getElementById('ticketNumber').textContent = resultado.numero_ticket;
+
+            } catch (error) {
+                console.error('Error:', error);
+                mostrarAlerta('Error de conexión. Intenta nuevamente.', 'error');
+                spinner.style.display = 'none';
+            }
+        }
+
+        function mostrarAlerta(mensaje, tipo) {
+            const container = document.getElementById('alertContainer');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${tipo}`;
+            alert.textContent = mensaje;
+            container.appendChild(alert);
+
+            setTimeout(() => {
+                alert.remove();
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

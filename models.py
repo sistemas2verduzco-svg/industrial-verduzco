@@ -144,6 +144,82 @@ class HistorialPreciosProveedor(db.Model):
         }
 
 
+class Ticket(db.Model):
+    """Tickets de incidencias - Sistema de Soporte Técnico"""
+    __tablename__ = 'tickets'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    numero_ticket = db.Column(db.String(20), unique=True, nullable=False)
+    titulo = db.Column(db.String(255), nullable=False)
+    descripcion = db.Column(db.Text, nullable=False)
+    nombre_solicitante = db.Column(db.String(100), nullable=False)  # Quién reporta (no login)
+    email_solicitante = db.Column(db.String(100), nullable=True)
+    departamento = db.Column(db.String(100), nullable=True)
+    
+    # Asignación a ingeniero
+    ingeniero_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)  # Usuario que lo tomó
+    
+    # Estados
+    estado = db.Column(db.String(20), default='nuevo')  # nuevo, en_progreso, resuelto
+    prioridad = db.Column(db.String(20), default='media')  # baja, media, alta, critica
+    categoria = db.Column(db.String(100), nullable=True)
+    
+    # Fechas
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    fecha_asignacion = db.Column(db.DateTime, nullable=True)
+    fecha_resolucion = db.Column(db.DateTime, nullable=True)
+    fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relación con comentarios
+    comentarios = db.relationship('ComentarioTicket', backref='ticket', lazy=True, cascade='all, delete-orphan')
+    ingeniero = db.relationship('Usuario', backref='tickets_asignados')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'numero_ticket': self.numero_ticket,
+            'titulo': self.titulo,
+            'descripcion': self.descripcion,
+            'nombre_solicitante': self.nombre_solicitante,
+            'email_solicitante': self.email_solicitante,
+            'departamento': self.departamento,
+            'ingeniero_id': self.ingeniero_id,
+            'ingeniero_nombre': self.ingeniero.username if self.ingeniero else None,
+            'estado': self.estado,
+            'prioridad': self.prioridad,
+            'categoria': self.categoria,
+            'fecha_creacion': self.fecha_creacion.isoformat(),
+            'fecha_asignacion': self.fecha_asignacion.isoformat() if self.fecha_asignacion else None,
+            'fecha_resolucion': self.fecha_resolucion.isoformat() if self.fecha_resolucion else None,
+            'fecha_actualizacion': self.fecha_actualizacion.isoformat(),
+            'comentarios': [c.to_dict() for c in self.comentarios]
+        }
+
+
+class ComentarioTicket(db.Model):
+    """Comentarios y evidencia en tickets"""
+    __tablename__ = 'comentarios_tickets'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    ticket_id = db.Column(db.Integer, db.ForeignKey('tickets.id'), nullable=False)
+    ingeniero_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    contenido = db.Column(db.Text, nullable=False)
+    imagen_url = db.Column(db.String(500), nullable=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    ingeniero = db.relationship('Usuario', backref='comentarios_tickets')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'ticket_id': self.ticket_id,
+            'ingeniero_nombre': self.ingeniero.username,
+            'contenido': self.contenido,
+            'imagen_url': self.imagen_url,
+            'fecha_creacion': self.fecha_creacion.isoformat()
+        }
+
+
 class AccessLog(db.Model):
     __tablename__ = 'access_logs'
 

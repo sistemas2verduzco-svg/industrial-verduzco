@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Soporte Técnico - Panel Ingeniero</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .ingeniero-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #ddd;
+        }
+
+        .header h1 {
+            margin: 0;
+            color: #333;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background-color: #0066cc;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #0052a3;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background-color: #5a6268;
+        }
+
+        .btn-success {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background-color: #218838;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #ddd;
+            margin-bottom: 30px;
+        }
+
+        .tab-btn {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            color: #666;
+            transition: all 0.3s ease;
+        }
+
+        .tab-btn.active {
+            color: #0066cc;
+            border-bottom-color: #0066cc;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .stat-numero {
+            font-size: 32px;
+            font-weight: bold;
+            color: #0066cc;
+            margin-bottom: 10px;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .tickets-grid {
+            display: grid;
+            gap: 20px;
+        }
+
+        .ticket-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-left: 5px solid #0066cc;
+        }
+
+        .ticket-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 15px;
+        }
+
+        .ticket-numero {
+            font-weight: bold;
+            font-size: 16px;
+            color: #0066cc;
+        }
+
+        .ticket-titulo {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .ticket-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            color: #333;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            width: fit-content;
+        }
+
+        .badge-nuevo {
+            background-color: #cce5ff;
+            color: #0066cc;
+        }
+
+        .badge-en_progreso {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .badge-resuelto {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .badge-baja {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .badge-media {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .badge-alta {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .badge-critica {
+            background-color: #f5c6cb;
+            color: #721c24;
+        }
+
+        .ticket-acciones {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn-pequeño {
+            padding: 8px 15px;
+            font-size: 12px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 700px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 15px;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 28px;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            min-height: 100px;
+        }
+
+        .form-group input[type="file"] {
+            display: block;
+            margin-top: 10px;
+        }
+
+        .comentario {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            border-left: 3px solid #0066cc;
+        }
+
+        .comentario-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+
+        .comentario-autor {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .comentario-fecha {
+            color: #999;
+        }
+
+        .comentario-texto {
+            color: #555;
+            margin-bottom: 10px;
+            white-space: pre-wrap;
+        }
+
+        .comentario-imagen {
+            max-width: 100%;
+            max-height: 300px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .alert-error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .ticket-info {
+                grid-template-columns: 1fr;
+            }
+
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+
+            .tabs {
+                flex-wrap: wrap;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="ingeniero-container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🔧 Panel de Soporte Técnico</h1>
+            <div>
+                <button class="btn btn-success" onclick="descargarExcel()">📥 Descargar Excel</button>
+                <a href="{{ url_for('logout_tickets') }}" class="btn btn-secondary" style="margin-left: 10px;">Salir</a>
+            </div>
+        </div>
+
+        <!-- Alertas -->
+        <div id="alertContainer"></div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" onclick="cambiarTab('bandeja')">📬 Bandeja de Entrados</button>
+            <button class="tab-btn" onclick="cambiarTab('mis-tickets')">✓ Mis Tickets</button>
+        </div>
+
+        <!-- TAB 1: Bandeja de Entrados -->
+        <div id="bandeja" class="tab-content active">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-numero" id="countEntrados">0</div>
+                    <div class="stat-label">Sin Asignar</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-numero" id="countMios">0</div>
+                    <div class="stat-label">Mis Tickets</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-numero" id="countEnProgreso">0</div>
+                    <div class="stat-label">En Progreso</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-numero" id="countResueltos">0</div>
+                    <div class="stat-label">Resueltos</div>
+                </div>
+            </div>
+
+            <div id="bandejaContent" class="tickets-grid"></div>
+        </div>
+
+        <!-- TAB 2: Mis Tickets -->
+        <div id="mis-tickets" class="tab-content">
+            <div id="misTicketsContent" class="tickets-grid"></div>
+        </div>
+    </div>
+
+    <!-- Modal: Ver Detalle y Documentar -->
+    <div id="detalleModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="detalleModalTitulo">Detalles del Ticket</h2>
+                <button class="close-btn" onclick="cerrarModal()">&times;</button>
+            </div>
+
+            <div id="alertModalContainer"></div>
+
+            <div id="detalleModalBody"></div>
+
+            <!-- Agregar Comentario (solo en tickets tomados) -->
+            <div id="seccionComentario" style="display: none; margin-top: 30px; border-top: 2px solid #eee; padding-top: 20px;">
+                <h3>Agregar Comentario / Documentación</h3>
+                <div class="form-group">
+                    <label>Tu Comentario:</label>
+                    <textarea id="nuevoComentario" placeholder="Describe el problema, solución aplicada, observaciones..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Imagen (opcional):</label>
+                    <input type="file" id="imagenComentario" accept="image/*">
+                    <small style="color: #666;">PNG, JPG, GIF o WEBP (máx 5MB)</small>
+                </div>
+                <button class="btn btn-primary" onclick="agregarComentario()">Guardar Comentario</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ticketsEntrados = [];
+        let misTickets = [];
+        let ticketActual = null;
+        let usuarioId = null;
+
+        // Inicializar
+        document.addEventListener('DOMContentLoaded', () => {
+            cargarDatos();
+        });
+
+        async function cargarDatos() {
+            try {
+                const [bandeja, mis] = await Promise.all([
+                    fetch('/api/bandeja-entrada').then(r => r.json()),
+                    fetch('/api/mis-tickets').then(r => r.json())
+                ]);
+
+                ticketsEntrados = bandeja.tickets || [];
+                misTickets = mis.tickets || [];
+
+                renderizarBandeja();
+                renderizarMisTickets();
+                actualizarStats();
+            } catch (error) {
+                console.error('Error:', error);
+                mostrarAlerta('Error al cargar datos', 'error');
+            }
+        }
+
+        function actualizarStats() {
+            document.getElementById('countEntrados').textContent = ticketsEntrados.length;
+            document.getElementById('countMios').textContent = misTickets.length;
+            document.getElementById('countEnProgreso').textContent = 
+                misTickets.filter(t => t.estado === 'en_progreso').length;
+            document.getElementById('countResueltos').textContent = 
+                misTickets.filter(t => t.estado === 'resuelto').length;
+        }
+
+        function renderizarBandeja() {
+            const container = document.getElementById('bandejaContent');
+
+            if (!ticketsEntrados || ticketsEntrados.length === 0) {
+                container.innerHTML = '<div class="empty-state"><h3>📭 Sin tickets nuevos</h3><p>No hay incidencias pendientes de asignar</p></div>';
+                return;
+            }
+
+            container.innerHTML = ticketsEntrados.map(ticket => `
+                <div class="ticket-card">
+                    <div class="ticket-header">
+                        <div>
+                            <div class="ticket-numero">${ticket.numero_ticket}</div>
+                            <div class="ticket-titulo">${ticket.titulo}</div>
+                        </div>
+                        <span class="badge badge-nuevo">NUEVO</span>
+                    </div>
+
+                    <div class="ticket-info">
+                        <div class="info-item">
+                            <span class="info-label">Solicitante</span>
+                            <span class="info-value">${ticket.nombre_solicitante}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Departamento</span>
+                            <span class="info-value">${ticket.departamento || '-'}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Categoría</span>
+                            <span class="info-value">${ticket.categoria}</span>
+                        </div>
+                    </div>
+
+                    <p style="color: #666; margin-bottom: 15px;">${ticket.descripcion}</p>
+
+                    <div class="ticket-acciones">
+                        <button class="btn btn-primary btn-pequeño" onclick="verDetalle(${ticket.id}, true)">Ver Detalle</button>
+                        <button class="btn btn-success btn-pequeño" onclick="tomarTicket(${ticket.id})">Tomar este Ticket</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderizarMisTickets() {
+            const container = document.getElementById('misTicketsContent');
+
+            if (!misTickets || misTickets.length === 0) {
+                container.innerHTML = '<div class="empty-state"><h3>📋 Sin tickets asignados</h3><p>Aún no has tomado ningún ticket</p></div>';
+                return;
+            }
+
+            container.innerHTML = misTickets.map(ticket => `
+                <div class="ticket-card">
+                    <div class="ticket-header">
+                        <div style="flex: 1;">
+                            <div class="ticket-numero">${ticket.numero_ticket}</div>
+                            <div class="ticket-titulo">${ticket.titulo}</div>
+                            <div style="font-size: 13px; color: #999; margin-top: 5px;">
+                                👤 ${ticket.nombre_solicitante}
+                            </div>
+                        </div>
+                        <span class="badge badge-${ticket.estado}">${ticket.estado.replace('_', ' ').toUpperCase()}</span>
+                    </div>
+
+                    <div class="ticket-info">
+                        <div class="info-item">
+                            <span class="info-label">Categoría</span>
+                            <span class="info-value">${ticket.categoria}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Prioridad</span>
+                            <span class="badge badge-${ticket.prioridad}">${ticket.prioridad.toUpperCase()}</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Creado</span>
+                            <span class="info-value">${formatearFecha(ticket.fecha_creacion)}</span>
+                        </div>
+                    </div>
+
+                    <div class="ticket-acciones">
+                        <button class="btn btn-primary btn-pequeño" onclick="verDetalle(${ticket.id}, false)">Ver Detalle</button>
+                        ${ticket.estado !== 'resuelto' ? `
+                            <button class="btn btn-success btn-pequeño" onclick="marcarResuelto(${ticket.id})">Marcar Resuelto</button>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function tomarTicket(ticketId) {
+            try {
+                const response = await fetch(`/api/tickets/${ticketId}/tomar`, {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    mostrarAlerta(data.error || 'Error al tomar ticket', 'error');
+                    return;
+                }
+
+                mostrarAlerta('✅ Ticket asignado a ti', 'success');
+                cerrarModal();
+                cargarDatos();
+            } catch (error) {
+                console.error('Error:', error);
+                mostrarAlerta('Error de conexión', 'error');
+            }
+        }
+
+        async function verDetalle(ticketId, mostrarAccionTomar) {
+            try {
+                const response = await fetch(`/api/tickets/${ticketId}`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    mostrarAlerta('Error al cargar', 'error');
+                    return;
+                }
+
+                ticketActual = data.ticket;
+                const ticket = data.ticket;
+
+                const body = document.getElementById('detalleModalBody');
+                body.innerHTML = `
+                    <div style="background: white;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                            <div>
+                                <strong>Número:</strong> ${ticket.numero_ticket}
+                            </div>
+                            <div>
+                                <strong>Estado:</strong> <span class="badge badge-${ticket.estado}">${ticket.estado.replace('_', ' ').toUpperCase()}</span>
+                            </div>
+                            <div>
+                                <strong>Solicitante:</strong> ${ticket.nombre_solicitante}
+                            </div>
+                            <div>
+                                <strong>Email:</strong> ${ticket.email_solicitante}
+                            </div>
+                            <div>
+                                <strong>Departamento:</strong> ${ticket.departamento}
+                            </div>
+                            <div>
+                                <strong>Categoría:</strong> ${ticket.categoria}
+                            </div>
+                        </div>
+
+                        <div style="margin: 20px 0;">
+                            <h3>${ticket.titulo}</h3>
+                            <p style="white-space: pre-wrap; color: #666; line-height: 1.5;">${ticket.descripcion}</p>
+                        </div>
+
+                        ${ticket.comentarios && ticket.comentarios.length > 0 ? `
+                            <div style="margin: 20px 0; border-top: 2px solid #eee; padding-top: 20px;">
+                                <h3>Comentarios y Documentación</h3>
+                                ${ticket.comentarios.map(com => `
+                                    <div class="comentario">
+                                        <div class="comentario-header">
+                                            <span class="comentario-autor">${com.ingeniero_nombre}</span>
+                                            <span class="comentario-fecha">${formatearFecha(com.fecha_creacion)}</span>
+                                        </div>
+                                        <div class="comentario-texto">${com.contenido}</div>
+                                        ${com.imagen_url ? `<img src="${com.imagen_url}" class="comentario-imagen">` : ''}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+
+                // Mostrar sección de comentario solo si el ticket es mío
+                const seccion = document.getElementById('seccionComentario');
+                if (!mostrarAccionTomar && ticket.ingeniero_nombre) {
+                    seccion.style.display = 'block';
+                } else {
+                    seccion.style.display = 'none';
+                }
+
+                // Botón para tomar
+                if (mostrarAccionTomar) {
+                    body.innerHTML += `
+                        <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid #eee;">
+                            <button class="btn btn-success" style="width: 100%;" onclick="tomarTicket(${ticketId})">
+                                ✓ Tomar este Ticket
+                            </button>
+                        </div>
+                    `;
+                }
+
+                abrirModal('detalleModal');
+            } catch (error) {
+                console.error('Error:', error);
+                mostrarAlerta('Error', 'error');
+            }
+        }
+
+        async function agregarComentario() {
+            const contenido = document.getElementById('nuevoComentario').value;
+            const archivo = document.getElementById('imagenComentario').files[0];
+
+            if (!contenido.trim()) {
+                mostrarAlerta('Escribe un comentario', 'error');
+                return;
+            }
+
+            try {
+                // Subir imagen si existe
+                let imagenUrl = null;
+                if (archivo) {
+                    const formData = new FormData();
+                    formData.append('imagen', archivo);
+
+                    const uploadResponse = await fetch(`/api/tickets/${ticketActual.id}/imagen`, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!uploadResponse.ok) {
+                        mostrarAlerta('Error al subir imagen', 'error');
+                        return;
+                    }
+
+                    const uploadData = await uploadResponse.json();
+                    imagenUrl = uploadData.imagen_url;
+                }
+
+                // Agregar comentario
+                const response = await fetch(`/api/tickets/${ticketActual.id}/comentario`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        contenido: contenido,
+                        imagen_url: imagenUrl
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    mostrarAlerta(data.error || 'Error', 'error');
+                    return;
+                }
+
+                mostrarAlerta('✅ Comentario agregado', 'success');
+                document.getElementById('nuevoComentario').value = '';
+                document.getElementById('imagenComentario').value = '';
+                cargarDatos();
+                verDetalle(ticketActual.id, false);
+            } catch (error) {
+                console.error('Error:', error);
+                mostrarAlerta('Error de conexión', 'error');
+            }
+        }
+
+        async function marcarResuelto(ticketId) {
+            if (!confirm('¿Marcar este ticket como resuelto?')) return;
+
+            try {
+                const response = await fetch(`/api/tickets/${ticketId}/estado`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ estado: 'resuelto' })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    mostrarAlerta(data.error || 'Error', 'error');
+                    return;
+                }
+
+                mostrarAlerta('✅ Ticket marcado como resuelto', 'success');
+                cerrarModal();
+                cargarDatos();
+            } catch (error) {
+                console.error('Error:', error);
+                mostrarAlerta('Error', 'error');
+            }
+        }
+
+        function descargarExcel() {
+            window.location.href = '/api/tickets/descargar/excel';
+        }
+
+        function cambiarTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        function abrirModal(modalId) {
+            document.getElementById(modalId).classList.add('active');
+        }
+
+        function cerrarModal() {
+            document.querySelectorAll('.modal').forEach(m => m.classList.remove('active'));
+        }
+
+        function mostrarAlerta(mensaje, tipo) {
+            const container = document.getElementById('alertContainer');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${tipo}`;
+            alert.textContent = mensaje;
+            container.appendChild(alert);
+
+            setTimeout(() => alert.remove(), 5000);
+        }
+
+        function formatearFecha(fecha) {
+            if (!fecha) return 'N/A';
+            const date = new Date(fecha);
+            return date.toLocaleString('es-MX', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        document.addEventListener('click', (e) => {
+            const modals = document.querySelectorAll('.modal');
+            modals.forEach(modal => {
+                if (e.target === modal) {
+                    modal.classList.remove('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
