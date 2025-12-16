@@ -689,13 +689,19 @@
                             </button>
                         </div>
                     `;
-                } else if (!mostrarAccionTomar && ticket.estado === 'en_progreso') {
-                    // Botones para ticket que es mío y está en progreso
+                } else if (!mostrarAccionTomar && ticket.ingeniero_nombre) {
+                    // Mostrar acciones para el ingeniero asignado (Devolver siempre disponible; Marcar Resuelto solo si no está resuelto)
                     body.innerHTML += `
                         <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid #eee; display: flex; gap: 10px;">
-                            <button class="btn btn-success" style="flex: 1;" onclick="marcarResuelto(${ticketId})">
-                                ✓ Marcar Resuelto
-                            </button>
+                            ${ticket.estado !== 'resuelto' ? `
+                                <button class="btn btn-success" style="flex: 1;" onclick="marcarResuelto(${ticketId})">
+                                    ✓ Marcar Resuelto
+                                </button>
+                            ` : `
+                                <button class="btn btn-success btn-pequeño" style="flex: 1; opacity: 0.7; cursor: default;" disabled>
+                                    ✓ Resuelto
+                                </button>
+                            `}
                             <button class="btn btn-secondary" style="flex: 1;" onclick="devolverTicket(${ticketId})">
                                 ↩️ Devolver a Bandeja
                             </button>
