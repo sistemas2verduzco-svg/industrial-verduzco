@@ -1,0 +1,35 @@
+<aside class="app-sidebar" style="width:240px; position:fixed; left:0; top:0; bottom:0; background:#0b2745; color:#fff; padding:20px; overflow:auto;">
+    <div style="margin-bottom:20px; font-weight:700; font-size:18px;">📚 Menú</div>
+    <nav style="display:flex; flex-direction:column; gap:8px;">
+        {% if has_permission('catalog', 'view') or current_user and current_user.es_admin %}
+        <a href="/" style="color:#fff; text-decoration:none; padding:8px 10px; border-radius:6px;">🏠 Catálogo</a>
+        {% endif %}
+
+        {% if has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        <a href="/admin" style="color:#fff; text-decoration:none; padding:8px 10px; border-radius:6px;">⚙️ Administrar</a>
+        {% endif %}
+
+        {% if has_permission('tickets', 'view') or current_user and current_user.es_admin %}
+        <a href="/soporte" style="color:#fff; text-decoration:none; padding:8px 10px; border-radius:6px;">🔧 Soporte</a>
+        {% endif %}
+
+        {% if current_user and current_user.es_admin %}
+        <a href="/proveedores" style="color:#fff; text-decoration:none; padding:8px 10px; border-radius:6px;">🏢 Proveedores</a>
+        <a href="/logout" style="color:#fff; text-decoration:none; padding:8px 10px; border-radius:6px;">🔒 Cerrar Sesión</a>
+        {% elif session.get('ingeniero_user') %}
+        <a href="/logout_tickets" style="color:#fff; text-decoration:none; padding:8px 10px; border-radius:6px;">🔒 Salir</a>
+        {% endif %}
+    </nav>
+
+    <div style="position: absolute; bottom: 20px; left: 20px; right: 20px; font-size:12px; color:#cdd7e5;">
+        <div>Usuario: {{ current_user.username if current_user else 'Invitado' }}</div>
+        <div style="margin-top:6px;">Role: {{ current_user.role if current_user and current_user.role else 'N/A' }}</div>
+    </div>
+</aside>
+
+<style>
+    /* Ajustes mínimos para que el contenido principal no quede atrás del sidebar */
+    body > .container, body > .ingeniero-container {
+        margin-left: 260px;
+    }
+</style>
