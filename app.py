@@ -1390,6 +1390,12 @@ def obtener_ticket(ticket_id):
         
         comentarios = ComentarioTicket.query.filter_by(ticket_id=ticket_id).all()
         
+        # Obtener nombre del ingeniero asignado
+        ingeniero_nombre = None
+        if ticket.ingeniero_id:
+            ing = Usuario.query.get(ticket.ingeniero_id)
+            ingeniero_nombre = ing.username if ing else None
+        
         return jsonify({
             'ticket': {
                 'id': ticket.id,
@@ -1402,6 +1408,8 @@ def obtener_ticket(ticket_id):
                 'estado': ticket.estado,
                 'prioridad': ticket.prioridad,
                 'categoria': ticket.categoria,
+                'ingeniero_id': ticket.ingeniero_id,
+                'ingeniero_nombre': ingeniero_nombre,
                 'fecha_creacion': ticket.fecha_creacion.isoformat() if ticket.fecha_creacion else None,
                 'fecha_asignacion': ticket.fecha_asignacion.isoformat() if ticket.fecha_asignacion else None,
                 'fecha_resolucion': ticket.fecha_resolucion.isoformat() if ticket.fecha_resolucion else None,
@@ -1410,7 +1418,8 @@ def obtener_ticket(ticket_id):
                         'id': c.id,
                         'contenido': c.contenido,
                         'imagen_url': c.imagen_url,
-                        'fecha_creacion': c.fecha_creacion.isoformat() if c.fecha_creacion else None
+                        'fecha_creacion': c.fecha_creacion.isoformat() if c.fecha_creacion else None,
+                        'ingeniero_nombre': Usuario.query.get(c.ingeniero_id).username if c.ingeniero_id else 'Desconocido'
                     }
                     for c in comentarios
                 ]
