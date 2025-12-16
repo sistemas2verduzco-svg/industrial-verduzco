@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -332,6 +332,55 @@ def logout_tickets():
     """Cerrar sesión de ingeniero"""
     session.pop('ingeniero_user', None)
     return redirect(url_for('reportar_incidencia'))
+
+
+# ---------------- Permission helpers ----------------
+def get_current_user():
+    """Return the current logged user (admin or ingeniero) or None."""
+    username = session.get('ingeniero_user') or session.get('admin_user')
+    if not username:
+        return None
+    try:
+        return Usuario.query.filter_by(username=username, activo=True).first()
+    except Exception:
+        return None
+
+
+@app.context_processor
+def inject_user_helpers():
+    """Make `current_user` and `has_permission` available in templates."""
+    user = get_current_user()
+    def has_permission(module, action):
+        if not user:
+            return False
+        return user.has_permission(module, action)
+    return dict(current_user=user, has_permission=has_permission)
+
+
+def requires_permission(module, action):
+    """Decorator factory to require a permission for a view or API.
+
+    Usage: @requires_permission('tickets', 'view')
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            user = get_current_user()
+            if not user:
+                # redirect to appropriate login
+                if request.path.startswith('/api/'):
+                    return jsonify({'error': 'Autenticación requerida'}), 401
+                # prefer ticket login if it's a ticket-related module
+                if module == 'tickets':
+                    return redirect(url_for('login_tickets'))
+                return redirect(url_for('login'))
+            if not user.has_permission(module, action):
+                if request.path.startswith('/api/'):
+                    return jsonify({'error': 'Permiso denegado'}), 403
+                return render_template('403.html'), 403
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
 
 # ==================== RUTAS FRONTEND ====================
 

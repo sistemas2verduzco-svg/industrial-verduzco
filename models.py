@@ -15,6 +15,9 @@ class Usuario(db.Model):
     activo = db.Column(db.Boolean, default=True)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Role-based permissions
+    role_id = db.Column(db.Integer, db.ForeignKey('roles.id'), nullable=True)
+    role = db.relationship('Role', backref='usuarios')
     
     def set_password(self, password):
         """Genera hash seguro de contraseña"""
@@ -32,8 +35,20 @@ class Usuario(db.Model):
             'es_admin': self.es_admin,
             'activo': self.activo,
             'fecha_creacion': self.fecha_creacion.isoformat(),
-            'fecha_actualizacion': self.fecha_actualizacion.isoformat()
+            'fecha_actualizacion': self.fecha_actualizacion.isoformat(),
+            'role': self.role.name if getattr(self, 'role', None) else None,
         }
+
+    def has_permission(self, module, action):
+        """Check whether the user (via role) has a given permission."""
+        if self.es_admin:
+            return True
+        if not self.role:
+            return False
+        for p in self.role.permissions:
+            if p.module == module and p.action == action:
+                return True
+        return False
 
 class Proveedor(db.Model):
     __tablename__ = 'proveedores'
@@ -64,6 +79,48 @@ class Proveedor(db.Model):
             'notas': self.notas,
             'fecha_creacion': self.fecha_creacion.isoformat(),
             'fecha_actualizacion': self.fecha_actualizacion.isoformat()
+        }
+
+
+# Role / Permission models
+role_permissions = db.Table('role_permissions',
+    db.Column('role_id', db.Integer, db.ForeignKey('roles.id'), primary_key=True),
+    db.Column('permission_id', db.Integer, db.ForeignKey('permissions.id'), primary_key=True)
+)
+
+
+class Role(db.Model):
+    __tablename__ = 'roles'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(80), unique=True, nullable=False)
+    descripcion = db.Column(db.String(255), nullable=True)
+
+    permissions = db.relationship('Permission', secondary=role_permissions, backref='roles')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'descripcion': self.descripcion,
+            'permissions': [p.to_dict() for p in self.permissions]
+        }
+
+
+class Permission(db.Model):
+    __tablename__ = 'permissions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    module = db.Column(db.String(100), nullable=False)
+    action = db.Column(db.String(50), nullable=False)  # e.g., view, edit, delete, export
+    descripcion = db.Column(db.String(255), nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'module': self.module,
+            'action': self.action,
+            'descripcion': self.descripcion
         }
 
 class Producto(db.Model):
