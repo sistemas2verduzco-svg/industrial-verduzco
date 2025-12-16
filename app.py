@@ -1526,6 +1526,44 @@ def cambiar_estado_ticket(ticket_id):
         return jsonify({'error': str(e)}), 500
 
 
+# 7.5 PUT /api/tickets/<id>/devolver (LOGIN REQUERIDO - devolver a bandeja)
+@app.route('/api/tickets/<int:ticket_id>/devolver', methods=['PUT'])
+@ingeniero_login_required
+def devolver_ticket(ticket_id):
+    """Devolver ticket a la bandeja (poner como 'nuevo' sin ingeniero)"""
+    try:
+        usuario = Usuario.query.filter_by(username=session.get('ingeniero_user')).first()
+        if not usuario:
+            return jsonify({'error': 'Usuario no encontrado'}), 401
+        
+        ticket = Ticket.query.get(ticket_id)
+        if not ticket:
+            return jsonify({'error': 'Ticket no encontrado'}), 404
+        
+        # Solo el ingeniero asignado puede devolverlo
+        if ticket.ingeniero_id != usuario.id:
+            return jsonify({'error': 'Solo el ingeniero asignado puede devolver este ticket'}), 403
+        
+        # Devolver a estado nuevo y limpiar ingeniero_id
+        ticket.estado = 'nuevo'
+        ticket.ingeniero_id = None
+        ticket.fecha_asignacion = None
+        
+        db.session.commit()
+        logger.info(f"✓ Ticket {ticket.numero_ticket} devuelto a bandeja por {usuario.username}")
+        
+        return jsonify({
+            'mensaje': 'Ticket devuelto a la bandeja',
+            'numero_ticket': ticket.numero_ticket,
+            'estado': ticket.estado
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error al devolver ticket: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 # 8. POST /api/tickets/<id>/imagen (LOGIN REQUERIDO)
 @app.route('/api/tickets/<int:ticket_id>/imagen', methods=['POST'])
 @ingeniero_login_required

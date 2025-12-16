@@ -689,6 +689,18 @@
                             </button>
                         </div>
                     `;
+                } else if (!mostrarAccionTomar && ticket.estado === 'en_progreso') {
+                    // Botones para ticket que es mío y está en progreso
+                    body.innerHTML += `
+                        <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid #eee; display: flex; gap: 10px;">
+                            <button class="btn btn-success" style="flex: 1;" onclick="marcarResuelto(${ticketId})">
+                                ✓ Marcar Resuelto
+                            </button>
+                            <button class="btn btn-secondary" style="flex: 1;" onclick="devolverTicket(${ticketId})">
+                                ↩️ Devolver a Bandeja
+                            </button>
+                        </div>
+                    `;
                 }
 
                 abrirModal('detalleModal');
@@ -778,6 +790,33 @@
                 }
 
                 mostrarAlerta('✅ Ticket marcado como resuelto', 'success');
+                cerrarModal();
+                cargarDatos();
+            } catch (error) {
+                console.error('Error:', error);
+                mostrarAlerta('Error', 'error');
+            }
+        }
+
+        async function devolverTicket(ticketId) {
+            if (!confirm('¿Devolver este ticket a la bandeja? Se pondrá como "nuevo" nuevamente.')) return;
+
+            try {
+                const response = await fetch(`/api/tickets/${ticketId}/devolver`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    mostrarAlerta(data.error || 'Error', 'error');
+                    return;
+                }
+
+                mostrarAlerta('↩️ Ticket devuelto a la bandeja', 'success');
                 cerrarModal();
                 cargarDatos();
             } catch (error) {
