@@ -392,6 +392,34 @@ body {
     font-size: 0.85rem;
 }
 
+/* ==================== ERP SIDEBAR LAYOUT ==================== */
+/* Ensure main content is offset when sidebar is present */
+body > .container,
+body > .admin-container,
+body > .ingeniero-container,
+body > .dashboard-container,
+body > .tabla-section,
+body > .tickets-container {
+    margin-left: 280px;
+    transition: margin-left 0.18s ease;
+}
+
+/* When viewport is small, hide sidebar and remove left margin */
+@media (max-width: 768px) {
+    body > .container,
+    body > .admin-container,
+    body > .ingeniero-container,
+    body > .dashboard-container,
+    body > .tabla-section,
+    body > .tickets-container {
+        margin-left: 0;
+    }
+}
+
+/* Optional: ensure bottom-nav CSS won't show if not present in templates */
+.bottom-nav { display: none !important; }
+
+
 .filtro-input {
     width: 100%;
     padding: 0.6rem;
