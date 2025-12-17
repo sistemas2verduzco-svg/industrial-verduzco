@@ -13,17 +13,7 @@
     <meta name="theme-color" content="#1976d2">
 </head>
 <body>
-    <nav class="navbar">
-        <div class="container">
-            <h1 class="logo">📦 Mi Catálogo</h1>
-            <ul class="nav-links">
-                <li><a href="/" class="btn-nav">Catálogo</a></li>
-                <li><a href="/admin" class="btn-nav">Administrar</a></li>
-                <li><a href="/proveedores" class="btn-nav" title="Gestionar Proveedores">🏢 Proveedores</a></li>
-                <li><a href="/logout" class="btn-logout">Cerrar Sesión</a></li>
-            </ul>
-        </div>
-    </nav>
+    {% include '_sidebar.html' %}
 
     <!-- Sección de filtros y búsqueda -->
     <div class="container">

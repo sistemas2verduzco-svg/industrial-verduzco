@@ -370,6 +370,100 @@ def admin():
     """Panel de administración"""
     return render_template('admin.html')
 
+
+@app.route('/admin/users')
+@login_required
+def admin_users_page():
+    """Página de administración de usuarios (solo admin)."""
+    if not is_admin_user():
+        return render_template('403.html'), 403
+    return render_template('admin_users.html')
+
+
+# ======= API: Usuarios (admin only) ======
+@app.route('/api/users')
+@login_required
+def api_list_users():
+    if not is_admin_user():
+        return jsonify({'error': 'Permiso denegado'}), 403
+    users = Usuario.query.order_by(Usuario.id.asc()).all()
+    data = []
+    for u in users:
+        data.append({
+            'id': u.id,
+            'username': u.username,
+            'correo': u.correo,
+            'activo': u.activo,
+            'es_admin': u.es_admin,
+            'role': u.role.name if u.role else None,
+            'fecha_creacion': u.fecha_creacion.isoformat() if u.fecha_creacion else None
+        })
+    return jsonify({'users': data})
+
+
+@app.route('/api/users/<int:user_id>/toggle_active', methods=['PUT'])
+@login_required
+def api_toggle_active(user_id):
+    if not is_admin_user():
+        return jsonify({'error': 'Permiso denegado'}), 403
+    u = Usuario.query.get_or_404(user_id)
+    if u.username == 'admin':
+        return jsonify({'error': 'No se puede desactivar el usuario admin'}), 400
+    u.activo = not bool(u.activo)
+    db.session.add(u)
+    db.session.commit()
+    return jsonify({'ok': True, 'activo': u.activo})
+
+
+@app.route('/api/users/<int:user_id>/role', methods=['PUT'])
+@login_required
+def api_set_role(user_id):
+    if not is_admin_user():
+        return jsonify({'error': 'Permiso denegado'}), 403
+    payload = request.get_json() or {}
+    role_name = payload.get('role')
+    u = Usuario.query.get_or_404(user_id)
+    if u.username == 'admin' and role_name != 'admin':
+        return jsonify({'error': 'El usuario admin debe conservar role admin'}), 400
+    if role_name:
+        role = Role.query.filter_by(name=role_name).first()
+        if not role:
+            return jsonify({'error': 'Role no encontrado'}), 404
+        u.role = role
+    else:
+        u.role = None
+    db.session.add(u)
+    db.session.commit()
+    return jsonify({'ok': True, 'role': u.role.name if u.role else None})
+
+
+@app.route('/api/users/<int:user_id>', methods=['DELETE'])
+@login_required
+def api_delete_user(user_id):
+    if not is_admin_user():
+        return jsonify({'error': 'Permiso denegado'}), 403
+    u = Usuario.query.get_or_404(user_id)
+    if u.username == 'admin':
+        return jsonify({'error': 'No se puede borrar el usuario admin'}), 400
+    db.session.delete(u)
+    db.session.commit()
+    return jsonify({'ok': True})
+
+
+@app.route('/delete_nonadmin_users', methods=['POST'])
+@login_required
+def delete_nonadmin_users():
+    """Endpoint conveniente que borra todos los usuarios salvo 'admin'. Protegido a admin."""
+    if not is_admin_user():
+        return jsonify({'error': 'Permiso denegado'}), 403
+    users = Usuario.query.filter(Usuario.username != 'admin').all()
+    deleted = 0
+    for u in users:
+        db.session.delete(u)
+        deleted += 1
+    db.session.commit()
+    return f"Usuarios eliminados: {deleted}", 200
+
 @app.route('/proveedores')
 @login_required
 def proveedores():

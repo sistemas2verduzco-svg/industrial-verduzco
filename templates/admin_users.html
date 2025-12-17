@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Admin - Usuarios</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    {% include '_sidebar.html' %}
+
+    <div class="container" style="padding:40px 24px;">
+        <h1>Gestión de Usuarios</h1>
+        <p>Panel exclusivo para el usuario administrador. Desde aquí puedes administrar usuarios, roles y acceso.</p>
+
+        <div style="margin-top:20px;">
+            <button id="btn-refresh" class="btn btn-secondary">🔄 Refrescar</button>
+            <button id="btn-delete-nonadmin" class="btn btn-danger" style="margin-left:10px;">🗑️ Borrar todos excepto admin</button>
+            <span id="mensaje" style="margin-left:12px; color:#333;"></span>
+        </div>
+
+        <table id="users-table" style="width:100%; margin-top:20px; border-collapse:collapse;">
+            <thead>
+                <tr style="background:#f4f6f8; text-align:left;">
+                    <th>ID</th>
+                    <th>Usuario</th>
+                    <th>Correo</th>
+                    <th>Role</th>
+                    <th>Activo</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="users-body">
+                <tr><td colspan="6">Cargando...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+<script>
+async function fetchJson(url, opts){
+    const res = await fetch(url, opts);
+    if(!res.ok){
+        const txt = await res.text();
+        throw new Error(txt || res.status);
+    }
+    return res.json();
+}
+
+async function loadUsers(){
+    try{
+        const data = await fetchJson('/api/users');
+        const tbody = document.getElementById('users-body');
+        tbody.innerHTML = '';
+        data.users.forEach(u=>{
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${u.id}</td>
+                <td>${u.username}${u.es_admin? ' <strong>(admin)</strong>':''}</td>
+                <td>${u.correo||''}</td>
+                <td>${u.role || ''}</td>
+                <td>${u.activo? 'Sí':'No'}</td>
+                <td>
+                    <button class="btn btn-secondary" onclick="toggleActive(${u.id})">Toggle</button>
+                    <button class="btn btn-primary" onclick="showRolePrompt(${u.id}, '${u.role||''}')">Role</button>
+                    ${u.username!=='admin'? `<button class="btn btn-danger" onclick="deleteUser(${u.id})">Borrar</button>`: ''}
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }catch(e){
+        document.getElementById('users-body').innerHTML = '<tr><td colspan="6">Error cargando usuarios</td></tr>';
+        console.error(e);
+    }
+}
+
+async function toggleActive(id){
+    try{
+        await fetchJson(`/api/users/${id}/toggle_active`, {method:'PUT'});
+        await loadUsers();
+    }catch(e){ alert('Error: '+e.message); }
+}
+
+async function showRolePrompt(id, current){
+    const role = prompt('Ingrese role (admin, support) o vacío para ninguno', current||'');
+    if(role===null) return;
+    try{
+        await fetchJson(`/api/users/${id}/role`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({role: role||null})});
+        await loadUsers();
+    }catch(e){ alert('Error: '+e.message); }
+}
+
+async function deleteUser(id){
+    if(!confirm('¿Confirmas borrar este usuario?')) return;
+    try{
+        await fetchJson(`/api/users/${id}`, {method:'DELETE'});
+        await loadUsers();
+    }catch(e){ alert('Error: '+e.message); }
+}
+
+document.getElementById('btn-refresh').addEventListener('click', loadUsers);
+
+// Delete non-admins action
+document.getElementById('btn-delete-nonadmin').addEventListener('click', async ()=>{
+    if(!confirm('Esto borrará todos los usuarios excepto "admin". Continuar?')) return;
+    try{
+        const res = await fetch('/delete_nonadmin_users', {method:'POST'});
+        if(!res.ok) throw new Error(await res.text());
+        const txt = await res.text();
+        document.getElementById('mensaje').textContent = txt;
+        await loadUsers();
+    }catch(e){ alert('Error: '+e.message); }
+});
+
+// Inicial
+loadUsers();
+</script>
+</body>
+</html>
