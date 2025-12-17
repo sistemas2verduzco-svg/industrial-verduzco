@@ -401,6 +401,66 @@ def api_list_users():
     return jsonify({'users': data})
 
 
+@app.route('/api/permissions')
+@login_required
+def api_list_permissions():
+    if not is_admin_user():
+        return jsonify({'error': 'Permiso denegado'}), 403
+    perms = Permission.query.order_by(Permission.module, Permission.action).all()
+    return jsonify({'permissions': [p.to_dict() for p in perms]})
+
+
+@app.route('/api/roles')
+@login_required
+def api_list_roles():
+    if not is_admin_user():
+        return jsonify({'error': 'Permiso denegado'}), 403
+    roles = Role.query.order_by(Role.name).all()
+    return jsonify({'roles': [r.to_dict() for r in roles]})
+
+
+@app.route('/api/roles/<int:role_id>/permissions', methods=['PUT'])
+@login_required
+def api_set_role_permissions(role_id):
+    if not is_admin_user():
+        return jsonify({'error': 'Permiso denegado'}), 403
+    payload = request.get_json() or {}
+    perm_ids = payload.get('permission_ids', [])
+    role = Role.query.get_or_404(role_id)
+    # fetch permissions
+    perms = Permission.query.filter(Permission.id.in_(perm_ids)).all() if perm_ids else []
+    role.permissions = perms
+    db.session.add(role)
+    db.session.commit()
+    return jsonify({'ok': True, 'role': role.to_dict()})
+
+
+@app.route('/api/users', methods=['POST'])
+@login_required
+def api_create_user():
+    if not is_admin_user():
+        return jsonify({'error': 'Permiso denegado'}), 403
+    data = request.get_json() or {}
+    username = data.get('username')
+    correo = data.get('correo')
+    password = data.get('password')
+    role_name = data.get('role')
+    es_admin = bool(data.get('es_admin', False))
+    if not username or not password:
+        return jsonify({'error': 'username y password requeridos'}), 400
+    if Usuario.query.filter_by(username=username).first():
+        return jsonify({'error': 'username ya existe'}), 409
+    u = Usuario(username=username, correo=correo, es_admin=es_admin, activo=True)
+    u.set_password(password)
+    if role_name:
+        role = Role.query.filter_by(name=role_name).first()
+        if role:
+            u.role = role
+    db.session.add(u)
+    db.session.commit()
+    return jsonify({'ok': True, 'user': u.to_dict()}), 201
+
+
 @app.route('/api/users/<int:user_id>/toggle_active', methods=['PUT'])
 @login_required
 def api_toggle_active(user_id):

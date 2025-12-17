@@ -16,6 +16,7 @@
         <div style="margin-top:20px;">
             <button id="btn-refresh" class="btn btn-secondary">🔄 Refrescar</button>
             <button id="btn-delete-nonadmin" class="btn btn-danger" style="margin-left:10px;">🗑️ Borrar todos excepto admin</button>
+            <button id="btn-manage-roles" class="btn btn-primary" style="margin-left:10px;">⚙️ Gestionar Roles/Permisos</button>
             <span id="mensaje" style="margin-left:12px; color:#333;"></span>
         </div>
 
@@ -34,6 +35,27 @@
                 <tr><td colspan="6">Cargando...</td></tr>
             </tbody>
         </table>
+    </div>
+
+    <!-- Modal Roles / Permisos -->
+    <div id="roles-modal" style="display:none; position:fixed; left:0; top:0; right:0; bottom:0; background:rgba(0,0,0,0.4); z-index:9999;">
+        <div style="width:800px; max-width:95%; margin:60px auto; background:#fff; border-radius:6px; padding:18px; box-shadow:0 6px 24px rgba(0,0,0,0.2);">
+            <h3>Gestionar Roles y Permisos</h3>
+            <div style="display:flex; gap:12px; margin-top:12px;">
+                <div style="flex:1; min-width:200px;">
+                    <label><strong>Roles</strong></label>
+                    <select id="roles-select" style="width:100%; padding:8px; margin-top:6px;"></select>
+                </div>
+                <div style="flex:2;">
+                    <label><strong>Permisos</strong></label>
+                    <div id="permissions-list" style="max-height:320px; overflow:auto; border:1px solid #eee; padding:8px; margin-top:6px;"></div>
+                </div>
+            </div>
+            <div style="margin-top:14px; text-align:right;">
+                <button id="roles-cancel" class="btn">Cancelar</button>
+                <button id="roles-save" class="btn btn-primary" style="margin-left:8px;">Guardar</button>
+            </div>
+        </div>
     </div>
 
 <script>
@@ -110,6 +132,77 @@ document.getElementById('btn-delete-nonadmin').addEventListener('click', async (
         await loadUsers();
     }catch(e){ alert('Error: '+e.message); }
 });
+
+// Roles / Permisos modal wiring
+document.getElementById('btn-manage-roles').addEventListener('click', async ()=>{
+    try{
+        await openRolesModal();
+    }catch(e){ alert('Error: '+e.message); }
+});
+
+let ALL_ROLES = [];
+let ALL_PERMS = [];
+
+async function openRolesModal(){
+    const modal = document.getElementById('roles-modal');
+    modal.style.display = 'block';
+    // load roles and permissions
+    const rolesResp = await fetchJson('/api/roles');
+    const permsResp = await fetchJson('/api/permissions');
+    ALL_ROLES = rolesResp.roles || rolesResp;
+    ALL_PERMS = permsResp.permissions || permsResp;
+
+    const select = document.getElementById('roles-select');
+    select.innerHTML = '';
+    ALL_ROLES.forEach(r=>{
+        const opt = document.createElement('option'); opt.value = r.id; opt.textContent = r.name + (r.description? ' — '+r.description:'');
+        select.appendChild(opt);
+    });
+
+    const plist = document.getElementById('permissions-list');
+    plist.innerHTML = '';
+    ALL_PERMS.forEach(p=>{
+        const id = 'perm_'+p.id;
+        const row = document.createElement('div');
+        row.style.marginBottom='6px';
+        row.innerHTML = `<label><input type="checkbox" id="${id}" data-perm-id="${p.id}"> <strong>${p.name}</strong> — ${p.description||''}</label>`;
+        plist.appendChild(row);
+    });
+
+    select.addEventListener('change', ()=>{ renderRolePermissions(parseInt(select.value,10)); });
+
+    if(ALL_ROLES.length) select.value = ALL_ROLES[0].id;
+    renderRolePermissions(parseInt(select.value,10));
+
+    document.getElementById('roles-cancel').onclick = ()=>{ closeRolesModal(); };
+    document.getElementById('roles-save').onclick = async ()=>{
+        try{
+            const rid = parseInt(select.value,10);
+            const checked = Array.from(document.querySelectorAll('#permissions-list input[type=checkbox]:checked')).map(i=>parseInt(i.dataset.permId,10));
+            const res = await fetch(`/api/roles/${rid}/permissions`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({permission_ids: checked})});
+            if(!res.ok) throw new Error(await res.text());
+            alert('Permisos guardados');
+            // refresh roles data
+            const newRoles = await fetchJson('/api/roles');
+            ALL_ROLES = newRoles.roles || newRoles;
+            renderRolePermissions(rid);
+        }catch(e){ alert('Error guardando permisos: '+e.message); }
+    };
+}
+
+function closeRolesModal(){
+    const modal = document.getElementById('roles-modal');
+    modal.style.display = 'none';
+}
+
+function renderRolePermissions(roleId){
+    const role = ALL_ROLES.find(r=>r.id===roleId) || {permissions:[]};
+    const permIds = (role.permissions||[]).map(x=> typeof x === 'object' ? x.id : x);
+    ALL_PERMS.forEach(p=>{
+        const cb = document.getElementById('perm_'+p.id);
+        if(cb) cb.checked = permIds.indexOf(p.id) !== -1;
+    });
+}
 
 // Inicial
 loadUsers();
