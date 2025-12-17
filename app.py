@@ -541,6 +541,35 @@ def soporte_tecnico():
     return render_template('soporte_tecnico.html')
 
 
+# ========== Paneles de Tickets (rutas asignadas) ===========
+@app.route('/tickets')
+@login_required
+def tickets_panel():
+    """Panel de tickets para usuarios (mis tickets)."""
+    return render_template('tickets.html')
+
+
+@app.route('/tickets/admin')
+@login_required
+def tickets_admin_panel():
+    """Panel de administración de tickets (solo admin)."""
+    if not is_admin_user():
+        return render_template('403.html'), 403
+    return render_template('tickets_admin.html')
+
+
+@app.route('/tickets/ingeniero')
+@login_required
+def tickets_ingeniero_panel():
+    """Panel específico para ingenieros de soporte."""
+    user = get_current_user()
+    if not user:
+        return redirect(url_for('login'))
+    if not (user.es_admin or (user.role and user.role.name == 'support')):
+        return render_template('403.html'), 403
+    return render_template('tickets_ingeniero.html')
+
+
 
 # ========== Public read-only endpoints and consulta page ===========
 @app.route('/catalogo_consulta')
