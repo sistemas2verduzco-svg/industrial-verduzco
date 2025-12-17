@@ -1056,7 +1056,8 @@ def get_logs():
 @login_required
 def puerta():
     """Vista web exclusiva para el usuario 'root' con registros de acceso."""
-    if not is_root_user():
+    # Permitimos ver la 'Puerta' a cualquier administrador (es_admin)
+    if not is_admin_user():
         return render_template('login.html', error='Acceso restringido'), 403
 
     from models import AccessLog
