@@ -259,18 +259,6 @@ def logout():
     session.pop('admin_user', None)
     session.pop('ingeniero_user', None)
     return redirect(url_for('login'))
-
-@app.route('/login_tickets', methods=['GET', 'POST'])
-def login_tickets():
-    """DEPRECATED - Redirige a /login para mantener compatibilidad"""
-    return redirect(url_for('login'))
-
-@app.route('/logout_tickets')
-def logout_tickets():
-    """DEPRECATED - Redirige a /logout para mantener compatibilidad"""
-    return redirect(url_for('logout'))
-
-
 # ==================== PERMISSION HELPERS (UNIFICADOS) ==================
 
 def get_current_user():
@@ -1087,6 +1075,7 @@ def puerta():
             'referer': l.referer
         })
     return render_template('puerta.html', logs=logs_serialized)
+
 
 # ==================== ENDPOINTS DE PROVEEDORES ====================
 

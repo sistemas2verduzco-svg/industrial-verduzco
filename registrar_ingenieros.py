@@ -62,7 +62,7 @@ def registrar_ingenieros():
         
         print("\n✅ Registro de ingenieros completado")
         print("\n📋 Credenciales de acceso:")
-        print("URL: http://localhost:5000/login_tickets")
+        print("URL: http://localhost:5000/login")
         for ing_data in ingenieros_data:
             print(f"  • {ing_data['username']} / {ing_data['password']}")
 
