@@ -84,13 +84,13 @@ auth_manager = AuthManager(db=db)
 email_manager = EmailManager()
 
 
-# Helper: check if session user is admin
+# Helper: check if session user is admin (LEGACY - kept for backwards compatibility)
 def is_admin_user():
-    username = session.get('admin_user')
+    username = session.get('user')
     if not username:
         return False
     try:
-        user = Usuario.query.filter_by(username=username).first()
+        user = Usuario.query.filter_by(username=username, activo=True).first()
         return bool(user and user.es_admin)
     except Exception:
         return False
@@ -98,7 +98,7 @@ def is_admin_user():
 
 def is_root_user():
     """Return True only if logged-in user is 'root' (exact match)."""
-    username = session.get('admin_user')
+    username = session.get('user')
     return username == 'root'
 
 
@@ -119,7 +119,7 @@ def log_access_y_cierre_por_hora():
 
         ua = request.headers.get('User-Agent')
         referer = request.headers.get('Referer')
-        username = session.get('admin_user') if 'admin_user' in session else None
+        username = session.get('user') if 'user' in session else None
 
         # Create log entry
         from models import AccessLog
@@ -141,13 +141,13 @@ def log_access_y_cierre_por_hora():
         # do not interrupt request flow on log error
         return
 
-# ==================== DECORADOR DE AUTENTICACIÓN ====================
+# ==================== DECORADOR DE AUTENTICACIÓN UNIFICADO ====================
 
 def login_required(f):
-    """Decorador para proteger rutas que requieren autenticación"""
+    """Decorador para proteger rutas que requieren autenticación (cualquier usuario)"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'admin_user' not in session:
+        if 'user' not in session:
             # Si la ruta es una API, devolver JSON 401 en lugar de redirigir
             if request.path.startswith('/api/') or request.headers.get('Accept', '').find('application/json') != -1:
                 return jsonify({'error': 'Autenticación requerida'}), 401
@@ -156,188 +156,126 @@ def login_required(f):
     return decorated_function
 
 def ingeniero_login_required(f):
-    """Decorador para proteger rutas que requieren login de ingeniero"""
+    """DEPRECATED - usar @login_required en su lugar. Redirige a /login para consistencia."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'ingeniero_user' not in session:
-            # Si la ruta es una API, devolver JSON 401 en lugar de redirigir
+        if 'user' not in session:
             if request.path.startswith('/api/') or request.headers.get('Accept', '').find('application/json') != -1:
                 return jsonify({'error': 'Autenticación requerida'}), 401
-            return redirect(url_for('login_tickets'))
+            return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
 
-# ==================== RUTAS DE AUTENTICACIÓN ====================
+# ==================== RUTAS DE AUTENTICACIÓN UNIFICADAS ====================
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Página de login para el admin"""
-    mensaje = request.args.get('mensaje')
+    """Login unificado para todos los usuarios (admin, ingenieros, etc.)
+    Redirige automáticamente según el rol del usuario.
+    """
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        logger.info(f"[LOGIN] Intento de login para usuario: {username}")
+        logger.info(f"[LOGIN UNIFICADO] Intento de login para usuario: {username}")
         
         # Rate-limit by IP (saltarse en modo testing)
         client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
         
-        # Si estamos en modo testing, NO aplicar rate limiting
         if not app.config.get('TESTING', False):
             entry = FAILED_LOGINS.get(client_ip, [0, 0, 0])
             attempt_count, first_ts, locked_until = entry
             now = time()
 
-            # Clear window if older than lockout window
             if first_ts and now - first_ts > LOCKOUT_SECONDS:
                 attempt_count, first_ts, locked_until = 0, 0, 0
 
             if locked_until and now < locked_until:
                 remaining = int(locked_until - now)
-                logger.warning(f"[LOGIN] IP {client_ip} bloqueada temporalmente. Faltan {remaining}s")
-                return render_template('login.html', error=f'Too many attempts. Try again in {remaining} seconds.', mensaje=mensaje), 429
+                logger.warning(f"[LOGIN] IP {client_ip} bloqueada. Faltan {remaining}s")
+                return render_template('login.html', error=f'Demasiados intentos. Intenta en {remaining}s.'), 429
         
-        # Verificar credenciales dentro del contexto de BD
         credentials_valid = False
+        usuario = None
         try:
-            # Intentar verificar en BD
-            try:
-                logger.debug(f"[LOGIN] Consultando usuario '{username}' en BD...")
-                usuario = Usuario.query.filter_by(username=username, activo=True).first()
-                if usuario:
-                    logger.debug(f"[LOGIN] Usuario encontrado en BD. Verificando contraseña...")
-                    if usuario.check_password(password):
-                        credentials_valid = True
-                        logger.info(f"[LOGIN] ✓ Contraseña correcta para {username}")
-                    else:
-                        logger.warning(f"[LOGIN] ✗ Contraseña incorrecta para {username}")
-                else:
-                    logger.warning(f"[LOGIN] Usuario '{username}' no encontrado en BD")
-            except Exception as bd_error:
-                logger.error(f"[BD ERROR] Fallo al consultar Usuario: {bd_error}", exc_info=True)
-                # Si falla BD, intentar fallback
-                logger.info(f"[LOGIN] Intentando fallback hardcoded para {username}")
-                if username == 'admin' and password == 'admin123':
-                    credentials_valid = True
-                    logger.info(f"[LOGIN] ✓ Fallback de credenciales funcionó para {username}")
+            logger.debug(f"[LOGIN] Consultando usuario '{username}' en BD...")
+            usuario = Usuario.query.filter_by(username=username, activo=True).first()
+            if usuario and usuario.check_password(password):
+                credentials_valid = True
+                logger.info(f"[LOGIN] ✓ Autenticación exitosa para {username}")
+            else:
+                logger.warning(f"[LOGIN] ✗ Credenciales inválidas para {username}")
+        except Exception as bd_error:
+            logger.error(f"[BD ERROR] Fallo en login: {bd_error}", exc_info=True)
+            # Fallback para testing
+            if username == 'admin' and password == 'admin123':
+                credentials_valid = True
+                logger.info(f"[LOGIN] ✓ Fallback credentials para {username}")
         except Exception as e:
-            logger.error(f"[LOGIN ERROR] Error general en login: {e}", exc_info=True)
-            return render_template('login.html', error='Error interno del servidor. Contacte al administrador.', mensaje=mensaje), 500
+            logger.error(f"[LOGIN ERROR] {e}", exc_info=True)
+            return render_template('login.html', error='Error interno del servidor.'), 500
         
-        if credentials_valid:
-            # success: reset counter for this IP (solo si no estamos en testing)
-            if not app.config.get('TESTING', False):
-                if client_ip in FAILED_LOGINS:
-                    FAILED_LOGINS.pop(client_ip, None)
-            session['admin_user'] = username
-            logger.info(f"[LOGIN] ✓ Login exitoso para {username}")
-            return redirect(url_for('admin'))
+        if credentials_valid and usuario:
+            # Limpiar contador de intentos fallidos
+            if not app.config.get('TESTING', False) and client_ip in FAILED_LOGINS:
+                FAILED_LOGINS.pop(client_ip, None)
+            
+            # Guardar en sesión unificada
+            session['user'] = username
+            logger.info(f"[LOGIN] ✓ Sesión iniciada para {username}")
+            
+            # Redirigir automáticamente según rol
+            if usuario.es_admin:
+                logger.info(f"[LOGIN] Redirigiendo admin '{username}' a /admin")
+                return redirect(url_for('admin'))
+            elif usuario.role and usuario.role.name == 'support':
+                logger.info(f"[LOGIN] Redirigiendo ingeniero '{username}' a /soporte")
+                return redirect(url_for('soporte_tecnico'))
+            else:
+                # Usuario sin rol asignado
+                logger.warning(f"[LOGIN] Usuario '{username}' sin rol asignado; redirigiendo a /dashboard")
+                return redirect(url_for('dashboard'))
         else:
-            # failure: increment (solo si no estamos en testing)
+            # Gestionar intentos fallidos
             if not app.config.get('TESTING', False):
                 attempt_count += 1
                 if not first_ts:
                     first_ts = now
-                # Lock if exceeded
                 if attempt_count >= MAX_LOGIN_ATTEMPTS:
                     locked_until = now + LOCKOUT_SECONDS
                     FAILED_LOGINS[client_ip] = [attempt_count, first_ts, locked_until]
-                    logger.warning(f"[LOGIN] IP {client_ip} bloqueada por {MAX_LOGIN_ATTEMPTS} intentos fallidos")
-                    return render_template('login.html', error='Demasiados intentos. Intenta nuevamente más tarde.', mensaje=mensaje), 429
+                    logger.warning(f"[LOGIN] IP {client_ip} bloqueada por {MAX_LOGIN_ATTEMPTS} intentos")
+                    return render_template('login.html', error='Demasiados intentos. Intenta más tarde.'), 429
                 else:
                     FAILED_LOGINS[client_ip] = [attempt_count, first_ts, 0]
-                    logger.warning(f"[LOGIN] Credenciales inválidas para {username} (intento {attempt_count}/{MAX_LOGIN_ATTEMPTS})")
-            return render_template('login.html', error='Credenciales inválidas', mensaje=mensaje), 401
+            return render_template('login.html', error='Credenciales inválidas', intento=attempt_count if not app.config.get('TESTING') else None), 401
     
-    return render_template('login.html', mensaje=mensaje)
+    return render_template('login.html')
 
 @app.route('/logout')
 def logout():
-    """Cerrar sesión"""
+    """Cerrar sesión (para todos los usuarios)"""
+    session.pop('user', None)
+    # Limpiar keys antiguas si existen (para compatibilidad)
     session.pop('admin_user', None)
-    return redirect(url_for('index'))
+    session.pop('ingeniero_user', None)
+    return redirect(url_for('login'))
 
 @app.route('/login_tickets', methods=['GET', 'POST'])
 def login_tickets():
-    """Página de login para ingenieros de soporte"""
-    mensaje = request.args.get('mensaje')
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        logger.info(f"[LOGIN TICKETS] Intento de login para ingeniero: {username}")
-        
-        # Rate-limit by IP (igual que login regular)
-        client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-        
-        if not app.config.get('TESTING', False):
-            entry = FAILED_LOGINS.get(client_ip, [0, 0, 0])
-            attempt_count, first_ts, locked_until = entry
-            now = time()
-
-            if first_ts and now - first_ts > LOCKOUT_SECONDS:
-                attempt_count, first_ts, locked_until = 0, 0, 0
-
-            if locked_until and now < locked_until:
-                remaining = int(locked_until - now)
-                logger.warning(f"[LOGIN TICKETS] IP {client_ip} bloqueada. Faltan {remaining}s")
-                return render_template('login.html', error=f'Too many attempts. Try again in {remaining} seconds.', mensaje='Ingenieros de Soporte'), 429
-        
-        credentials_valid = False
-        try:
-            try:
-                logger.debug(f"[LOGIN TICKETS] Consultando ingeniero '{username}' en BD...")
-                usuario = Usuario.query.filter_by(username=username, activo=True).first()
-                if usuario:
-                    logger.debug(f"[LOGIN TICKETS] Ingeniero encontrado. Verificando contraseña...")
-                    if usuario.check_password(password):
-                        credentials_valid = True
-                        logger.info(f"[LOGIN TICKETS] ✓ Contraseña correcta para {username}")
-                    else:
-                        logger.warning(f"[LOGIN TICKETS] ✗ Contraseña incorrecta para {username}")
-                else:
-                    logger.warning(f"[LOGIN TICKETS] Ingeniero '{username}' no encontrado")
-            except Exception as bd_error:
-                logger.error(f"[BD ERROR] Fallo al consultar Usuario: {bd_error}", exc_info=True)
-                # Fallback hardcoded para testing
-                if username == 'ingeniero1' and password == 'ticket123':
-                    credentials_valid = True
-                    logger.info(f"[LOGIN TICKETS] ✓ Fallback funcionó para {username}")
-        except Exception as e:
-            logger.error(f"[LOGIN TICKETS ERROR] {e}", exc_info=True)
-            return render_template('login.html', error='Error interno del servidor.', mensaje='Ingenieros de Soporte'), 500
-        
-        if credentials_valid:
-            if not app.config.get('TESTING', False):
-                FAILED_LOGINS.pop(client_ip, None)
-            session['ingeniero_user'] = username
-            logger.info(f"[LOGIN TICKETS] ✓ Login exitoso para {username}")
-            return redirect(url_for('soporte_tecnico'))
-        else:
-            if not app.config.get('TESTING', False):
-                attempt_count += 1
-                if not first_ts:
-                    first_ts = now
-                if attempt_count >= MAX_LOGIN_ATTEMPTS:
-                    locked_until = now + LOCKOUT_SECONDS
-                    FAILED_LOGINS[client_ip] = [attempt_count, first_ts, locked_until]
-                    logger.warning(f"[LOGIN TICKETS] IP {client_ip} bloqueada")
-                    return render_template('login.html', error='Demasiados intentos. Intenta nuevamente más tarde.', mensaje='Ingenieros de Soporte'), 429
-                else:
-                    FAILED_LOGINS[client_ip] = [attempt_count, first_ts, 0]
-            return render_template('login.html', error='Credenciales inválidas', mensaje='Ingenieros de Soporte'), 401
-    
-    return render_template('login.html', mensaje='Ingenieros de Soporte')
+    """DEPRECATED - Redirige a /login para mantener compatibilidad"""
+    return redirect(url_for('login'))
 
 @app.route('/logout_tickets')
 def logout_tickets():
-    """Cerrar sesión de ingeniero"""
-    session.pop('ingeniero_user', None)
-    return redirect(url_for('reportar_incidencia'))
+    """DEPRECATED - Redirige a /logout para mantener compatibilidad"""
+    return redirect(url_for('logout'))
 
 
-# ---------------- Permission helpers ----------------
+# ==================== PERMISSION HELPERS (UNIFICADOS) ==================
+
 def get_current_user():
-    """Return the current logged user (admin or ingeniero) or None."""
-    username = session.get('ingeniero_user') or session.get('admin_user')
+    """Obtiene el usuario actual desde la sesión unificada."""
+    username = session.get('user')
     if not username:
         return None
     try:
@@ -348,7 +286,7 @@ def get_current_user():
 
 @app.context_processor
 def inject_user_helpers():
-    """Make `current_user` and `has_permission` available in templates."""
+    """Inyecta `current_user` y `has_permission` en todas las plantillas."""
     user = get_current_user()
     def has_permission(module, action):
         if not user:
@@ -358,21 +296,17 @@ def inject_user_helpers():
 
 
 def requires_permission(module, action):
-    """Decorator factory to require a permission for a view or API.
-
-    Usage: @requires_permission('tickets', 'view')
+    """Decorador para requerir un permiso específico en una ruta o API.
+    
+    Uso: @requires_permission('tickets', 'view')
     """
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
             user = get_current_user()
             if not user:
-                # redirect to appropriate login
                 if request.path.startswith('/api/'):
                     return jsonify({'error': 'Autenticación requerida'}), 401
-                # prefer ticket login if it's a ticket-related module
-                if module == 'tickets':
-                    return redirect(url_for('login_tickets'))
                 return redirect(url_for('login'))
             if not user.has_permission(module, action):
                 if request.path.startswith('/api/'):
@@ -381,6 +315,26 @@ def requires_permission(module, action):
             return f(*args, **kwargs)
         return decorated
     return decorator
+
+# ==================== DASHBOARD / HOME CENTRAL ====================
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    """Dashboard central - cada usuario ve su panel según permisos."""
+    user = get_current_user()
+    if not user:
+        return redirect(url_for('login'))
+    
+    # Admin → ir a admin
+    if user.es_admin:
+        return redirect(url_for('admin'))
+    # Ingeniero de soporte → ir a soporte
+    elif user.role and user.role.name == 'support':
+        return redirect(url_for('soporte_tecnico'))
+    # Otro rol → mostrar página genérica de bienvenida
+    else:
+        return render_template('dashboard.html', user=user)
 
 # ==================== RUTAS FRONTEND ====================
 
@@ -427,7 +381,7 @@ def reportar_incidencia():
     return render_template('reportar_incidencia.html')
 
 @app.route('/soporte')
-@ingeniero_login_required
+@login_required
 def soporte_tecnico():
     """Panel de ingenieros para gestionar tickets de soporte"""
     return render_template('soporte_tecnico.html')
