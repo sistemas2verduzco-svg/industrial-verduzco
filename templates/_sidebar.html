@@ -45,11 +45,6 @@
         <a href="/admin" style="color:#fff; text-decoration:none; padding:10px 12px; border-radius:6px; display:flex; align-items:center; gap:8px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
             <span>⚙️</span> <span>Administrar</span>
         </a>
-        {% if current_user and current_user.es_admin %}
-        <a href="/admin/users" style="color:#fff; text-decoration:none; padding:10px 12px; margin-left:20px; border-radius:6px; display:flex; align-items:center; gap:8px; font-size:13px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
-            <span>👥</span> <span>Usuarios</span>
-        </a>
-        {% endif %}
         <a href="/proveedores" style="color:#fff; text-decoration:none; padding:10px 12px; margin-left:20px; border-radius:6px; display:flex; align-items:center; gap:8px; font-size:13px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
             <span>🏢</span> <span>Proveedores</span>
         </a>
@@ -60,6 +55,16 @@
 
         <!-- SEPARATOR -->
         <div style="height:1px; background:rgba(255,255,255,0.1); margin:15px 0;"></div>
+        <!-- CONFIGURACIÓN (solo admins) -->
+        {% if current_user and current_user.es_admin %}
+        <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:8px; margin-bottom:8px; padding-left:8px;">CONFIGURACIÓN</div>
+        <a href="/admin/users" style="color:#fff; text-decoration:none; padding:10px 12px; border-radius:6px; display:flex; align-items:center; gap:8px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
+            <span>👥</span> <span>Usuarios</span>
+        </a>
+        <a href="/admin/puerta" style="color:#fff; text-decoration:none; padding:10px 12px; margin-left:0; border-radius:6px; display:flex; align-items:center; gap:8px; font-size:13px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
+            <span>🔐</span> <span>Puerta (Registros)</span>
+        </a>
+        {% endif %}
 
         <!-- PUBLIC ACTIONS -->
         <a href="/reportar" style="color:#fff; text-decoration:none; padding:10px 12px; border-radius:6px; display:flex; align-items:center; gap:8px; transition:all 0.2s; border-left:3px solid transparent; font-size:13px;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
