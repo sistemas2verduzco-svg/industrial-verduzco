@@ -498,6 +498,59 @@ def api_delete_user(user_id):
     return jsonify({'ok': True})
 
 
+@app.route('/api/users/<int:user_id>', methods=['GET'])
+@login_required
+def api_get_user(user_id):
+    if not is_admin_user():
+        return jsonify({'error': 'Permiso denegado'}), 403
+    u = Usuario.query.get_or_404(user_id)
+    data = {
+        'id': u.id,
+        'username': u.username,
+        'correo': u.correo,
+        'activo': u.activo,
+        'es_admin': u.es_admin,
+        'role': u.role.name if u.role else None,
+        'fecha_creacion': u.fecha_creacion.isoformat() if u.fecha_creacion else None
+    }
+    try:
+        # devolver contraseña desencriptada SOLO para admin
+        data['password'] = u.decrypt_password()
+    except Exception:
+        data['password'] = None
+    return jsonify({'user': data})
+
+
+@app.route('/api/users/<int:user_id>', methods=['PUT'])
+@login_required
+def api_update_user(user_id):
+    if not is_admin_user():
+        return jsonify({'error': 'Permiso denegado'}), 403
+    u = Usuario.query.get_or_404(user_id)
+    data = request.get_json() or {}
+    correo = data.get('correo')
+    password = data.get('password')
+    es_admin = data.get('es_admin')
+    role_name = data.get('role')
+
+    if correo is not None:
+        u.correo = correo
+    if password:
+        u.set_password(password)
+    if es_admin is not None:
+        u.es_admin = bool(es_admin)
+    if role_name is not None:
+        if role_name == '':
+            u.role = None
+        else:
+            role = Role.query.filter_by(name=role_name).first()
+            if role:
+                u.role = role
+    db.session.add(u)
+    db.session.commit()
+    return jsonify({'ok': True, 'user': u.to_dict()})
+
+
 @app.route('/delete_nonadmin_users', methods=['POST'])
 @login_required
 def delete_nonadmin_users():

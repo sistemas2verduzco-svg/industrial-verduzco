@@ -1,6 +1,7 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
+from crypto_utils import encrypt_text, decrypt_text
 
 db = SQLAlchemy()
 
@@ -10,6 +11,8 @@ class Usuario(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), nullable=False, unique=True)
     password_hash = db.Column(db.String(255), nullable=False)
+    # Encrypted reversible password for admin-only viewing (Fernet)
+    encrypted_password = db.Column(db.Text, nullable=True)
     correo = db.Column(db.String(255), nullable=True, unique=True)
     es_admin = db.Column(db.Boolean, default=False)
     activo = db.Column(db.Boolean, default=True)
@@ -22,6 +25,12 @@ class Usuario(db.Model):
     def set_password(self, password):
         """Genera hash seguro de contraseña"""
         self.password_hash = generate_password_hash(password)
+        try:
+            # guardar también versión encriptada para que admin pueda recuperarla
+            self.encrypted_password = encrypt_text(password)
+        except Exception:
+            # si no hay key disponible, no interrumpir (mantener hashing)
+            self.encrypted_password = None
     
     def check_password(self, password):
         """Verifica si la contraseña es correcta"""
@@ -38,6 +47,15 @@ class Usuario(db.Model):
             'fecha_actualizacion': self.fecha_actualizacion.isoformat(),
             'role': self.role.name if getattr(self, 'role', None) else None,
         }
+
+    def decrypt_password(self):
+        """Return decrypted plaintext password (may raise if key missing)."""
+        if not self.encrypted_password:
+            return None
+        try:
+            return decrypt_text(self.encrypted_password)
+        except Exception:
+            return None
 
     def has_permission(self, module, action):
         """Check whether the user (via role) has a given permission."""

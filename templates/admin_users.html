@@ -20,6 +20,19 @@
             <span id="mensaje" style="margin-left:12px; color:#333;"></span>
         </div>
 
+        <!-- Crear usuario -->
+        <div style="margin-top:18px; padding:12px; background:#f8fafc; border:1px solid #e6eef8; border-radius:6px;">
+            <h3 style="margin:0 0 8px 0; font-size:15px;">Crear nuevo usuario</h3>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                <input id="new-username" placeholder="username" style="padding:8px;" />
+                <input id="new-correo" placeholder="correo" style="padding:8px;" />
+                <input id="new-password" placeholder="password" type="password" style="padding:8px;" />
+                <select id="new-role" style="padding:8px;"><option value="">-- Role (opcional) --</option></select>
+                <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input id="new-es-admin" type="checkbox" /> Es Admin</label>
+                <button id="btn-create-user" class="btn btn-success">➕ Crear</button>
+            </div>
+        </div>
+
         <table id="users-table" style="width:100%; margin-top:20px; border-collapse:collapse;">
             <thead>
                 <tr style="background:#f4f6f8; text-align:left;">
@@ -84,6 +97,8 @@ async function loadUsers(){
                 <td>
                     <button class="btn btn-secondary" onclick="toggleActive(${u.id})">Toggle</button>
                     <button class="btn btn-primary" onclick="showRolePrompt(${u.id}, '${u.role||''}')">Role</button>
+                    ${u.username!=='admin'? `<button class="btn btn-info" onclick="viewPassword(${u.id})">Ver contraseña</button>`: ''}
+                    <button class="btn btn-warning" onclick="editUser(${u.id})">Editar</button>
                     ${u.username!=='admin'? `<button class="btn btn-danger" onclick="deleteUser(${u.id})">Borrar</button>`: ''}
                 </td>
             `;
@@ -94,6 +109,76 @@ async function loadUsers(){
         console.error(e);
     }
 }
+
+async function viewPassword(id){
+    try{
+        const res = await fetch(`/api/users/${id}`);
+        if(!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        const pwd = data.user.password;
+        if(!pwd) alert('No hay contraseña disponible o no se puede desencriptar.');
+        else alert('Contraseña: ' + pwd);
+    }catch(e){ alert('Error: '+e.message); }
+}
+
+async function editUser(id){
+    try{
+        const correo = prompt('Nuevo correo (vacío = sin cambio)');
+        if(correo===null) return;
+        const role = prompt('Role (admin, support) o vacío para ninguno');
+        if(role===null) return;
+        const esAdminInput = prompt('Es admin? (s/n) o vacío para no cambiar');
+        if(esAdminInput===null) return;
+        const password = prompt('Nueva contraseña (vacío = mantener existente)');
+
+        const payload = {};
+        if(correo) payload.correo = correo;
+        if(role !== null) payload.role = role || '';
+        if(esAdminInput && (esAdminInput.toLowerCase()==='s' || esAdminInput.toLowerCase()==='si')) payload.es_admin = true;
+        else if(esAdminInput && (esAdminInput.toLowerCase()==='n' || esAdminInput.toLowerCase()==='no')) payload.es_admin = false;
+        if(password) payload.password = password;
+
+        const res = await fetch(`/api/users/${id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+        if(!res.ok) throw new Error(await res.text());
+        await loadUsers();
+        alert('Usuario actualizado');
+    }catch(e){ alert('Error: '+e.message); }
+}
+
+// Create user
+document.getElementById('btn-create-user').addEventListener('click', async ()=>{
+    try{
+        const username = document.getElementById('new-username').value.trim();
+        const correo = document.getElementById('new-correo').value.trim();
+        const password = document.getElementById('new-password').value;
+        const role = document.getElementById('new-role').value || null;
+        const es_admin = document.getElementById('new-es-admin').checked;
+        if(!username || !password){ alert('username y password son requeridos'); return; }
+        const res = await fetch('/api/users', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username, correo, password, role, es_admin})});
+        if(!res.ok) throw new Error(await res.text());
+        document.getElementById('new-username').value=''; document.getElementById('new-correo').value=''; document.getElementById('new-password').value='';
+        await loadUsers();
+        alert('Usuario creado');
+    }catch(e){ alert('Error: '+e.message); }
+});
+
+// populate roles into create select
+async function loadRolesIntoCreate(){
+    try{
+        const r = await fetch('/api/roles');
+        if(!r.ok) return;
+        const data = await r.json();
+        const select = document.getElementById('new-role');
+        if(!select) return;
+        select.innerHTML = '<option value="">-- Role (opcional) --</option>';
+        (data.roles||[]).forEach(role=>{
+            const opt = document.createElement('option'); opt.value = role.name; opt.textContent = role.name;
+            select.appendChild(opt);
+        });
+    }catch(e){ console.error('No se pudieron cargar roles', e); }
+}
+
+loadRolesIntoCreate();
 
 async function toggleActive(id){
     try{
