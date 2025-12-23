@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -351,6 +351,61 @@ def producto_detalle(producto_id):
             'historial_precios': historial
         })
     return render_template('producto_detalle.html', producto=producto, proveedores=proveedores)
+
+
+@app.route('/control_calidad')
+@login_required
+def control_calidad_list():
+    productos = Producto.query.order_by(Producto.nombre.asc()).all()
+    return render_template('control_calidad_list.html', productos=productos)
+
+
+@app.route('/control_calidad/<int:producto_id>', methods=['GET', 'POST'])
+@login_required
+def control_calidad_producto(producto_id):
+    producto = Producto.query.get_or_404(producto_id)
+
+    # Componentes por defecto (puedes personalizarlos luego)
+    default_componentes = [
+        'Cabezal', 'Banco', 'Comal', 'Sistema eléctrico', 'Sistema de gas', 'Funcionamiento completo'
+    ]
+
+    componentes = [{'nombre': c, 'image_url': None, 'checked': False} for c in default_componentes]
+
+    informe_guardado = False
+
+    if request.method == 'POST':
+        # directorios para guardar evidencias
+        reports_dir = os.path.join('uploads', 'qc_reports')
+        images_dir = os.path.join(reports_dir, 'images')
+        os.makedirs(images_dir, exist_ok=True)
+
+        # crear QCReport
+        report = QCReport(producto_id=producto.id, usuario=session.get('user'), observaciones=request.form.get('observaciones'))
+        db.session.add(report)
+        db.session.flush()  # obtener id
+
+        for idx, comp in enumerate(componentes):
+            checked = bool(request.form.get(f'check_{idx}'))
+            evidencia_file = request.files.get(f'evidence_{idx}')
+            evidence_url = None
+            if evidencia_file and evidencia_file.filename:
+                filename = secure_filename(f"qc_p{producto_id}_{idx}_{int(time())}_{evidencia_file.filename}")
+                save_path = os.path.join(images_dir, filename)
+                evidencia_file.save(save_path)
+                evidence_url = os.path.relpath(save_path, start=os.getcwd())
+
+            item = QCItem(report_id=report.id, nombre=comp['nombre'], checked=checked, evidence_url=evidence_url)
+            db.session.add(item)
+
+        try:
+            db.session.commit()
+            informe_guardado = True
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error guardando informe QC en BD: {e}", exc_info=True)
+
+    return render_template('control_calidad_detalle.html', producto=producto, componentes=componentes, informe_guardado=informe_guardado)
 
 
 

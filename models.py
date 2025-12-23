@@ -333,3 +333,47 @@ class AccessLog(db.Model):
             'referer': self.referer,
             'timestamp': self.timestamp.isoformat()
         }
+
+
+class QCReport(db.Model):
+    """Informe de control de calidad para un producto/máquina."""
+    __tablename__ = 'qc_reports'
+
+    id = db.Column(db.Integer, primary_key=True)
+    producto_id = db.Column(db.Integer, db.ForeignKey('productos.id'), nullable=False)
+    usuario = db.Column(db.String(100), nullable=True)
+    observaciones = db.Column(db.Text, nullable=True)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relación con items
+    items = db.relationship('QCItem', backref='report', lazy=True, cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'producto_id': self.producto_id,
+            'usuario': self.usuario,
+            'observaciones': self.observaciones,
+            'timestamp': self.timestamp.isoformat(),
+            'items': [i.to_dict() for i in self.items]
+        }
+
+
+class QCItem(db.Model):
+    """Item del checklist asociado a un QCReport."""
+    __tablename__ = 'qc_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    report_id = db.Column(db.Integer, db.ForeignKey('qc_reports.id'), nullable=False)
+    nombre = db.Column(db.String(200), nullable=False)
+    checked = db.Column(db.Boolean, default=False)
+    evidence_url = db.Column(db.String(500), nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'report_id': self.report_id,
+            'nombre': self.nombre,
+            'checked': self.checked,
+            'evidence_url': self.evidence_url
+        }
