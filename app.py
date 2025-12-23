@@ -13,7 +13,6 @@ import logging
 from openpyxl import Workbook
 from io import BytesIO
 import uuid
-import json
 
 # Configurar logging
 logging.basicConfig(
@@ -354,80 +353,7 @@ def producto_detalle(producto_id):
     return render_template('producto_detalle.html', producto=producto, proveedores=proveedores)
 
 
-@app.route('/control_calidad')
-@login_required
-def control_calidad_list():
-    """Lista las máquinas disponibles para control de calidad."""
-    productos = Producto.query.order_by(Producto.nombre.asc()).all()
-    return render_template('control_calidad_list.html', productos=productos)
 
-
-@app.route('/control_calidad/<int:producto_id>', methods=['GET', 'POST'])
-@login_required
-def control_calidad_producto(producto_id):
-    producto = Producto.query.get_or_404(producto_id)
-
-    # Lista por defecto (el usuario puede pasar otras). Ejemplo proporcionado.
-    default_componentes = [
-        'Cabezal',
-        'Banco',
-        'Comal',
-        'Sistema eléctrico',
-        'Sistema de gas',
-        'Funcionamiento completo'
-    ]
-
-    # Construir estructura de componentes (puede ampliarse con imágenes si se suben)
-    componentes = [{'nombre': c, 'image_url': None, 'checked': False} for c in default_componentes]
-
-    informe_guardado = False
-    informe_path = None
-
-    if request.method == 'POST':
-        # Asegurar carpeta de reports
-        reports_dir = os.path.join(app.config.get('UPLOAD_FOLDER', 'uploads/productos'), '..', 'qc_reports')
-        reports_dir = os.path.normpath(reports_dir)
-        images_dir = os.path.join(reports_dir, 'images')
-        os.makedirs(images_dir, exist_ok=True)
-
-        # Recopilar datos
-        resultados = []
-        for idx, comp in enumerate(componentes):
-            checked = bool(request.form.get(f'check_{idx}'))
-            evidencia_file = request.files.get(f'evidence_{idx}')
-            evidencia_path = None
-            if evidencia_file and evidencia_file.filename:
-                filename = secure_filename(f"qc_p{producto_id}_{idx}_{int(time())}_{evidencia_file.filename}")
-                save_path = os.path.join(images_dir, filename)
-                evidencia_file.save(save_path)
-                # Guardar ruta relativa para mostrar
-                evidencia_path = os.path.relpath(save_path, start=os.getcwd())
-            resultados.append({'nombre': comp['nombre'], 'checked': checked, 'evidence': evidencia_path})
-
-        observaciones = request.form.get('observaciones')
-        informe = {
-            'producto_id': producto.id,
-            'producto_nombre': producto.nombre,
-            'timestamp': datetime.utcnow().isoformat(),
-            'usuario': session.get('user'),
-            'resultados': resultados,
-            'observaciones': observaciones
-        }
-
-        ts = datetime.utcnow().strftime('%Y%m%dT%H%M%S')
-        reports_dir = os.path.join('uploads', 'qc_reports')
-        os.makedirs(reports_dir, exist_ok=True)
-        informe_filename = f"qc_report_p{producto_id}_{ts}.json"
-        informe_fullpath = os.path.join(reports_dir, informe_filename)
-        try:
-            with open(informe_fullpath, 'w', encoding='utf-8') as f:
-                json.dump(informe, f, ensure_ascii=False, indent=2)
-            informe_guardado = True
-            informe_path = informe_fullpath
-        except Exception as e:
-            logger.error(f"Error guardando informe QC: {e}", exc_info=True)
-
-    return render_template('control_calidad_detalle.html', producto=producto, componentes=componentes, informe_guardado=informe_guardado, informe_path=informe_path)
 
 @app.route('/admin')
 @login_required
