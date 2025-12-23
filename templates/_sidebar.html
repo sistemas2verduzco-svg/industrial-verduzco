@@ -24,6 +24,9 @@
         <a href="/" style="color:#fff; text-decoration:none; padding:10px 12px; border-radius:6px; display:flex; align-items:center; gap:8px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
             <span>🏠</span> <span>Ver Catálogo</span>
         </a>
+        <a href="/control_calidad" style="color:#fff; text-decoration:none; padding:10px 12px; border-radius:6px; display:flex; align-items:center; gap:8px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
+            <span>🔍</span> <span>Control Calidad</span>
+        </a>
         {% endif %}
 
         <!-- SOPORTE SECTION -->
@@ -32,24 +35,22 @@
         <a href="/soporte" style="color:#fff; text-decoration:none; padding:10px 12px; border-radius:6px; display:flex; align-items:center; gap:8px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
             <span>🔧</span> <span>Sistema de Tickets</span>
         </a>
-        {% if has_permission('tickets', 'export') or current_user and current_user.es_admin %}
         <a href="/soporte" style="color:#fff; text-decoration:none; padding:10px 12px; margin-left:20px; border-radius:6px; display:flex; align-items:center; gap:8px; font-size:13px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
             <span>📥</span> <span>Exportar</span>
         </a>
-        {% endif %}
+        <a href="/reportar" style="color:#fff; text-decoration:none; padding:10px 12px; margin-left:20px; border-radius:6px; display:flex; align-items:center; gap:8px; font-size:13px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
+            <span>📋</span> <span>Reportar Incidencia</span>
+        </a>
         {% endif %}
 
-        <!-- ADMINISTRACIÓN SECTION -->
+        <!-- ADMINISTRACIÓN CATÁLOGO SECTION -->
         {% if has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
-        <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">ADMINISTRACIÓN</div>
+        <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">ADMINISTRACIÓN CATÁLOGO</div>
         <a href="/admin" style="color:#fff; text-decoration:none; padding:10px 12px; border-radius:6px; display:flex; align-items:center; gap:8px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
             <span>⚙️</span> <span>Administrar</span>
         </a>
         <a href="/proveedores" style="color:#fff; text-decoration:none; padding:10px 12px; margin-left:20px; border-radius:6px; display:flex; align-items:center; gap:8px; font-size:13px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
             <span>🏢</span> <span>Proveedores</span>
-        </a>
-        <a href="/admin/puerta" style="color:#fff; text-decoration:none; padding:10px 12px; margin-left:20px; border-radius:6px; display:flex; align-items:center; gap:8px; font-size:13px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
-            <span>🔐</span> <span>Puerta (Registros)</span>
         </a>
         {% endif %}
 
@@ -70,6 +71,10 @@
         <a href="/reportar" style="color:#fff; text-decoration:none; padding:10px 12px; border-radius:6px; display:flex; align-items:center; gap:8px; transition:all 0.2s; border-left:3px solid transparent; font-size:13px;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
             <span>📋</span> <span>Reportar Incidencia</span>
         </a>
+        <a href="/admin" style="color:#fff; text-decoration:none; padding:10px 12px; margin-left:0; border-radius:6px; display:flex; align-items:center; gap:8px; font-size:13px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
+            <span>🔑</span> <span>Admin</span>
+        </a>
+        {% endif %}
 
         <!-- LOGOUT -->
         <a href="{{ url_for('logout') }}" style="color:#ff7675; text-decoration:none; padding:10px 12px; border-radius:6px; display:flex; align-items:center; gap:8px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,118,118,0.1)'; this.style.borderColor='#ff7675';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">

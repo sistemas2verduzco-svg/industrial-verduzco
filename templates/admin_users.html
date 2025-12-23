@@ -50,18 +50,18 @@
         </table>
     </div>
 
-    <!-- Modal Roles / Permisos -->
+    <!-- Modal Roles / Módulos -->
     <div id="roles-modal" style="display:none; position:fixed; left:0; top:0; right:0; bottom:0; background:rgba(0,0,0,0.4); z-index:9999;">
         <div style="width:800px; max-width:95%; margin:60px auto; background:#fff; border-radius:6px; padding:18px; box-shadow:0 6px 24px rgba(0,0,0,0.2);">
-            <h3>Gestionar Roles y Permisos</h3>
+            <h3>Gestionar Roles y Módulos</h3>
             <div style="display:flex; gap:12px; margin-top:12px;">
                 <div style="flex:1; min-width:200px;">
                     <label><strong>Roles</strong></label>
                     <select id="roles-select" style="width:100%; padding:8px; margin-top:6px;"></select>
                 </div>
                 <div style="flex:2;">
-                    <label><strong>Permisos</strong></label>
-                    <div id="permissions-list" style="max-height:320px; overflow:auto; border:1px solid #eee; padding:8px; margin-top:6px;"></div>
+                    <label><strong>Módulos Accesibles</strong></label>
+                    <div id="modules-list" style="max-height:320px; overflow:auto; border:1px solid #eee; padding:8px; margin-top:6px;"></div>
                 </div>
             </div>
             <div style="margin-top:14px; text-align:right;">
@@ -218,7 +218,14 @@ document.getElementById('btn-delete-nonadmin').addEventListener('click', async (
     }catch(e){ alert('Error: '+e.message); }
 });
 
-// Roles / Permisos modal wiring
+// Roles / Módulos modal wiring
+const MODULES = [
+    {id: 'catalog', label: 'CATÁLOGO', icon: '📊'},
+    {id: 'soporte', label: 'SOPORTE', icon: '🔧'},
+    {id: 'admin_catalog', label: 'ADMINISTRACIÓN CATÁLOGO', icon: '⚙️'},
+    {id: 'configuracion', label: 'CONFIGURACIÓN', icon: '🔑'}
+];
+
 document.getElementById('btn-manage-roles').addEventListener('click', async ()=>{
     try{
         await openRolesModal();
@@ -226,16 +233,12 @@ document.getElementById('btn-manage-roles').addEventListener('click', async ()=>
 });
 
 let ALL_ROLES = [];
-let ALL_PERMS = [];
 
 async function openRolesModal(){
     const modal = document.getElementById('roles-modal');
     modal.style.display = 'block';
-    // load roles and permissions
     const rolesResp = await fetchJson('/api/roles');
-    const permsResp = await fetchJson('/api/permissions');
     ALL_ROLES = rolesResp.roles || rolesResp;
-    ALL_PERMS = permsResp.permissions || permsResp;
 
     const select = document.getElementById('roles-select');
     select.innerHTML = '';
@@ -244,34 +247,37 @@ async function openRolesModal(){
         select.appendChild(opt);
     });
 
-    const plist = document.getElementById('permissions-list');
-    plist.innerHTML = '';
-    ALL_PERMS.forEach(p=>{
-        const id = 'perm_'+p.id;
+    const mlist = document.getElementById('modules-list');
+    mlist.innerHTML = '';
+    MODULES.forEach(m=>{
+        const id = 'mod_'+m.id;
         const row = document.createElement('div');
-        row.style.marginBottom='6px';
-        row.innerHTML = `<label><input type="checkbox" id="${id}" data-perm-id="${p.id}"> <strong>${p.name}</strong> — ${p.description||''}</label>`;
-        plist.appendChild(row);
+        row.style.marginBottom='8px; padding: 8px; background: #f5f5f5; border-radius: 4px;';
+        row.innerHTML = `<label style="display:flex; align-items:center; gap:8px; cursor:pointer;"><input type="checkbox" id="${id}" data-mod-id="${m.id}" /> <span style="font-weight:600;">${m.icon} ${m.label}</span></label>`;
+        mlist.appendChild(row);
     });
 
-    select.addEventListener('change', ()=>{ renderRolePermissions(parseInt(select.value,10)); });
+    select.addEventListener('change', ()=>{ renderRoleModules(parseInt(select.value,10)); });
 
     if(ALL_ROLES.length) select.value = ALL_ROLES[0].id;
-    renderRolePermissions(parseInt(select.value,10));
+    renderRoleModules(parseInt(select.value,10));
 
     document.getElementById('roles-cancel').onclick = ()=>{ closeRolesModal(); };
     document.getElementById('roles-save').onclick = async ()=>{
         try{
             const rid = parseInt(select.value,10);
-            const checked = Array.from(document.querySelectorAll('#permissions-list input[type=checkbox]:checked')).map(i=>parseInt(i.dataset.permId,10));
-            const res = await fetch(`/api/roles/${rid}/permissions`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({permission_ids: checked})});
+            const checked = Array.from(document.querySelectorAll('#modules-list input[type=checkbox]:checked')).map(i=>i.dataset.modId);
+            const rolesData = {
+                modules: checked,
+                description: ALL_ROLES.find(r=>r.id===rid)?.description || ''
+            };
+            const res = await fetch(`/api/roles/${rid}/modules`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(rolesData)});
             if(!res.ok) throw new Error(await res.text());
-            alert('Permisos guardados');
-            // refresh roles data
+            alert('Módulos guardados');
             const newRoles = await fetchJson('/api/roles');
             ALL_ROLES = newRoles.roles || newRoles;
-            renderRolePermissions(rid);
-        }catch(e){ alert('Error guardando permisos: '+e.message); }
+            renderRoleModules(rid);
+        }catch(e){ alert('Error guardando módulos: '+e.message); }
     };
 }
 
@@ -280,12 +286,12 @@ function closeRolesModal(){
     modal.style.display = 'none';
 }
 
-function renderRolePermissions(roleId){
-    const role = ALL_ROLES.find(r=>r.id===roleId) || {permissions:[]};
-    const permIds = (role.permissions||[]).map(x=> typeof x === 'object' ? x.id : x);
-    ALL_PERMS.forEach(p=>{
-        const cb = document.getElementById('perm_'+p.id);
-        if(cb) cb.checked = permIds.indexOf(p.id) !== -1;
+function renderRoleModules(roleId){
+    const role = ALL_ROLES.find(r=>r.id===roleId) || {modules:[]};
+    const mods = (role.modules||[]);
+    MODULES.forEach(m=>{
+        const cb = document.getElementById('mod_'+m.id);
+        if(cb) cb.checked = mods.indexOf(m.id) !== -1;
     });
 }
 
