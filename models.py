@@ -113,29 +113,14 @@ class Role(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(80), unique=True, nullable=False)
     descripcion = db.Column(db.String(255), nullable=True)
-    modules = db.Column(db.Text, default='[]')  # JSON array of module IDs
 
     permissions = db.relationship('Permission', secondary=role_permissions, backref='roles')
-
-    def get_modules(self):
-        """Parse modules JSON string into list."""
-        import json
-        try:
-            return json.loads(self.modules or '[]')
-        except:
-            return []
-
-    def set_modules(self, module_list):
-        """Store modules list as JSON string."""
-        import json
-        self.modules = json.dumps(module_list or [])
 
     def to_dict(self):
         return {
             'id': self.id,
             'name': self.name,
             'descripcion': self.descripcion,
-            'modules': self.get_modules(),
             'permissions': [p.to_dict() for p in self.permissions]
         }
 
