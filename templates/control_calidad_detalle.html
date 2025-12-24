@@ -28,7 +28,7 @@
                         <h4>Checklist de componentes</h4>
                         <p style="color:#666; font-size:13px;">Marca la casilla si el componente funciona correctamente. Puedes subir evidencias (foto por componente).</p>
 
-                        {% for idx, comp in enumerate(componentes) %}
+                        {% for comp in componentes %}
                         <div style="display:flex; gap:12px; align-items:center; margin:10px 0; border-bottom:1px dashed #f0f0f0; padding-bottom:8px;">
                             <div style="width:90px; height:70px; background:#fafafa; display:flex; align-items:center; justify-content:center; border-radius:6px; overflow:hidden;">
                                 {% if comp.image_url %}
@@ -42,10 +42,10 @@
                             </div>
                             <div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
                                 <label style="display:flex; gap:6px; align-items:center;">
-                                    <input type="checkbox" name="check_{{ idx }}" value="1" {% if comp.checked %}checked{% endif %} />
+                                    <input type="checkbox" name="check_{{ loop.index0 }}" value="1" {% if comp.checked %}checked{% endif %} />
                                     <span>OK</span>
                                 </label>
-                                <input type="file" name="evidence_{{ idx }}" accept="image/*" />
+                                <input type="file" name="evidence_{{ loop.index0 }}" accept="image/*" />
                             </div>
                         </div>
                         {% endfor %}
