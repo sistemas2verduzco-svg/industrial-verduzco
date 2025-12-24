@@ -57,25 +57,10 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db.init_app(app)
 
-# Crear tablas
-with app.app_context():
-    db.create_all()
-    # Crear usuario admin por defecto si no existe
-    try:
-        if not Usuario.query.filter_by(username='admin').first():
-            admin_user = Usuario(
-                username='admin',
-                correo='admin@example.com',
-                es_admin=True,
-                activo=True
-            )
-            admin_user.set_password('admin123')
-            db.session.add(admin_user)
-            db.session.commit()
-            print("✓ Usuario admin por defecto creado.")
-    except Exception as e:
-        db.session.rollback()
-        print(f"ℹ Usuario admin ya existe o error: {e}")
+# Nota: la creación de tablas se realiza con `create_db.py` para evitar
+# colisiones al arrancar múltiples workers (ej. Gunicorn). Ejecutar:
+#   python create_db.py
+# una vez antes de arrancar la app en producción.
 
 # Inicializar AuthManager con BD
 auth_manager = AuthManager(db=db)
