@@ -321,11 +321,11 @@ class AccessLog(db.Model):
 
 
 class QCReport(db.Model):
-    """Informe de control de calidad para un producto/máquina."""
+    """Informe de control de calidad para una máquina."""
     __tablename__ = 'qc_reports'
 
     id = db.Column(db.Integer, primary_key=True)
-    producto_id = db.Column(db.Integer, db.ForeignKey('productos.id'), nullable=False)
+    maquina_id = db.Column(db.Integer, db.ForeignKey('maquinas.id'), nullable=False)
     usuario = db.Column(db.String(100), nullable=True)
     observaciones = db.Column(db.Text, nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
@@ -336,7 +336,7 @@ class QCReport(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
-            'producto_id': self.producto_id,
+            'maquina_id': self.maquina_id,
             'usuario': self.usuario,
             'observaciones': self.observaciones,
             'timestamp': self.timestamp.isoformat(),
@@ -361,4 +361,51 @@ class QCItem(db.Model):
             'nombre': self.nombre,
             'checked': self.checked,
             'evidence_url': self.evidence_url
+        }
+
+
+class Máquina(db.Model):
+    """Máquinas que requieren control de calidad (independiente de productos)."""
+    __tablename__ = 'maquinas'
+
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(255), nullable=False, unique=True)
+    descripcion = db.Column(db.Text, nullable=True)
+    imagen_url = db.Column(db.String(500), nullable=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relaciones
+    componentes = db.relationship('ComponenteMáquina', backref='maquina', lazy=True, cascade='all, delete-orphan')
+    reportes = db.relationship('QCReport', backref='maquina_obj', lazy=True, cascade='all, delete-orphan', foreign_keys='QCReport.maquina_id')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nombre': self.nombre,
+            'descripcion': self.descripcion,
+            'imagen_url': self.imagen_url,
+            'fecha_creacion': self.fecha_creacion.isoformat(),
+            'fecha_actualizacion': self.fecha_actualizacion.isoformat(),
+            'componentes': [c.to_dict() for c in self.componentes]
+        }
+
+
+class ComponenteMáquina(db.Model):
+    """Componentes estándar de una máquina para el checklist QC."""
+    __tablename__ = 'componentes_maquinas'
+
+    id = db.Column(db.Integer, primary_key=True)
+    maquina_id = db.Column(db.Integer, db.ForeignKey('maquinas.id'), nullable=False)
+    nombre = db.Column(db.String(200), nullable=False)
+    descripcion = db.Column(db.Text, nullable=True)
+    orden = db.Column(db.Integer, default=0)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'maquina_id': self.maquina_id,
+            'nombre': self.nombre,
+            'descripcion': self.descripcion,
+            'orden': self.orden
         }

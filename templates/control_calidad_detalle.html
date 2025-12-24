@@ -3,23 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control de Calidad — {{ producto.nombre }}</title>
+    <title>Control de Calidad — {{ maquina.nombre }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
     {% include '_sidebar.html' %}
 
     <div class="container">
-        <h2>Control de Calidad — {{ producto.nombre }}</h2>
+        <h2>Control de Calidad — {{ maquina.nombre }}</h2>
 
         <div style="display:flex; gap:24px; margin-top:12px; align-items:flex-start;">
             <div style="width:420px; border:1px solid #e6e6e6; padding:12px; border-radius:8px; background:#fff;">
-                {% if producto.imagen_url %}
-                    <img src="{{ producto.imagen_url }}" alt="{{ producto.nombre }}" style="width:100%; height:auto; object-fit:contain;" />
+                {% if maquina.imagen_url %}
+                    <img src="{{ maquina.imagen_url }}" alt="{{ maquina.nombre }}" style="width:100%; height:auto; object-fit:contain;" />
                 {% else %}
-                    <div style="height:240px; display:flex; align-items:center; justify-content:center; color:#aaa;">Sin imagen del producto</div>
+                    <div style="height:240px; display:flex; align-items:center; justify-content:center; color:#aaa;">Sin imagen de la máquina</div>
                 {% endif %}
-                <div style="margin-top:8px; color:#666;">{{ producto.descripcion }}</div>
+                <div style="margin-top:8px; color:#666;">{{ maquina.descripcion }}</div>
             </div>
 
             <div style="flex:1;">

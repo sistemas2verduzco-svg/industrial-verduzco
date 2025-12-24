@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, Máquina, ComponenteMáquina
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -356,46 +356,48 @@ def producto_detalle(producto_id):
 @app.route('/control_calidad')
 @login_required
 def control_calidad_list():
-    productos = Producto.query.order_by(Producto.nombre.asc()).all()
-    return render_template('control_calidad_list.html', productos=productos)
+    """Lista las máquinas disponibles para control de calidad."""
+    maquinas = Máquina.query.order_by(Máquina.nombre.asc()).all()
+    return render_template('control_calidad_list.html', maquinas=maquinas)
 
 
-@app.route('/control_calidad/<int:producto_id>', methods=['GET', 'POST'])
+@app.route('/control_calidad/<int:maquina_id>', methods=['GET', 'POST'])
 @login_required
-def control_calidad_producto(producto_id):
-    producto = Producto.query.get_or_404(producto_id)
+def control_calidad_maquina(maquina_id):
+    """Formulario de control de calidad para una máquina específica."""
+    maquina = Máquina.query.get_or_404(maquina_id)
 
-    # Componentes por defecto (puedes personalizarlos luego)
-    default_componentes = [
-        'Cabezal', 'Banco', 'Comal', 'Sistema eléctrico', 'Sistema de gas', 'Funcionamiento completo'
-    ]
-
-    componentes = [{'nombre': c, 'image_url': None, 'checked': False} for c in default_componentes]
+    # Obtener componentes configurados para esta máquina
+    componentes = ComponenteMáquina.query.filter_by(maquina_id=maquina_id).order_by(ComponenteMáquina.orden).all()
+    if not componentes:
+        # Si no hay componentes, crear una lista vacía
+        componentes = []
 
     informe_guardado = False
 
     if request.method == 'POST':
-        # directorios para guardar evidencias
+        # Directorio para guardar evidencias
         reports_dir = os.path.join('uploads', 'qc_reports')
         images_dir = os.path.join(reports_dir, 'images')
         os.makedirs(images_dir, exist_ok=True)
 
-        # crear QCReport
-        report = QCReport(producto_id=producto.id, usuario=session.get('user'), observaciones=request.form.get('observaciones'))
+        # Crear QCReport
+        report = QCReport(maquina_id=maquina.id, usuario=session.get('user'), observaciones=request.form.get('observaciones'))
         db.session.add(report)
-        db.session.flush()  # obtener id
+        db.session.flush()  # Obtener el ID del reporte
 
+        # Crear QCItem por cada componente
         for idx, comp in enumerate(componentes):
             checked = bool(request.form.get(f'check_{idx}'))
             evidencia_file = request.files.get(f'evidence_{idx}')
             evidence_url = None
             if evidencia_file and evidencia_file.filename:
-                filename = secure_filename(f"qc_p{producto_id}_{idx}_{int(time())}_{evidencia_file.filename}")
+                filename = secure_filename(f"qc_m{maquina.id}_{comp.id}_{int(time())}_{evidencia_file.filename}")
                 save_path = os.path.join(images_dir, filename)
                 evidencia_file.save(save_path)
                 evidence_url = os.path.relpath(save_path, start=os.getcwd())
 
-            item = QCItem(report_id=report.id, nombre=comp['nombre'], checked=checked, evidence_url=evidence_url)
+            item = QCItem(report_id=report.id, nombre=comp.nombre, checked=checked, evidence_url=evidence_url)
             db.session.add(item)
 
         try:
@@ -405,7 +407,10 @@ def control_calidad_producto(producto_id):
             db.session.rollback()
             logger.error(f"Error guardando informe QC en BD: {e}", exc_info=True)
 
-    return render_template('control_calidad_detalle.html', producto=producto, componentes=componentes, informe_guardado=informe_guardado)
+    # Crear estructura de datos para la plantilla
+    comp_list = [{'nombre': c.nombre, 'descripcion': c.descripcion, 'image_url': None, 'checked': False} for c in componentes]
+
+    return render_template('control_calidad_detalle.html', maquina=maquina, componentes=comp_list, informe_guardado=informe_guardado)
 
 
 
