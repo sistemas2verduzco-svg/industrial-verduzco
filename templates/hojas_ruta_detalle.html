@@ -183,108 +183,124 @@
     {% include '_sidebar.html' %}
 
     <div class="container">
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
-            <a href="/hojas_ruta" style="text-decoration: none; color: #0b74de;">← Volver</a>
-            <h2 style="margin: 0;">{{ maquina.nombre }} — Hojas de Ruta</h2>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <a href="/hojas_ruta" style="text-decoration:none;color:#0b74de;">← Volver</a>
+            <h2 style="margin:0;">{{ maquina.nombre }} — Hojas de Ruta</h2>
+            <div></div>
         </div>
 
         {% if hojas %}
             {% for hoja in hojas %}
-            <div class="hoja-card">
-                <div class="hoja-header">
-                    <div>
-                        <div class="hoja-nombre">{{ hoja.nombre }}</div>
-                        {% if hoja.descripcion %}
-                            <div style="font-size: 12px; color: #666; margin-top: 4px;">{{ hoja.descripcion }}</div>
-                        {% endif %}
-                        <div style="font-size: 11px; color: #999; margin-top: 6px;">Creada: {{ hoja.fecha_creacion[:10] }}</div>
-                    </div>
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                        <span class="hoja-estado estado-{{ hoja.estado }}">{{ hoja.estado }}</span>
-                        <div style="display: flex; gap: 6px;">
-                            <button class="btn-tiny" onclick="toggleHojaEstado('{{ hoja.id }}')">
-                                {% if hoja.estado == 'activa' %}Pausar{% else %}Reanudar{% endif %}
-                            </button>
+            <div class="hoja-card" style="padding:8px 12px;">
+                <div class="hoja-layout" style="display:flex;gap:12px;">
+                    <!-- Main sheet area -->
+                    <div style="flex:1; border:1px solid #000;">
+                        <div style="display:flex; background:#00c6d4; color:#000; font-weight:800;">
+                            <div style="width:90px; padding:6px; background:#fff; display:flex;align-items:center;justify-content:center;">
+                                <!-- logo placeholder -->
+                                <img src="{{ url_for('static', filename='icons/README.txt') }}" alt="logo" style="max-width:80px; max-height:60px;"/>
+                            </div>
+                            <div style="flex:1; padding:12px 8px; text-align:center; font-size:22px;">
+                                HOJA DE RUTA MAQUINADO(ALMACEN PRODUCTO TERMINADO)
+                            </div>
+                            <div style="width:220px; padding:6px; text-align:left;">
+                                <div style="font-size:12px;">FOLIO M.P</div>
+                                <div style="font-size:12px;">REVISION: 02</div>
+                                <div style="font-size:12px;">HORA DE INGRESO ALMACEN P.T</div>
+                            </div>
                         </div>
-                    </div>
-                </div>
 
-                {% if hoja.estaciones %}
-                    <div style="margin-top: 12px;">
-                        <h4 style="margin: 0 0 8px 0; font-size: 13px;">Estaciones de trabajo</h4>
-                        <ul class="estaciones-list">
-                            {% for est in hoja.estaciones %}
-                            <li class="estacion-item">
-                                <div class="estacion-orden">{{ est.orden }}</div>
-                                <div class="estacion-info">
-                                    <div class="estacion-nombre">{{ est.nombre }}</div>
-                                    {% if est.descripcion %}
-                                        <div class="estacion-desc">{{ est.descripcion }}</div>
-                                    {% endif %}
-                                    <div class="estacion-estado est-{{ est.estado }}">{{ est.estado }}</div>
-                                    {% if est.notas %}
-                                        <div style="margin-top: 4px; font-size: 11px; color: #666;">Notas: {{ est.notas }}</div>
-                                    {% endif %}
-                                </div>
-                                <div class="estacion-actions">
-                                    {% if est.estado != 'completada' %}
-                                        <button class="btn-tiny" onclick="updateEstacionEstado('{{ est.id }}', 'en_curso')">Iniciar</button>
-                                    {% endif %}
-                                    {% if est.estado == 'en_curso' %}
-                                        <button class="btn-tiny" onclick="updateEstacionEstado('{{ est.id }}', 'completada')" style="background: #c8e6c9; color: #1b5e20;">Completar</button>
-                                    {% endif %}
-                                    <button class="btn-tiny" onclick="editarEstacion('{{ est.id }}', '{{ est.nombre }}', '{{ est.descripcion or '' }}')">Editar</button>
-                                </div>
-                            </li>
-                            {% endfor %}
-                        </ul>
-                    </div>
-                {% else %}
-                    <div style="padding: 16px; text-align: center; color: #aaa; background: #fafafa; border-radius: 6px;">
-                        Sin estaciones. Agrégalas abajo.
-                    </div>
-                {% endif %}
+                        <!-- header details row -->
+                        <div style="display:flex; border-bottom:3px solid #000;">
+                            <div style="flex:0 0 120px; border-right:1px solid #000; padding:8px; background:#dff0ff; text-align:center;">CALIDAD:<br>{{ hoja.calidad or '' }}</div>
+                            <div style="flex:0 0 100px; border-right:1px solid #000; padding:8px; text-align:center;">{{ hoja.pn or '' }}</div>
+                            <div style="flex:1; padding:8px; text-align:center; background:#00b0d6; color:#fff; font-weight:700;">{{ hoja.nombre }}</div>
+                            <div style="flex:0 0 140px; border-left:1px solid #000; padding:8px; text-align:center;">FECHA DE SALIDA<br>{{ hoja.fecha_salida[:10] if hoja.fecha_salida }}</div>
+                        </div>
 
-                <!-- Agregar nueva estación a esta hoja -->
-                <div style="margin-top: 12px;">
-                    <button class="btn-tiny" onclick="toggleForm('form-est-{{ hoja.id }}')">+ Agregar estación</button>
-                    <div id="form-est-{{ hoja.id }}" style="display: none; margin-top: 12px; padding: 12px; background: #f5f5f5; border-radius: 6px;">
-                        <div class="form-group">
-                            <label>Nombre de la estación</label>
-                            <input type="text" id="nombre-est-{{ hoja.id }}" placeholder="Ej: Torneado, Fresado, Ensamble..." />
-                        </div>
-                        <div class="form-group">
-                            <label>Descripción (opcional)</label>
-                            <textarea id="desc-est-{{ hoja.id }}" placeholder="Detalles del proceso..."></textarea>
-                        </div>
-                        <div style="display: flex; gap: 8px;">
-                            <button class="btn btn-primary" onclick="crearEstacion('{{ hoja.id }}')">Crear estación</button>
-                            <button class="btn btn-secondary" onclick="toggleForm('form-est-{{ hoja.id }}')">Cancelar</button>
+                        <!-- table and side metadata -->
+                        <div style="display:flex;">
+                            <div style="flex:1;">
+                                <table style="width:100%; border-collapse:collapse;">
+                                    <thead>
+                                        <tr style="background:#d6eaf8;">
+                                            <th style="border:1px solid #000; width:40px;">PROC.</th>
+                                            <th style="border:1px solid #000; width:100px;">C.T.</th>
+                                            <th style="border:1px solid #000;">OPERACIÓN</th>
+                                            <th style="border:1px solid #000; width:90px;">T/E</th>
+                                            <th style="border:1px solid #000; width:90px;">T/CT</th>
+                                            <th style="border:1px solid #000; width:90px;">T/CO</th>
+                                            <th style="border:1px solid #000; width:90px;">T/O</th>
+                                            <th style="border:1px solid #000; width:110px;">TOTAL DE PIEZAS</th>
+                                            <th style="border:1px solid #000; width:120px;">OPERADOR</th>
+                                            <th style="border:1px solid #000; width:100px;">EFICIENCIA</th>
+                                            <th style="border:1px solid #000; width:150px;">FIRMA DEL SUPERVISOR</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for i in range(1,16) %}
+                                            {% set est_list = (hoja.estaciones|selectattr('orden','equalto',i)|list) %}
+                                            {% set est = est_list[0] if est_list|length > 0 else None %}
+                                        <tr style="height:36px;">
+                                            <td style="border:1px solid #000; text-align:center;">{{ i }}°</td>
+                                            <td style="border:1px solid #000; text-align:center;">{{ est.centro_trabajo if est else '' }}</td>
+                                            <td style="border:1px solid #000; padding:6px;">{{ est.operacion if est else '' }}</td>
+                                            <td style="border:1px solid #000; text-align:center;">{{ est.t_e if est else '' }}</td>
+                                            <td style="border:1px solid #000; text-align:center;">{{ est.t_tct if est else '' }}</td>
+                                            <td style="border:1px solid #000; text-align:center;">{{ est.t_tco if est else '' }}</td>
+                                            <td style="border:1px solid #000; text-align:center;">{{ est.t_to if est else '' }}</td>
+                                            <td style="border:1px solid #000; text-align:center;">{{ est.total_piezas if est else '' }}</td>
+                                            <td style="border:1px solid #000; text-align:center;">{{ est.operador if est else '' }}</td>
+                                            <td style="border:1px solid #000; text-align:center;">{{ est.eficiencia if est else '' }}</td>
+                                            <td style="border:1px solid #000; text-align:center;"></td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                                <!-- footer area inside main sheet -->
+                                <div style="display:flex; margin-top:8px;">
+                                    <div style="flex:1; background:#cfe2f3; padding:8px; border:1px solid #000;">TOTAL DE TIEMPO<br>{{ hoja.total_tiempo or '' }}</div>
+                                    <div style="width:160px; background:#cfe2f3; padding:8px; border:1px solid #000; text-align:center;">DIAS A LABORAR<br>{{ hoja.dias_a_laborar or '' }}</div>
+                                    <div style="width:160px; background:#cfe2f3; padding:8px; border:1px solid #000; text-align:center;">FECHA DE TERMINO<br>{{ hoja.fecha_termino[:10] if hoja.fecha_termino }}</div>
+                                </div>
+
+                                <div style="display:flex; gap:12px; margin-top:8px;">
+                                    <div style="flex:1; border:1px solid #000; padding:8px; min-height:100px;">APROBADA<br>{{ 'SI' if hoja.aprobada else '' }}</div>
+                                    <div style="flex:1; border:1px solid #000; padding:8px; min-height:100px;">RECHAZADA<br>{{ 'SI' if hoja.rechazada else '' }}</div>
+                                    <div style="flex:1; border:1px solid #000; padding:8px; min-height:100px;">SCRAP<br>{{ 'SI' if hoja.scrap else '' }}</div>
+                                    <div style="flex:1; border:1px solid #000; padding:8px; min-height:100px;">RETRABAJO<br>{{ 'SI' if hoja.retrabajo else '' }}</div>
+                                </div>
+
+                                <div style="display:flex; gap:12px; margin-top:8px;">
+                                    <div style="flex:1; border:1px solid #000; padding:8px;">ING: {{ hoja.supervisor or '' }}<br>FIRMA:</div>
+                                    <div style="flex:1; border:1px solid #000; padding:8px;">ING: {{ hoja.operador or '' }}<br>FIRMA:</div>
+                                    <div style="flex:2; border:1px solid #000; padding:8px;">COMENTARIOS</div>
+                                </div>
+                            </div>
+
+                            <!-- Right metadata column -->
+                            <div style="width:220px; border-left:3px solid #000;">
+                                <div style="border-bottom:1px solid #000; padding:8px; text-align:center; background:#e9f6fb;">CANTIDAD DE PIEZAS<br><span style="font-size:28px; font-weight:800;">{{ hoja.cantidad_piezas or '' }}</span></div>
+                                <div style="padding:8px; border-bottom:1px dashed #999;">ORDEN DE TRABAJO H.R<br>{{ hoja.orden_trabajo_hr or '' }}</div>
+                                <div style="padding:8px; border-bottom:1px dashed #999;">ORDEN DE TRABAJO P.T<br>{{ hoja.orden_trabajo_pt or '' }}</div>
+                                <div style="padding:8px; border-bottom:1px dashed #999;">ALMACEN<br>{{ hoja.almacen or '' }}</div>
+                                <div style="padding:8px; border-bottom:1px dashed #999;">NO. SIN ORDEN<br>{{ hoja.no_sin_orden or '' }}</div>
+                                <div style="padding:8px; border-bottom:1px dashed #999; background:#cfe2f3; text-align:center;">MATERIA PRIMA<br>{{ hoja.materia_prima or '' }}</div>
+                                <div style="height:80px; background:#00ff44; margin:8px; border:2px solid #000;"></div>
+                            </div>
                         </div>
                     </div>
+
                 </div>
             </div>
             {% endfor %}
         {% else %}
-            <div style="text-align: center; padding: 40px; color: #aaa; background: #fafafa; border-radius: 8px;">
-                Sin hojas de ruta. Crea una abajo.
-            </div>
+            <div style="text-align:center; padding:40px; color:#aaa; background:#fafafa; border-radius:8px;">Sin hojas de ruta. Crea una abajo.</div>
         {% endif %}
 
-        <!-- Crear nueva hoja de ruta -->
-        <div class="form-section">
-            <h4 style="margin-top: 0;">Crear nueva hoja de ruta</h4>
-            <div class="form-group">
-                <label>Nombre de la hoja</label>
-                <input type="text" id="nombre-hoja" placeholder="Ej: Producción Lote 001" />
-            </div>
-            <div class="form-group">
-                <label>Descripción (opcional)</label>
-                <textarea id="desc-hoja" placeholder="Detalles del lote..."></textarea>
-            </div>
-            <div style="display: flex; gap: 8px;">
-                <button class="btn btn-primary" onclick="crearHoja()">Crear hoja</button>
-            </div>
+        <!-- small action form area kept minimal -->
+        <div style="margin-top:12px;">
+            <button class="btn btn-primary" onclick="location.reload()">Refrescar</button>
         </div>
     </div>
 
