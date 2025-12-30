@@ -46,6 +46,12 @@
                                     <span>OK</span>
                                 </label>
                                 <input type="file" name="evidence_{{ loop.index0 }}" accept="image/*" />
+                                <div style="margin-top:6px; display:flex; gap:6px; align-items:center;">
+                                    <input type="file" name="model_{{ loop.index0 }}" accept=".stl" />
+                                    {% if comp.stl_url %}
+                                        <button type="button" class="btn" onclick="openSTLViewer('{{ comp.stl_url }}')" style="padding:6px 8px; border:1px solid #ddd; background:#fff;">Ver 3D</button>
+                                    {% endif %}
+                                </div>
                             </div>
                         </div>
                         {% endfor %}
@@ -68,6 +74,93 @@
         <div style="margin-top:12px; padding:10px; background:#e8f5e9; border:1px solid #c8e6c9; border-radius:6px; color:#256029;">Informe guardado.</div>
         {% endif %}
     </div>
+    <!-- Modal / visor 3D -->
+    <div id="stlModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); align-items:center; justify-content:center; z-index:9999;">
+        <div style="width:80%; height:80%; background:#fff; position:relative; border-radius:8px; overflow:hidden;">
+            <button id="stlClose" style="position:absolute; right:10px; top:10px; z-index:10; padding:6px 8px;">Cerrar</button>
+            <div id="stlViewer" style="width:100%; height:100%;"></div>
+        </div>
+    </div>
+
+    <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.152.2/build/three.module.js';
+    import { STLLoader } from 'https://unpkg.com/three@0.152.2/examples/jsm/loaders/STLLoader.js';
+
+    let renderer, scene, camera, currentMesh, animationId;
+
+    function initRenderer(container){
+        if(renderer) return;
+        const el = container;
+        renderer = new THREE.WebGLRenderer({antialias:true});
+        renderer.setSize(el.clientWidth, el.clientHeight);
+        renderer.setPixelRatio(window.devicePixelRatio || 1);
+        el.appendChild(renderer.domElement);
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xf0f0f0);
+        camera = new THREE.PerspectiveCamera(45, el.clientWidth / el.clientHeight, 0.1, 1000);
+        camera.position.set(0, 0, 100);
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(0, 0, 1).normalize();
+        scene.add(light);
+        const amb = new THREE.AmbientLight(0x888888);
+        scene.add(amb);
+    }
+
+    function fitCameraToObject(object, camera, offset = 1.25) {
+        const box = new THREE.Box3().setFromObject(object);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        const maxSize = Math.max(size.x, size.y, size.z);
+        const fitHeightDistance = maxSize / (2 * Math.atan(Math.PI * camera.fov / 360));
+        const distance = fitHeightDistance * offset;
+        camera.position.copy(center);
+        camera.position.x += distance;
+        camera.position.y += distance;
+        camera.position.z += distance;
+        camera.lookAt(center);
+        camera.updateProjectionMatrix();
+    }
+
+    function animate(){
+        animationId = requestAnimationFrame(animate);
+        if(currentMesh) currentMesh.rotation.y += 0.01;
+        renderer.render(scene, camera);
+    }
+
+    window.openSTLViewer = function(url){
+        const modal = document.getElementById('stlModal');
+        const viewer = document.getElementById('stlViewer');
+        modal.style.display = 'flex';
+        if(renderer){
+            while(viewer.firstChild) viewer.removeChild(viewer.firstChild);
+            renderer = null; scene = null; camera = null; currentMesh = null;
+        }
+        initRenderer(viewer);
+        const loader = new STLLoader();
+        const absUrl = '/' + url.replace(/\\\\/g, '/');
+        loader.load(absUrl, function(geometry){
+            const material = new THREE.MeshStandardMaterial({color:0x7f7f7f, metalness:0.5, roughness:0.5});
+            const mesh = new THREE.Mesh(geometry, material);
+            scene.add(mesh);
+            currentMesh = mesh;
+            fitCameraToObject(mesh, camera, 2.0);
+            animate();
+        }, undefined, function(err){
+            console.error('Error cargando STL', err);
+            alert('No se pudo cargar el archivo STL.');
+        });
+    }
+
+    document.getElementById('stlClose').addEventListener('click', function(){
+        const modal = document.getElementById('stlModal');
+        modal.style.display = 'none';
+        if(animationId) cancelAnimationFrame(animationId);
+        if(renderer && renderer.domElement && renderer.domElement.parentNode){
+            renderer.domElement.parentNode.removeChild(renderer.domElement);
+        }
+        renderer = null; scene = null; camera = null; currentMesh = null;
+    });
+    </script>
 </body>
 </html>
 <!-- Template removed: control_calidad_detalle (reverted) -->

@@ -1,5 +1,5 @@
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, Máquina, ComponenteMáquina
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, Máquina, ComponenteMáquina, HojaRuta, EstacionTrabajo
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -365,6 +365,9 @@ def control_calidad_maquina(maquina_id):
         reports_dir = os.path.join('uploads', 'qc_reports')
         images_dir = os.path.join(reports_dir, 'images')
         os.makedirs(images_dir, exist_ok=True)
+        # Directorio para guardar modelos 3D (STL)
+        models_dir = os.path.join('uploads', 'models')
+        os.makedirs(models_dir, exist_ok=True)
 
         # Crear QCReport
         report = QCReport(maquina_id=maquina.id, usuario=session.get('user'), observaciones=request.form.get('observaciones'))
@@ -375,12 +378,28 @@ def control_calidad_maquina(maquina_id):
         for idx, comp in enumerate(componentes):
             checked = bool(request.form.get(f'check_{idx}'))
             evidencia_file = request.files.get(f'evidence_{idx}')
+            model_file = request.files.get(f'model_{idx}')
             evidence_url = None
             if evidencia_file and evidencia_file.filename:
                 filename = secure_filename(f"qc_m{maquina.id}_{comp.id}_{int(time())}_{evidencia_file.filename}")
                 save_path = os.path.join(images_dir, filename)
                 evidencia_file.save(save_path)
                 evidence_url = os.path.relpath(save_path, start=os.getcwd())
+
+            # Guardar modelo STL (si se sube)
+            stl_url = None
+            if model_file and model_file.filename:
+                # Forzar extensión .stl si viene con nombre válido
+                model_filename = secure_filename(f"model_m{maquina.id}_c{comp.id}_{int(time())}_{model_file.filename}")
+                # asegurarse de que la extensión sea .stl
+                if not model_filename.lower().endswith('.stl'):
+                    model_filename = model_filename + '.stl'
+                model_save_path = os.path.join(models_dir, model_filename)
+                try:
+                    model_file.save(model_save_path)
+                    stl_url = os.path.relpath(model_save_path, start=os.getcwd())
+                except Exception as e:
+                    logger.error(f"Error guardando STL: {e}", exc_info=True)
 
             item = QCItem(report_id=report.id, nombre=comp.nombre, checked=checked, evidence_url=evidence_url)
             db.session.add(item)
@@ -392,12 +411,197 @@ def control_calidad_maquina(maquina_id):
             db.session.rollback()
             logger.error(f"Error guardando informe QC en BD: {e}", exc_info=True)
 
-    # Crear estructura de datos para la plantilla
-    comp_list = [{'nombre': c.nombre, 'descripcion': c.descripcion, 'image_url': None, 'checked': False} for c in componentes]
+    # Crear estructura de datos para la plantilla (incluye id y posible STL)
+    models_dir = os.path.join('uploads', 'models')
+    comp_list = []
+    for c in componentes:
+        # Buscar un STL existente para este componente (por convención de nombre)
+        stl_url = None
+        try:
+            if os.path.exists(models_dir):
+                for fname in os.listdir(models_dir):
+                    if fname.lower().startswith(f"model_m{maquina.id}_c{c.id}_") and fname.lower().endswith('.stl'):
+                        # tomar el primero (más reciente sería mejor, pero esto es suficiente)
+                        stl_url = os.path.relpath(os.path.join(models_dir, fname), start=os.getcwd())
+                        break
+        except Exception:
+            stl_url = None
+
+        comp_list.append({
+            'id': c.id,
+            'nombre': c.nombre,
+            'descripcion': c.descripcion,
+            'image_url': None,
+            'checked': False,
+            'stl_url': stl_url
+        })
 
     return render_template('control_calidad_detalle.html', maquina=maquina, componentes=comp_list, informe_guardado=informe_guardado)
 
 
+@app.route('/uploads/<path:filename>')
+def uploaded_file(filename):
+    # Sirve archivos desde la carpeta uploads de forma segura
+    uploads_root = os.path.join(os.getcwd(), 'uploads')
+    try:
+        return send_from_directory(uploads_root, filename)
+    except Exception:
+        return ('', 404)
+
+
+# ==================== MÓDULO HOJAS DE RUTA ====================
+
+@app.route('/hojas_ruta')
+@login_required
+def hojas_ruta_list():
+    """Lista de máquinas con sus hojas de ruta activas y estado de producción."""
+    maquinas = Máquina.query.order_by(Máquina.nombre.asc()).all()
+    
+    # Obtener hoja activa para cada máquina
+    maquinas_data = []
+    for maq in maquinas:
+        hoja_activa = HojaRuta.query.filter_by(maquina_id=maq.id, estado='activa').first()
+        estacion_actual = None
+        if hoja_activa:
+            estacion_actual = EstacionTrabajo.query.filter_by(
+                hoja_ruta_id=hoja_activa.id, 
+                estado='en_curso'
+            ).order_by(EstacionTrabajo.orden).first()
+        
+        maquinas_data.append({
+            'id': maq.id,
+            'nombre': maq.nombre,
+            'descripcion': maq.descripcion,
+            'imagen_url': maq.imagen_url,
+            'hoja_activa': hoja_activa.to_dict() if hoja_activa else None,
+            'estacion_actual': estacion_actual.nombre if estacion_actual else 'Sin producción'
+        })
+    
+    return render_template('hojas_ruta_list.html', maquinas=maquinas_data)
+
+
+@app.route('/hojas_ruta/<int:maquina_id>')
+@login_required
+def hojas_ruta_detalle(maquina_id):
+    """Detalle de hojas de ruta para una máquina específica."""
+    maquina = Máquina.query.get_or_404(maquina_id)
+    hojas = HojaRuta.query.filter_by(maquina_id=maquina_id).order_by(HojaRuta.fecha_creacion.desc()).all()
+    
+    hojas_data = []
+    for hoja in hojas:
+        estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
+        hojas_data.append({
+            'id': hoja.id,
+            'nombre': hoja.nombre,
+            'descripcion': hoja.descripcion,
+            'estado': hoja.estado,
+            'fecha_creacion': hoja.fecha_creacion.isoformat(),
+            'estaciones': [e.to_dict() for e in estaciones]
+        })
+    
+    return render_template('hojas_ruta_detalle.html', maquina=maquina, hojas=hojas_data)
+
+
+# API para crear / actualizar hojas de ruta
+
+@app.route('/api/hojas_ruta', methods=['POST'])
+@login_required
+def api_crear_hoja_ruta():
+    """Crear una nueva hoja de ruta para una máquina."""
+    data = request.get_json()
+    maquina_id = data.get('maquina_id')
+    nombre = data.get('nombre')
+    descripcion = data.get('descripcion')
+    
+    if not maquina_id or not nombre:
+        return jsonify({'error': 'maquina_id y nombre requeridos'}), 400
+    
+    hoja = HojaRuta(
+        maquina_id=maquina_id,
+        nombre=nombre,
+        descripcion=descripcion,
+        estado='activa'
+    )
+    db.session.add(hoja)
+    db.session.commit()
+    
+    logger.info(f"[HOJAS_RUTA] Nueva hoja creada: {hoja.id} para máquina {maquina_id}")
+    return jsonify(hoja.to_dict()), 201
+
+
+@app.route('/api/hojas_ruta/<int:hoja_id>', methods=['PUT'])
+@login_required
+def api_actualizar_hoja_ruta(hoja_id):
+    """Actualizar estado de una hoja de ruta."""
+    hoja = HojaRuta.query.get_or_404(hoja_id)
+    data = request.get_json()
+    
+    if 'estado' in data:
+        hoja.estado = data['estado']
+    if 'nombre' in data:
+        hoja.nombre = data['nombre']
+    if 'descripcion' in data:
+        hoja.descripcion = data['descripcion']
+    
+    db.session.commit()
+    logger.info(f"[HOJAS_RUTA] Hoja actualizada: {hoja_id}")
+    return jsonify(hoja.to_dict()), 200
+
+
+@app.route('/api/estaciones', methods=['POST'])
+@login_required
+def api_crear_estacion():
+    """Crear una nueva estación de trabajo en una hoja de ruta."""
+    data = request.get_json()
+    hoja_ruta_id = data.get('hoja_ruta_id')
+    nombre = data.get('nombre')
+    
+    if not hoja_ruta_id or not nombre:
+        return jsonify({'error': 'hoja_ruta_id y nombre requeridos'}), 400
+    
+    # Obtener orden máxima actual
+    max_orden = db.session.query(db.func.max(EstacionTrabajo.orden)).filter_by(
+        hoja_ruta_id=hoja_ruta_id
+    ).scalar() or 0
+    
+    estacion = EstacionTrabajo(
+        hoja_ruta_id=hoja_ruta_id,
+        nombre=nombre,
+        descripcion=data.get('descripcion'),
+        orden=max_orden + 1,
+        estado='pendiente'
+    )
+    db.session.add(estacion)
+    db.session.commit()
+    
+    logger.info(f"[HOJAS_RUTA] Nueva estación creada: {estacion.id}")
+    return jsonify(estacion.to_dict()), 201
+
+
+@app.route('/api/estaciones/<int:estacion_id>', methods=['PUT'])
+@login_required
+def api_actualizar_estacion(estacion_id):
+    """Actualizar estado y detalles de una estación."""
+    estacion = EstacionTrabajo.query.get_or_404(estacion_id)
+    data = request.get_json()
+    
+    if 'estado' in data:
+        estacion.estado = data['estado']
+        if data['estado'] == 'en_curso' and not estacion.fecha_inicio:
+            estacion.fecha_inicio = datetime.utcnow()
+        elif data['estado'] == 'completada' and not estacion.fecha_finalizacion:
+            estacion.fecha_finalizacion = datetime.utcnow()
+    
+    if 'nombre' in data:
+        estacion.nombre = data['nombre']
+    if 'descripcion' in data:
+        estacion.descripcion = data['descripcion']
+    if 'notas' in data:
+        estacion.notas = data['notas']
+    
+    db.session.commit()
+    logger.info(f"[HOJAS_RUTA] Estación actualizada: {estacion_id}")
+    return jsonify(estacion.to_dict()), 200
 
 
 @app.route('/admin')

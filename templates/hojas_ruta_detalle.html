@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hojas de Ruta — {{ maquina.nombre }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .hoja-card {
+            border: 1px solid #e6e6e6;
+            border-radius: 8px;
+            padding: 16px;
+            background: #fff;
+            margin-bottom: 16px;
+        }
+        .hoja-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            border-bottom: 1px solid #f0f0f0;
+            padding-bottom: 12px;
+        }
+        .hoja-nombre {
+            font-size: 16px;
+            font-weight: 600;
+        }
+        .hoja-estado {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            display: inline-block;
+        }
+        .estado-activa {
+            background: #c8e6c9;
+            color: #1b5e20;
+        }
+        .estado-pausada {
+            background: #fff3cd;
+            color: #664d03;
+        }
+        .estado-completada {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        .estaciones-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .estacion-item {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            padding: 12px;
+            background: #fafafa;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            position: relative;
+        }
+        .estacion-orden {
+            width: 32px;
+            height: 32px;
+            background: #0b74de;
+            color: #fff;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+        .estacion-info {
+            flex: 1;
+        }
+        .estacion-nombre {
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .estacion-desc {
+            font-size: 12px;
+            color: #666;
+        }
+        .estacion-estado {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 600;
+            background: #e0e0e0;
+            color: #333;
+            margin-top: 4px;
+        }
+        .est-pendiente {
+            background: #f5f5f5;
+            color: #666;
+        }
+        .est-en_curso {
+            background: #fff9e6;
+            color: #664d03;
+        }
+        .est-completada {
+            background: #e8f5e9;
+            color: #1b5e20;
+        }
+        .estacion-actions {
+            display: flex;
+            gap: 6px;
+        }
+        .btn-tiny {
+            padding: 4px 8px;
+            font-size: 11px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            background: #fff;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-tiny:hover {
+            background: #f0f0f0;
+            border-color: #0b74de;
+            color: #0b74de;
+        }
+        .form-section {
+            background: #f9f9f9;
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid #e6e6e6;
+            margin-top: 16px;
+        }
+        .form-group {
+            margin-bottom: 12px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: #333;
+        }
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 13px;
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+        .form-group textarea {
+            resize: vertical;
+            min-height: 60px;
+        }
+        .btn {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: #0b74de;
+            color: #fff;
+        }
+        .btn-primary:hover {
+            background: #0963cc;
+        }
+        .btn-secondary {
+            background: #e6e6e6;
+            color: #333;
+        }
+        .btn-secondary:hover {
+            background: #d6d6d6;
+        }
+    </style>
+</head>
+<body>
+    {% include '_sidebar.html' %}
+
+    <div class="container">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+            <a href="/hojas_ruta" style="text-decoration: none; color: #0b74de;">← Volver</a>
+            <h2 style="margin: 0;">{{ maquina.nombre }} — Hojas de Ruta</h2>
+        </div>
+
+        {% if hojas %}
+            {% for hoja in hojas %}
+            <div class="hoja-card">
+                <div class="hoja-header">
+                    <div>
+                        <div class="hoja-nombre">{{ hoja.nombre }}</div>
+                        {% if hoja.descripcion %}
+                            <div style="font-size: 12px; color: #666; margin-top: 4px;">{{ hoja.descripcion }}</div>
+                        {% endif %}
+                        <div style="font-size: 11px; color: #999; margin-top: 6px;">Creada: {{ hoja.fecha_creacion[:10] }}</div>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <span class="hoja-estado estado-{{ hoja.estado }}">{{ hoja.estado }}</span>
+                        <div style="display: flex; gap: 6px;">
+                            <button class="btn-tiny" onclick="toggleHojaEstado('{{ hoja.id }}')">
+                                {% if hoja.estado == 'activa' %}Pausar{% else %}Reanudar{% endif %}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {% if hoja.estaciones %}
+                    <div style="margin-top: 12px;">
+                        <h4 style="margin: 0 0 8px 0; font-size: 13px;">Estaciones de trabajo</h4>
+                        <ul class="estaciones-list">
+                            {% for est in hoja.estaciones %}
+                            <li class="estacion-item">
+                                <div class="estacion-orden">{{ est.orden }}</div>
+                                <div class="estacion-info">
+                                    <div class="estacion-nombre">{{ est.nombre }}</div>
+                                    {% if est.descripcion %}
+                                        <div class="estacion-desc">{{ est.descripcion }}</div>
+                                    {% endif %}
+                                    <div class="estacion-estado est-{{ est.estado }}">{{ est.estado }}</div>
+                                    {% if est.notas %}
+                                        <div style="margin-top: 4px; font-size: 11px; color: #666;">Notas: {{ est.notas }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="estacion-actions">
+                                    {% if est.estado != 'completada' %}
+                                        <button class="btn-tiny" onclick="updateEstacionEstado('{{ est.id }}', 'en_curso')">Iniciar</button>
+                                    {% endif %}
+                                    {% if est.estado == 'en_curso' %}
+                                        <button class="btn-tiny" onclick="updateEstacionEstado('{{ est.id }}', 'completada')" style="background: #c8e6c9; color: #1b5e20;">Completar</button>
+                                    {% endif %}
+                                    <button class="btn-tiny" onclick="editarEstacion('{{ est.id }}', '{{ est.nombre }}', '{{ est.descripcion or '' }}')">Editar</button>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% else %}
+                    <div style="padding: 16px; text-align: center; color: #aaa; background: #fafafa; border-radius: 6px;">
+                        Sin estaciones. Agrégalas abajo.
+                    </div>
+                {% endif %}
+
+                <!-- Agregar nueva estación a esta hoja -->
+                <div style="margin-top: 12px;">
+                    <button class="btn-tiny" onclick="toggleForm('form-est-{{ hoja.id }}')">+ Agregar estación</button>
+                    <div id="form-est-{{ hoja.id }}" style="display: none; margin-top: 12px; padding: 12px; background: #f5f5f5; border-radius: 6px;">
+                        <div class="form-group">
+                            <label>Nombre de la estación</label>
+                            <input type="text" id="nombre-est-{{ hoja.id }}" placeholder="Ej: Torneado, Fresado, Ensamble..." />
+                        </div>
+                        <div class="form-group">
+                            <label>Descripción (opcional)</label>
+                            <textarea id="desc-est-{{ hoja.id }}" placeholder="Detalles del proceso..."></textarea>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-primary" onclick="crearEstacion('{{ hoja.id }}')">Crear estación</button>
+                            <button class="btn btn-secondary" onclick="toggleForm('form-est-{{ hoja.id }}')">Cancelar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div style="text-align: center; padding: 40px; color: #aaa; background: #fafafa; border-radius: 8px;">
+                Sin hojas de ruta. Crea una abajo.
+            </div>
+        {% endif %}
+
+        <!-- Crear nueva hoja de ruta -->
+        <div class="form-section">
+            <h4 style="margin-top: 0;">Crear nueva hoja de ruta</h4>
+            <div class="form-group">
+                <label>Nombre de la hoja</label>
+                <input type="text" id="nombre-hoja" placeholder="Ej: Producción Lote 001" />
+            </div>
+            <div class="form-group">
+                <label>Descripción (opcional)</label>
+                <textarea id="desc-hoja" placeholder="Detalles del lote..."></textarea>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button class="btn btn-primary" onclick="crearHoja()">Crear hoja</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    function toggleForm(formId) {
+        const form = document.getElementById(formId);
+        form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function crearHoja() {
+        const nombre = document.getElementById('nombre-hoja').value.trim();
+        const desc = document.getElementById('desc-hoja').value.trim();
+        
+        if (!nombre) {
+            alert('El nombre es requerido');
+            return;
+        }
+
+        fetch('/api/hojas_ruta', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                maquina_id: {{ maquina.id }},
+                nombre: nombre,
+                descripcion: desc || null
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                alert('Error: ' + data.error);
+            } else {
+                location.reload();
+            }
+        })
+        .catch(err => {
+            console.error('Error:', err);
+            alert('Error al crear hoja');
+        });
+    }
+
+    function crearEstacion(hojaId) {
+        const nombre = document.getElementById('nombre-est-' + hojaId).value.trim();
+        const desc = document.getElementById('desc-est-' + hojaId).value.trim();
+
+        if (!nombre) {
+            alert('El nombre es requerido');
+            return;
+        }
+
+        fetch('/api/estaciones', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                hoja_ruta_id: hojaId,
+                nombre: nombre,
+                descripcion: desc || null
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                alert('Error: ' + data.error);
+            } else {
+                location.reload();
+            }
+        })
+        .catch(err => {
+            console.error('Error:', err);
+            alert('Error al crear estación');
+        });
+    }
+
+    function updateEstacionEstado(estacionId, nuevoEstado) {
+        fetch('/api/estaciones/' + estacionId, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ estado: nuevoEstado })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                alert('Error: ' + data.error);
+            } else {
+                location.reload();
+            }
+        })
+        .catch(err => {
+            console.error('Error:', err);
+            alert('Error al actualizar estado');
+        });
+    }
+
+    function toggleHojaEstado(hojaId) {
+        // Obtener estado actual y cambiar
+        const newEstado = prompt('Estado: (activa/pausada/completada)');
+        if (!newEstado) return;
+
+        fetch('/api/hojas_ruta/' + hojaId, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ estado: newEstado })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                alert('Error: ' + data.error);
+            } else {
+                location.reload();
+            }
+        })
+        .catch(err => {
+            console.error('Error:', err);
+            alert('Error al cambiar estado');
+        });
+    }
+
+    function editarEstacion(estacionId, nombre, desc) {
+        const newNombre = prompt('Nombre:', nombre);
+        if (newNombre === null) return;
+
+        fetch('/api/estaciones/' + estacionId, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nombre: newNombre, descripcion: desc })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                alert('Error: ' + data.error);
+            } else {
+                location.reload();
+            }
+        })
+        .catch(err => {
+            console.error('Error:', err);
+            alert('Error al editar');
+        });
+    }
+    </script>
+</body>
+</html>

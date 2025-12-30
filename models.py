@@ -409,3 +409,62 @@ class ComponenteMáquina(db.Model):
             'descripcion': self.descripcion,
             'orden': self.orden
         }
+
+
+class HojaRuta(db.Model):
+    """Hojas de ruta de producción para máquinas."""
+    __tablename__ = 'hojas_ruta'
+
+    id = db.Column(db.Integer, primary_key=True)
+    maquina_id = db.Column(db.Integer, db.ForeignKey('maquinas.id'), nullable=False)
+    nombre = db.Column(db.String(255), nullable=False)  # Ej: "Producción Lote 001"
+    descripcion = db.Column(db.Text, nullable=True)
+    estado = db.Column(db.String(20), default='activa')  # activa, pausada, completada
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relaciones
+    maquina = db.relationship('Máquina', backref='hojas_ruta')
+    estaciones = db.relationship('EstacionTrabajo', backref='hoja_ruta', lazy=True, cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'maquina_id': self.maquina_id,
+            'nombre': self.nombre,
+            'descripcion': self.descripcion,
+            'estado': self.estado,
+            'fecha_creacion': self.fecha_creacion.isoformat(),
+            'fecha_actualizacion': self.fecha_actualizacion.isoformat(),
+            'estaciones': [e.to_dict() for e in self.estaciones]
+        }
+
+
+class EstacionTrabajo(db.Model):
+    """Estaciones o pasos dentro de una hoja de ruta."""
+    __tablename__ = 'estaciones_trabajo'
+
+    id = db.Column(db.Integer, primary_key=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False)
+    nombre = db.Column(db.String(255), nullable=False)  # Ej: "Torneado", "Fresado"
+    descripcion = db.Column(db.Text, nullable=True)
+    orden = db.Column(db.Integer, default=0)  # Orden de ejecución
+    estado = db.Column(db.String(20), default='pendiente')  # pendiente, en_curso, completada
+    fecha_inicio = db.Column(db.DateTime, nullable=True)
+    fecha_finalizacion = db.Column(db.DateTime, nullable=True)
+    notas = db.Column(db.Text, nullable=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'hoja_ruta_id': self.hoja_ruta_id,
+            'nombre': self.nombre,
+            'descripcion': self.descripcion,
+            'orden': self.orden,
+            'estado': self.estado,
+            'fecha_inicio': self.fecha_inicio.isoformat() if self.fecha_inicio else None,
+            'fecha_finalizacion': self.fecha_finalizacion.isoformat() if self.fecha_finalizacion else None,
+            'notas': self.notas,
+            'fecha_creacion': self.fecha_creacion.isoformat()
+        }

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hojas de Ruta de Producción</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .maquina-card {
+            border: 1px solid #e6e6e6;
+            border-radius: 8px;
+            padding: 16px;
+            background: #fff;
+            margin-bottom: 12px;
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+        .maquina-image {
+            width: 120px;
+            height: 120px;
+            background: #f5f5f5;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .maquina-image img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        .maquina-info {
+            flex: 1;
+        }
+        .maquina-nombre {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .maquina-desc {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .status-produciendo {
+            background: #c8e6c9;
+            color: #1b5e20;
+        }
+        .status-parado {
+            background: #ffccbc;
+            color: #bf360c;
+        }
+        .maquina-actions {
+            display: flex;
+            gap: 8px;
+            flex-direction: column;
+        }
+        .btn-small {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #fff;
+            cursor: pointer;
+            font-size: 13px;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        .btn-small:hover {
+            background: #f9f9f9;
+            border-color: #0b74de;
+            color: #0b74de;
+        }
+        .btn-primary-small {
+            background: #0b74de;
+            color: #fff;
+            border-color: #0b74de;
+        }
+        .btn-primary-small:hover {
+            background: #0963cc;
+        }
+    </style>
+</head>
+<body>
+    {% include '_sidebar.html' %}
+
+    <div class="container">
+        <h2>Hojas de Ruta — Producción en Máquinas</h2>
+        <p style="color: #666; margin-top: 8px;">Selecciona una máquina para ver y gestionar sus hojas de ruta y estaciones de trabajo.</p>
+
+        <div style="margin-top: 24px;">
+            {% if maquinas %}
+                {% for maq in maquinas %}
+                <div class="maquina-card">
+                    <div class="maquina-image">
+                        {% if maq.imagen_url %}
+                            <img src="{{ maq.imagen_url }}" alt="{{ maq.nombre }}" />
+                        {% else %}
+                            <div style="color: #aaa; font-size: 12px; text-align: center;">Sin imagen</div>
+                        {% endif %}
+                    </div>
+                    <div class="maquina-info">
+                        <div class="maquina-nombre">{{ maq.nombre }}</div>
+                        <div class="maquina-desc">{{ maq.descripcion }}</div>
+                        <div>
+                            {% if maq.hoja_activa %}
+                                <span class="status-badge status-produciendo">🏭 Produciendo</span>
+                                <div style="margin-top: 4px; font-size: 12px; color: #666;">
+                                    Hoja: <strong>{{ maq.hoja_activa.nombre }}</strong><br>
+                                    Estación actual: <strong>{{ maq.estacion_actual }}</strong>
+                                </div>
+                            {% else %}
+                                <span class="status-badge status-parado">⏸ Sin producción</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="maquina-actions">
+                        <a href="/hojas_ruta/{{ maq.id }}" class="btn-small btn-primary-small">Ver hojas</a>
+                        <a href="/control_calidad/{{ maq.id }}" class="btn-small">Control QC</a>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div style="text-align: center; padding: 40px; color: #aaa;">
+                    No hay máquinas registradas.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
