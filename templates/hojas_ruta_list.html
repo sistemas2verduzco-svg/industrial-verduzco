@@ -127,7 +127,13 @@
                     <div class="maquina-actions">
                         <a href="/hojas_ruta/{{ maq.id }}" class="btn-small btn-primary-small">Ver hojas</a>
                         <a href="/control_calidad/{{ maq.id }}" class="btn-small">Control QC</a>
-                        <button class="btn-small" style="background:#4caf50; color:#fff; border-color:#4caf50;" onclick="abrirFormPiezas({{ maq.id }}, '{{ maq.nombre }}')">Ingresar piezas</button>
+                        <button class="btn-small" onclick="aprobarOT({{ maq.id }})">Aprobar OT</button>
+                        {% if maq.activo %}
+                            <button class="btn-small" style="background:#f44336; color:#fff; border-color:#f44336;" onclick="toggleActivacion({{ maq.id }}, false)">Desactivar Máquina</button>
+                        {% else %}
+                            <button class="btn-small" style="background:#2196f3; color:#fff; border-color:#2196f3;" onclick="toggleActivacion({{ maq.id }}, true)">Activar Máquina</button>
+                        {% endif %}
+                        <button class="btn-small" style="background:#4caf50; color:#fff; border-color:#4caf50;" onclick="abrirFormPiezas({{ maq.id }}, '{{ maq.nombre }}', '{{ maq.tipo or '' }}')">Ingresar piezas</button>
                     </div>
                 </div>
                 {% endfor %}
@@ -144,14 +150,26 @@
         <div style="background:#fff; padding:24px; border-radius:8px; width:90%; max-width:500px; box-shadow:0 4px 16px rgba(0,0,0,0.2);">
             <h3 style="margin:0 0 16px 0;">Ingresar Piezas — <span id="maqNombre"></span></h3>
             
-            <div style="margin-bottom:16px;">
+            <div style="margin-bottom:12px;">
                 <label style="display:block; font-weight:600; margin-bottom:6px; font-size:14px;">Cantidad de piezas</label>
                 <input type="number" id="cantidadPiezas" min="1" placeholder="Ej: 100" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; font-size:14px; box-sizing:border-box;" />
             </div>
 
-            <div style="margin-bottom:16px;">
+            <div style="margin-bottom:12px;">
                 <label style="display:block; font-weight:600; margin-bottom:6px; font-size:14px;">Clave de la pieza</label>
                 <input type="text" id="clavePieza" placeholder="Ej: P-2025-001" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; font-size:14px; box-sizing:border-box;" />
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <label style="display:block; font-weight:600; margin-bottom:6px; font-size:14px;">Tiempo total (HH:MM:SS) - opcional</label>
+                <input type="text" id="tiempoTotal" placeholder="00:00:00" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; font-size:14px; box-sizing:border-box;" />
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <label style="display:block; font-weight:600; margin-bottom:6px; font-size:14px;">Plantilla (opcional)</label>
+                <select id="plantillaSelect" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; font-size:14px; box-sizing:border-box;">
+                    <option value="">Usar plantilla por defecto / Ninguna</option>
+                </select>
             </div>
 
             <div style="display:flex; gap:8px; justify-content:flex-end;">
@@ -164,11 +182,26 @@
     <script>
     let maquinaIdActual = null;
 
-    function abrirFormPiezas(maquinaId, maquinaNombre) {
+    function abrirFormPiezas(maquinaId, maquinaNombre, maquinaTipo) {
         maquinaIdActual = maquinaId;
         document.getElementById('maqNombre').textContent = maquinaNombre;
         document.getElementById('cantidadPiezas').value = '';
         document.getElementById('clavePieza').value = '';
+        document.getElementById('tiempoTotal').value = '';
+        // cargar plantillas disponibles para este tipo
+        const select = document.getElementById('plantillaSelect');
+        select.innerHTML = '<option value="">Usar plantilla por defecto / Ninguna</option>';
+        if (maquinaTipo) {
+            fetch('/api/plantillas_estaciones/nombres?maquina_tipo=' + encodeURIComponent(maquinaTipo))
+            .then(res => res.json())
+            .then(data => {
+                if (data.nombres && data.nombres.length) {
+                    data.nombres.forEach(n => {
+                        const opt = document.createElement('option'); opt.value = n; opt.textContent = n; select.appendChild(opt);
+                    });
+                }
+            }).catch(err => { console.error('No se pudieron cargar plantillas', err); });
+        }
         document.getElementById('modalPiezas').style.display = 'flex';
     }
 
@@ -180,9 +213,10 @@
     function guardarPiezas() {
         const cantidad = document.getElementById('cantidadPiezas').value.trim();
         const clave = document.getElementById('clavePieza').value.trim();
+        const tiempo = document.getElementById('tiempoTotal').value.trim();
 
         if (!cantidad || !clave) {
-            alert('Por favor completa todos los campos');
+            alert('Por favor completa todos los campos obligatorios');
             return;
         }
 
@@ -191,17 +225,55 @@
             return;
         }
 
-        // Aquí puedes hacer la llamada a la API para guardar las piezas
-        console.log('Guardar piezas:', {
-            maquina_id: maquinaIdActual,
-            cantidad: parseInt(cantidad),
-            clave: clave
-        });
+        const plantillaSeleccionada = document.getElementById('plantillaSelect').value;
+        const payload = { maquina_id: maquinaIdActual, cantidad: parseInt(cantidad), clave: clave, tiempo_total: tiempo };
+        if (plantillaSeleccionada) payload.plantilla_nombre = plantillaSeleccionada;
 
-        alert('Piezas ingresadas correctamente:\n\nCantidad: ' + cantidad + '\nClave: ' + clave);
-        cerrarFormPiezas();
-        // Aquí podrías hacer una llamada a la API y luego recargar la página
-        // location.reload();
+        fetch('/api/produccion/ingresar_piezas', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert('Piezas registradas. Hoja de ruta creada.');
+                cerrarFormPiezas();
+                window.location.href = '/hojas_ruta/' + maquinaIdActual;
+            } else {
+                alert('Error: ' + (data.error || 'No se pudo crear la hoja'));
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Error al conectar con el servidor');
+        });
+    }
+
+    function aprobarOT(maquinaId) {
+        fetch('/api/produccion/aprobar_ot', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ maquina_id: maquinaId })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert('OT aprobada. Puedes activar la máquina.');
+                window.location.reload();
+            } else {
+                alert('Error al aprobar OT');
+            }
+        })
+        .catch(err => { console.error(err); alert('Error al conectar'); });
+    }
+
+    function toggleActivacion(maquinaId, activar) {
+        const url = '/api/maquinas/' + maquinaId + (activar ? '/activar' : '/desactivar');
+        fetch(url, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => { if (data.success) window.location.reload(); else alert('Error al actualizar estado'); })
+        .catch(err => { console.error(err); alert('Error al conectar'); });
     }
 
     // Cerrar modal si se presiona Escape

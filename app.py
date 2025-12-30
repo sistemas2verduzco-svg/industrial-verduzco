@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, Máquina, ComponenteMáquina, HojaRuta, EstacionTrabajo
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, Máquina, ComponenteMáquina, HojaRuta, EstacionTrabajo, EstacionPlantilla
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -474,6 +474,7 @@ def hojas_ruta_list():
             'descripcion': maq.descripcion,
             'imagen_url': maq.imagen_url,
             'hoja_activa': hoja_activa.to_dict() if hoja_activa else None,
+            'activo': getattr(maq, 'activo', False),
             'estacion_actual': estacion_actual.nombre if estacion_actual else 'Sin producción'
         })
     
@@ -578,6 +579,114 @@ def api_crear_estacion():
     return jsonify(estacion.to_dict()), 201
 
 
+# ==== Producción / flujo operativo ==== 
+@app.route('/api/produccion/aprobar_ot', methods=['POST'])
+@login_required
+def api_aprobar_ot():
+    data = request.get_json() or {}
+    maquina_id = data.get('maquina_id')
+    ot = data.get('orden_trabajo')
+    # Sólo registramos en logs por ahora
+    logger.info(f"[PRODUCCION] OT aprobada para maquina={maquina_id} OT={ot}")
+    return jsonify({'ok': True, 'message': 'OT aprobada'}), 200
+
+
+@app.route('/api/maquinas/<int:maquina_id>/activar', methods=['POST'])
+@login_required
+def api_activar_maquina(maquina_id):
+    maq = Máquina.query.get_or_404(maquina_id)
+    try:
+        maq.activo = True
+        db.session.commit()
+        logger.info(f"[MAQUINA] Activada maquina {maquina_id}")
+        return jsonify({'ok': True, 'maquina_id': maquina_id, 'activo': True}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error activando maquina: {e}", exc_info=True)
+        return jsonify({'error': 'No se pudo activar la máquina. Ejecuta ALTER TABLE para agregar columna activo si no existe.'}), 500
+
+
+@app.route('/api/maquinas/<int:maquina_id>/desactivar', methods=['POST'])
+@login_required
+def api_desactivar_maquina(maquina_id):
+    maq = Máquina.query.get_or_404(maquina_id)
+    try:
+        maq.activo = False
+        db.session.commit()
+        logger.info(f"[MAQUINA] Desactivada maquina {maquina_id}")
+        return jsonify({'ok': True, 'maquina_id': maquina_id, 'activo': False}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error desactivando maquina: {e}", exc_info=True)
+        return jsonify({'error': 'No se pudo desactivar la máquina.'}), 500
+
+
+@app.route('/api/produccion/ingresar_piezas', methods=['POST'])
+@login_required
+def api_ingresar_piezas():
+    """Recibe: maquina_id, cantidad, clave, tiempo_total (HH:MM:SS opcional), producto (opcional).
+    Crea una HojaRuta con esos datos y la marca como activa.
+    """
+    data = request.get_json() or {}
+    maquina_id = data.get('maquina_id')
+    cantidad = data.get('cantidad')
+    clave = data.get('clave')
+    tiempo_total = data.get('tiempo_total')
+    producto = data.get('producto')
+
+    if not maquina_id or not cantidad or not clave:
+        return jsonify({'error': 'maquina_id, cantidad y clave son requeridos'}), 400
+
+    try:
+        nombre = f"Producción {clave}"
+        hoja = HojaRuta(
+            maquina_id=maquina_id,
+            nombre=nombre,
+            producto=producto or clave,
+            pn=clave,
+            cantidad_piezas=int(cantidad),
+            total_tiempo=tiempo_total,
+            fecha_salida=datetime.utcnow(),
+            estado='activa'
+        )
+        db.session.add(hoja)
+        db.session.flush()  # obtener id sin commit
+
+        # Clonar plantillas de estaciones según plantilla_nombre (si viene) o por tipo de la máquina
+        try:
+            maquina = Máquina.query.get(maquina_id)
+            plantilla_nombre = data.get('plantilla_nombre')
+            if plantilla_nombre:
+                plantillas = EstacionPlantilla.query.filter_by(maquina_tipo=maquina.tipo if maquina else None, plantilla_nombre=plantilla_nombre).order_by(EstacionPlantilla.orden).all()
+            else:
+                plantilla_tipo = maquina.tipo if maquina else None
+                plantillas = EstacionPlantilla.query.filter_by(maquina_tipo=plantilla_tipo).order_by(EstacionPlantilla.orden).all() if plantilla_tipo else []
+
+            for p in plantillas:
+                est = EstacionTrabajo(
+                    hoja_ruta_id=hoja.id,
+                    pro_c=p.pro_c,
+                    centro_trabajo=p.centro_trabajo,
+                    operacion=p.operacion,
+                    orden=p.orden,
+                    t_e=p.t_e,
+                    t_tct=p.t_tct,
+                    t_tco=p.t_tco,
+                    t_to=p.t_to
+                )
+                db.session.add(est)
+        except Exception as e2:
+            logger.warning(f"No se clonaron plantillas para maquina {maquina_id}: {e2}")
+
+        db.session.commit()
+        logger.info(f"[PRODUCCION] Hoja creada {hoja.id} para maquina {maquina_id} y plantillas clonadas")
+        return jsonify({'success': True, 'hoja': hoja.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error creando hoja de ruta desde ingreso de piezas: {e}", exc_info=True)
+        return jsonify({'error': 'Error creando hoja de ruta'}), 500
+
+
 @app.route('/api/estaciones/<int:estacion_id>', methods=['PUT'])
 @login_required
 def api_actualizar_estacion(estacion_id):
@@ -602,6 +711,101 @@ def api_actualizar_estacion(estacion_id):
     db.session.commit()
     logger.info(f"[HOJAS_RUTA] Estación actualizada: {estacion_id}")
     return jsonify(estacion.to_dict()), 200
+
+
+@app.route('/api/plantillas_estaciones', methods=['GET'])
+@login_required
+def api_list_plantillas():
+    """Listar plantillas; opcionalmente filtrar por `maquina_tipo` query param."""
+    tipo = request.args.get('maquina_tipo')
+    if tipo:
+        plantillas = EstacionPlantilla.query.filter_by(maquina_tipo=tipo).order_by(EstacionPlantilla.plantilla_nombre, EstacionPlantilla.orden).all()
+    else:
+        plantillas = EstacionPlantilla.query.order_by(EstacionPlantilla.maquina_tipo, EstacionPlantilla.plantilla_nombre, EstacionPlantilla.orden).all()
+    return jsonify({'plantillas': [p.to_dict() for p in plantillas]})
+
+
+@app.route('/api/plantillas_estaciones/nombres')
+@login_required
+def api_plantilla_nombres():
+    """Devuelve nombres de plantillas (distinct) para un tipo de máquina dado."""
+    tipo = request.args.get('maquina_tipo')
+    if not tipo:
+        return jsonify({'error': 'maquina_tipo requerido'}), 400
+    try:
+        rows = db.session.query(EstacionPlantilla.plantilla_nombre).filter_by(maquina_tipo=tipo).distinct().all()
+        nombres = [r[0] for r in rows if r[0]]
+        return jsonify({'nombres': nombres})
+    except Exception as e:
+        logger.error(f"Error fetch plantilla nombres: {e}", exc_info=True)
+        return jsonify({'error': 'Error interno'}), 500
+
+
+@app.route('/api/plantillas_estaciones', methods=['POST'])
+@login_required
+def api_create_plantilla():
+    data = request.get_json() or {}
+    required = ['maquina_tipo', 'operacion']
+    for r in required:
+        if r not in data:
+            return jsonify({'error': f'{r} es requerido'}), 400
+    try:
+        p = EstacionPlantilla(
+            plantilla_nombre=data.get('plantilla_nombre'),
+            maquina_tipo=data.get('maquina_tipo'),
+            pro_c=data.get('pro_c'),
+            centro_trabajo=data.get('centro_trabajo'),
+            operacion=data.get('operacion'),
+            orden=int(data.get('orden') or 0),
+            t_e=data.get('t_e'),
+            t_tct=data.get('t_tct'),
+            t_tco=data.get('t_tco'),
+            t_to=data.get('t_to')
+        )
+        db.session.add(p)
+        db.session.commit()
+        return jsonify({'success': True, 'plantilla': p.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error creando plantilla: {e}", exc_info=True)
+        return jsonify({'error': 'Error creando plantilla'}), 500
+
+
+@app.route('/api/plantillas_estaciones/<int:pid>', methods=['PUT'])
+@login_required
+def api_update_plantilla(pid):
+    p = EstacionPlantilla.query.get_or_404(pid)
+    data = request.get_json() or {}
+    for k in ['plantilla_nombre', 'maquina_tipo', 'pro_c', 'centro_trabajo', 'operacion', 'orden', 't_e', 't_tct', 't_tco', 't_to']:
+        if k in data:
+            setattr(p, k, data[k])
+    try:
+        db.session.commit()
+        return jsonify({'success': True, 'plantilla': p.to_dict()})
+    except Exception:
+        db.session.rollback()
+        return jsonify({'error': 'No se pudo actualizar plantilla'}), 500
+
+
+@app.route('/api/plantillas_estaciones/<int:pid>', methods=['DELETE'])
+@login_required
+def api_delete_plantilla(pid):
+    p = EstacionPlantilla.query.get_or_404(pid)
+    try:
+        db.session.delete(p)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception:
+        db.session.rollback()
+        return jsonify({'error': 'No se pudo eliminar plantilla'}), 500
+
+
+@app.route('/plantillas_estaciones')
+@login_required
+def plantillas_page():
+    if not is_admin_user():
+        return render_template('403.html'), 403
+    return render_template('plantillas_estaciones.html')
 
 
 @app.route('/admin')

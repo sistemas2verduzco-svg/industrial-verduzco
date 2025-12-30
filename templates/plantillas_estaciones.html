@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Plantillas de Estaciones</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+    <style>
+        .panel { background:#fff; padding:16px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.05); }
+        .row { display:flex; gap:12px; align-items:center; }
+        .field { flex:1; }
+        .btn { padding:8px 12px; border-radius:6px; border:1px solid #ddd; background:#f7f7f7; cursor:pointer; }
+        .btn.primary { background:#0b74de; color:#fff; border-color:#0b74de; }
+        table { width:100%; border-collapse:collapse; margin-top:12px; }
+        th,td { padding:8px; border:1px solid #eee; font-size:13px; }
+    </style>
+</head>
+<body>
+    {% include '_sidebar.html' %}
+    <div class="container">
+        <h2>Plantillas de Estaciones</h2>
+        <div class="panel">
+            <h4>Crear / Agregar estación a plantilla</h4>
+            <div class="row" style="margin-bottom:8px;">
+                <input class="field" id="plantilla_nombre" placeholder="Nombre de plantilla (ej: Fresadora Serie A)" />
+                <input class="field" id="maquina_tipo" placeholder="Tipo de máquina (ej: fresadora, torno)" />
+            </div>
+            <div class="row" style="margin-bottom:8px;">
+                <input class="field" id="pro_c" placeholder="PRO C" />
+                <input class="field" id="centro_trabajo" placeholder="Centro de trabajo" />
+            </div>
+            <div style="margin-bottom:8px;">
+                <input style="width:100%; padding:8px;" id="operacion" placeholder="Descripción de la operación" />
+            </div>
+            <div class="row">
+                <input style="width:100px;" id="orden" placeholder="Orden" />
+                <input style="width:120px;" id="t_e" placeholder="T/E" />
+                <input style="width:120px;" id="t_tct" placeholder="T/CT" />
+                <input style="width:120px;" id="t_tco" placeholder="T/CO" />
+                <input style="width:120px;" id="t_to" placeholder="T/O" />
+                <button class="btn primary" onclick="crearPlantilla()">Agregar estación</button>
+            </div>
+        </div>
+
+        <div class="panel" style="margin-top:16px;">
+            <h4>Plantillas existentes</h4>
+            <div style="margin-bottom:8px;">
+                <label>Filtrar por tipo: <input id="filtro_tipo" placeholder="ej: fresadora" /></label>
+                <button class="btn" onclick="cargarPlantillas()">Filtrar</button>
+            </div>
+            <div id="listado">
+                <table>
+                    <thead>
+                        <tr><th>Plantilla</th><th>Tipo</th><th>Orden</th><th>Operacion</th><th>T/E</th><th>T/CT</th><th>T/CO</th><th>T/O</th><th>Acciones</th></tr>
+                    </thead>
+                    <tbody id="plantillasBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function crearPlantilla(){
+            const payload = {
+                plantilla_nombre: document.getElementById('plantilla_nombre').value.trim(),
+                maquina_tipo: document.getElementById('maquina_tipo').value.trim(),
+                pro_c: document.getElementById('pro_c').value.trim(),
+                centro_trabajo: document.getElementById('centro_trabajo').value.trim(),
+                operacion: document.getElementById('operacion').value.trim(),
+                orden: parseInt(document.getElementById('orden').value || 0),
+                t_e: document.getElementById('t_e').value.trim(),
+                t_tct: document.getElementById('t_tct').value.trim(),
+                t_tco: document.getElementById('t_tco').value.trim(),
+                t_to: document.getElementById('t_to').value.trim(),
+            };
+            if(!payload.maquina_tipo || !payload.operacion){ alert('Tipo de máquina y operación son obligatorios'); return; }
+            fetch('/api/plantillas_estaciones', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) })
+            .then(r=>r.json()).then(j=>{ if(j.success){ cargarPlantillas(); } else { alert(j.error || 'Error'); } })
+            .catch(e=>{ console.error(e); alert('Error de conexión'); });
+        }
+
+        function eliminarPlantilla(id){
+            if(!confirm('Eliminar esta estación plantilla?')) return;
+            fetch('/api/plantillas_estaciones/'+id, { method:'DELETE' })
+            .then(r=>r.json()).then(j=>{ if(j.success) cargarPlantillas(); else alert(j.error || 'Error'); })
+            .catch(e=>{ console.error(e); alert('Error de conexión'); });
+        }
+
+        function cargarPlantillas(){
+            const tipo = document.getElementById('filtro_tipo').value.trim();
+            const q = tipo ? '?maquina_tipo='+encodeURIComponent(tipo) : '';
+            fetch('/api/plantillas_estaciones'+q).then(r=>r.json()).then(j=>{
+                const body = document.getElementById('plantillasBody'); body.innerHTML='';
+                (j.plantillas||[]).forEach(p=>{
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `<td>${p.plantilla_nombre||''}</td><td>${p.maquina_tipo||''}</td><td>${p.orden||''}</td><td>${p.operacion||''}</td><td>${p.t_e||''}</td><td>${p.t_tct||''}</td><td>${p.t_tco||''}</td><td>${p.t_to||''}</td><td><button class='btn' onclick='eliminarPlantilla(${p.id})'>Eliminar</button></td>`;
+                    body.appendChild(tr);
+                })
+            }).catch(e=>{ console.error(e); alert('Error de conexión'); });
+        }
+
+        // cargar inicialmente
+        cargarPlantillas();
+    </script>
+</body>
+</html>

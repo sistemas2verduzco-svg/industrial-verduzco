@@ -18,6 +18,7 @@ class Usuario(db.Model):
     activo = db.Column(db.Boolean, default=True)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    activo = db.Column(db.Boolean, default=False)
     # Role-based permissions
     role_id = db.Column(db.Integer, db.ForeignKey('roles.id'), nullable=True)
     role = db.relationship('Role', backref='usuarios')
@@ -374,6 +375,8 @@ class Máquina(db.Model):
     imagen_url = db.Column(db.String(500), nullable=True)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Tipo de la máquina (ej: fresadora, torno, cnc) - usado para seleccionar plantillas
+    tipo = db.Column(db.String(100), nullable=True)
 
     # Relaciones
     componentes = db.relationship('ComponenteMáquina', backref='maquina', lazy=True, cascade='all, delete-orphan')
@@ -383,6 +386,7 @@ class Máquina(db.Model):
         return {
             'id': self.id,
             'nombre': self.nombre,
+            'tipo': self.tipo,
             'descripcion': self.descripcion,
             'imagen_url': self.imagen_url,
             'fecha_creacion': self.fecha_creacion.isoformat(),
@@ -531,5 +535,40 @@ class EstacionTrabajo(db.Model):
             'fecha_inicio': self.fecha_inicio.isoformat() if self.fecha_inicio else None,
             'fecha_finalizacion': self.fecha_finalizacion.isoformat() if self.fecha_finalizacion else None,
             'notas': self.notas,
+            'fecha_creacion': self.fecha_creacion.isoformat()
+        }
+
+
+class EstacionPlantilla(db.Model):
+    """Plantillas reutilizables de estaciones por tipo de máquina."""
+    __tablename__ = 'plantillas_estaciones'
+
+    id = db.Column(db.Integer, primary_key=True)
+    plantilla_nombre = db.Column(db.String(255), nullable=True)  # nombre del conjunto/template
+    maquina_tipo = db.Column(db.String(100), nullable=True)  # ej: fresadora, torno, cnc
+    pro_c = db.Column(db.String(50), nullable=True)
+    centro_trabajo = db.Column(db.String(100), nullable=True)
+    operacion = db.Column(db.Text, nullable=False)
+    orden = db.Column(db.Integer, default=0)
+    t_e = db.Column(db.String(20), nullable=True)
+    t_tct = db.Column(db.String(20), nullable=True)
+    t_tco = db.Column(db.String(20), nullable=True)
+    t_to = db.Column(db.String(20), nullable=True)
+
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'plantilla_nombre': self.plantilla_nombre,
+            'maquina_tipo': self.maquina_tipo,
+            'pro_c': self.pro_c,
+            'centro_trabajo': self.centro_trabajo,
+            'operacion': self.operacion,
+            'orden': self.orden,
+            't_e': self.t_e,
+            't_tct': self.t_tct,
+            't_tco': self.t_tco,
+            't_to': self.t_to,
             'fecha_creacion': self.fecha_creacion.isoformat()
         }
