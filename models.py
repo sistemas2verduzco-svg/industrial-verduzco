@@ -414,12 +414,35 @@ class ComponenteMáquina(db.Model):
 class HojaRuta(db.Model):
     """Hojas de ruta de producción para máquinas."""
     __tablename__ = 'hojas_ruta'
-
     id = db.Column(db.Integer, primary_key=True)
     maquina_id = db.Column(db.Integer, db.ForeignKey('maquinas.id'), nullable=False)
-    nombre = db.Column(db.String(255), nullable=False)  # Ej: "Producción Lote 001"
+    nombre = db.Column(db.String(255), nullable=False)
     descripcion = db.Column(db.Text, nullable=True)
-    estado = db.Column(db.String(20), default='activa')  # activa, pausada, completada
+
+    # Campos adicionales según plantilla HOJA DE RUTA
+    producto = db.Column(db.String(255), nullable=True)
+    calidad = db.Column(db.String(255), nullable=True)
+    pn = db.Column(db.String(255), nullable=True)
+    fecha_salida = db.Column(db.DateTime, nullable=True)
+    cantidad_piezas = db.Column(db.Integer, nullable=True)
+    orden_trabajo_hr = db.Column(db.String(100), nullable=True)
+    orden_trabajo_pt = db.Column(db.String(100), nullable=True)
+    almacen = db.Column(db.String(100), nullable=True)
+    no_sin_orden = db.Column(db.String(100), nullable=True)
+    materia_prima = db.Column(db.String(255), nullable=True)
+    total_tiempo = db.Column(db.String(50), nullable=True)  # formato HH:MM:SS
+    dias_a_laborar = db.Column(db.Float, nullable=True)
+    fecha_termino = db.Column(db.DateTime, nullable=True)
+
+    aprobada = db.Column(db.Boolean, default=False)
+    rechazada = db.Column(db.Boolean, default=False)
+    scrap = db.Column(db.Boolean, default=False)
+    retrabajo = db.Column(db.Boolean, default=False)
+
+    supervisor = db.Column(db.String(200), nullable=True)
+    operador = db.Column(db.String(200), nullable=True)
+    eficiencia = db.Column(db.Float, nullable=True)
+
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -433,7 +456,26 @@ class HojaRuta(db.Model):
             'maquina_id': self.maquina_id,
             'nombre': self.nombre,
             'descripcion': self.descripcion,
-            'estado': self.estado,
+            'producto': self.producto,
+            'calidad': self.calidad,
+            'pn': self.pn,
+            'fecha_salida': self.fecha_salida.isoformat() if self.fecha_salida else None,
+            'cantidad_piezas': self.cantidad_piezas,
+            'orden_trabajo_hr': self.orden_trabajo_hr,
+            'orden_trabajo_pt': self.orden_trabajo_pt,
+            'almacen': self.almacen,
+            'no_sin_orden': self.no_sin_orden,
+            'materia_prima': self.materia_prima,
+            'total_tiempo': self.total_tiempo,
+            'dias_a_laborar': self.dias_a_laborar,
+            'fecha_termino': self.fecha_termino.isoformat() if self.fecha_termino else None,
+            'aprobada': self.aprobada,
+            'rechazada': self.rechazada,
+            'scrap': self.scrap,
+            'retrabajo': self.retrabajo,
+            'supervisor': self.supervisor,
+            'operador': self.operador,
+            'eficiencia': self.eficiencia,
             'fecha_creacion': self.fecha_creacion.isoformat(),
             'fecha_actualizacion': self.fecha_actualizacion.isoformat(),
             'estaciones': [e.to_dict() for e in self.estaciones]
@@ -441,15 +483,28 @@ class HojaRuta(db.Model):
 
 
 class EstacionTrabajo(db.Model):
-    """Estaciones o pasos dentro de una hoja de ruta."""
+    """Estaciones o pasos dentro de una hoja de ruta, con tiempos por columna según plantilla."""
     __tablename__ = 'estaciones_trabajo'
 
     id = db.Column(db.Integer, primary_key=True)
     hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False)
-    nombre = db.Column(db.String(255), nullable=False)  # Ej: "Torneado", "Fresado"
-    descripcion = db.Column(db.Text, nullable=True)
-    orden = db.Column(db.Integer, default=0)  # Orden de ejecución
-    estado = db.Column(db.String(20), default='pendiente')  # pendiente, en_curso, completada
+    pro_c = db.Column(db.String(50), nullable=True)  # PRO C. (número o código)
+    centro_trabajo = db.Column(db.String(100), nullable=True)  # C.T.
+    operacion = db.Column(db.Text, nullable=False)
+    orden = db.Column(db.Integer, default=0)
+
+    # Tiempos en formato string HH:MM:SS según columnas T/E, T/CT, T/CO, T/O
+    t_e = db.Column(db.String(20), nullable=True)
+    t_tct = db.Column(db.String(20), nullable=True)
+    t_tco = db.Column(db.String(20), nullable=True)
+    t_to = db.Column(db.String(20), nullable=True)
+
+    total_piezas = db.Column(db.Integer, nullable=True)
+    operador = db.Column(db.String(200), nullable=True)
+    eficiencia = db.Column(db.Float, nullable=True)
+    firma_supervisor = db.Column(db.String(200), nullable=True)
+
+    estado = db.Column(db.String(20), default='pendiente')
     fecha_inicio = db.Column(db.DateTime, nullable=True)
     fecha_finalizacion = db.Column(db.DateTime, nullable=True)
     notas = db.Column(db.Text, nullable=True)
@@ -459,9 +514,18 @@ class EstacionTrabajo(db.Model):
         return {
             'id': self.id,
             'hoja_ruta_id': self.hoja_ruta_id,
-            'nombre': self.nombre,
-            'descripcion': self.descripcion,
+            'pro_c': self.pro_c,
+            'centro_trabajo': self.centro_trabajo,
+            'operacion': self.operacion,
             'orden': self.orden,
+            't_e': self.t_e,
+            't_tct': self.t_tct,
+            't_tco': self.t_tco,
+            't_to': self.t_to,
+            'total_piezas': self.total_piezas,
+            'operador': self.operador,
+            'eficiencia': self.eficiencia,
+            'firma_supervisor': self.firma_supervisor,
             'estado': self.estado,
             'fecha_inicio': self.fecha_inicio.isoformat() if self.fecha_inicio else None,
             'fecha_finalizacion': self.fecha_finalizacion.isoformat() if self.fecha_finalizacion else None,
