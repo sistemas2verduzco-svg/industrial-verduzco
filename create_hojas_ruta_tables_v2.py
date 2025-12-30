@@ -9,6 +9,7 @@ sys.path.insert(0, '.')
 
 from app import app
 from models import db
+from sqlalchemy import text
 
 SQL = '''
 CREATE TABLE IF NOT EXISTS hojas_ruta (
@@ -67,7 +68,7 @@ def run():
     with app.app_context():
         conn = db.engine.connect()
         try:
-            conn.execute(SQL)
+            conn.execute(text(SQL))
             print('Tablas creadas o ya existían (hojas_ruta, estaciones_trabajo).')
         except Exception as e:
             print('Error creando tablas:', e)
