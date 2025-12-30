@@ -418,6 +418,7 @@ class HojaRuta(db.Model):
     maquina_id = db.Column(db.Integer, db.ForeignKey('maquinas.id'), nullable=False)
     nombre = db.Column(db.String(255), nullable=False)
     descripcion = db.Column(db.Text, nullable=True)
+    estado = db.Column(db.String(20), default='activa')  # activa, pausada, completada
 
     # Campos adicionales según plantilla HOJA DE RUTA
     producto = db.Column(db.String(255), nullable=True)

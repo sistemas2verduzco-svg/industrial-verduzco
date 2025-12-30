@@ -12,11 +12,15 @@ from models import db
 from sqlalchemy import text
 
 SQL = '''
-CREATE TABLE IF NOT EXISTS hojas_ruta (
+DROP TABLE IF EXISTS estaciones_trabajo CASCADE;
+DROP TABLE IF EXISTS hojas_ruta CASCADE;
+
+CREATE TABLE hojas_ruta (
     id SERIAL PRIMARY KEY,
     maquina_id INTEGER NOT NULL REFERENCES maquinas(id),
     nombre VARCHAR(255) NOT NULL,
     descripcion TEXT,
+    estado VARCHAR(20) DEFAULT 'activa',
     producto VARCHAR(255),
     calidad VARCHAR(255),
     pn VARCHAR(255),
@@ -41,7 +45,7 @@ CREATE TABLE IF NOT EXISTS hojas_ruta (
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS estaciones_trabajo (
+CREATE TABLE estaciones_trabajo (
     id SERIAL PRIMARY KEY,
     hoja_ruta_id INTEGER NOT NULL REFERENCES hojas_ruta(id) ON DELETE CASCADE,
     pro_c VARCHAR(50),
