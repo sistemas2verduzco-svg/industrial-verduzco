@@ -37,6 +37,7 @@ def run():
             for p in plantillas:
                 est = EstacionTrabajo(
                     hoja_ruta_id=hoja.id,
+                    nombre=(p.operacion or p.pro_c or 'Estación'),
                     pro_c=p.pro_c,
                     centro_trabajo=p.centro_trabajo,
                     operacion=p.operacion,

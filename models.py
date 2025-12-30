@@ -493,6 +493,7 @@ class EstacionTrabajo(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False)
+    nombre = db.Column(db.String(255), nullable=False)
     pro_c = db.Column(db.String(50), nullable=True)  # PRO C. (número o código)
     centro_trabajo = db.Column(db.String(100), nullable=True)  # C.T.
     operacion = db.Column(db.Text, nullable=False)
