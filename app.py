@@ -663,18 +663,18 @@ def api_ingresar_piezas():
                 plantillas = EstacionPlantilla.query.filter_by(maquina_tipo=plantilla_tipo).order_by(EstacionPlantilla.orden).all() if plantilla_tipo else []
 
             for p in plantillas:
-                    est = EstacionTrabajo(
-                        hoja_ruta_id=hoja.id,
-                        nombre=(p.operacion or p.pro_c or 'Estación'),
-                        pro_c=p.pro_c,
-                        centro_trabajo=p.centro_trabajo,
-                        operacion=p.operacion,
-                        orden=p.orden,
-                        t_e=p.t_e,
-                        t_tct=p.t_tct,
-                        t_tco=p.t_tco,
-                        t_to=p.t_to
-                    )
+                est = EstacionTrabajo(
+                    hoja_ruta_id=hoja.id,
+                    nombre=(p.operacion or p.pro_c or 'Estación'),
+                    pro_c=p.pro_c,
+                    centro_trabajo=p.centro_trabajo,
+                    operacion=p.operacion,
+                    orden=p.orden,
+                    t_e=p.t_e,
+                    t_tct=p.t_tct,
+                    t_tco=p.t_tco,
+                    t_to=p.t_to
+                )
                 db.session.add(est)
         except Exception as e2:
             logger.warning(f"No se clonaron plantillas para maquina {maquina_id}: {e2}")
