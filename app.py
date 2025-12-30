@@ -475,7 +475,9 @@ def hojas_ruta_list():
             'imagen_url': maq.imagen_url,
             'hoja_activa': hoja_activa.to_dict() if hoja_activa else None,
             'activo': getattr(maq, 'activo', False),
-            'estacion_actual': estacion_actual.nombre if estacion_actual else 'Sin producción'
+            'estacion_actual': estacion_actual.nombre if estacion_actual else 'Sin producción',
+            'tipo': getattr(maq, 'tipo', None),
+            'plantilla_default': getattr(maq, 'plantilla_default', None)
         })
     
     return render_template('hojas_ruta_list.html', maquinas=maquinas_data)
@@ -686,6 +688,26 @@ def api_ingresar_piezas():
         db.session.rollback()
         logger.error(f"Error creando hoja de ruta desde ingreso de piezas: {e}", exc_info=True)
         return jsonify({'error': 'Error creando hoja de ruta'}), 500
+
+
+@app.route('/api/maquinas/<int:maquina_id>/plantilla_default', methods=['POST'])
+@login_required
+def api_set_plantilla_default(maquina_id):
+    """Asigna una plantilla por defecto a una máquina (campo plantilla_default)."""
+    data = request.get_json() or {}
+    plantilla = data.get('plantilla_nombre')
+    if plantilla is None:
+        return jsonify({'error': 'plantilla_nombre es requerido'}), 400
+    try:
+        maquina = Máquina.query.get_or_404(maquina_id)
+        maquina.plantilla_default = plantilla
+        db.session.commit()
+        logger.info(f"[MAQUINA] plantilla_default set {plantilla} for maquina {maquina_id}")
+        return jsonify({'success': True, 'maquina': maquina.to_dict()}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error asignando plantilla_default: {e}", exc_info=True)
+        return jsonify({'error': 'No se pudo asignar plantilla_default'}), 500
 
 
 @app.route('/api/estaciones/<int:estacion_id>', methods=['PUT'])

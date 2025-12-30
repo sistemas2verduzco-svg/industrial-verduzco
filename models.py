@@ -377,6 +377,8 @@ class Máquina(db.Model):
     fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     # Tipo de la máquina (ej: fresadora, torno, cnc) - usado para seleccionar plantillas
     tipo = db.Column(db.String(100), nullable=True)
+    # Plantilla por defecto asignada a la máquina (nombre de plantilla)
+    plantilla_default = db.Column(db.String(255), nullable=True)
 
     # Relaciones
     componentes = db.relationship('ComponenteMáquina', backref='maquina', lazy=True, cascade='all, delete-orphan')
@@ -386,6 +388,7 @@ class Máquina(db.Model):
         return {
             'id': self.id,
             'nombre': self.nombre,
+            'plantilla_default': self.plantilla_default,
             'tipo': self.tipo,
             'descripcion': self.descripcion,
             'imagen_url': self.imagen_url,

@@ -133,7 +133,8 @@
                         {% else %}
                             <button class="btn-small" style="background:#2196f3; color:#fff; border-color:#2196f3;" onclick="toggleActivacion({{ maq.id }}, true)">Activar Máquina</button>
                         {% endif %}
-                        <button class="btn-small" style="background:#4caf50; color:#fff; border-color:#4caf50;" onclick="abrirFormPiezas({{ maq.id }}, '{{ maq.nombre }}', '{{ maq.tipo or '' }}')">Ingresar piezas</button>
+                        <button class="btn-small" style="background:#4caf50; color:#fff; border-color:#4caf50;" onclick="abrirFormPiezas({{ maq.id }}, '{{ maq.nombre|escapejs }}', '{{ maq.tipo or '' }}', '{{ maq.plantilla_default or ''|escapejs }}')">Ingresar piezas</button>
+                        <button class="btn-small" title="Asignar plantilla por defecto a esta máquina" onclick="asignarPlantillaRapida({{ maq.id }}, '{{ maq.tipo or '' }}')">Asignar Plantilla</button>
                     </div>
                 </div>
                 {% endfor %}
@@ -182,7 +183,7 @@
     <script>
     let maquinaIdActual = null;
 
-    function abrirFormPiezas(maquinaId, maquinaNombre, maquinaTipo) {
+    function abrirFormPiezas(maquinaId, maquinaNombre, maquinaTipo, plantillaDefault) {
         maquinaIdActual = maquinaId;
         document.getElementById('maqNombre').textContent = maquinaNombre;
         document.getElementById('cantidadPiezas').value = '';
@@ -197,12 +198,41 @@
             .then(data => {
                 if (data.nombres && data.nombres.length) {
                     data.nombres.forEach(n => {
-                        const opt = document.createElement('option'); opt.value = n; opt.textContent = n; select.appendChild(opt);
+                        const opt = document.createElement('option'); opt.value = n; opt.textContent = n; 
+                        if (plantillaDefault && plantillaDefault === n) opt.selected = true;
+                        select.appendChild(opt);
                     });
                 }
             }).catch(err => { console.error('No se pudieron cargar plantillas', err); });
         }
         document.getElementById('modalPiezas').style.display = 'flex';
+    }
+
+    function asignarPlantillaRapida(maquinaId, maquinaTipo) {
+        if (!maquinaTipo) {
+            alert('Esta máquina no tiene tipo definido.');
+            return;
+        }
+        fetch('/api/plantillas_estaciones/nombres?maquina_tipo=' + encodeURIComponent(maquinaTipo))
+        .then(res => res.json())
+        .then(data => {
+            const nombres = (data.nombres || []);
+            if (!nombres.length) {
+                alert('No hay plantillas disponibles para este tipo de máquina.');
+                return;
+            }
+            const lista = nombres.join('\n');
+            const seleccion = prompt('Plantillas disponibles:\n' + lista + '\n\nEscribe el nombre exacto de la plantilla para asignarla (dejar vacío para limpiar):');
+            if (seleccion === null) return; // cancel
+            const payload = { plantilla_nombre: seleccion.trim() };
+            fetch('/api/maquinas/' + maquinaId + '/plantilla_default', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(r => { if (r.success) { alert('Plantilla actualizada'); window.location.reload(); } else alert('Error: ' + (r.error || 'no se pudo actualizar')); })
+            .catch(err => { console.error(err); alert('Error al conectar con el servidor'); });
+        })
+        .catch(err => { console.error(err); alert('No se pudieron cargar plantillas'); });
     }
 
     function cerrarFormPiezas() {
