@@ -34,6 +34,7 @@ def run():
         conn = db.engine.connect()
         try:
             conn.execute(text(SQL))
+            conn.commit()
             print('Tabla plantillas_estaciones creada o ya existía.')
         except Exception as e:
             print('Error creando tabla plantillas_estaciones:', e)
