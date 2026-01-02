@@ -133,7 +133,7 @@
                         {% else %}
                             <button class="btn-small" style="background:#2196f3; color:#fff; border-color:#2196f3;" onclick="toggleActivacion({{ maq.id }}, true)">Activar Máquina</button>
                         {% endif %}
-                        <button class="btn-small" style="background:#4caf50; color:#fff; border-color:#4caf50;" onclick="abrirFormPiezas({{ maq.id }}, '{{ maq.nombre|escapejs }}', '{{ maq.tipo or '' }}', '{{ maq.plantilla_default or ''|escapejs }}')">Ingresar piezas</button>
+                        <button class="btn-small" style="background:#4caf50; color:#fff; border-color:#4caf50;" onclick="abrirFormPiezas({{ maq.id }}, '{{ maq.nombre|tojson|safe }}', '{{ maq.tipo or '' }}', '{{ maq.plantilla_default or ''|tojson|safe }}')">Ingresar piezas</button>
                         <button class="btn-small" title="Asignar plantilla por defecto a esta máquina" onclick="asignarPlantillaRapida({{ maq.id }}, '{{ maq.tipo or '' }}')">Asignar Plantilla</button>
                     </div>
                 </div>
