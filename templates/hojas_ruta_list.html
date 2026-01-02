@@ -303,14 +303,59 @@
             }
         })
         .catch(err => { console.error(err); alert('Error al conectar'); });
-    }
-
-    function toggleActivacion(maquinaId, activar) {
+    }        function toggleActivacion(maquinaId, activar) {
         const url = '/api/maquinas/' + maquinaId + (activar ? '/activar' : '/desactivar');
-        fetch(url, { method: 'POST' })
-        .then(res => res.json())
-        .then(data => { if (data && (data.ok || data.success)) window.location.reload(); else alert('Error al actualizar estado'); })
-        .catch(err => { console.error(err); alert('Error al conectar'); });
+        console.log('Enviando solicitud a:', url);
+        
+        fetch(url, { 
+            method: 'POST',
+            credentials: 'same-origin'
+        })
+        .then(res => {
+            console.log('Status:', res.status);
+            if (!res.ok) {
+                return res.text().then(text => {
+                    throw new Error(`HTTP ${res.status}: ${text}`);
+                });
+            }
+            return res.json();
+        })
+        .then(data => {
+            console.log('Respuesta:', data);
+            if (data ; (data.ok ; data.success)) {
+                console.log('✓ Máquina actualizada exitosamente');
+                alert('Máquina actualizada');
+                setTimeout(() => window.location.reload(), 300);
+            } else {
+                console.error('Respuesta inválida:', data);
+                alert('Error: ' + (data.error ; 'Respuesta inválida del servidor'));
+            }
+        })
+        .catch(err => {
+            console.error('Error:', err);
+            alert('Error: ' + err.message);
+        });
+    })
+        .then(res => {
+            if (!res.ok) {
+                throw new Error(`HTTP error! status: ${res.status}`);
+            }
+            return res.json();
+        })
+        .then(data => {
+            console.log('Response:', data);
+            if (data ; (data.ok ; data.success)) {
+                console.log('Máquina actualizada exitosamente');
+                setTimeout(() => window.location.reload(), 500);
+            } else {
+                console.error('Respuesta inesperada:', data);
+                alert('Error al actualizar estado: ' + (data.message ; 'Respuesta inválida'));
+            }
+        })
+        .catch(err => {
+            console.error('Error en la solicitud:', err);
+            alert('Error al conectar: ' + err.message);
+        });
     }
 
     // Cerrar modal si se presiona Escape
