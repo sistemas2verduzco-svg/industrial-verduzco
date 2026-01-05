@@ -90,6 +90,33 @@
             background: #0963cc;
         }
     </style>
+    <script>
+    function toggleActivacion(maquinaId, activar) {
+        const url = '/api/maquinas/' + maquinaId + (activar ? '/activar' : '/desactivar');
+        fetch(url, { method: 'POST', credentials: 'same-origin' })
+        .then(r => r.json())
+        .then(data => {
+            if (data && (data.ok || data.success)) {
+                const icon = document.getElementById('status-icon-' + maquinaId);
+                const text = document.getElementById('status-text-' + maquinaId);
+                const badge = document.getElementById('status-badge-' + maquinaId);
+                const btn = document.getElementById('btn-toggle-' + maquinaId);
+                if (icon) icon.textContent = activar ? '⚡' : '⛔';
+                if (text) text.textContent = activar ? 'Máquina Activada' : 'Máquina Desactivada';
+                if (badge) badge.style.background = activar ? 'linear-gradient(90deg, #28a745, #2ecc71)' : 'linear-gradient(90deg, #dc3545, #e74c3c)';
+                if (btn) {
+                    btn.textContent = activar ? 'Desactivar Máquina' : 'Activar Máquina';
+                    btn.style.background = activar ? '#f44336' : '#2196f3';
+                    btn.style.borderColor = activar ? '#f44336' : '#2196f3';
+                    btn.onclick = function(){ toggleActivacion(maquinaId, !activar); };
+                }
+            } else {
+                alert('❌ Error: respuesta inválida');
+            }
+        })
+        .catch(e => { alert('❌ Error: '+e.message); });
+    }
+    </script>
 </head>
 <body>
     {% include '_sidebar.html' %}
@@ -124,9 +151,9 @@
                             {% endif %}
                             <!-- Indicador de activación de la máquina -->
                             <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px;">
-                                <div style="display: flex; align-items: center; padding: 6px 12px; border-radius: 20px; {% if maq.activo %}background: linear-gradient(90deg, #28a745, #2ecc71); color: white; font-weight: 600;{% else %}background: linear-gradient(90deg, #dc3545, #e74c3c); color: white; font-weight: 600;{% endif %}">
-                                    <span style="font-size: 16px; margin-right: 6px;">{{ '⚡' if maq.activo else '⛔' }}</span>
-                                    <span style="font-size: 13px;">{{ 'Máquina Activada' if maq.activo else 'Máquina Desactivada' }}</span>
+                                <div id="status-badge-{{ maq.id }}" style="display: flex; align-items: center; padding: 6px 12px; border-radius: 20px; {% if maq.activo %}background: linear-gradient(90deg, #28a745, #2ecc71); color: white; font-weight: 600;{% else %}background: linear-gradient(90deg, #dc3545, #e74c3c); color: white; font-weight: 600;{% endif %}">
+                                    <span id="status-icon-{{ maq.id }}" style="font-size: 16px; margin-right: 6px;">{{ '⚡' if maq.activo else '⛔' }}</span>
+                                    <span id="status-text-{{ maq.id }}" style="font-size: 13px;">{{ 'Máquina Activada' if maq.activo else 'Máquina Desactivada' }}</span>
                                 </div>
                             </div>
                         </div>
@@ -136,9 +163,9 @@
                         <a href="/control_calidad/{{ maq.id }}" class="btn-small">Control QC</a>
                         <button class="btn-small" onclick="aprobarOT({{ maq.id }})">Aprobar OT</button>
                         {% if maq.activo %}
-                            <button class="btn-small" style="background:#f44336; color:#fff; border-color:#f44336;" onclick="toggleActivacion({{ maq.id }}, false)">Desactivar Máquina</button>
+                            <button id="btn-toggle-{{ maq.id }}" class="btn-small" style="background:#f44336; color:#fff; border-color:#f44336;" onclick="toggleActivacion({{ maq.id }}, false)">Desactivar Máquina</button>
                         {% else %}
-                            <button class="btn-small" style="background:#2196f3; color:#fff; border-color:#2196f3;" onclick="toggleActivacion({{ maq.id }}, true)">Activar Máquina</button>
+                            <button id="btn-toggle-{{ maq.id }}" class="btn-small" style="background:#2196f3; color:#fff; border-color:#2196f3;" onclick="toggleActivacion({{ maq.id }}, true)">Activar Máquina</button>
                         {% endif %}
                         <button class="btn-small" style="background:#4caf50; color:#fff; border-color:#4caf50;" onclick="abrirFormPiezas({{ maq.id }}, '{{ maq.nombre|tojson|safe }}', '{{ maq.tipo or '' }}', '{{ maq.plantilla_default or ''|tojson|safe }}')">Ingresar piezas</button>
                         <button class="btn-small" title="Asignar plantilla por defecto a esta máquina" onclick="asignarPlantillaRapida({{ maq.id }}, '{{ maq.tipo or '' }}')">Asignar Plantilla</button>
@@ -236,7 +263,7 @@
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
             })
             .then(res => res.json())
-            .then(r => { if (r.success) { alert('Plantilla actualizada'); window.location.reload(); } else alert('Error: ' + (r.error || 'no se pudo actualizar')); })
+            .then(r => { if (r.success) { alert('Plantilla actualizada'); window.location.reload(); } else alert('Error: ' + (r.error ; 'no se pudo actualizar')); })
             .catch(err => { console.error(err); alert('Error al conectar con el servidor'); });
         })
         .catch(err => { console.error(err); alert('No se pudieron cargar plantillas'); });
@@ -273,12 +300,12 @@
         })
         .then(res => res.json())
         .then(data => {
-            if (data && (data.ok || data.success)) {
+            if (data.success) {
                 alert('Piezas registradas. Hoja de ruta creada.');
                 cerrarFormPiezas();
                 window.location.href = '/hojas_ruta/' + maquinaIdActual;
             } else {
-                alert('Error: ' + (data.error || 'No se pudo crear la hoja'));
+                alert('Error: ' + (data.error ; 'No se pudo crear la hoja'));
             }
         })
         .catch(err => {
@@ -295,7 +322,7 @@
         })
         .then(res => res.json())
         .then(data => {
-            if (data && (data.ok || data.success)) {
+            if (data.success) {
                 alert('OT aprobada. Puedes activar la máquina.');
                 window.location.reload();
             } else {
@@ -303,59 +330,6 @@
             }
         })
         .catch(err => { console.error(err); alert('Error al conectar'); });
-    }        function toggleActivacion(maquinaId, activar) {
-        const url = '/api/maquinas/' + maquinaId + (activar ? '/activar' : '/desactivar');
-        console.log('Enviando solicitud a:', url);
-        
-        fetch(url, { 
-            method: 'POST',
-            credentials: 'same-origin'
-        })
-        .then(res => {
-            console.log('Status:', res.status);
-            if (!res.ok) {
-                return res.text().then(text => {
-                    throw new Error(`HTTP ${res.status}: ${text}`);
-                });
-            }
-            return res.json();
-        })
-        .then(data => {
-            console.log('Respuesta:', data);
-            if (data ; (data.ok ; data.success)) {
-                console.log('✓ Máquina actualizada exitosamente');
-                alert('Máquina actualizada');
-                setTimeout(() => window.location.reload(), 300);
-            } else {
-                console.error('Respuesta inválida:', data);
-                alert('Error: ' + (data.error ; 'Respuesta inválida del servidor'));
-            }
-        })
-        .catch(err => {
-            console.error('Error:', err);
-            alert('Error: ' + err.message);
-        });
-    })
-        .then(res => {
-            if (!res.ok) {
-                throw new Error(`HTTP error! status: ${res.status}`);
-            }
-            return res.json();
-        })
-        .then(data => {
-            console.log('Response:', data);
-            if (data ; (data.ok ; data.success)) {
-                console.log('Máquina actualizada exitosamente');
-                setTimeout(() => window.location.reload(), 500);
-            } else {
-                console.error('Respuesta inesperada:', data);
-                alert('Error al actualizar estado: ' + (data.message ; 'Respuesta inválida'));
-            }
-        })
-        .catch(err => {
-            console.error('Error en la solicitud:', err);
-            alert('Error al conectar: ' + err.message);
-        });
     }
 
     // Cerrar modal si se presiona Escape
@@ -365,4 +339,5 @@
         }
     });
     </script>
-
+</body>
+</html>

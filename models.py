@@ -379,6 +379,7 @@ class Máquina(db.Model):
     tipo = db.Column(db.String(100), nullable=True)
     # Plantilla por defecto asignada a la máquina (nombre de plantilla)
     plantilla_default = db.Column(db.String(255), nullable=True)
+    activo = db.Column(db.Boolean, default=True)
 
     # Relaciones
     componentes = db.relationship('ComponenteMáquina', backref='maquina', lazy=True, cascade='all, delete-orphan')
