@@ -256,16 +256,31 @@
             }
             const lista = nombres.join('\n');
             const seleccion = prompt('Plantillas disponibles:\n' + lista + '\n\nEscribe el nombre exacto de la plantilla para asignarla (dejar vacío para limpiar):');
-            if (seleccion === null) return; // cancel
+            if (seleccion === null) return;
             const payload = { plantilla_nombre: seleccion.trim() };
             fetch('/api/maquinas/' + maquinaId + '/plantilla_default', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
             })
             .then(res => res.json())
-            .then(r => { if (r.success) { alert('Plantilla actualizada'); window.location.reload(); } else alert('Error: ' + (r.error || 'no se pudo actualizar')); })
-            .catch(err => { console.error(err); alert('Error al conectar con el servidor'); });
+            .then(r => {
+                if (r.success) {
+                    alert('Plantilla actualizada');
+                    window.location.reload();
+                } else {
+                    alert('Error: ' + (r.error || 'no se pudo actualizar'));
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Error al conectar con el servidor');
+            });
         })
-        .catch(err => { console.error(err); alert('No se pudieron cargar plantillas'); });
+        .catch(err => {
+            console.error(err);
+            alert('No se pudieron cargar plantillas');
+        });
     }
 
     function cerrarFormPiezas() {
@@ -289,7 +304,12 @@
         }
 
         const plantillaSeleccionada = document.getElementById('plantillaSelect').value;
-        const payload = { maquina_id: maquinaIdActual, cantidad: parseInt(cantidad), clave: clave, tiempo_total: tiempo };
+        const payload = {
+            maquina_id: maquinaIdActual,
+            cantidad: parseInt(cantidad),
+            clave: clave,
+            tiempo_total: tiempo
+        };
         if (plantillaSeleccionada) payload.plantilla_nombre = plantillaSeleccionada;
 
         fetch('/api/produccion/ingresar_piezas', {
