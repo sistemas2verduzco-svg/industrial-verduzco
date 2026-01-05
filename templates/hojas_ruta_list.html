@@ -231,7 +231,9 @@
             .then(data => {
                 if (data.nombres && data.nombres.length) {
                     data.nombres.forEach(n => {
-                        const opt = document.createElement('option'); opt.value = n; opt.textContent = n; 
+                        const opt = document.createElement('option');
+                        opt.value = n;
+                        opt.textContent = n;
                         if (plantillaDefault && plantillaDefault === n) opt.selected = true;
                         select.appendChild(opt);
                     });
