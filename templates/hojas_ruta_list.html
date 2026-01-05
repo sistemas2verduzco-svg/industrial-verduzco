@@ -164,16 +164,15 @@
                         <button class="btn-small" onclick="aprobarOT({{ maq.id }})">Aprobar OT</button>
                         {% if maq.activo %}
                             <button id="btn-toggle-{{ maq.id }}" class="btn-small" style="background:#f44336; color:#fff; border-color:#f44336;" onclick="toggleActivacion({{ maq.id }}, false)">Desactivar Máquina</button>
+                        {% if maq.activo %}
+                            <button id="btn-toggle-{{ maq.id }}" class="btn-small" style="background:#f44336; color:#fff; border-color:#f44336;" onclick="toggleActivacion({{ maq.id }}, false)">Desactivar Máquina</button>
                         {% else %}
                             <button id="btn-toggle-{{ maq.id }}" class="btn-small" style="background:#2196f3; color:#fff; border-color:#2196f3;" onclick="toggleActivacion({{ maq.id }}, true)">Activar Máquina</button>
                         {% endif %}
                         <button class="btn-small" style="background:#4caf50; color:#fff; border-color:#4caf50;" onclick="abrirFormPiezas({{ maq.id }}, '{{ maq.nombre|tojson|safe }}', '{{ maq.tipo or '' }}', '{{ maq.plantilla_default or ''|tojson|safe }}')">Ingresar piezas</button>
-                        <button class="btn-small" title="Asignar plantilla por defecto a esta máquina" onclick="asignarPlantillaRapida({{ maq.id }}, '{{ maq.tipo or '' }}')">Asignar Plantilla</button>
-                    </div>
-                </div>
-                {% endfor %}
-            {% else %}
-                <div style="text-align: center; padding: 40px; color: #aaa;">
+                        <a href="/control_calidad/{{ maq.id }}" class="btn-small">Control QC</a>
+                        <button class="btn-small" onclick="aprobarOT({{ maq.id }})">Aprobar OT</button>
+                        <a href="/hojas_ruta/{{ maq.id }}" class="btn-small btn-primary-small">Ver hojas</a
                     No hay máquinas registradas.
                 </div>
             {% endif %}
