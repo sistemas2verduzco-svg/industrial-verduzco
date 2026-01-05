@@ -304,7 +304,7 @@
                 cerrarFormPiezas();
                 window.location.href = '/hojas_ruta/' + maquinaIdActual;
             } else {
-                alert('Error: ' + (data.error ; 'No se pudo crear la hoja'));
+                alert('Error: ' + (data.error || 'No se pudo crear la hoja'));
             }
         })
         .catch(err => {
