@@ -159,15 +159,16 @@
                         </div>
                     </div>
                     <div class="maquina-actions">
+                        <a href="/hojas_ruta/{{ maq.id }}" class="btn-small btn-primary-small">Ver hojas</a>
+                        <a href="/control_calidad/{{ maq.id }}" class="btn-small">Control QC</a>
+                        <button class="btn-small" onclick="aprobarOT({{ maq.id }})">Aprobar OT</button>
                         {% if maq.activo %}
                             <button id="btn-toggle-{{ maq.id }}" class="btn-small" style="background:#f44336; color:#fff; border-color:#f44336;" onclick="toggleActivacion({{ maq.id }}, false)">Desactivar Máquina</button>
                         {% else %}
                             <button id="btn-toggle-{{ maq.id }}" class="btn-small" style="background:#2196f3; color:#fff; border-color:#2196f3;" onclick="toggleActivacion({{ maq.id }}, true)">Activar Máquina</button>
                         {% endif %}
-                        <button class="btn-small btn-ingresar-piezas" style="background:#4caf50; color:#fff; border-color:#4caf50;" data-maq-id="{{ maq.id }}" data-maq-nombre='{{ maq.nombre|tojson }}' data-maq-tipo='{{ (maq.tipo or '')|tojson }}' data-maq-plantilla='{{ (maq.plantilla_default or '')|tojson }}'>Ingresar piezas</button>
-                        <a href="/control_calidad/{{ maq.id }}" class="btn-small">Control QC</a>
-                        <button class="btn-small" onclick="aprobarOT({{ maq.id }})">Aprobar OT</button>
-                        <a href="/hojas_ruta/{{ maq.id }}" class="btn-small btn-primary-small">Ver hojas</a>
+                        <button class="btn-small" style="background:#4caf50; color:#fff; border-color:#4caf50;" onclick="abrirFormPiezas({{ maq.id }}, '{{ maq.nombre|tojson|safe }}', '{{ maq.tipo or '' }}', '{{ maq.plantilla_default or ''|tojson|safe }}')">Ingresar piezas</button>
+                        <button class="btn-small" title="Asignar plantilla por defecto a esta máquina" onclick="asignarPlantillaRapida({{ maq.id }}, '{{ maq.tipo or '' }}')">Asignar Plantilla</button>
                     </div>
                 </div>
                 {% endfor %}
@@ -222,27 +223,50 @@
         document.getElementById('cantidadPiezas').value = '';
         document.getElementById('clavePieza').value = '';
         document.getElementById('tiempoTotal').value = '';
+        // cargar plantillas disponibles para este tipo
         const select = document.getElementById('plantillaSelect');
         select.innerHTML = '<option value="">Usar plantilla por defecto / Ninguna</option>';
         if (maquinaTipo) {
             fetch('/api/plantillas_estaciones/nombres?maquina_tipo=' + encodeURIComponent(maquinaTipo))
-                .then(res => res.json())
-                .then(data => {
-                    if (data.nombres && data.nombres.length) {
-                        data.nombres.forEach(n => {
-                            const opt = document.createElement('option');
-                            opt.value = n;
-                            opt.textContent = n;
-                            if (plantillaDefault && plantillaDefault === n) {
-                                opt.selected = true;
-                            }
-                            select.appendChild(opt);
-                        });
-                    }
-                })
-                .catch(err => console.error('No se pudieron cargar plantillas', err));
+            .then(res => res.json())
+            .then(data => {
+                if (data.nombres && data.nombres.length) {
+                    data.nombres.forEach(n => {
+                        const opt = document.createElement('option'); opt.value = n; opt.textContent = n; 
+                        if (plantillaDefault && plantillaDefault === n) opt.selected = true;
+                        select.appendChild(opt);
+                    });
+                }
+            }).catch(err => { console.error('No se pudieron cargar plantillas', err); });
         }
         document.getElementById('modalPiezas').style.display = 'flex';
+    }
+
+    function asignarPlantillaRapida(maquinaId, maquinaTipo) {
+        if (!maquinaTipo) {
+            alert('Esta máquina no tiene tipo definido.');
+            return;
+        }
+        fetch('/api/plantillas_estaciones/nombres?maquina_tipo=' + encodeURIComponent(maquinaTipo))
+        .then(res => res.json())
+        .then(data => {
+            const nombres = (data.nombres || []);
+            if (!nombres.length) {
+                alert('No hay plantillas disponibles para este tipo de máquina.');
+                return;
+            }
+            const lista = nombres.join('\n');
+            const seleccion = prompt('Plantillas disponibles:\n' + lista + '\n\nEscribe el nombre exacto de la plantilla para asignarla (dejar vacío para limpiar):');
+            if (seleccion === null) return; // cancel
+            const payload = { plantilla_nombre: seleccion.trim() };
+            fetch('/api/maquinas/' + maquinaId + '/plantilla_default', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(r => { if (r.success) { alert('Plantilla actualizada'); window.location.reload(); } else alert('Error: ' + (r.error || 'no se pudo actualizar')); })
+            .catch(err => { console.error(err); alert('Error al conectar con el servidor'); });
+        })
+        .catch(err => { console.error(err); alert('No se pudieron cargar plantillas'); });
     }
 
     function cerrarFormPiezas() {
@@ -266,35 +290,28 @@
         }
 
         const plantillaSeleccionada = document.getElementById('plantillaSelect').value;
-        const payload = {
-            maquina_id: maquinaIdActual,
-            cantidad: parseInt(cantidad, 10),
-            clave: clave,
-            tiempo_total: tiempo
-        };
-        if (plantillaSeleccionada) {
-            payload.plantilla_nombre = plantillaSeleccionada;
-        }
+        const payload = { maquina_id: maquinaIdActual, cantidad: parseInt(cantidad), clave: clave, tiempo_total: tiempo };
+        if (plantillaSeleccionada) payload.plantilla_nombre = plantillaSeleccionada;
 
         fetch('/api/produccion/ingresar_piezas', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    alert('Piezas registradas. Hoja de ruta creada.');
-                    cerrarFormPiezas();
-                    window.location.href = '/hojas_ruta/' + maquinaIdActual;
-                } else {
-                    alert('Error: ' + (data.error || 'No se pudo crear la hoja'));
-                }
-            })
-            .catch(err => {
-                console.error(err);
-                alert('Error al conectar con el servidor');
-            });
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert('Piezas registradas. Hoja de ruta creada.');
+                cerrarFormPiezas();
+                window.location.href = '/hojas_ruta/' + maquinaIdActual;
+            } else {
+                alert('Error: ' + (data.error || 'No se pudo crear la hoja'));
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Error al conectar con el servidor');
+        });
     }
 
     function aprobarOT(maquinaId) {
@@ -303,36 +320,23 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ maquina_id: maquinaId })
         })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    alert('OT aprobada. Puedes activar la máquina.');
-                    window.location.reload();
-                } else {
-                    alert('Error al aprobar OT');
-                }
-            })
-            .catch(err => {
-                console.error(err);
-                alert('Error al conectar');
-            });
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                alert('OT aprobada. Puedes activar la máquina.');
+                window.location.reload();
+            } else {
+                alert('Error al aprobar OT');
+            }
+        })
+        .catch(err => { console.error(err); alert('Error al conectar'); });
     }
 
+    // Cerrar modal si se presiona Escape
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             cerrarFormPiezas();
         }
-    });
-
-    // Enlaza los botones sin usar inline JS para evitar problemas de comillas
-    document.querySelectorAll('.btn-ingresar-piezas').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const maquinaId = parseInt(btn.getAttribute('data-maq-id'), 10);
-            const maquinaNombre = JSON.parse(btn.getAttribute('data-maq-nombre'));
-            const maquinaTipo = JSON.parse(btn.getAttribute('data-maq-tipo'));
-            const plantillaDefault = JSON.parse(btn.getAttribute('data-maq-plantilla'));
-            abrirFormPiezas(maquinaId, maquinaNombre, maquinaTipo, plantillaDefault);
-        });
     });
     </script>
 </body>
