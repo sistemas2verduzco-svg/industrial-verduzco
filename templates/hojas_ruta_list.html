@@ -165,7 +165,7 @@
                             <button id="btn-toggle-{{ maq.id }}" class="btn-small" style="background:#2196f3; color:#fff; border-color:#2196f3;" onclick="toggleActivacion({{ maq.id }}, true)">Activar Máquina</button>
                         {% endif %}
                         <button class="btn-small btn-ingresar-piezas" style="background:#4caf50; color:#fff; border-color:#4caf50;" data-maq-id="{{ maq.id }}" data-maq-nombre='{{ maq.nombre|tojson }}' data-maq-tipo='{{ (maq.tipo or '')|tojson }}' data-maq-plantilla='{{ (maq.plantilla_default or '')|tojson }}'>Ingresar piezas</button>
-                        <a href="/control_calidad/{{ maq.id }}" class="btn-small">Control QC</a>
+                        <a href="/qc_estaciones/{{ maq.id }}" class="btn-small">Control QC</a>
                         <button class="btn-small" onclick="aprobarOT({{ maq.id }})">Aprobar OT</button>
                         <a href="/hojas_ruta/{{ maq.id }}" class="btn-small btn-primary-small">Ver hojas</a>
                     </div>

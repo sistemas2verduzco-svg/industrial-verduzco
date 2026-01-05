@@ -67,6 +67,19 @@ services:
     volumes:
       - pgadmin_data:/var/lib/pgadmin
 
+  adminer:
+    image: adminer:4
+    container_name: catalogo_adminer
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    ports:
+      - "8080:8080"
+    networks:
+      - catalogo_network
+
 volumes:
   postgres_data:
   pgadmin_data:

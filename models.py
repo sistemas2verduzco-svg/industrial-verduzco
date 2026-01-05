@@ -365,6 +365,42 @@ class QCItem(db.Model):
         }
 
 
+class QCProduccionRegistro(db.Model):
+    """Control de calidad para piezas/lotes de producción (independiente del QC de maquinaria)."""
+    __tablename__ = 'qc_estaciones'
+
+    id = db.Column(db.Integer, primary_key=True)
+    maquina_id = db.Column(db.Integer, db.ForeignKey('maquinas.id'), nullable=False)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=True)
+    clave_pieza = db.Column(db.String(255), nullable=False)
+    lote = db.Column(db.String(255), nullable=True)
+    cantidad_inspeccionada = db.Column(db.Integer, nullable=True)
+    cantidad_aprobada = db.Column(db.Integer, nullable=True)
+    cantidad_rechazada = db.Column(db.Integer, nullable=True)
+    resultado = db.Column(db.String(50), nullable=False)  # aprobado / rechazado
+    notas = db.Column(db.Text, nullable=True)
+    mediciones = db.Column(db.JSON, nullable=True)  # lista/dict de mediciones opcionales
+    usuario = db.Column(db.String(100), nullable=True)
+    creado_en = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'maquina_id': self.maquina_id,
+            'hoja_ruta_id': self.hoja_ruta_id,
+            'clave_pieza': self.clave_pieza,
+            'lote': self.lote,
+            'cantidad_inspeccionada': self.cantidad_inspeccionada,
+            'cantidad_aprobada': self.cantidad_aprobada,
+            'cantidad_rechazada': self.cantidad_rechazada,
+            'resultado': self.resultado,
+            'notas': self.notas,
+            'mediciones': self.mediciones,
+            'usuario': self.usuario,
+            'creado_en': self.creado_en.isoformat() if self.creado_en else None
+        }
+
+
 class Máquina(db.Model):
     """Máquinas que requieren control de calidad (independiente de productos)."""
     __tablename__ = 'maquinas'

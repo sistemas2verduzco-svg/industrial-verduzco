@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Calidad de Producción</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .qc-card { background:#fff; border:1px solid #e0e0e0; border-radius:8px; padding:16px; margin-bottom:16px; box-shadow:0 2px 6px rgba(0,0,0,0.04); }
+        .qc-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
+        .qc-field { display:flex; flex-direction:column; gap:4px; }
+        .qc-field label { font-weight:600; font-size:13px; color:#333; }
+        .qc-field input, .qc-field select, .qc-field textarea { padding:8px; border:1px solid #ddd; border-radius:4px; font-size:14px; }
+        .qc-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:12px; }
+        .btn-primary { background:#0b74de; color:#fff; border:1px solid #0b74de; padding:10px 16px; border-radius:4px; cursor:pointer; font-weight:600; }
+        .btn-secondary { background:#fff; color:#333; border:1px solid #ccc; padding:10px 16px; border-radius:4px; cursor:pointer; }
+        table { width:100%; border-collapse:collapse; }
+        th, td { padding:8px; border-bottom:1px solid #eee; text-align:left; font-size:13px; }
+        th { background:#f7f9fb; font-size:12px; text-transform:uppercase; letter-spacing:0.03em; }
+        .badge { display:inline-block; padding:4px 8px; border-radius:12px; font-size:12px; font-weight:600; }
+        .badge-ok { background:#e8f5e9; color:#1b5e20; }
+        .badge-bad { background:#ffebee; color:#c62828; }
+    </style>
+</head>
+<body>
+    {% include '_sidebar.html' %}
+
+    <div class="container">
+        <h2>Control de Calidad — Producción</h2>
+        <p style="color:#666; margin:6px 0 16px;">Módulo independiente para evaluar piezas/lotes producidos en estaciones.</p>
+
+        <div class="qc-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+                <div>
+                    <div style="font-weight:700; font-size:18px;">{{ maquina.nombre }}</div>
+                    <div style="color:#555; font-size:13px;">{{ maquina.descripcion }}</div>
+                    {% if hoja_activa %}
+                    <div style="color:#0b74de; font-size:12px; margin-top:4px;">Hoja activa: {{ hoja_activa.nombre }}</div>
+                    {% endif %}
+                </div>
+                <div style="font-size:12px; color:#777;">ID Máquina: {{ maquina.id }}</div>
+            </div>
+
+            <form id="formQC">
+                <input type="hidden" name="maquina_id" value="{{ maquina.id }}">
+                {% if hoja_activa %}
+                <input type="hidden" name="hoja_ruta_id" value="{{ hoja_activa.id }}">
+                {% endif %}
+                <div class="qc-grid">
+                    <div class="qc-field">
+                        <label for="clave_pieza">Clave de pieza</label>
+                        <input type="text" id="clave_pieza" name="clave_pieza" required placeholder="Ej: FLECHA-001">
+                    </div>
+                    <div class="qc-field">
+                        <label for="lote">Lote (opcional)</label>
+                        <input type="text" id="lote" name="lote" placeholder="Ej: Lote-12-A">
+                    </div>
+                    <div class="qc-field">
+                        <label for="cantidad_inspeccionada">Cantidad inspeccionada</label>
+                        <input type="number" id="cantidad_inspeccionada" name="cantidad_inspeccionada" min="0" placeholder="Ej: 50">
+                    </div>
+                    <div class="qc-field">
+                        <label for="cantidad_aprobada">Cantidad aprobada</label>
+                        <input type="number" id="cantidad_aprobada" name="cantidad_aprobada" min="0" placeholder="Ej: 48">
+                    </div>
+                    <div class="qc-field">
+                        <label for="cantidad_rechazada">Cantidad rechazada</label>
+                        <input type="number" id="cantidad_rechazada" name="cantidad_rechazada" min="0" placeholder="Ej: 2">
+                    </div>
+                    <div class="qc-field">
+                        <label for="resultado">Resultado</label>
+                        <select id="resultado" name="resultado" required>
+                            <option value="">Selecciona</option>
+                            <option value="aprobado">Aprobado</option>
+                            <option value="rechazado">Rechazado</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="qc-field" style="margin-top:10px;">
+                    <label for="notas">Notas / Hallazgos</label>
+                    <textarea id="notas" name="notas" rows="3" placeholder="Observaciones del lote o pieza"></textarea>
+                </div>
+                <div class="qc-field" style="margin-top:10px;">
+                    <label for="mediciones">Mediciones (JSON opcional)</label>
+                    <textarea id="mediciones" name="mediciones" rows="3" placeholder='Ej: {"longitud_mm": 120.5, "diametro_mm": 12.3}'></textarea>
+                    <small style="color:#777;">Puedes dejarlo vacío o pegar un JSON simple con medidas.</small>
+                </div>
+                <div class="qc-actions">
+                    <button type="button" class="btn-secondary" onclick="window.history.back()">Volver</button>
+                    <button type="submit" class="btn-primary">Guardar QC</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="qc-card">
+            <h3 style="margin:0 0 12px;">Histórico reciente</h3>
+            {% if registros %}
+            <div style="overflow-x:auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Clave</th>
+                            <th>Lote</th>
+                            <th>Resultado</th>
+                            <th>Insp.</th>
+                            <th>Aprob.</th>
+                            <th>Rech.</th>
+                            <th>Notas</th>
+                            <th>Usuario</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in registros %}
+                        <tr>
+                            <td>{{ r.creado_en.strftime('%Y-%m-%d %H:%M') if r.creado_en else '' }}</td>
+                            <td>{{ r.clave_pieza }}</td>
+                            <td>{{ r.lote }}</td>
+                            <td>
+                                {% if r.resultado == 'aprobado' %}
+                                    <span class="badge badge-ok">Aprobado</span>
+                                {% else %}
+                                    <span class="badge badge-bad">Rechazado</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ r.cantidad_inspeccionada }}</td>
+                            <td>{{ r.cantidad_aprobada }}</td>
+                            <td>{{ r.cantidad_rechazada }}</td>
+                            <td style="max-width:240px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="{{ r.notas }}">{{ r.notas }}</td>
+                            <td>{{ r.usuario }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p style="color:#777;">Aún no hay registros para esta máquina.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+    const form = document.getElementById('formQC');
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(form);
+        const payload = {};
+        formData.forEach((v, k) => { payload[k] = v.trim(); });
+
+        if (!payload.maquina_id || !payload.clave_pieza || !payload.resultado) {
+            alert('maquina_id, clave_pieza y resultado son obligatorios');
+            return;
+        }
+
+        // Limpiar vacíos a null para no forzar strings
+        ['hoja_ruta_id','lote','cantidad_inspeccionada','cantidad_aprobada','cantidad_rechazada','notas','mediciones'].forEach(key => {
+            if (payload[key] === '') payload[key] = null;
+        });
+
+        try {
+            const res = await fetch('/api/qc_estaciones', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert('QC guardado');
+                window.location.reload();
+            } else {
+                alert('Error: ' + (data.error || 'No se pudo guardar'));
+            }
+        } catch (err) {
+            console.error(err);
+            alert('No se pudo conectar al servidor');
+        }
+    });
+    </script>
+</body>
+</html>

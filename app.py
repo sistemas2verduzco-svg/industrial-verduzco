@@ -1,8 +1,9 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, Máquina, ComponenteMáquina, HojaRuta, EstacionTrabajo, EstacionPlantilla
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRuta, EstacionTrabajo, EstacionPlantilla
 from auth import AuthManager
 from email_manager import EmailManager
 import os
+import json
 from dotenv import load_dotenv
 from functools import wraps
 import secrets
@@ -505,6 +506,16 @@ def hojas_ruta_detalle(maquina_id):
     return render_template('hojas_ruta_detalle.html', maquina=maquina, hojas=hojas_data)
 
 
+@app.route('/qc_estaciones/<int:maquina_id>')
+@login_required
+def qc_estaciones_maquina(maquina_id):
+    """Vista independiente de control de calidad para producción por máquina."""
+    maquina = Máquina.query.get_or_404(maquina_id)
+    hoja_activa = HojaRuta.query.filter_by(maquina_id=maquina_id, estado='activa').first()
+    registros = QCProduccionRegistro.query.filter_by(maquina_id=maquina_id).order_by(QCProduccionRegistro.creado_en.desc()).limit(50).all()
+    return render_template('qc_estaciones.html', maquina=maquina, hoja_activa=hoja_activa, registros=registros)
+
+
 # API para crear / actualizar hojas de ruta
 
 @app.route('/api/hojas_ruta', methods=['POST'])
@@ -688,6 +699,59 @@ def api_ingresar_piezas():
         db.session.rollback()
         logger.error(f"Error creando hoja de ruta desde ingreso de piezas: {e}", exc_info=True)
         return jsonify({'error': 'Error creando hoja de ruta'}), 500
+
+
+@app.route('/api/qc_estaciones', methods=['POST'])
+@login_required
+def api_qc_estaciones_registro():
+    """Registrar control de calidad de producción (independiente del QC de maquinaria)."""
+    payload = request.get_json(silent=True) or request.form
+    maquina_id = payload.get('maquina_id')
+    clave_pieza = payload.get('clave_pieza')
+    resultado = payload.get('resultado')
+
+    if not maquina_id or not clave_pieza or not resultado:
+        return jsonify({'error': 'maquina_id, clave_pieza y resultado son requeridos'}), 400
+
+    def to_int(value):
+        try:
+            return int(value) if value is not None and value != '' else None
+        except Exception:
+            return None
+
+    mediciones = None
+    mediciones_raw = payload.get('mediciones')
+    if mediciones_raw:
+        if isinstance(mediciones_raw, (dict, list)):
+            mediciones = mediciones_raw
+        else:
+            try:
+                mediciones = json.loads(mediciones_raw)
+            except Exception:
+                mediciones = {'valor': str(mediciones_raw)}
+
+    try:
+        registro = QCProduccionRegistro(
+            maquina_id=int(maquina_id),
+            hoja_ruta_id=to_int(payload.get('hoja_ruta_id')),
+            clave_pieza=clave_pieza,
+            lote=payload.get('lote'),
+            cantidad_inspeccionada=to_int(payload.get('cantidad_inspeccionada')),
+            cantidad_aprobada=to_int(payload.get('cantidad_aprobada')),
+            cantidad_rechazada=to_int(payload.get('cantidad_rechazada')),
+            resultado=resultado,
+            notas=payload.get('notas'),
+            mediciones=mediciones,
+            usuario=session.get('user')
+        )
+        db.session.add(registro)
+        db.session.commit()
+        logger.info(f"[QC ESTACIONES] Registro creado {registro.id} para maquina {maquina_id}")
+        return jsonify({'success': True, 'registro': registro.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error guardando QC estaciones: {e}", exc_info=True)
+        return jsonify({'error': 'No se pudo guardar el control de calidad'}), 500
 
 
 @app.route('/api/maquinas/<int:maquina_id>/plantilla_default', methods=['POST'])
