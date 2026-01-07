@@ -489,7 +489,20 @@ def hojas_ruta_list():
 def hojas_ruta_form():
     """Formulario para crear una hoja de ruta con todos los campos del formato."""
     maquinas = Máquina.query.order_by(Máquina.nombre.asc()).all()
-    return render_template('hojas_ruta_form.html', maquinas=maquinas)
+    # Listado reciente (máximo 50) para consulta rápida
+    hojas = HojaRuta.query.order_by(HojaRuta.fecha_creacion.desc()).limit(50).all()
+    hojas_data = []
+    for h in hojas:
+        hojas_data.append({
+            'id': h.id,
+            'maquina': h.maquina.nombre if getattr(h, 'maquina', None) else str(h.maquina_id),
+            'maquina_id': h.maquina_id,
+            'nombre': h.nombre,
+            'estado': h.estado,
+            'cantidad_piezas': h.cantidad_piezas,
+            'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None
+        })
+    return render_template('hojas_ruta_form.html', maquinas=maquinas, hojas=hojas_data)
 
 
 @app.route('/hojas_ruta/<int:maquina_id>')
@@ -501,15 +514,12 @@ def hojas_ruta_detalle(maquina_id):
     
     hojas_data = []
     for hoja in hojas:
+        # Usa to_dict() completo para incluir todos los campos (calidad, pn, tiempos, etc.)
+        h = hoja.to_dict()
+        # Asegura orden de estaciones
         estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
-        hojas_data.append({
-            'id': hoja.id,
-            'nombre': hoja.nombre,
-            'descripcion': hoja.descripcion,
-            'estado': hoja.estado,
-            'fecha_creacion': hoja.fecha_creacion.isoformat(),
-            'estaciones': [e.to_dict() for e in estaciones]
-        })
+        h['estaciones'] = [e.to_dict() for e in estaciones]
+        hojas_data.append(h)
     
     return render_template('hojas_ruta_detalle.html', maquina=maquina, hojas=hojas_data)
 

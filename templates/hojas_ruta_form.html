@@ -130,6 +130,53 @@
                 </div>
             </form>
         </div>
+
+        {% if hojas %}
+        <div class="section-title">Hojas de ruta creadas recientemente</div>
+        <div class="form-card" style="margin-top:10px;">
+            <div class="inline" style="margin-bottom:10px;">
+                <div>
+                    <label>Filtrar por máquina</label>
+                    <select id="filtroMaquina">
+                        <option value="">Todas</option>
+                        {% for m in maquinas %}
+                        <option value="{{ m.nombre }}">{{ m.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div style="overflow-x:auto;">
+                <table style="width:100%; border-collapse:collapse;">
+                    <thead>
+                        <tr style="background:#f5f7fb;">
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #e0e0e0;">ID</th>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #e0e0e0;">Máquina</th>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #e0e0e0;">Nombre</th>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #e0e0e0;">Estado</th>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #e0e0e0;">Piezas</th>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #e0e0e0;">Creada</th>
+                            <th style="text-align:left; padding:8px; border-bottom:1px solid #e0e0e0;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaHojas">
+                        {% for h in hojas %}
+                        <tr data-maq="{{ h.maquina }}" data-maquina_id="{{ h.maquina_id }}">
+                            <td style="padding:8px; border-bottom:1px solid #f0f0f0;">{{ h.id }}</td>
+                            <td style="padding:8px; border-bottom:1px solid #f0f0f0;">{{ h.maquina }}</td>
+                            <td style="padding:8px; border-bottom:1px solid #f0f0f0;">{{ h.nombre }}</td>
+                            <td style="padding:8px; border-bottom:1px solid #f0f0f0;">{{ h.estado }}</td>
+                            <td style="padding:8px; border-bottom:1px solid #f0f0f0;">{{ h.cantidad_piezas or '' }}</td>
+                            <td style="padding:8px; border-bottom:1px solid #f0f0f0;">{{ h.fecha_creacion[:16] if h.fecha_creacion }}</td>
+                            <td style="padding:8px; border-bottom:1px solid #f0f0f0;"><a href="/hojas_ruta/{{ h.maquina_id }}">Ver</a></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% else %}
+        <div class="form-card" style="margin-top:10px; color:#777;">Aún no hay hojas registradas.</div>
+        {% endif %}
     </div>
 
     <script>
@@ -167,11 +214,10 @@
                 body: JSON.stringify(payload)
             });
             const data = await res.json();
-            if (res.ok && data.id) {
+            if (res.ok && (data.id || data.hoja || data.success)) {
                 alert('Hoja creada');
-                window.location.href = '/hojas_ruta/' + payload.maquina_id;
-            } else if (data.id) {
-                window.location.href = '/hojas_ruta/' + payload.maquina_id;
+                // Permanecer en esta página para ver el listado actualizado
+                window.location.reload();
             } else {
                 alert('Error: ' + (data.error || 'No se pudo crear la hoja'));
             }
@@ -180,6 +226,19 @@
             alert('Error al conectar');
         }
     });
+
+    // Filtro por máquina
+    const filtro = document.getElementById('filtroMaquina');
+    const tbody = document.getElementById('tablaHojas');
+    if (filtro && tbody) {
+        filtro.addEventListener('change', () => {
+            const term = filtro.value.trim();
+            Array.from(tbody.querySelectorAll('tr')).forEach(tr => {
+                const m = tr.getAttribute('data-maq') || '';
+                tr.style.display = !term || m === term ? '' : 'none';
+            });
+        });
+    }
     </script>
 </body>
 </html>
