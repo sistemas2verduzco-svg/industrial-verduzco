@@ -5,6 +5,7 @@ from email_manager import EmailManager
 import os
 import json
 from dotenv import load_dotenv
+from sqlalchemy import text
 from functools import wraps
 import secrets
 from werkzeug.utils import secure_filename
@@ -565,14 +566,6 @@ def api_crear_hoja_ruta():
         if isinstance(val, bool):
             return val
         return str(val).lower() in ['1', 'true', 'si', 'sí', 'on', 'yes']
-
-    # Asegurar cambios de esquema en producción sin migraciones (Postgres 15)
-    try:
-        db.session.execute("ALTER TABLE hojas_ruta ADD COLUMN IF NOT EXISTS revision VARCHAR(100)")
-        db.session.execute("ALTER TABLE hojas_ruta ALTER COLUMN maquina_id DROP NOT NULL")
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
 
     hoja = HojaRuta(
         maquina_id=int(maquina_id) if maquina_id else None,
