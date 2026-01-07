@@ -484,6 +484,14 @@ def hojas_ruta_list():
     return render_template('hojas_ruta_list.html', maquinas=maquinas_data)
 
 
+@app.route('/hojas_ruta_form')
+@login_required
+def hojas_ruta_form():
+    """Formulario para crear una hoja de ruta con todos los campos del formato."""
+    maquinas = Máquina.query.order_by(Máquina.nombre.asc()).all()
+    return render_template('hojas_ruta_form.html', maquinas=maquinas)
+
+
 @app.route('/hojas_ruta/<int:maquina_id>')
 @login_required
 def hojas_ruta_detalle(maquina_id):
@@ -526,19 +534,46 @@ def api_crear_hoja_ruta():
     maquina_id = data.get('maquina_id')
     nombre = data.get('nombre')
     descripcion = data.get('descripcion')
-    
+
     if not maquina_id or not nombre:
         return jsonify({'error': 'maquina_id y nombre requeridos'}), 400
-    
+
+    def parse_bool(val):
+        if val is None:
+            return False
+        if isinstance(val, bool):
+            return val
+        return str(val).lower() in ['1', 'true', 'si', 'sí', 'on', 'yes']
+
     hoja = HojaRuta(
         maquina_id=maquina_id,
         nombre=nombre,
         descripcion=descripcion,
-        estado='activa'
+        estado=data.get('estado', 'activa'),
+        producto=data.get('producto'),
+        calidad=data.get('calidad'),
+        pn=data.get('pn'),
+        fecha_salida=datetime.fromisoformat(data['fecha_salida']) if data.get('fecha_salida') else None,
+        cantidad_piezas=int(data['cantidad_piezas']) if data.get('cantidad_piezas') else None,
+        orden_trabajo_hr=data.get('orden_trabajo_hr'),
+        orden_trabajo_pt=data.get('orden_trabajo_pt'),
+        almacen=data.get('almacen'),
+        no_sin_orden=data.get('no_sin_orden'),
+        materia_prima=data.get('materia_prima'),
+        total_tiempo=data.get('total_tiempo'),
+        dias_a_laborar=float(data['dias_a_laborar']) if data.get('dias_a_laborar') else None,
+        fecha_termino=datetime.fromisoformat(data['fecha_termino']) if data.get('fecha_termino') else None,
+        aprobada=parse_bool(data.get('aprobada')),
+        rechazada=parse_bool(data.get('rechazada')),
+        scrap=parse_bool(data.get('scrap')),
+        retrabajo=parse_bool(data.get('retrabajo')),
+        supervisor=data.get('supervisor'),
+        operador=data.get('operador'),
+        eficiencia=float(data['eficiencia']) if data.get('eficiencia') else None
     )
     db.session.add(hoja)
     db.session.commit()
-    
+
     logger.info(f"[HOJAS_RUTA] Nueva hoja creada: {hoja.id} para máquina {maquina_id}")
     return jsonify(hoja.to_dict()), 201
 

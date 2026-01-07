@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nueva Hoja de Ruta</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .form-card { background:#fff; border:1px solid #e0e0e0; border-radius:10px; padding:18px; box-shadow:0 4px 12px rgba(0,0,0,0.05); }
+        .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:12px; }
+        label { font-weight:600; font-size:13px; color:#333; }
+        input, select, textarea { width:100%; padding:8px; border:1px solid #d4d4d4; border-radius:6px; font-size:14px; }
+        textarea { resize: vertical; min-height: 80px; }
+        .section-title { margin:18px 0 8px; font-weight:700; color:#0b74de; }
+        .actions { display:flex; gap:10px; justify-content:flex-end; margin-top:14px; }
+        .btn { padding:10px 14px; border:none; border-radius:6px; cursor:pointer; font-weight:700; }
+        .btn-primary { background:#0b74de; color:#fff; }
+        .btn-secondary { background:#eef2f5; color:#333; }
+        .inline { display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
+        .flag { display:flex; gap:8px; align-items:center; }
+    </style>
+</head>
+<body>
+    {% include '_sidebar.html' %}
+
+    <div class="container">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <h2 style="margin:0;">Nueva Hoja de Ruta</h2>
+            <a href="/hojas_ruta" style="color:#0b74de; text-decoration:none;">← Volver a listado</a>
+        </div>
+
+        <div class="form-card">
+            <form id="hojaForm">
+                <div class="grid">
+                    <div>
+                        <label>Máquina</label>
+                        <select name="maquina_id" required>
+                            <option value="">Selecciona máquina</option>
+                            {% for m in maquinas %}
+                            <option value="{{ m.id }}">{{ m.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label>Nombre de hoja</label>
+                        <input name="nombre" required placeholder="Ej: Hoja ruta pieza X">
+                    </div>
+                    <div>
+                        <label>Producto</label>
+                        <input name="producto" placeholder="Producto">
+                    </div>
+                    <div>
+                        <label>Calidad</label>
+                        <input name="calidad" placeholder="Calidad">
+                    </div>
+                    <div>
+                        <label>PN</label>
+                        <input name="pn" placeholder="PN">
+                    </div>
+                    <div>
+                        <label>Fecha de salida</label>
+                        <input type="datetime-local" name="fecha_salida">
+                    </div>
+                    <div>
+                        <label>Cantidad de piezas</label>
+                        <input type="number" name="cantidad_piezas" min="0" step="1">
+                    </div>
+                    <div>
+                        <label>Orden de trabajo H.R</label>
+                        <input name="orden_trabajo_hr">
+                    </div>
+                    <div>
+                        <label>Orden de trabajo P.T</label>
+                        <input name="orden_trabajo_pt">
+                    </div>
+                    <div>
+                        <label>Almacén</label>
+                        <input name="almacen">
+                    </div>
+                    <div>
+                        <label>No. sin orden</label>
+                        <input name="no_sin_orden">
+                    </div>
+                    <div>
+                        <label>Materia prima</label>
+                        <input name="materia_prima">
+                    </div>
+                    <div>
+                        <label>Total de tiempo (HH:MM:SS)</label>
+                        <input name="total_tiempo" placeholder="00:00:00">
+                    </div>
+                    <div>
+                        <label>Días a laborar</label>
+                        <input type="number" name="dias_a_laborar" step="0.1" min="0">
+                    </div>
+                    <div>
+                        <label>Fecha de término</label>
+                        <input type="date" name="fecha_termino">
+                    </div>
+                </div>
+
+                <div class="section-title">Responsables y estado</div>
+                <div class="grid">
+                    <div>
+                        <label>Supervisor</label>
+                        <input name="supervisor">
+                    </div>
+                    <div>
+                        <label>Operador</label>
+                        <input name="operador">
+                    </div>
+                    <div>
+                        <label>Eficiencia (%)</label>
+                        <input type="number" name="eficiencia" step="0.01" min="0" max="100" placeholder="0-100">
+                    </div>
+                </div>
+                <div class="inline" style="margin-top:10px;">
+                    <div class="flag"><input type="checkbox" name="aprobada" id="aprobada"> <label for="aprobada">Aprobada</label></div>
+                    <div class="flag"><input type="checkbox" name="rechazada" id="rechazada"> <label for="rechazada">Rechazada</label></div>
+                    <div class="flag"><input type="checkbox" name="scrap" id="scrap"> <label for="scrap">Scrap</label></div>
+                    <div class="flag"><input type="checkbox" name="retrabajo" id="retrabajo"> <label for="retrabajo">Retrabajo</label></div>
+                </div>
+
+                <div class="section-title">Descripción</div>
+                <textarea name="descripcion" placeholder="Notas de la hoja"></textarea>
+
+                <div class="actions">
+                    <button type="button" class="btn btn-secondary" onclick="history.back()">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Crear hoja</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+    const form = document.getElementById('hojaForm');
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fd = new FormData(form);
+        const payload = {};
+        fd.forEach((v, k) => { payload[k] = v; });
+
+        if (!payload.maquina_id || !payload.nombre) {
+            alert('Máquina y nombre son obligatorios');
+            return;
+        }
+
+        // Normalizar checkboxes y vacíos
+        ['aprobada','rechazada','scrap','retrabajo'].forEach(key => {
+            payload[key] = fd.get(key) ? true : false;
+        });
+        ['dias_a_laborar','cantidad_piezas','eficiencia'].forEach(key => {
+            if (payload[key] === '') payload[key] = null; else payload[key] = payload[key];
+        });
+        if (payload.fecha_salida === '') payload.fecha_salida = null; 
+        if (payload.fecha_termino === '') payload.fecha_termino = null;
+
+        // Adapt datetime-local to ISO
+        if (payload.fecha_salida) {
+            payload.fecha_salida = payload.fecha_salida.replace('T', ' ');
+        }
+
+        try {
+            const res = await fetch('/api/hojas_ruta', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (res.ok && data.id) {
+                alert('Hoja creada');
+                window.location.href = '/hojas_ruta/' + payload.maquina_id;
+            } else if (data.id) {
+                window.location.href = '/hojas_ruta/' + payload.maquina_id;
+            } else {
+                alert('Error: ' + (data.error || 'No se pudo crear la hoja'));
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Error al conectar');
+        }
+    });
+    </script>
+</body>
+</html>
