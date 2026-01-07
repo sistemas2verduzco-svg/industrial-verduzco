@@ -459,7 +459,7 @@ class HojaRuta(db.Model):
     """Hojas de ruta de producción para máquinas."""
     __tablename__ = 'hojas_ruta'
     id = db.Column(db.Integer, primary_key=True)
-    maquina_id = db.Column(db.Integer, db.ForeignKey('maquinas.id'), nullable=False)
+    maquina_id = db.Column(db.Integer, db.ForeignKey('maquinas.id'), nullable=True)
     nombre = db.Column(db.String(255), nullable=False)
     descripcion = db.Column(db.Text, nullable=True)
     estado = db.Column(db.String(20), default='activa')  # activa, pausada, completada
@@ -468,6 +468,7 @@ class HojaRuta(db.Model):
     producto = db.Column(db.String(255), nullable=True)
     calidad = db.Column(db.String(255), nullable=True)
     pn = db.Column(db.String(255), nullable=True)
+    revision = db.Column(db.String(100), nullable=True)
     fecha_salida = db.Column(db.DateTime, nullable=True)
     cantidad_piezas = db.Column(db.Integer, nullable=True)
     orden_trabajo_hr = db.Column(db.String(100), nullable=True)
@@ -504,6 +505,7 @@ class HojaRuta(db.Model):
             'producto': self.producto,
             'calidad': self.calidad,
             'pn': self.pn,
+            'revision': self.revision,
             'fecha_salida': self.fecha_salida.isoformat() if self.fecha_salida else None,
             'cantidad_piezas': self.cantidad_piezas,
             'orden_trabajo_hr': self.orden_trabajo_hr,

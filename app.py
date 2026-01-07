@@ -545,8 +545,8 @@ def api_crear_hoja_ruta():
     nombre = data.get('nombre')
     descripcion = data.get('descripcion')
 
-    if not maquina_id or not nombre:
-        return jsonify({'error': 'maquina_id y nombre requeridos'}), 400
+    if not nombre:
+        return jsonify({'error': 'nombre requerido'}), 400
 
     def parse_bool(val):
         if val is None:
@@ -555,14 +555,23 @@ def api_crear_hoja_ruta():
             return val
         return str(val).lower() in ['1', 'true', 'si', 'sí', 'on', 'yes']
 
+    # Asegurar cambios de esquema en producción sin migraciones (Postgres 15)
+    try:
+        db.session.execute("ALTER TABLE hojas_ruta ADD COLUMN IF NOT EXISTS revision VARCHAR(100)")
+        db.session.execute("ALTER TABLE hojas_ruta ALTER COLUMN maquina_id DROP NOT NULL")
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
     hoja = HojaRuta(
-        maquina_id=maquina_id,
+        maquina_id=int(maquina_id) if maquina_id else None,
         nombre=nombre,
         descripcion=descripcion,
         estado=data.get('estado', 'activa'),
         producto=data.get('producto'),
         calidad=data.get('calidad'),
-        pn=data.get('pn'),
+        pn=data.get('clave') or data.get('pn'),
+        revision=data.get('revision'),
         fecha_salida=datetime.fromisoformat(data['fecha_salida']) if data.get('fecha_salida') else None,
         cantidad_piezas=int(data['cantidad_piezas']) if data.get('cantidad_piezas') else None,
         orden_trabajo_hr=data.get('orden_trabajo_hr'),
@@ -577,7 +586,7 @@ def api_crear_hoja_ruta():
         rechazada=parse_bool(data.get('rechazada')),
         scrap=parse_bool(data.get('scrap')),
         retrabajo=parse_bool(data.get('retrabajo')),
-        supervisor=data.get('supervisor'),
+        supervisor=data.get('ingeniero') or data.get('supervisor'),
         operador=data.get('operador'),
         eficiencia=float(data['eficiencia']) if data.get('eficiencia') else None
     )

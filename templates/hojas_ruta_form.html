@@ -26,21 +26,12 @@
     <div class="container">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
             <h2 style="margin:0;">Nueva Hoja de Ruta</h2>
-            <a href="/hojas_ruta" style="color:#0b74de; text-decoration:none;">← Volver a listado</a>
+            <div></div>
         </div>
 
         <div class="form-card">
             <form id="hojaForm">
                 <div class="grid">
-                    <div>
-                        <label>Máquina</label>
-                        <select name="maquina_id" required>
-                            <option value="">Selecciona máquina</option>
-                            {% for m in maquinas %}
-                            <option value="{{ m.id }}">{{ m.nombre }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
                     <div>
                         <label>Nombre de hoja</label>
                         <input name="nombre" required placeholder="Ej: Hoja ruta pieza X">
@@ -54,8 +45,8 @@
                         <input name="calidad" placeholder="Calidad">
                     </div>
                     <div>
-                        <label>PN</label>
-                        <input name="pn" placeholder="PN">
+                        <label>Clave</label>
+                        <input name="clave" placeholder="CLAVE">
                     </div>
                     <div>
                         <label>Fecha de salida</label>
@@ -86,6 +77,10 @@
                         <input name="materia_prima">
                     </div>
                     <div>
+                        <label>Revisión (opcional)</label>
+                        <input name="revision" placeholder="Ej: 02">
+                    </div>
+                    <div>
                         <label>Total de tiempo (HH:MM:SS)</label>
                         <input name="total_tiempo" placeholder="00:00:00">
                     </div>
@@ -102,8 +97,14 @@
                 <div class="section-title">Responsables y estado</div>
                 <div class="grid">
                     <div>
-                        <label>Supervisor</label>
-                        <input name="supervisor">
+                        <label>Ingeniero</label>
+                        <select name="ingeniero" id="ingeniero">
+                            <option value="">Selecciona ingeniero</option>
+                            <option>Rodrigo Gomez</option>
+                            <option>Jose Nemesio</option>
+                            <option>Otro...</option>
+                        </select>
+                        <input id="ingeniero_otro" name="ingeniero_otro" placeholder="Nombre del ingeniero" style="margin-top:6px; display:none;">
                     </div>
                     <div>
                         <label>Operador</label>
@@ -186,9 +187,13 @@
         const fd = new FormData(form);
         const payload = {};
         fd.forEach((v, k) => { payload[k] = v; });
+        // Ingeniero: si elige "Otro..." usar el campo libre
+        if (payload['ingeniero'] === 'Otro...') {
+            payload['ingeniero'] = fd.get('ingeniero_otro') || '';
+        }
 
-        if (!payload.maquina_id || !payload.nombre) {
-            alert('Máquina y nombre son obligatorios');
+        if (!payload.nombre || !payload.clave) {
+            alert('Nombre y clave son obligatorios');
             return;
         }
 
@@ -237,6 +242,15 @@
                 const m = tr.getAttribute('data-maq') || '';
                 tr.style.display = !term || m === term ? '' : 'none';
             });
+        });
+    }
+
+    // Mostrar input de ingeniero cuando selecciona "Otro..."
+    const selIng = document.getElementById('ingeniero');
+    const ingOtro = document.getElementById('ingeniero_otro');
+    if (selIng && ingOtro) {
+        selIng.addEventListener('change', () => {
+            ingOtro.style.display = selIng.value === 'Otro...' ? '' : 'none';
         });
     }
     </script>
