@@ -505,6 +505,17 @@ def hojas_ruta_form():
     return render_template('hojas_ruta_form.html', maquinas=maquinas, hojas=hojas_data)
 
 
+@app.route('/hoja/<int:hoja_id>')
+@login_required
+def hoja_ruta_ver(hoja_id):
+    """Vista independiente para ver una hoja por ID, sin requerir máquina."""
+    hoja = HojaRuta.query.get_or_404(hoja_id)
+    h = hoja.to_dict()
+    estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
+    h['estaciones'] = [e.to_dict() for e in estaciones]
+    return render_template('hoja_ruta_ver.html', hoja=h)
+
+
 @app.route('/hojas_ruta/<int:maquina_id>')
 @login_required
 def hojas_ruta_detalle(maquina_id):

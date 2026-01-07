@@ -168,7 +168,7 @@
                             <td style="padding:8px; border-bottom:1px solid #f0f0f0;">{{ h.estado }}</td>
                             <td style="padding:8px; border-bottom:1px solid #f0f0f0;">{{ h.cantidad_piezas or '' }}</td>
                             <td style="padding:8px; border-bottom:1px solid #f0f0f0;">{{ h.fecha_creacion[:16] if h.fecha_creacion }}</td>
-                            <td style="padding:8px; border-bottom:1px solid #f0f0f0;"><a href="/hojas_ruta/{{ h.maquina_id }}">Ver</a></td>
+                            <td style="padding:8px; border-bottom:1px solid #f0f0f0;"><a href="/hoja/{{ h.id }}">Ver</a></td>
                         </tr>
                         {% endfor %}
                     </tbody>
