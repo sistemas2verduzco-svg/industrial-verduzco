@@ -630,6 +630,8 @@ class ProcesoCatalogo(db.Model):
     operacion = db.Column(db.Text, nullable=True)
     descripcion = db.Column(db.Text, nullable=True)
     centro_trabajo = db.Column(db.String(100), nullable=True)
+    # Tiempo estimado por defecto (T/E)
+    tiempo_estimado = db.Column(db.String(20), nullable=True)
     activo = db.Column(db.Boolean, default=True)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -644,6 +646,7 @@ class ProcesoCatalogo(db.Model):
             'operacion': self.operacion,
             'descripcion': self.descripcion,
             'centro_trabajo': self.centro_trabajo,
+            'tiempo_estimado': self.tiempo_estimado,
             'activo': self.activo,
             'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,
         }

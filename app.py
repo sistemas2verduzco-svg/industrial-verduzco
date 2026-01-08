@@ -2764,9 +2764,9 @@ def procesos_base_save():
         codigo = request.form.get('codigo', '').strip()
         nombre = request.form.get('nombre', '').strip()
         operacion = request.form.get('operacion', '').strip()
-        operacion = request.form.get('operacion', '').strip()
         descripcion = request.form.get('descripcion', '').strip()
         centro_trabajo = request.form.get('centro_trabajo', '').strip()
+        tiempo_est = request.form.get('tiempo_estimado', '').strip()
         activo = request.form.get('activo') == 'on'
 
         # Si no quieren código, lo permitimos vacío. Si no se envía nombre, usar operacion como nombre
@@ -2780,9 +2780,10 @@ def procesos_base_save():
             p.operacion = operacion
             p.descripcion = descripcion
             p.centro_trabajo = centro_trabajo
+            p.tiempo_estimado = tiempo_est
             p.activo = activo
         else:
-            p = ProcesoCatalogo(codigo=codigo or None, nombre=nombre, operacion=operacion, descripcion=descripcion, centro_trabajo=centro_trabajo, activo=activo)
+            p = ProcesoCatalogo(codigo=codigo or None, nombre=nombre, operacion=operacion, descripcion=descripcion, centro_trabajo=centro_trabajo, tiempo_estimado=tiempo_est, activo=activo)
             db.session.add(p)
         db.session.commit()
         return redirect(url_for('procesos_panel'))

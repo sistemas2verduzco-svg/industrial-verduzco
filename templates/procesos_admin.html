@@ -64,7 +64,7 @@
           <select id="selectProceso" style="flex:1; padding:8px; border:1px solid #ddd; border-radius:6px;">
             <option value="">-- Seleccionar proceso --</option>
             {% for p in procesos %}
-            <option value="{{ p.id }}" data-codigo="{{ p.codigo or '' }}" data-nombre="{{ p.nombre }}" data-ct="{{ p.centro_trabajo or '' }}" data-oper="{{ p.operacion or '' }}">{{ p.centro_trabajo or 'C.T.?'}} - {{ p.operacion or p.nombre }}</option>
+            <option value="{{ p.id }}" data-codigo="{{ p.codigo or '' }}" data-nombre="{{ p.nombre }}" data-ct="{{ p.centro_trabajo or '' }}" data-oper="{{ p.operacion or '' }}" data-te="{{ p.tiempo_estimado or '' }}">{{ p.centro_trabajo or 'C.T.?'}} - {{ p.operacion or p.nombre }}</option>
             {% endfor %}
           </select>
           <button type="button" id="btnAgregarProceso" class="btn" style="padding:8px 12px; border:1px solid #ccc; background:#f6f8fa; border-radius:6px; cursor:pointer;">Agregar</button>
@@ -94,7 +94,7 @@
                 <div><input type="text" name="ct[]" value="{{ cp.centro_trabajo or cp.proceso.centro_trabajo or '' }}" placeholder="C.T." style="width:140px; padding:6px; border:1px solid #ddd; border-radius:6px;"></div>
                 <div style="margin-top:6px;"><input type="text" name="operacion[]" value="{{ cp.operacion or cp.proceso.operacion or '' }}" placeholder="Operación" style="width:100%; padding:6px; border:1px solid #ddd; border-radius:6px;"></div>
               </td>
-              <td style="padding:6px;"><input type="text" name="t_e[]" value="{{ cp.t_e or '' }}" placeholder="T/E" style="width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;"></td>
+              <td style="padding:6px;"><input type="text" name="t_e[]" value="{{ cp.t_e or cp.proceso.tiempo_estimado or '' }}" placeholder="T/E" style="width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;" class="input-te"></td>
               <td style="padding:6px;"><input type="text" name="t_tct[]" value="{{ cp.t_tct or '' }}" placeholder="T/CT" style="width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;"></td>
               <td style="padding:6px;"><input type="text" name="t_tco[]" value="{{ cp.t_tco or '' }}" placeholder="T/CO" style="width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;"></td>
               <td style="padding:6px;"><input type="text" name="t_to[]" value="{{ cp.t_to or '' }}" placeholder="T/O" style="width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;"></td>
@@ -133,6 +133,10 @@
           <textarea name="operacion" id="proc_oper" rows="2" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;"></textarea>
         </div>
         <div>
+          <label>T/E (Tiempo Estimado, ej: 00:05:10)</label>
+          <input type="text" name="tiempo_estimado" id="proc_te" placeholder="HH:MM:SS" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
+        </div>
+        <div>
           <label>Nombre (opcional, default = Operación)</label>
           <input type="text" name="nombre" id="proc_nombre" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
         </div>
@@ -155,7 +159,7 @@
       <input type="text" id="buscarProceso" placeholder="Buscar proceso..." style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; margin-bottom:8px;">
       <div style="max-height:420px; overflow:auto; border-top:1px solid #eee;">
         {% for p in procesos %}
-        <div class="itemProc" data-id="{{ p.id }}" data-codigo="{{ p.codigo or '' }}" data-nombre="{{ p.nombre }}" data-oper="{{ p.operacion or '' }}" data-ct="{{ p.centro_trabajo or '' }}" data-desc="{{ p.descripcion or '' }}" style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px; border-bottom:1px solid #f0f0f0;">
+        <div class="itemProc" data-id="{{ p.id }}" data-codigo="{{ p.codigo or '' }}" data-nombre="{{ p.nombre }}" data-oper="{{ p.operacion or '' }}" data-ct="{{ p.centro_trabajo or '' }}" data-te="{{ p.tiempo_estimado or '' }}" data-desc="{{ p.descripcion or '' }}" style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px; border-bottom:1px solid #f0f0f0;">
           <div>
             <div style="font-weight:600;">{{ p.centro_trabajo or 'C.T.?' }} - {{ p.operacion or p.nombre }}</div>
             <div style="font-size:12px; color:#666;">{{ p.descripcion }}</div>
@@ -217,6 +221,7 @@
       const nombre = sel.options[sel.selectedIndex].dataset.nombre;
       const defCt = sel.options[sel.selectedIndex].dataset.ct || '';
       const defOper = sel.options[sel.selectedIndex].dataset.oper || '';
+      const defTe = sel.options[sel.selectedIndex].dataset.te || '';
       const tbody = document.getElementById('tbodySecuencia');
       const orden = tbody.querySelectorAll('tr').length + 1;
       const tr = document.createElement('tr');
@@ -241,6 +246,7 @@
       tbody.appendChild(tr);
       sel.value = '';
       bindRowButtons(tr);
+      calcularTiempos();
     });
   }
 
@@ -276,6 +282,7 @@
       const input = row.querySelector('input[name="orden[]"]');
       if (input) input.value = idx + 1;
     });
+    calcularTiempos();
   }
   bindRowButtons(document);
 
@@ -288,6 +295,7 @@
       document.getElementById('proc_nombre').value = wrap.dataset.nombre;
       document.getElementById('proc_oper').value = wrap.dataset.oper || '';
       document.getElementById('proc_ct').value = wrap.dataset.ct || '';
+      document.getElementById('proc_te').value = wrap.dataset.te || '';
       document.getElementById('proc_desc').value = wrap.dataset.desc || '';
       document.getElementById('proc_activo').checked = true;
       window.scrollTo({ top: document.getElementById('formProceso').offsetTop - 20, behavior: 'smooth' });
@@ -298,7 +306,180 @@
     document.getElementById('proc_nombre').value = '';
     document.getElementById('proc_oper').value = '';
     document.getElementById('proc_ct').value = '';
+    document.getElementById('proc_te').value = '';
     document.getElementById('proc_desc').value = '';
     document.getElementById('proc_activo').checked = true;
   });
+
+  // Auto-calculate T/CT and T/O based on T/E grouped by C.T.
+  function calcularTiempos() {
+    const rows = document.querySelectorAll('#tbodySecuencia tr');
+    const ctGroups = {}; // { 'CNC': [row1, row2], 'TALADROS': [row3, row4, row5] }
+    
+    // Group rows by C.T.
+    rows.forEach(row => {
+      const ctInput = row.querySelector('input[name="ct[]"]');
+      const ct = (ctInput?.value || '').trim().toUpperCase();
+      if (ct) {
+        if (!ctGroups[ct]) ctGroups[ct] = [];
+        ctGroups[ct].push(row);
+      }
+    });
+
+    let totalTCT = 0; // suma de todos los T/CT
+
+    // For each C.T. group, sum T/E and put result in T/CT of last row
+    Object.keys(ctGroups).forEach(ct => {
+      const group = ctGroups[ct];
+      let sumTE = 0;
+      
+      group.forEach((row, idx) => {
+        const teInput = row.querySelector('input[name="t_e[]"]');
+        const tctInput = row.querySelector('input[name="t_tct[]"]');
+        const te = parseTime(teInput?.value || '00:00:00');
+        sumTE += te;
+        
+        // Clear T/CT for non-last rows
+        if (idx < group.length - 1) {
+          if (tctInput) tctInput.value = '';
+        }
+      });
+
+      // Put sum in last row's T/CT
+      const lastRow = group[group.length - 1];
+      const lastTCT = lastRow.querySelector('input[name="t_tct[]"]');
+      if (lastTCT) {
+        lastTCT.value = formatTime(sumTE);
+      }
+      totalTCT += sumTE;
+    });
+
+    // Put total in T/O of last overall row
+    const lastRow = rows[rows.length - 1];
+    if (lastRow) {
+      const toInput = lastRow.querySelector('input[name="t_to[]"]');
+      if (toInput) toInput.value = formatTime(totalTCT);
+      
+      // Clear T/O for all other rows
+      rows.forEach((row, idx) => {
+        if (idx < rows.length - 1) {
+          const toInput = row.querySelector('input[name="t_to[]"]');
+          if (toInput) toInput.value = '';
+        }
+      });
+    }
+  }
+
+  function parseTime(str) {
+    // Convert HH:MM:SS to total seconds
+    const parts = str.split(':').map(p => parseInt(p) || 0);
+    if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
+    if (parts.length === 2) return parts[0]*60 + parts[1];
+    return parts[0] || 0;
+  }
+
+  function formatTime(sec) {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+
+  // Recalculate on T/E or CT change
+  document.getElementById('tbodySecuencia')?.addEventListener('input', (e) => {
+    if (e.target.matches('input[name="t_e[]"]') || e.target.matches('input[name="ct[]"]')) {
+      calcularTiempos();
+    }
+  });
+
+  // Initial calculation if rows exist
+  if (document.querySelectorAll('#tbodySecuencia tr').length > 0) {
+    calcularTiempos();
+  }
+
+  // Auto-calculate T/CT and T/O based on T/E grouped by C.T.
+  function calcularTiempos() {
+    const rows = document.querySelectorAll('#tbodySecuencia tr');
+    const ctGroups = {}; // { 'CNC': [row1, row2], 'TALADROS': [row3, row4, row5] }
+    
+    // Group rows by C.T.
+    rows.forEach(row => {
+      const ctInput = row.querySelector('input[name="ct[]"]');
+      const ct = (ctInput?.value || '').trim().toUpperCase();
+      if (ct) {
+        if (!ctGroups[ct]) ctGroups[ct] = [];
+        ctGroups[ct].push(row);
+      }
+    });
+
+    let totalTCT = 0; // suma de todos los T/CT
+
+    // For each C.T. group, sum T/E and put result in T/CT of last row
+    Object.keys(ctGroups).forEach(ct => {
+      const group = ctGroups[ct];
+      let sumTE = 0;
+      
+      group.forEach((row, idx) => {
+        const teInput = row.querySelector('input[name="t_e[]"]');
+        const tctInput = row.querySelector('input[name="t_tct[]"]');
+        const te = parseTime(teInput?.value || '00:00:00');
+        sumTE += te;
+        
+        // Clear T/CT for non-last rows
+        if (idx < group.length - 1) {
+          if (tctInput) tctInput.value = '';
+        }
+      });
+
+      // Put sum in last row's T/CT
+      const lastRow = group[group.length - 1];
+      const lastTCT = lastRow.querySelector('input[name="t_tct[]"]');
+      if (lastTCT) {
+        lastTCT.value = formatTime(sumTE);
+      }
+      totalTCT += sumTE;
+    });
+
+    // Put total in T/O of last overall row
+    const lastRow = rows[rows.length - 1];
+    if (lastRow) {
+      const toInput = lastRow.querySelector('input[name="t_to[]"]');
+      if (toInput) toInput.value = formatTime(totalTCT);
+      
+      // Clear T/O for all other rows
+      rows.forEach((row, idx) => {
+        if (idx < rows.length - 1) {
+          const toInput = row.querySelector('input[name="t_to[]"]');
+          if (toInput) toInput.value = '';
+        }
+      });
+    }
+  }
+
+  function parseTime(str) {
+    // Convert HH:MM:SS to total seconds
+    const parts = str.split(':').map(p => parseInt(p) || 0);
+    if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
+    if (parts.length === 2) return parts[0]*60 + parts[1];
+    return parts[0] || 0;
+  }
+
+  function formatTime(sec) {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+
+  // Recalculate on T/E or CT change
+  document.getElementById('tbodySecuencia')?.addEventListener('input', (e) => {
+    if (e.target.matches('input[name="t_e[]"]') || e.target.matches('input[name="ct[]"]')) {
+      calcularTiempos();
+    }
+  });
+
+  // Initial calculation if rows exist
+  if (document.querySelectorAll('#tbodySecuencia tr').length > 0) {
+    calcularTiempos();
+  }
 </script>
