@@ -623,7 +623,8 @@ class ProcesoCatalogo(db.Model):
     __tablename__ = 'procesos_catalogo'
 
     id = db.Column(db.Integer, primary_key=True)
-    codigo = db.Column(db.String(50), nullable=False, unique=True)
+    # Ya no se exige clave/código; se deja opcional
+    codigo = db.Column(db.String(50), nullable=True)
     nombre = db.Column(db.String(255), nullable=False)
     # Texto de la operación por defecto (visible en hoja)
     operacion = db.Column(db.Text, nullable=True)
