@@ -615,3 +615,102 @@ class EstacionPlantilla(db.Model):
             't_to': self.t_to,
             'fecha_creacion': self.fecha_creacion.isoformat()
         }
+
+
+# ==================== PROCESOS Y CLAVES (CATÁLOGO DE PRODUCCIÓN) ====================
+
+class ProcesoCatalogo(db.Model):
+    __tablename__ = 'procesos_catalogo'
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(50), nullable=False, unique=True)
+    nombre = db.Column(db.String(255), nullable=False)
+    # Texto de la operación por defecto (visible en hoja)
+    operacion = db.Column(db.Text, nullable=True)
+    descripcion = db.Column(db.Text, nullable=True)
+    centro_trabajo = db.Column(db.String(100), nullable=True)
+    activo = db.Column(db.Boolean, default=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relación con claves
+    claves = db.relationship('ClaveProceso', backref='proceso', lazy=True, cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'codigo': self.codigo,
+            'nombre': self.nombre,
+            'operacion': self.operacion,
+            'descripcion': self.descripcion,
+            'centro_trabajo': self.centro_trabajo,
+            'activo': self.activo,
+            'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,
+        }
+
+
+class ClaveProducto(db.Model):
+    __tablename__ = 'claves_producto'
+
+    id = db.Column(db.Integer, primary_key=True)
+    clave = db.Column(db.String(100), nullable=False, unique=True)
+    nombre = db.Column(db.String(255), nullable=True)
+    notas = db.Column(db.Text, nullable=True)
+    activo = db.Column(db.Boolean, default=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+
+    procesos = db.relationship('ClaveProceso', backref='clave', lazy=True, cascade='all, delete-orphan', order_by='ClaveProceso.orden')
+
+    def to_dict(self, include_procesos=False):
+        data = {
+            'id': self.id,
+            'clave': self.clave,
+            'nombre': self.nombre,
+            'notas': self.notas,
+            'activo': self.activo,
+            'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,
+        }
+        if include_procesos:
+            data['procesos'] = [p.to_dict() for p in self.procesos]
+        return data
+
+
+class ClaveProceso(db.Model):
+    __tablename__ = 'clave_procesos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    clave_id = db.Column(db.Integer, db.ForeignKey('claves_producto.id'), nullable=False)
+    proceso_id = db.Column(db.Integer, db.ForeignKey('procesos_catalogo.id'), nullable=False)
+    orden = db.Column(db.Integer, default=0)
+    # Overrides por clave/producto
+    centro_trabajo = db.Column(db.String(100), nullable=True)
+    operacion = db.Column(db.Text, nullable=True)
+    # Tiempos por columna (formato HH:MM:SS)
+    t_e = db.Column(db.String(20), nullable=True)
+    t_tct = db.Column(db.String(20), nullable=True)
+    t_tco = db.Column(db.String(20), nullable=True)
+    t_to = db.Column(db.String(20), nullable=True)
+    # Back-compat
+    tiempo_estimado = db.Column(db.String(20), nullable=True)
+    notas = db.Column(db.Text, nullable=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('clave_id', 'proceso_id', name='uq_clave_proceso_unico'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'clave_id': self.clave_id,
+            'proceso_id': self.proceso_id,
+            'proceso_codigo': self.proceso.codigo if getattr(self, 'proceso', None) else None,
+            'proceso_nombre': self.proceso.nombre if getattr(self, 'proceso', None) else None,
+            'orden': self.orden,
+            'centro_trabajo': self.centro_trabajo,
+            'operacion': self.operacion,
+            't_e': self.t_e,
+            't_tct': self.t_tct,
+            't_tco': self.t_tco,
+            't_to': self.t_to,
+            'tiempo_estimado': self.tiempo_estimado,
+            'notas': self.notas,
+        }

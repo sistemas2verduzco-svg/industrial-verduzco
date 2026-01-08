@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRuta, EstacionTrabajo, EstacionPlantilla
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRuta, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -2626,6 +2626,187 @@ def actualizar_ingeniero(ingeniero_id):
         db.session.rollback()
         logger.error(f"Error al actualizar ingeniero: {e}")
         return jsonify({'error': str(e)}), 500
+
+
+# ==================== PROCESOS Y CLAVES - ADMIN PANEL ====================
+
+@app.route('/procesos')
+@login_required
+@requires_permission('catalog', 'edit')
+def procesos_panel():
+    """Panel de administración para procesos (catálogo) y claves (productos)."""
+    try:
+        clave_id = request.args.get('clave_id', type=int)
+        claves = ClaveProducto.query.order_by(ClaveProducto.clave.asc()).all()
+        procesos = ProcesoCatalogo.query.filter_by(activo=True).order_by(ProcesoCatalogo.nombre.asc()).all()
+        clave_sel = ClaveProducto.query.get(clave_id) if clave_id else None
+        return render_template('procesos_admin.html', claves=claves, procesos=procesos, clave_sel=clave_sel)
+    except Exception as e:
+        logger.error(f"Error cargando panel de procesos: {e}")
+        return render_template('procesos_admin.html', claves=[], procesos=[], clave_sel=None, error=str(e))
+
+
+@app.route('/procesos/clave/save', methods=['POST'])
+@login_required
+@requires_permission('catalog', 'edit')
+def procesos_clave_save():
+    """Crear o actualizar una clave producto."""
+    try:
+        clave_id = request.form.get('id', type=int)
+        clave = request.form.get('clave', '').strip()
+        nombre = request.form.get('nombre', '').strip()
+        notas = request.form.get('notas', '').strip()
+        activo = request.form.get('activo') == 'on'
+
+        if not clave:
+            return redirect(url_for('procesos_panel'))
+
+        if clave_id:
+            obj = ClaveProducto.query.get_or_404(clave_id)
+            obj.clave = clave
+            obj.nombre = nombre
+            obj.notas = notas
+            obj.activo = activo
+        else:
+            obj = ClaveProducto(clave=clave, nombre=nombre, notas=notas, activo=activo)
+            db.session.add(obj)
+        db.session.commit()
+        return redirect(url_for('procesos_panel', clave_id=obj.id))
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error guardando clave: {e}")
+        return redirect(url_for('procesos_panel'))
+
+
+@app.route('/procesos/clave/<int:clave_id>/secuencia/save', methods=['POST'])
+@login_required
+@requires_permission('catalog', 'edit')
+def procesos_clave_secuencia_save(clave_id):
+    """Guardar la secuencia de procesos para una clave."""
+    try:
+        clave = ClaveProducto.query.get_or_404(clave_id)
+        # Arrays enviados desde el formulario
+        procesos_ids = request.form.getlist('proceso_id[]')
+        ordenes = request.form.getlist('orden[]')
+        ct_list = request.form.getlist('ct[]')
+        oper_list = request.form.getlist('operacion[]')
+        t_e_list = request.form.getlist('t_e[]')
+        t_tct_list = request.form.getlist('t_tct[]')
+        t_tco_list = request.form.getlist('t_tco[]')
+        t_to_list = request.form.getlist('t_to[]')
+        tiempos = request.form.getlist('tiempo_est[]')  # legacy opcional
+        notas_list = request.form.getlist('notas[]')
+
+        # Limpiar actuales
+        ClaveProceso.query.filter_by(clave_id=clave.id).delete()
+        db.session.flush()
+
+        # Crear nuevos en orden
+        for idx, pid in enumerate(procesos_ids):
+            try:
+                p_id = int(pid)
+            except ValueError:
+                continue
+            orden = int(ordenes[idx]) if idx < len(ordenes) and str(ordenes[idx]).isdigit() else idx + 1
+            ct = ct_list[idx] if idx < len(ct_list) else None
+            oper = oper_list[idx] if idx < len(oper_list) else None
+            t_e = t_e_list[idx] if idx < len(t_e_list) else None
+            t_tct = t_tct_list[idx] if idx < len(t_tct_list) else None
+            t_tco = t_tco_list[idx] if idx < len(t_tco_list) else None
+            t_to = t_to_list[idx] if idx < len(t_to_list) else None
+            tiempo = tiempos[idx] if idx < len(tiempos) else None
+            nota = notas_list[idx] if idx < len(notas_list) else None
+            cp = ClaveProceso(
+                clave_id=clave.id,
+                proceso_id=p_id,
+                orden=orden,
+                centro_trabajo=ct,
+                operacion=oper,
+                t_e=t_e,
+                t_tct=t_tct,
+                t_tco=t_tco,
+                t_to=t_to,
+                tiempo_estimado=tiempo,
+                notas=nota
+            )
+            db.session.add(cp)
+
+        db.session.commit()
+        return redirect(url_for('procesos_panel', clave_id=clave.id))
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error guardando secuencia de clave {clave_id}: {e}")
+        return redirect(url_for('procesos_panel', clave_id=clave_id))
+
+
+@app.route('/procesos/clave/<int:clave_id>/delete', methods=['POST'])
+@login_required
+@requires_permission('catalog', 'edit')
+def procesos_clave_delete(clave_id):
+    try:
+        obj = ClaveProducto.query.get_or_404(clave_id)
+        db.session.delete(obj)
+        db.session.commit()
+        return redirect(url_for('procesos_panel'))
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error eliminando clave {clave_id}: {e}")
+        return redirect(url_for('procesos_panel'))
+
+
+@app.route('/procesos/base/save', methods=['POST'])
+@login_required
+@requires_permission('catalog', 'edit')
+def procesos_base_save():
+    """Crear o actualizar un proceso del catálogo."""
+    try:
+        proc_id = request.form.get('id', type=int)
+        codigo = request.form.get('codigo', '').strip()
+        nombre = request.form.get('nombre', '').strip()
+        operacion = request.form.get('operacion', '').strip()
+        descripcion = request.form.get('descripcion', '').strip()
+        centro_trabajo = request.form.get('centro_trabajo', '').strip()
+        activo = request.form.get('activo') == 'on'
+
+        if not codigo or not nombre:
+            return redirect(url_for('procesos_panel'))
+
+        if proc_id:
+            p = ProcesoCatalogo.query.get_or_404(proc_id)
+            p.codigo = codigo
+            p.nombre = nombre
+            p.operacion = operacion
+            p.descripcion = descripcion
+            p.centro_trabajo = centro_trabajo
+            p.activo = activo
+        else:
+            p = ProcesoCatalogo(codigo=codigo, nombre=nombre, operacion=operacion, descripcion=descripcion, centro_trabajo=centro_trabajo, activo=activo)
+            db.session.add(p)
+        db.session.commit()
+        return redirect(url_for('procesos_panel'))
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error guardando proceso base: {e}")
+        return redirect(url_for('procesos_panel'))
+
+
+@app.route('/procesos/base/<int:proc_id>/delete', methods=['POST'])
+@login_required
+@requires_permission('catalog', 'edit')
+def procesos_base_delete(proc_id):
+    try:
+        uso = ClaveProceso.query.filter_by(proceso_id=proc_id).count()
+        if uso > 0:
+            # Evitar borrar si está en uso
+            return redirect(url_for('procesos_panel'))
+        p = ProcesoCatalogo.query.get_or_404(proc_id)
+        db.session.delete(p)
+        db.session.commit()
+        return redirect(url_for('procesos_panel'))
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error eliminando proceso base {proc_id}: {e}")
+        return redirect(url_for('procesos_panel'))
 
 
 @app.errorhandler(404)

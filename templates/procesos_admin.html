@@ -1,0 +1,316 @@
+{% include '_sidebar.html' %}
+<div class="admin-container" style="padding:24px;">
+  <h2 style="margin-bottom:16px;">Procesos y Claves (Catálogo de Producción)</h2>
+  {% if error %}
+  <div style="padding:10px; background:#ffe5e5; color:#b71c1c; border-radius:6px; margin-bottom:12px;">{{ error }}</div>
+  {% endif %}
+
+  <div style="display:grid; grid-template-columns: 260px 1fr 360px; gap:16px; align-items:start;">
+    <!-- Columna izquierda: Claves -->
+    <div style="background:#fff; border:1px solid #e0e0e0; border-radius:8px; padding:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <strong>Claves</strong>
+        <button id="btnNuevaClave" class="btn btn-sm" style="padding:6px 10px; border:1px solid #ccc; background:#f6f8fa; border-radius:6px; cursor:pointer;">Nueva</button>
+      </div>
+      <input type="text" id="buscarClave" placeholder="Buscar clave..." style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; margin-bottom:8px;">
+      <div style="max-height:480px; overflow:auto; border-top:1px solid #eee;">
+        {% for c in claves %}
+        <a href="{{ url_for('procesos_panel', clave_id=c.id) }}" style="display:block; padding:8px; text-decoration:none; color:#333; border-bottom:1px solid #f0f0f0;">
+          <div style="font-weight:600;">{{ c.clave }}</div>
+          <div style="font-size:12px; color:#666;">{{ c.nombre }}</div>
+        </a>
+        {% else %}
+        <div style="color:#999; padding:12px;">Sin claves registradas</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Columna central: Editor de clave y secuencia -->
+    <div style="background:#fff; border:1px solid #e0e0e0; border-radius:8px; padding:12px;">
+      <h3 style="margin:0 0 10px;">{{ 'Editar Clave' if clave_sel else 'Nueva Clave' }}</h3>
+      <form action="{{ url_for('procesos_clave_save') }}" method="POST" style="margin-bottom:12px; display:grid; grid-template-columns: 1fr 1fr; gap:10px; align-items:end;">
+        {% if clave_sel %}
+        <input type="hidden" name="id" value="{{ clave_sel.id }}">
+        {% endif %}
+        <div>
+          <label>Clave</label>
+          <input type="text" name="clave" required value="{{ clave_sel.clave if clave_sel else '' }}" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
+        </div>
+        <div>
+          <label>Nombre</label>
+          <input type="text" name="nombre" value="{{ clave_sel.nombre if clave_sel else '' }}" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
+        </div>
+        <div style="grid-column:1 / span 2;">
+          <label>Notas</label>
+          <textarea name="notas" rows="2" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">{{ clave_sel.notas if clave_sel else '' }}</textarea>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" id="activo_clave" name="activo" {% if not clave_sel or clave_sel.activo %}checked{% endif %}>
+          <label for="activo_clave">Activo</label>
+        </div>
+        <div style="text-align:right;">
+          <button type="submit" class="btn" style="padding:8px 12px; border:1px solid #1976d2; background:#1976d2; color:#fff; border-radius:6px; cursor:pointer;">Guardar clave</button>
+        </div>
+      </form>
+
+      <hr style="border:none; border-top:1px solid #eee; margin:10px 0;">
+
+      <h4 style="margin:0 0 8px;">Secuencia de procesos</h4>
+      {% if not clave_sel %}
+      <div style="padding:10px; background:#f9f9f9; border:1px dashed #ddd; border-radius:6px; color:#666;">Selecciona o crea una clave para configurar su proceso.</div>
+      {% else %}
+      <form action="{{ url_for('procesos_clave_secuencia_save', clave_id=clave_sel.id) }}" method="POST" id="formSecuencia">
+        <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+          <select id="selectProceso" style="flex:1; padding:8px; border:1px solid #ddd; border-radius:6px;">
+            <option value="">-- Seleccionar proceso --</option>
+            {% for p in procesos %}
+            <option value="{{ p.id }}" data-codigo="{{ p.codigo }}" data-nombre="{{ p.nombre }}">{{ p.codigo }} - {{ p.nombre }}</option>
+            {% endfor %}
+          </select>
+          <button type="button" id="btnAgregarProceso" class="btn" style="padding:8px 12px; border:1px solid #ccc; background:#f6f8fa; border-radius:6px; cursor:pointer;">Agregar</button>
+        </div>
+
+        <table style="width:100%; border-collapse:collapse;">
+          <thead>
+            <tr style="background:#f3f4f6;">
+              <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">Orden</th>
+              <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">Código</th>
+              <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">Proceso / C.T. / Operación</th>
+              <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">T/E</th>
+              <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">T/CT</th>
+              <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">T/CO</th>
+              <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">T/O</th>
+              <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">Total</th>
+              <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">Notas</th>
+              <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tbodySecuencia">
+            {% for cp in clave_sel.procesos %}
+            <tr>
+              <td style="padding:6px;">
+                <input type="number" name="orden[]" value="{{ cp.orden }}" style="width:64px; padding:6px; border:1px solid #ddd; border-radius:6px;">
+              </td>
+              <td style="padding:6px;">{{ cp.proceso.codigo }}</td>
+              <td style="padding:6px;">
+                <div style="font-weight:600;">{{ cp.proceso.nombre }}</div>
+                <div><input type="text" name="ct[]" value="{{ cp.centro_trabajo or cp.proceso.centro_trabajo or '' }}" placeholder="C.T." style="width:120px; padding:6px; border:1px solid #ddd; border-radius:6px;"></div>
+                <div style="margin-top:6px;"><input type="text" name="operacion[]" value="{{ cp.operacion or cp.proceso.operacion or '' }}" placeholder="Operación" style="width:100%; padding:6px; border:1px solid #ddd; border-radius:6px;"></div>
+              </td>
+              <td style="padding:6px;"><input type="text" name="t_e[]" value="{{ cp.t_e or '' }}" placeholder="T/E" style="width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;"></td>
+              <td style="padding:6px;"><input type="text" name="t_tct[]" value="{{ cp.t_tct or '' }}" placeholder="T/CT" style="width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;"></td>
+              <td style="padding:6px;"><input type="text" name="t_tco[]" value="{{ cp.t_tco or '' }}" placeholder="T/CO" style="width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;"></td>
+              <td style="padding:6px;"><input type="text" name="t_to[]" value="{{ cp.t_to or '' }}" placeholder="T/O" style="width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;"></td>
+              <td style="padding:6px;"><input type="text" name="tiempo_est[]" value="{{ cp.tiempo_estimado or '' }}" placeholder="Total" style="width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;"></td>
+              <td style="padding:6px;">
+                <input type="text" name="notas[]" value="{{ cp.notas or '' }}" style="width:100%; padding:6px; border:1px solid #ddd; border-radius:6px;">
+              </td>
+              <td style="padding:6px; white-space:nowrap;">
+                <input type="hidden" name="proceso_id[]" value="{{ cp.proceso_id }}">
+                <button type="button" class="btnUp" title="Subir" style="padding:6px 8px;">▲</button>
+                <button type="button" class="btnDown" title="Bajar" style="padding:6px 8px;">▼</button>
+                <button type="button" class="btnRemove" title="Quitar" style="padding:6px 8px; color:#b71c1c;">✖</button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <div style="text-align:right; margin-top:10px;">
+          <button type="submit" class="btn" style="padding:8px 12px; border:1px solid #1976d2; background:#1976d2; color:#fff; border-radius:6px; cursor:pointer;">Guardar secuencia</button>
+        </div>
+      </form>
+      {% endif %}
+    </div>
+
+    <!-- Columna derecha: Catálogo de procesos -->
+    <div style="background:#fff; border:1px solid #e0e0e0; border-radius:8px; padding:12px;">
+      <h3 style="margin:0 0 10px;">Catálogo de procesos</h3>
+      <form id="formProceso" action="{{ url_for('procesos_base_save') }}" method="POST" style="display:grid; gap:8px;">
+        <input type="hidden" name="id" id="proc_id">
+        <div>
+          <label>Código</label>
+          <input type="text" name="codigo" id="proc_codigo" required style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
+        </div>
+        <div>
+          <label>Nombre</label>
+          <input type="text" name="nombre" id="proc_nombre" required style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
+        </div>
+        <div>
+          <label>Operación (texto)</label>
+          <textarea name="operacion" id="proc_oper" rows="2" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;"></textarea>
+        </div>
+        <div>
+          <label>Centro de trabajo</label>
+          <input type="text" name="centro_trabajo" id="proc_ct" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
+        </div>
+        <div>
+          <label>Descripción</label>
+          <textarea name="descripcion" id="proc_desc" rows="2" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;"></textarea>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" id="proc_activo" name="activo" checked>
+          <label for="proc_activo">Activo</label>
+        </div>
+        <div style="display:flex; gap:8px; justify-content:flex-end;">
+          <button type="button" id="btnLimpiarProc" class="btn" style="padding:8px 12px; border:1px solid #ccc; background:#f6f8fa; border-radius:6px; cursor:pointer;">Limpiar</button>
+          <button type="submit" class="btn" style="padding:8px 12px; border:1px solid #1976d2; background:#1976d2; color:#fff; border-radius:6px; cursor:pointer;">Guardar proceso</button>
+        </div>
+      </form>
+
+      <hr style="border:none; border-top:1px solid #eee; margin:10px 0;">
+
+      <input type="text" id="buscarProceso" placeholder="Buscar proceso..." style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; margin-bottom:8px;">
+      <div style="max-height:420px; overflow:auto; border-top:1px solid #eee;">
+        {% for p in procesos %}
+        <div class="itemProc" data-id="{{ p.id }}" data-codigo="{{ p.codigo }}" data-nombre="{{ p.nombre }}" data-oper="{{ p.operacion or '' }}" data-ct="{{ p.centro_trabajo or '' }}" data-desc="{{ p.descripcion or '' }}" style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px; border-bottom:1px solid #f0f0f0;">
+          <div>
+            <div style="font-weight:600;">{{ p.codigo }} - {{ p.nombre }}</div>
+            <div style="font-size:12px; color:#666;">{{ p.centro_trabajo }}</div>
+          </div>
+          <div style="display:flex; gap:6px;">
+            <button type="button" class="btnEditProc" style="padding:6px 8px;">Editar</button>
+            <form action="{{ url_for('procesos_base_delete', proc_id=p.id) }}" method="POST" onsubmit="return confirm('¿Eliminar proceso?');">
+              <button type="submit" style="padding:6px 8px; color:#b71c1c;">Eliminar</button>
+            </form>
+          </div>
+        </div>
+        {% else %}
+        <div style="color:#999; padding:12px;">Sin procesos en catálogo</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Filtro rápido en listas
+  const buscarClave = document.getElementById('buscarClave');
+  if (buscarClave) {
+    buscarClave.addEventListener('input', () => {
+      const term = buscarClave.value.toLowerCase();
+      document.querySelectorAll('a[href*="clave_id="]').forEach(a => {
+        a.style.display = a.textContent.toLowerCase().includes(term) ? '' : 'none';
+      });
+    });
+  }
+  const buscarProceso = document.getElementById('buscarProceso');
+  if (buscarProceso) {
+    buscarProceso.addEventListener('input', () => {
+      const term = buscarProceso.value.toLowerCase();
+      document.querySelectorAll('.itemProc').forEach(div => {
+        div.style.display = div.textContent.toLowerCase().includes(term) ? 'flex' : 'none';
+      });
+    });
+  }
+
+  // Nueva clave: limpiar formulario central
+  const btnNuevaClave = document.getElementById('btnNuevaClave');
+  if (btnNuevaClave) {
+    btnNuevaClave.addEventListener('click', () => {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('clave_id');
+      window.location.href = url.toString();
+    });
+  }
+
+  // Secuencia: agregar desde select
+  const btnAgregarProceso = document.getElementById('btnAgregarProceso');
+  if (btnAgregarProceso) {
+    btnAgregarProceso.addEventListener('click', () => {
+      const sel = document.getElementById('selectProceso');
+      const val = sel.value;
+      if (!val) return;
+      const codigo = sel.options[sel.selectedIndex].dataset.codigo;
+      const nombre = sel.options[sel.selectedIndex].dataset.nombre;
+      const tbody = document.getElementById('tbodySecuencia');
+      const orden = tbody.querySelectorAll('tr').length + 1;
+      const wrap = document.querySelector(`.itemProc[data-id='${val}']`);
+      const defCt = wrap ? (wrap.dataset.ct || '') : '';
+      const defOper = wrap ? (wrap.dataset.oper || '') : '';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="padding:6px;"><input type="number" name="orden[]" value="${orden}" style="width:64px; padding:6px; border:1px solid #ddd; border-radius:6px;"></td>
+        <td style="padding:6px;">${codigo}</td>
+        <td style="padding:6px;">
+          <div style=\"font-weight:600;\">${nombre}</div>
+          <div><input type=\"text\" name=\"ct[]\" value=\"${defCt}\" placeholder=\"C.T.\" style=\"width:120px; padding:6px; border:1px solid #ddd; border-radius:6px;\"></div>
+          <div style=\"margin-top:6px;\"><input type=\"text\" name=\"operacion[]\" value=\"${defOper}\" placeholder=\"Operación\" style=\"width:100%; padding:6px; border:1px solid #ddd; border-radius:6px;\"></div>
+        </td>
+        <td style=\"padding:6px;\"><input type=\"text\" name=\"t_e[]\" placeholder=\"T/E\" style=\"width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;\"></td>
+        <td style=\"padding:6px;\"><input type=\"text\" name=\"t_tct[]\" placeholder=\"T/CT\" style=\"width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;\"></td>
+        <td style=\"padding:6px;\"><input type=\"text\" name=\"t_tco[]\" placeholder=\"T/CO\" style=\"width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;\"></td>
+        <td style=\"padding:6px;\"><input type=\"text\" name=\"t_to[]\" placeholder=\"T/O\" style=\"width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;\"></td>
+        <td style=\"padding:6px;\"><input type=\"text\" name=\"tiempo_est[]\" placeholder=\"Total\" style=\"width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;\"></td>
+        <td style=\"padding:6px;\"><input type=\"text\" name=\"notas[]\" style=\"width:100%; padding:6px; border:1px solid #ddd; border-radius:6px;\"></td>
+        <td style=\"padding:6px; white-space:nowrap;\">
+          <input type=\"hidden\" name=\"proceso_id[]\" value=\"${val}\">
+          <button type=\"button\" class=\"btnUp\" title=\"Subir\" style=\"padding:6px 8px;\">▲</button>
+          <button type=\"button\" class=\"btnDown\" title=\"Bajar\" style=\"padding:6px 8px;\">▼</button>
+          <button type=\"button\" class=\"btnRemove\" title=\"Quitar\" style=\"padding:6px 8px; color:#b71c1c;\">✖</button>
+        </td>`;
+      tbody.appendChild(tr);
+      sel.value = '';
+      bindRowButtons(tr);
+    });
+  }
+
+  function bindRowButtons(scope) {
+    (scope.querySelector('.btnRemove') ? [scope] : document.querySelectorAll('#tbodySecuencia tr')).forEach(row => {
+      const btnR = row.querySelector('.btnRemove');
+      const btnU = row.querySelector('.btnUp');
+      const btnD = row.querySelector('.btnDown');
+      if (btnR && !btnR._bound) {
+        btnR._bound = true;
+        btnR.addEventListener('click', () => { row.remove(); renumerarOrden(); });
+      }
+      if (btnU && !btnU._bound) {
+        btnU._bound = true;
+        btnU.addEventListener('click', () => {
+          const prev = row.previousElementSibling;
+          if (prev) row.parentNode.insertBefore(row, prev);
+          renumerarOrden();
+        });
+      }
+      if (btnD && !btnD._bound) {
+        btnD._bound = true;
+        btnD.addEventListener('click', () => {
+          const next = row.nextElementSibling;
+          if (next) row.parentNode.insertBefore(next, row);
+          renumerarOrden();
+        });
+      }
+    });
+  }
+  function renumerarOrden() {
+    document.querySelectorAll('#tbodySecuencia tr').forEach((row, idx) => {
+      const input = row.querySelector('input[name="orden[]"]');
+      if (input) input.value = idx + 1;
+    });
+  }
+  bindRowButtons(document);
+
+  // Rellenar formulario de proceso al hacer clic en Editar
+  document.querySelectorAll('.btnEditProc').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const wrap = e.target.closest('.itemProc');
+      if (!wrap) return;
+      document.getElementById('proc_id').value = wrap.dataset.id;
+      document.getElementById('proc_codigo').value = wrap.dataset.codigo;
+      document.getElementById('proc_nombre').value = wrap.dataset.nombre;
+      document.getElementById('proc_oper').value = wrap.dataset.oper || '';
+      document.getElementById('proc_ct').value = wrap.dataset.ct || '';
+      document.getElementById('proc_desc').value = wrap.dataset.desc || '';
+      document.getElementById('proc_activo').checked = true;
+      window.scrollTo({ top: document.getElementById('formProceso').offsetTop - 20, behavior: 'smooth' });
+    });
+  });
+  document.getElementById('btnLimpiarProc')?.addEventListener('click', () => {
+    document.getElementById('proc_id').value = '';
+    document.getElementById('proc_codigo').value = '';
+    document.getElementById('proc_nombre').value = '';
+    document.getElementById('proc_oper').value = '';
+    document.getElementById('proc_ct').value = '';
+    document.getElementById('proc_desc').value = '';
+    document.getElementById('proc_activo').checked = true;
+  });
+</script>
