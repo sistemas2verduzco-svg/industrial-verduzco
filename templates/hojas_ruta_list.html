@@ -125,10 +125,22 @@
         <h2>Hojas de Ruta — Producción en Máquinas</h2>
         <p style="color: #666; margin-top: 8px;">Selecciona una máquina para ver y gestionar sus hojas de ruta y estaciones de trabajo.</p>
 
+        <div style="background:#f9f9f9; padding:12px; border-radius:6px; margin:16px 0; display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+            <div style="flex:1; min-width:200px;">
+                <label style="display:block; font-weight:600; font-size:13px; margin-bottom:4px;">Buscar máquina</label>
+                <input type="text" id="filtroMaquina" placeholder="Ej: Torno, Fresadora..." style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">
+            </div>
+            <div style="flex:1; min-width:200px;">
+                <label style="display:block; font-weight:600; font-size:13px; margin-bottom:4px;">Buscar hoja activa</label>
+                <input type="text" id="filtroHoja" placeholder="Ej: Producción pieza X..." style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">
+            </div>
+            <button onclick="limpiarFiltros()" style="padding:8px 12px; border:1px solid #ddd; border-radius:4px; background:#fff; cursor:pointer; font-size:13px;">Limpiar</button>
+        </div>
+
         <div style="margin-top: 24px;">
             {% if maquinas %}
                 {% for maq in maquinas %}
-                <div class="maquina-card">
+                <div class="maquina-card" data-maq-nombre="{{ maq.nombre.lower() }}" data-hoja-nombre="{% if maq.hoja_activa %}{{ maq.hoja_activa.nombre.lower() }}{% endif %}">
                     <div class="maquina-image">
                         {% if maq.imagen_url %}
                             <img src="{{ maq.imagen_url }}" alt="{{ maq.nombre }}" />
@@ -323,6 +335,53 @@
             cerrarFormPiezas();
         }
     });
+
+    // Filtrado por máquina y hoja activa
+    const filtroMaq = document.getElementById('filtroMaquina');
+    const filtroHoja = document.getElementById('filtroHoja');
+
+    function aplicarFiltros() {
+        const termMaq = (filtroMaq.value || '').toLowerCase();
+        const termHoja = (filtroHoja.value || '').toLowerCase();
+        const cards = document.querySelectorAll('.maquina-card');
+        let visibles = 0;
+
+        cards.forEach(card => {
+            const maqNombre = card.getAttribute('data-maq-nombre') || '';
+            const hojaNombre = card.getAttribute('data-hoja-nombre') || '';
+            const cumpleMaq = !termMaq || maqNombre.includes(termMaq);
+            const cumpteHoja = !termHoja || hojaNombre.includes(termHoja);
+            const mostrar = cumpleMaq && cumpteHoja;
+            card.style.display = mostrar ? '' : 'none';
+            if (mostrar) visibles++;
+        });
+
+        // Mostrar mensaje si no hay resultados
+        const contenedor = document.querySelector('[style*="margin-top: 24px"]');
+        let noResults = document.getElementById('noResults');
+        if (visibles === 0 && (termMaq || termHoja)) {
+            if (!noResults) {
+                noResults = document.createElement('div');
+                noResults.id = 'noResults';
+                noResults.style.cssText = 'text-align:center; padding:40px; color:#aaa; background:#fafafa; border-radius:8px;';
+                noResults.textContent = 'No se encontraron máquinas con los criterios de búsqueda.';
+                contenedor.parentNode.insertBefore(noResults, contenedor.nextSibling);
+            }
+        } else if (noResults) {
+            noResults.remove();
+        }
+    }
+
+    function limpiarFiltros() {
+        filtroMaq.value = '';
+        filtroHoja.value = '';
+        aplicarFiltros();
+    }
+
+    if (filtroMaq && filtroHoja) {
+        filtroMaq.addEventListener('input', aplicarFiltros);
+        filtroHoja.addEventListener('input', aplicarFiltros);
+    }
 
     // Enlaza los botones sin usar inline JS para evitar problemas de comillas
     document.querySelectorAll('.btn-ingresar-piezas').forEach(btn => {
