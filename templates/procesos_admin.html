@@ -231,12 +231,12 @@
           <div><input type=\"text\" name=\"ct[]\" value=\"${defCt}\" placeholder=\"C.T.\" style=\"width:140px; padding:6px; border:1px solid\n#ddd; border-radius:6px;\"></div>
           <div style=\"margin-top:6px;\"><input type=\"text\" name=\"operacion[]\" value=\"${defOper}\" placeholder=\"Operación\" style=\"width:100%; padding:6px; border:1px solid #ddd; border-radius:6px;\"></div>
         </td>
-        <td style=\"padding:6px;\"><input type=\"text\" name=\"t_e[]\" placeholder=\"T/E\" style=\"width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;\"></td>
+        <td style=\"padding:6px;\"><input type=\"text\" name=\"t_e[]\" value=\"${defTe}\" placeholder=\"T/E\" style=\"width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;\"></td>
         <td style=\"padding:6px;\"><input type=\"text\" name=\"t_tct[]\" placeholder=\"T/CT\" style=\"width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;\"></td>
         <td style=\"padding:6px;\"><input type=\"text\" name=\"t_tco[]\" placeholder=\"T/CO\" style=\"width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;\"></td>
         <td style=\"padding:6px;\"><input type=\"text\" name=\"t_to[]\" placeholder=\"T/O\" style=\"width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;\"></td>
         <td style=\"padding:6px;\"><input type=\"text\" name=\"tiempo_est[]\" placeholder=\"Total\" style=\"width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;\"></td>
-        <td style=\"padding:6px;\"><input type=\"text\" name=\"notas[]\" style=\"width:100%; padding:6px; border:1px solid #ddd; border-radius:6px;\"></td>
+        <td style=\"padding:6px;\"><input type=\"text\" name=\"notas[]\" placeholder=\"Notas\" style=\"width:100%; padding:6px; border:1px solid #ddd; border-radius:6px;\"></td>
         <td style=\"padding:6px; white-space:nowrap;\">
           <input type=\"hidden\" name=\"proceso_id[]\" value=\"${val}\">
           <button type=\"button\" class=\"btnUp\" title=\"Subir\" style=\"padding:6px 8px;\">▲</button>
@@ -251,25 +251,38 @@
   }
 
   function bindRowButtons(scope) {
-    (scope.querySelector('.btnRemove') ? [scope] : document.querySelectorAll('#tbodySecuencia tr')).forEach(row => {
+    // Si scope es una fila individual, procesar solo esa; si no, procesar todas
+    const rows = scope instanceof HTMLTableRowElement ? [scope] : document.querySelectorAll('#tbodySecuencia tr');
+    
+    rows.forEach(row => {
+      // Solo procesar filas que aún no tengan listeners
+      if (row._boundButtons) return;
+      row._boundButtons = true;
+
       const btnR = row.querySelector('.btnRemove');
       const btnU = row.querySelector('.btnUp');
       const btnD = row.querySelector('.btnDown');
-      if (btnR && !btnR._bound) {
-        btnR._bound = true;
-        btnR.addEventListener('click', () => { row.remove(); renumerarOrden(); });
+
+      if (btnR) {
+        btnR.addEventListener('click', (e) => {
+          e.preventDefault();
+          row.remove();
+          renumerarOrden();
+        });
       }
-      if (btnU && !btnU._bound) {
-        btnU._bound = true;
-        btnU.addEventListener('click', () => {
+
+      if (btnU) {
+        btnU.addEventListener('click', (e) => {
+          e.preventDefault();
           const prev = row.previousElementSibling;
           if (prev) row.parentNode.insertBefore(row, prev);
           renumerarOrden();
         });
       }
-      if (btnD && !btnD._bound) {
-        btnD._bound = true;
-        btnD.addEventListener('click', () => {
+
+      if (btnD) {
+        btnD.addEventListener('click', (e) => {
+          e.preventDefault();
           const next = row.nextElementSibling;
           if (next) row.parentNode.insertBefore(next, row);
           renumerarOrden();
@@ -311,9 +324,30 @@
     document.getElementById('proc_activo').checked = true;
   });
 
+  // Utility functions for time parsing and formatting
+  function parseTime(str) {
+    // Convierte HH:MM:SS a segundos totales
+    if (!str) return 0;
+    const parts = String(str).split(':').map(p => parseInt(p.trim()) || 0);
+    if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
+    if (parts.length === 2) return parts[0]*60 + parts[1];
+    return parts[0] || 0;
+  }
+
+  function formatTime(sec) {
+    // Convierte segundos totales a HH:MM:SS
+    sec = Math.round(sec || 0);
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+
   // Auto-calculate T/CT and T/O based on T/E grouped by C.T.
   function calcularTiempos() {
     const rows = document.querySelectorAll('#tbodySecuencia tr');
+    if (rows.length === 0) return;
+    
     const ctGroups = {}; // { 'CNC': [row1, row2], 'TALADROS': [row3, row4, row5] }
     
     // Group rows by C.T.
@@ -336,7 +370,8 @@
       group.forEach((row, idx) => {
         const teInput = row.querySelector('input[name="t_e[]"]');
         const tctInput = row.querySelector('input[name="t_tct[]"]');
-        const te = parseTime(teInput?.value || '00:00:00');
+        const teValue = teInput?.value || '00:00:00';
+        const te = parseTime(teValue);
         sumTE += te;
         
         // Clear T/CT for non-last rows
@@ -368,107 +403,6 @@
         }
       });
     }
-  }
-
-  function parseTime(str) {
-    // Convert HH:MM:SS to total seconds
-    const parts = str.split(':').map(p => parseInt(p) || 0);
-    if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
-    if (parts.length === 2) return parts[0]*60 + parts[1];
-    return parts[0] || 0;
-  }
-
-  function formatTime(sec) {
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const s = sec % 60;
-    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-  }
-
-  // Recalculate on T/E or CT change
-  document.getElementById('tbodySecuencia')?.addEventListener('input', (e) => {
-    if (e.target.matches('input[name="t_e[]"]') || e.target.matches('input[name="ct[]"]')) {
-      calcularTiempos();
-    }
-  });
-
-  // Initial calculation if rows exist
-  if (document.querySelectorAll('#tbodySecuencia tr').length > 0) {
-    calcularTiempos();
-  }
-
-  // Auto-calculate T/CT and T/O based on T/E grouped by C.T.
-  function calcularTiempos() {
-    const rows = document.querySelectorAll('#tbodySecuencia tr');
-    const ctGroups = {}; // { 'CNC': [row1, row2], 'TALADROS': [row3, row4, row5] }
-    
-    // Group rows by C.T.
-    rows.forEach(row => {
-      const ctInput = row.querySelector('input[name="ct[]"]');
-      const ct = (ctInput?.value || '').trim().toUpperCase();
-      if (ct) {
-        if (!ctGroups[ct]) ctGroups[ct] = [];
-        ctGroups[ct].push(row);
-      }
-    });
-
-    let totalTCT = 0; // suma de todos los T/CT
-
-    // For each C.T. group, sum T/E and put result in T/CT of last row
-    Object.keys(ctGroups).forEach(ct => {
-      const group = ctGroups[ct];
-      let sumTE = 0;
-      
-      group.forEach((row, idx) => {
-        const teInput = row.querySelector('input[name="t_e[]"]');
-        const tctInput = row.querySelector('input[name="t_tct[]"]');
-        const te = parseTime(teInput?.value || '00:00:00');
-        sumTE += te;
-        
-        // Clear T/CT for non-last rows
-        if (idx < group.length - 1) {
-          if (tctInput) tctInput.value = '';
-        }
-      });
-
-      // Put sum in last row's T/CT
-      const lastRow = group[group.length - 1];
-      const lastTCT = lastRow.querySelector('input[name="t_tct[]"]');
-      if (lastTCT) {
-        lastTCT.value = formatTime(sumTE);
-      }
-      totalTCT += sumTE;
-    });
-
-    // Put total in T/O of last overall row
-    const lastRow = rows[rows.length - 1];
-    if (lastRow) {
-      const toInput = lastRow.querySelector('input[name="t_to[]"]');
-      if (toInput) toInput.value = formatTime(totalTCT);
-      
-      // Clear T/O for all other rows
-      rows.forEach((row, idx) => {
-        if (idx < rows.length - 1) {
-          const toInput = row.querySelector('input[name="t_to[]"]');
-          if (toInput) toInput.value = '';
-        }
-      });
-    }
-  }
-
-  function parseTime(str) {
-    // Convert HH:MM:SS to total seconds
-    const parts = str.split(':').map(p => parseInt(p) || 0);
-    if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
-    if (parts.length === 2) return parts[0]*60 + parts[1];
-    return parts[0] || 0;
-  }
-
-  function formatTime(sec) {
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const s = sec % 60;
-    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
   }
 
   // Recalculate on T/E or CT change
