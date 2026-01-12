@@ -43,20 +43,54 @@ def load_dataframe(path: str, sheet: Optional[str]) -> pd.DataFrame:
     if ext in (".xlsx", ".xls"):
         # Si no especifica hoja, usa la primera (0)
         sheet_name = sheet if sheet else 0
-        return pd.read_excel(path, sheet_name=sheet_name)
-    return pd.read_csv(path)
+        df = pd.read_excel(path, sheet_name=sheet_name)
+    else:
+        df = pd.read_csv(path)
+    
+    # Mostrar columnas detectadas para debug
+    print(f"Columnas detectadas: {list(df.columns)}")
+    return df
+
+
+def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Mapea nombres de columnas flexibles a nombres estándar."""
+    mapping = {
+        'clave': ['clave', 'CLAVE', 'Clave', 'PROC.', 'proc'],
+        'nombre_clave': ['nombre_clave', 'nombre clave', 'NOMBRE', 'nombre', 'Nombre'],
+        'orden': ['orden', 'ORDEN', 'Orden', 'Nº', 'nº', 'no', 'NO'],
+        'centro_trabajo': ['centro_trabajo', 'centro trabajo', 'CT', 'c.t.', 'C.T.', 'CENTRO_TRABAJO'],
+        'operacion': ['operacion', 'OPERACIÓN', 'operación', 'OPERACION', 'operación', 'Operación'],
+        'tiempo_estimado': ['tiempo_estimado', 'tiempo estimado', 't/e', 'T/E', 'T/E (HH:MM:SS)', 'TIEMPO_ESTIMADO'],
+        'notas_paso': ['notas_paso', 'notas paso', 'notas', 'NOTAS', 'Notas', 'observaciones'],
+        'notas_clave': ['notas_clave', 'notas clave', 'notas'],
+    }
+    
+    # Crear mapeo inverso (columna actual -> columna estándar)
+    col_map = {}
+    for std_col, variants in mapping.items():
+        for var in variants:
+            if var in df.columns:
+                col_map[var] = std_col
+                break
+    
+    # Renombrar columnas
+    df = df.rename(columns=col_map)
+    df.columns = [c.strip().lower() for c in df.columns]
+    
+    print(f"Columnas mapeadas a: {list(df.columns)}")
+    return df
 
 
 # --- Import logic ---------------------------------------------------------
 
 def import_file(path: str, sheet: Optional[str], overwrite: bool) -> None:
     df = load_dataframe(path, sheet)
-    df.columns = [c.strip().lower() for c in df.columns]
+    df = normalize_columns(df)
 
     required = {"clave", "orden", "centro_trabajo", "operacion", "tiempo_estimado"}
     missing = required - set(df.columns)
     if missing:
-        raise ValueError(f"Faltan columnas requeridas: {missing}")
+        raise ValueError(f"Faltan columnas requeridas: {missing}\nColumnas disponibles: {list(df.columns)}")
 
     df = df.sort_values(["clave", "orden"])  # asegura orden correcto
 
