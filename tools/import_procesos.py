@@ -38,17 +38,61 @@ def hhmmss(val: Optional[str]) -> Optional[str]:
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 
-def load_dataframe(path: str, sheet: Optional[str]) -> pd.DataFrame:
+def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
+    """Parse el Excel con formato de bloques repetidos por clave."""
     ext = os.path.splitext(path)[1].lower()
     if ext in (".xlsx", ".xls"):
-        # Si no especifica hoja, usa la primera (0)
         sheet_name = sheet if sheet else 0
-        df = pd.read_excel(path, sheet_name=sheet_name)
+        df_raw = pd.read_excel(path, sheet_name=sheet_name, header=None)
     else:
-        df = pd.read_csv(path)
+        df_raw = pd.read_csv(path, header=None)
     
-    # Mostrar columnas detectadas para debug
-    print(f"Columnas detectadas: {list(df.columns)}")
+    records = []
+    current_clave = None
+    current_nombre = None
+    orden = 0
+    
+    for idx, row in df_raw.iterrows():
+        # Columna B (índice 1) tiene claves como AS01, AS02, etc.
+        col_b = str(row.iloc[1] if len(row) > 1 else "").strip()
+        
+        # Detectar fila de clave (formato AS01, BY01, etc. en columna B con fondo naranja)
+        if col_b and len(col_b) <= 10 and not col_b.startswith("C.T.") and col_b != "PROC.":
+            # Es una clave nueva
+            current_clave = col_b
+            # El nombre está en columna E-G aproximadamente
+            current_nombre = " ".join([str(row.iloc[i]) for i in range(4, 8) if i < len(row) and pd.notna(row.iloc[i])]).strip()
+            orden = 0
+            continue
+        
+        # Detectar fila de encabezados (tiene "PROC." en columna A o "C.T." en columna B)
+        col_a = str(row.iloc[0] if len(row) > 0 else "").strip()
+        if col_a == "PROC." or col_b == "C.T.":
+            continue
+        
+        # Detectar fila de datos (tiene 1°, 2°, 3° en columna A)
+        if current_clave and col_a and (col_a.endswith("°") or col_a.isdigit()):
+            orden += 1
+            ct = str(row.iloc[1] if len(row) > 1 else "").strip()  # C.T.
+            operacion = str(row.iloc[2] if len(row) > 2 else "").strip()  # OPERACIÓN
+            te = str(row.iloc[3] if len(row) > 3 else "").strip()  # T/E
+            
+            if ct and operacion:
+                records.append({
+                    'clave': current_clave,
+                    'nombre_clave': current_nombre,
+                    'orden': orden,
+                    'centro_trabajo': ct,
+                    'operacion': operacion,
+                    'tiempo_estimado': te if te and te != 'nan' else None,
+                })
+    
+    df = pd.DataFrame(records)
+    print(f"Registros parseados: {len(df)}")
+    print(f"Claves únicas: {df['clave'].nunique() if len(df) > 0 else 0}")
+    if len(df) > 0:
+        print(f"\nPrimeros 5 registros:")
+        print(df.head(5))
     return df
 
 
@@ -83,11 +127,14 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 # --- Import logic ---------------------------------------------------------
 
-def import_file(path: str, sheet: Optional[str], overwrite: bool) -> None:
-    df = load_dataframe(path, sheet)
-    df = normalize_columns(df)
+def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: int = 0) -> None:
+    # Parsear el Excel con formato de bloques
+    df = parse_excel_blocks(path, sheet)
+    
+    if len(df) == 0:
+        raise ValueError("No se encontraron datos válidos en el archivo")
 
-    required = {"clave", "orden", "centro_trabajo", "operacion", "tiempo_estimado"}
+    required = {"clave", "orden", "centro_trabajo", "operacion"}
     missing = required - set(df.columns)
     if missing:
         raise ValueError(f"Faltan columnas requeridas: {missing}\nColumnas disponibles: {list(df.columns)}")
@@ -172,6 +219,7 @@ def main():
     parser = argparse.ArgumentParser(description="Importa claves y procesos desde CSV/Excel")
     parser.add_argument("--file", required=True, help="Ruta al CSV o Excel")
     parser.add_argument("--sheet", default=None, help="Nombre de hoja (solo Excel)")
+    parser.add_argument("--header", type=int, default=0, help="Fila del encabezado (0=primera fila, 1=segunda, etc.)")
     parser.add_argument("--overwrite", action="store_true", help="Sobrescribe la secuencia existente de cada clave")
     args = parser.parse_args()
 
@@ -179,7 +227,7 @@ def main():
         print(f"No se encuentra el archivo: {args.file}", file=sys.stderr)
         sys.exit(1)
 
-    import_file(args.file, args.sheet, args.overwrite)
+    import_file(args.file, args.sheet, args.overwrite, args.header)
     print("Importación completada.")
 
 
