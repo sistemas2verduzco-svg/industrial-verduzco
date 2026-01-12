@@ -41,7 +41,9 @@ def hhmmss(val: Optional[str]) -> Optional[str]:
 def load_dataframe(path: str, sheet: Optional[str]) -> pd.DataFrame:
     ext = os.path.splitext(path)[1].lower()
     if ext in (".xlsx", ".xls"):
-        return pd.read_excel(path, sheet_name=sheet)
+        # Si no especifica hoja, usa la primera (0)
+        sheet_name = sheet if sheet else 0
+        return pd.read_excel(path, sheet_name=sheet_name)
     return pd.read_csv(path)
 
 
