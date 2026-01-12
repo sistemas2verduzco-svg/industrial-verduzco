@@ -3,6 +3,16 @@ import os
 import sys
 from typing import Optional
 
+# Obtener la ruta del directorio raíz (padre de tools/)
+script_dir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.dirname(script_dir)
+sys.path.insert(0, root_dir)
+
+# Debug: mostrar rutas
+print(f"Script dir: {script_dir}")
+print(f"Root dir: {root_dir}")
+print(f"Archivos en root: {os.listdir(root_dir)[:5]}")
+
 import pandas as pd
 
 from app import app, db
