@@ -180,8 +180,10 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
 
             # Si overwrite, limpiar secuencia previa de esta clave
             if overwrite:
-                ClaveProceso.query.filter_by(clave_id=clave_obj.id).delete()
-                db.session.flush()
+                deleted_count = ClaveProceso.query.filter_by(clave_id=clave_obj.id).delete()
+                db.session.flush()  # Forzar flush del delete antes de continuar
+                if deleted_count > 0:
+                    print(f"  Limpiadas {deleted_count} filas previas de {clave_code}")
 
             # Cache local de procesos para esta corrida
             proc_cache = {}
@@ -223,7 +225,9 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
                 )
                 db.session.add(cp)
 
-        db.session.commit()
+            # Commit por clave para evitar transacción gigante
+            db.session.commit()
+            print(f"✓ Importada clave {clave_code} con {len(gdf)} pasos")
 
 
 # --- CLI ------------------------------------------------------------------
