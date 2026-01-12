@@ -40,6 +40,8 @@ def hhmmss(val: Optional[str]) -> Optional[str]:
 
 def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
     """Parse el Excel con formato de bloques repetidos por clave."""
+    import re
+    
     ext = os.path.splitext(path)[1].lower()
     if ext in (".xlsx", ".xls"):
         sheet_name = sheet if sheet else 0
@@ -52,17 +54,27 @@ def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
     current_nombre = None
     orden = 0
     
+    # Patrón para detectar claves válidas: letras seguidas de números (AS01, BY01/BY02, etc.)
+    clave_pattern = re.compile(r'^[A-Z]{1,4}\d{1,3}(/[A-Z]{1,4}\d{1,3})?$', re.IGNORECASE)
+    
     for idx, row in df_raw.iterrows():
         # Columna B (índice 1) tiene claves como AS01, AS02, etc.
         col_b = str(row.iloc[1] if len(row) > 1 else "").strip()
         
-        # Detectar fila de clave (formato AS01, BY01, etc. en columna B con fondo naranja)
-        if col_b and len(col_b) <= 10 and not col_b.startswith("C.T.") and col_b != "PROC.":
+        # Detectar fila de clave (debe coincidir con el patrón AS01, BY01, etc.)
+        if col_b and clave_pattern.match(col_b):
             # Es una clave nueva
-            current_clave = col_b
-            # El nombre está en columna E-G aproximadamente
-            current_nombre = " ".join([str(row.iloc[i]) for i in range(4, 8) if i < len(row) and pd.notna(row.iloc[i])]).strip()
+            current_clave = col_b.upper()
+            # El nombre está en columnas posteriores (E, F, G, H aprox.)
+            nombre_parts = []
+            for i in range(4, 12):
+                if i < len(row) and pd.notna(row.iloc[i]):
+                    val = str(row.iloc[i]).strip()
+                    if val and val.upper() != current_clave and not val.startswith("Unnamed"):
+                        nombre_parts.append(val)
+            current_nombre = " ".join(nombre_parts).strip() if nombre_parts else None
             orden = 0
+            print(f"Detectada clave: {current_clave} - {current_nombre}")
             continue
         
         # Detectar fila de encabezados (tiene "PROC." en columna A o "C.T." en columna B)
@@ -70,14 +82,14 @@ def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
         if col_a == "PROC." or col_b == "C.T.":
             continue
         
-        # Detectar fila de datos (tiene 1°, 2°, 3° en columna A)
-        if current_clave and col_a and (col_a.endswith("°") or col_a.isdigit()):
+        # Detectar fila de datos (tiene 1°, 2°, 3°, 4°, 5° en columna A)
+        if current_clave and col_a and (col_a.endswith("°") or (col_a.isdigit() and int(col_a) < 100)):
             orden += 1
             ct = str(row.iloc[1] if len(row) > 1 else "").strip()  # C.T.
             operacion = str(row.iloc[2] if len(row) > 2 else "").strip()  # OPERACIÓN
             te = str(row.iloc[3] if len(row) > 3 else "").strip()  # T/E
             
-            if ct and operacion:
+            if ct and operacion and ct != "C.T.":
                 records.append({
                     'clave': current_clave,
                     'nombre_clave': current_nombre,
@@ -88,11 +100,12 @@ def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
                 })
     
     df = pd.DataFrame(records)
-    print(f"Registros parseados: {len(df)}")
+    print(f"\nRegistros parseados: {len(df)}")
     print(f"Claves únicas: {df['clave'].nunique() if len(df) > 0 else 0}")
     if len(df) > 0:
-        print(f"\nPrimeros 5 registros:")
-        print(df.head(5))
+        print(f"Claves encontradas: {sorted(df['clave'].unique())}")
+        print(f"\nPrimeros 10 registros:")
+        print(df.head(10))
     return df
 
 
