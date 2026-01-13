@@ -152,24 +152,14 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
     if missing:
         raise ValueError(f"Faltan columnas requeridas: {missing}\nColumnas disponibles: {list(df.columns)}")
 
-    # Detectar claves duplicadas
-    claves_unicas_inicial = df['clave'].nunique()
-    total_registros_inicial = len(df)
+    # Detectar claves duplicadas (para información)
+    claves_duplicadas = df['clave'].value_counts()
+    claves_repetidas = claves_duplicadas[claves_duplicadas > 10]  # Más de 10 pasos probablemente es duplicado
+    if len(claves_repetidas) > 0:
+        print(f"\n⚠ Claves con muchos pasos (posibles duplicados): {dict(claves_repetidas)}")
+        print(f"   Con --overwrite, se usará la última aparición de cada clave")
     
-    # Agregar índice para identificar el orden de aparición
-    df['_aparicion'] = df.groupby('clave').cumcount()
-    
-    # Para claves duplicadas, mantener solo la última aparición completa
-    # (todas las filas del último bloque de cada clave)
-    df['_max_aparicion'] = df.groupby('clave')['_aparicion'].transform('max')
-    df_filtrado = df[df['_aparicion'] == df['_max_aparicion']].copy()
-    df_filtrado = df_filtrado.drop(columns=['_aparicion', '_max_aparicion'])
-    
-    claves_duplicadas = total_registros_inicial - len(df_filtrado)
-    if claves_duplicadas > 0:
-        print(f"\n⚠ Eliminados {claves_duplicadas} registros de claves duplicadas (mantenida última aparición)")
-    
-    df = df_filtrado.sort_values(["clave", "orden"])  # asegura orden correcto
+    df = df.sort_values(["clave", "orden"])  # asegura orden correcto
 
     # Agrupamos por clave para poder limpiar secuencia por clave si overwrite=True
     grouped = df.groupby("clave", sort=False)
