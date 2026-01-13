@@ -152,7 +152,24 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
     if missing:
         raise ValueError(f"Faltan columnas requeridas: {missing}\nColumnas disponibles: {list(df.columns)}")
 
-    df = df.sort_values(["clave", "orden"])  # asegura orden correcto
+    # Detectar claves duplicadas
+    claves_unicas_inicial = df['clave'].nunique()
+    total_registros_inicial = len(df)
+    
+    # Agregar índice para identificar el orden de aparición
+    df['_aparicion'] = df.groupby('clave').cumcount()
+    
+    # Para claves duplicadas, mantener solo la última aparición completa
+    # (todas las filas del último bloque de cada clave)
+    df['_max_aparicion'] = df.groupby('clave')['_aparicion'].transform('max')
+    df_filtrado = df[df['_aparicion'] == df['_max_aparicion']].copy()
+    df_filtrado = df_filtrado.drop(columns=['_aparicion', '_max_aparicion'])
+    
+    claves_duplicadas = total_registros_inicial - len(df_filtrado)
+    if claves_duplicadas > 0:
+        print(f"\n⚠ Eliminados {claves_duplicadas} registros de claves duplicadas (mantenida última aparición)")
+    
+    df = df_filtrado.sort_values(["clave", "orden"])  # asegura orden correcto
 
     # Agrupamos por clave para poder limpiar secuencia por clave si overwrite=True
     grouped = df.groupby("clave", sort=False)
@@ -183,6 +200,8 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
                 deleted_count = ClaveProceso.query.filter_by(clave_id=clave_obj.id).delete()
                 # COMMIT inmediato para asegurar que DELETE se ejecuta antes de INSERT
                 db.session.commit()
+                # Limpiar sesión para evitar que SQLAlchemy reinserte objetos viejos
+                db.session.expire_all()
                 if deleted_count > 0:
                     print(f"  Limpiadas {deleted_count} filas previas de {clave_code}")
 
