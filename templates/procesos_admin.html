@@ -1,183 +1,215 @@
 {% include '_sidebar.html' %}
-<div class="admin-container" style="padding:24px;">
-  <h2 style="margin-bottom:16px;">Procesos y Claves (Catálogo de Producción)</h2>
+<div class="admin-container" style="padding:24px; max-width:1400px; margin:0 auto;">
+  <h2 style="margin-bottom:20px; font-size:28px; font-weight:600; color:#1a202c;">Procesos y Claves de Producción</h2>
   {% if error %}
-  <div style="padding:10px; background:#ffe5e5; color:#b71c1c; border-radius:6px; margin-bottom:12px;">{{ error }}</div>
+  <div style="padding:12px 16px; background:#fee; color:#c53030; border-radius:8px; margin-bottom:16px; border-left:4px solid #c53030;">{{ error }}</div>
   {% endif %}
 
-  <div style="display:grid; grid-template-columns: 260px 1fr 360px; gap:16px; align-items:start;">
-    <!-- Columna izquierda: Claves -->
-    <div style="background:#fff; border:1px solid #e0e0e0; border-radius:8px; padding:12px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-        <strong>Claves</strong>
-        <button id="btnNuevaClave" class="btn btn-sm" style="padding:6px 10px; border:1px solid #ccc; background:#f6f8fa; border-radius:6px; cursor:pointer;">Nueva</button>
+  <div class="procesos-layout" style="display:grid; grid-template-columns: 280px 1fr; gap:20px; align-items:start;">
+    <!-- Columna izquierda: Claves y Catálogo de procesos -->
+    <div style="display:flex; flex-direction:column; gap:20px;">
+      <!-- Claves -->
+      <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <strong style="font-size:16px; color:#2d3748;">Claves de Producto</strong>
+          <button id="btnNuevaClave" class="btn btn-sm" style="padding:8px 12px; border:none; background:#3182ce; color:#fff; border-radius:6px; cursor:pointer; font-size:13px; font-weight:500; transition:background 0.2s;">Nueva</button>
+        </div>
+        <input type="text" id="buscarClave" placeholder="🔍 Buscar clave..." style="width:100%; padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:12px; font-size:14px;">
+        <div style="max-height:420px; overflow-y:auto; border-top:1px solid #edf2f7;">
+          {% for c in claves %}
+          <a href="{{ url_for('procesos_panel', clave_id=c.id) }}" style="display:block; padding:12px 8px; text-decoration:none; color:#2d3748; border-bottom:1px solid #f7fafc; transition:background 0.2s;" class="clave-item">
+            <div style="font-weight:600; font-size:14px; color:#2b6cb0;">{{ c.clave }}</div>
+            <div style="font-size:12px; color:#718096; margin-top:2px;">{{ c.nombre or 'Sin nombre' }}</div>
+          </a>
+          {% else %}
+          <div style="color:#a0aec0; padding:16px; text-align:center; font-size:13px;">Sin claves registradas</div>
+          {% endfor %}
+        </div>
       </div>
-      <input type="text" id="buscarClave" placeholder="Buscar clave..." style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; margin-bottom:8px;">
-      <div style="max-height:480px; overflow:auto; border-top:1px solid #eee;">
-        {% for c in claves %}
-        <a href="{{ url_for('procesos_panel', clave_id=c.id) }}" style="display:block; padding:8px; text-decoration:none; color:#333; border-bottom:1px solid #f0f0f0;">
-          <div style="font-weight:600;">{{ c.clave }}</div>
-          <div style="font-size:12px; color:#666;">{{ c.nombre }}</div>
-        </a>
-        {% else %}
-        <div style="color:#999; padding:12px;">Sin claves registradas</div>
-        {% endfor %}
+
+      <!-- Catálogo de procesos -->
+      <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 12px; font-size:16px; color:#2d3748; font-weight:600;">Catálogo de Procesos</h3>
+        <form id="formProceso" action="{{ url_for('procesos_base_save') }}" method="POST" style="display:grid; gap:10px; margin-bottom:12px;">
+          <input type="hidden" name="id" id="proc_id">
+          <div>
+            <label style="display:block; font-size:13px; font-weight:500; color:#4a5568; margin-bottom:4px;">Centro de trabajo</label>
+            <input type="text" name="centro_trabajo" id="proc_ct" style="width:100%; padding:8px 10px; border:1px solid #e2e8f0; border-radius:6px; font-size:14px;">
+          </div>
+          <div>
+            <label style="display:block; font-size:13px; font-weight:500; color:#4a5568; margin-bottom:4px;">Operación</label>
+            <textarea name="operacion" id="proc_oper" rows="2" style="width:100%; padding:8px 10px; border:1px solid #e2e8f0; border-radius:6px; font-size:14px; resize:vertical;"></textarea>
+          </div>
+          <div>
+            <label style="display:block; font-size:13px; font-weight:500; color:#4a5568; margin-bottom:4px;">T/E (HH:MM:SS)</label>
+            <input type="text" name="tiempo_estimado" id="proc_te" placeholder="00:05:10" style="width:100%; padding:8px 10px; border:1px solid #e2e8f0; border-radius:6px; font-size:14px;">
+          </div>
+          <div>
+            <label style="display:block; font-size:13px; font-weight:500; color:#4a5568; margin-bottom:4px;">Nombre</label>
+            <input type="text" name="nombre" id="proc_nombre" placeholder="Opcional" style="width:100%; padding:8px 10px; border:1px solid #e2e8f0; border-radius:6px; font-size:14px;">
+          </div>
+          <div>
+            <label style="display:block; font-size:13px; font-weight:500; color:#4a5568; margin-bottom:4px;">Descripción</label>
+            <textarea name="descripcion" id="proc_desc" rows="2" style="width:100%; padding:8px 10px; border:1px solid #e2e8f0; border-radius:6px; font-size:14px; resize:vertical;"></textarea>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="proc_activo" name="activo" checked style="width:16px; height:16px;">
+            <label for="proc_activo" style="font-size:13px; color:#4a5568;">Activo</label>
+          </div>
+          <div style="display:flex; gap:8px; justify-content:flex-end;">
+            <button type="button" id="btnLimpiarProc" class="btn" style="padding:8px 12px; border:1px solid #e2e8f0; background:#f7fafc; border-radius:6px; cursor:pointer; font-size:13px; font-weight:500;">Limpiar</button>
+            <button type="submit" class="btn" style="padding:8px 12px; border:none; background:#3182ce; color:#fff; border-radius:6px; cursor:pointer; font-size:13px; font-weight:500; transition:background 0.2s;">Guardar</button>
+          </div>
+        </form>
+
+        <hr style="border:none; border-top:1px solid #edf2f7; margin:12px 0;">
+
+        <input type="text" id="buscarProceso" placeholder="🔍 Buscar proceso..." style="width:100%; padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:12px; font-size:14px;">
+        <div style="max-height:360px; overflow-y:auto; border-top:1px solid #edf2f7;">
+          {% for p in procesos %}
+          <div class="itemProc" data-id="{{ p.id }}" data-codigo="{{ p.codigo or '' }}" data-nombre="{{ p.nombre }}" data-oper="{{ p.operacion or '' }}" data-ct="{{ p.centro_trabajo or '' }}" data-te="{{ p.tiempo_estimado or '' }}" data-desc="{{ p.descripcion or '' }}" style="padding:10px 8px; border-bottom:1px solid #f7fafc;">
+            <div style="font-size:13px; font-weight:600; color:#2d3748; margin-bottom:4px;">{{ p.centro_trabajo or 'C.T.?' }} - {{ p.operacion or p.nombre }}</div>
+            <div style="font-size:12px; color:#718096; margin-bottom:8px;">{{ p.descripcion or '' }}</div>
+            <div style="display:flex; gap:6px;">
+              <button type="button" class="btnEditProc" style="padding:6px 10px; font-size:12px; border:1px solid #e2e8f0; background:#fff; border-radius:4px; cursor:pointer;">Editar</button>
+              <form action="{{ url_for('procesos_base_delete', proc_id=p.id) }}" method="POST" onsubmit="return confirm('¿Eliminar proceso?');" style="display:inline;">
+                <button type="submit" style="padding:6px 10px; font-size:12px; border:1px solid #fc8181; background:#fff; color:#c53030; border-radius:4px; cursor:pointer;">Eliminar</button>
+              </form>
+            </div>
+          </div>
+          {% else %}
+          <div style="color:#a0aec0; padding:16px; text-align:center; font-size:13px;">Sin procesos en catálogo</div>
+          {% endfor %}
+        </div>
       </div>
     </div>
 
-    <!-- Columna central: Editor de clave y secuencia -->
-    <div style="background:#fff; border:1px solid #e0e0e0; border-radius:8px; padding:12px;">
-      <h3 style="margin:0 0 10px;">{{ 'Editar Clave' if clave_sel else 'Nueva Clave' }}</h3>
-      <form action="{{ url_for('procesos_clave_save') }}" method="POST" style="margin-bottom:12px; display:grid; grid-template-columns: 1fr 1fr; gap:10px; align-items:end;">
+    <!-- Columna derecha: Editor de clave y secuencia -->
+    <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <h3 style="margin:0 0 16px; font-size:20px; color:#2d3748; font-weight:600;">{{ 'Editar Clave: ' ~ clave_sel.clave if clave_sel else 'Nueva Clave' }}</h3>
+      <form action="{{ url_for('procesos_clave_save') }}" method="POST" style="margin-bottom:16px; display:grid; grid-template-columns: 1fr 1fr; gap:12px; align-items:end;">
         {% if clave_sel %}
         <input type="hidden" name="id" value="{{ clave_sel.id }}">
         {% endif %}
         <div>
-          <label>Clave</label>
-          <input type="text" name="clave" required value="{{ clave_sel.clave if clave_sel else '' }}" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
+          <label style="display:block; font-size:13px; font-weight:500; color:#4a5568; margin-bottom:4px;">Clave *</label>
+          <input type="text" name="clave" required value="{{ clave_sel.clave if clave_sel else '' }}" style="width:100%; padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px;">
         </div>
         <div>
-          <label>Nombre</label>
-          <input type="text" name="nombre" value="{{ clave_sel.nombre if clave_sel else '' }}" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
+          <label style="display:block; font-size:13px; font-weight:500; color:#4a5568; margin-bottom:4px;">Nombre del producto</label>
+          <input type="text" name="nombre" value="{{ clave_sel.nombre if clave_sel else '' }}" style="width:100%; padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px;">
         </div>
         <div style="grid-column:1 / span 2;">
-          <label>Notas</label>
-          <textarea name="notas" rows="2" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">{{ clave_sel.notas if clave_sel else '' }}</textarea>
+          <label style="display:block; font-size:13px; font-weight:500; color:#4a5568; margin-bottom:4px;">Notas</label>
+          <textarea name="notas" rows="2" style="width:100%; padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px; resize:vertical;">{{ clave_sel.notas if clave_sel else '' }}</textarea>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
-          <input type="checkbox" id="activo_clave" name="activo" {% if not clave_sel or clave_sel.activo %}checked{% endif %}>
-          <label for="activo_clave">Activo</label>
+          <input type="checkbox" id="activo_clave" name="activo" {% if not clave_sel or clave_sel.activo %}checked{% endif %} style="width:16px; height:16px;">
+          <label for="activo_clave" style="font-size:13px; color:#4a5568;">Activo</label>
         </div>
         <div style="text-align:right;">
-          <button type="submit" class="btn" style="padding:8px 12px; border:1px solid #1976d2; background:#1976d2; color:#fff; border-radius:6px; cursor:pointer;">Guardar clave</button>
+          <button type="submit" class="btn" style="padding:10px 16px; border:none; background:#3182ce; color:#fff; border-radius:8px; cursor:pointer; font-size:14px; font-weight:500; transition:background 0.2s;">Guardar clave</button>
         </div>
       </form>
 
-      <hr style="border:none; border-top:1px solid #eee; margin:10px 0;">
+      <hr style="border:none; border-top:2px solid #edf2f7; margin:16px 0;">
 
-      <h4 style="margin:0 0 8px;">Secuencia de procesos</h4>
+      <h4 style="margin:0 0 12px; font-size:18px; color:#2d3748; font-weight:600;">Secuencia de Procesos</h4>
       {% if not clave_sel %}
-      <div style="padding:10px; background:#f9f9f9; border:1px dashed #ddd; border-radius:6px; color:#666;">Selecciona o crea una clave para configurar su proceso.</div>
+      <div style="padding:20px; background:#f7fafc; border:2px dashed #cbd5e0; border-radius:8px; color:#718096; text-align:center;">Selecciona o crea una clave para configurar su secuencia de procesos.</div>
       {% else %}
       <form action="{{ url_for('procesos_clave_secuencia_save', clave_id=clave_sel.id) }}" method="POST" id="formSecuencia">
-        <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
-          <select id="selectProceso" style="flex:1; padding:8px; border:1px solid #ddd; border-radius:6px;">
+        <div style="display:flex; gap:10px; align-items:center; margin-bottom:16px; flex-wrap:wrap;">
+          <select id="selectProceso" style="flex:1; min-width:200px; padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px;">
             <option value="">-- Seleccionar proceso --</option>
             {% for p in procesos %}
             <option value="{{ p.id }}" data-codigo="{{ p.codigo or '' }}" data-nombre="{{ p.nombre }}" data-ct="{{ p.centro_trabajo or '' }}" data-oper="{{ p.operacion or '' }}" data-te="{{ p.tiempo_estimado or '' }}">{{ p.centro_trabajo or 'C.T.?'}} - {{ p.operacion or p.nombre }}</option>
             {% endfor %}
           </select>
-          <button type="button" id="btnAgregarProceso" class="btn" style="padding:8px 12px; border:1px solid #ccc; background:#f6f8fa; border-radius:6px; cursor:pointer;">Agregar</button>
+          <button type="button" id="btnAgregarProceso" class="btn" style="padding:10px 16px; border:none; background:#48bb78; color:#fff; border-radius:8px; cursor:pointer; font-size:14px; font-weight:500; transition:background 0.2s;">+ Agregar</button>
         </div>
 
-        <table style="width:100%; border-collapse:collapse;">
-          <thead>
-            <tr style="background:#f3f4f6;">
-              <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">Orden</th>
-              <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">C.T. / Operación</th>
-              <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">T/E</th>
-              <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">T/CT</th>
-              <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">T/CO</th>
-              <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">T/O</th>
-              <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">Total</th>
-              <th style="text-align:left; padding:8px; border-bottom:1px solid #e5e7eb;">Notas</th>
-              <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="tbodySecuencia">
-            {% for cp in clave_sel.procesos %}
-            <tr>
-              <td style="padding:6px;">
-                <input type="number" name="orden[]" value="{{ cp.orden }}" style="width:64px; padding:6px; border:1px solid #ddd; border-radius:6px;">
-              </td>
-              <td style="padding:6px;">
-                <div><input type="text" name="ct[]" value="{{ cp.centro_trabajo or cp.proceso.centro_trabajo or '' }}" placeholder="C.T." style="width:140px; padding:6px; border:1px solid #ddd; border-radius:6px;"></div>
-                <div style="margin-top:6px;"><input type="text" name="operacion[]" value="{{ cp.operacion or cp.proceso.operacion or '' }}" placeholder="Operación" style="width:100%; padding:6px; border:1px solid #ddd; border-radius:6px;"></div>
-              </td>
-              <td style="padding:6px;"><input type="text" name="t_e[]" value="{{ cp.t_e or cp.proceso.tiempo_estimado or '' }}" placeholder="T/E" style="width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;" class="input-te"></td>
-              <td style="padding:6px;"><input type="text" name="t_tct[]" value="{{ cp.t_tct or '' }}" placeholder="T/CT" style="width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;"></td>
-              <td style="padding:6px;"><input type="text" name="t_tco[]" value="{{ cp.t_tco or '' }}" placeholder="T/CO" style="width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;"></td>
-              <td style="padding:6px;"><input type="text" name="t_to[]" value="{{ cp.t_to or '' }}" placeholder="T/O" style="width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;"></td>
-              <td style="padding:6px;"><input type="text" name="tiempo_est[]" value="{{ cp.tiempo_estimado or '' }}" placeholder="Total" style="width:90px; padding:6px; border:1px solid #ddd; border-radius:6px;"></td>
-              <td style="padding:6px;">
-                <input type="text" name="notas[]" value="{{ cp.notas or '' }}" style="width:100%; padding:6px; border:1px solid #ddd; border-radius:6px;">
-              </td>
-              <td style="padding:6px; white-space:nowrap;">
-                <input type="hidden" name="proceso_id[]" value="{{ cp.proceso_id }}">
-                <button type="button" class="btnUp" title="Subir" style="padding:6px 8px;">▲</button>
-                <button type="button" class="btnDown" title="Bajar" style="padding:6px 8px;">▼</button>
-                <button type="button" class="btnRemove" title="Quitar" style="padding:6px 8px; color:#b71c1c;">✖</button>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        <div style="text-align:right; margin-top:10px;">
-          <button type="submit" class="btn" style="padding:8px 12px; border:1px solid #1976d2; background:#1976d2; color:#fff; border-radius:6px; cursor:pointer;">Guardar secuencia</button>
-        </div>
-      </form>
-      {% endif %}
-    </div>
-
-    <!-- Columna derecha: Catálogo de procesos -->
-    <div style="background:#fff; border:1px solid #e0e0e0; border-radius:8px; padding:12px;">
-      <h3 style="margin:0 0 10px;">Catálogo de procesos</h3>
-      <form id="formProceso" action="{{ url_for('procesos_base_save') }}" method="POST" style="display:grid; gap:8px;">
-        <input type="hidden" name="id" id="proc_id">
-        <div>
-          <label>Centro de trabajo</label>
-          <input type="text" name="centro_trabajo" id="proc_ct" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
-        </div>
-        <div>
-          <label>Operación</label>
-          <textarea name="operacion" id="proc_oper" rows="2" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;"></textarea>
-        </div>
-        <div>
-          <label>T/E (Tiempo Estimado, ej: 00:05:10)</label>
-          <input type="text" name="tiempo_estimado" id="proc_te" placeholder="HH:MM:SS" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
-        </div>
-        <div>
-          <label>Nombre (opcional, default = Operación)</label>
-          <input type="text" name="nombre" id="proc_nombre" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;">
-        </div>
-        <div>
-          <label>Descripción</label>
-          <textarea name="descripcion" id="proc_desc" rows="2" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;"></textarea>
-        </div>
-        <div style="display:flex; align-items:center; gap:8px;">
-          <input type="checkbox" id="proc_activo" name="activo" checked>
-          <label for="proc_activo">Activo</label>
-        </div>
-        <div style="display:flex; gap:8px; justify-content:flex-end;">
-          <button type="button" id="btnLimpiarProc" class="btn" style="padding:8px 12px; border:1px solid #ccc; background:#f6f8fa; border-radius:6px; cursor:pointer;">Limpiar</button>
-          <button type="submit" class="btn" style="padding:8px 12px; border:1px solid #1976d2; background:#1976d2; color:#fff; border-radius:6px; cursor:pointer;">Guardar proceso</button>
-        </div>
-      </form>
-
-      <hr style="border:none; border-top:1px solid #eee; margin:10px 0;">
-
-      <input type="text" id="buscarProceso" placeholder="Buscar proceso..." style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; margin-bottom:8px;">
-      <div style="max-height:420px; overflow:auto; border-top:1px solid #eee;">
-        {% for p in procesos %}
-        <div class="itemProc" data-id="{{ p.id }}" data-codigo="{{ p.codigo or '' }}" data-nombre="{{ p.nombre }}" data-oper="{{ p.operacion or '' }}" data-ct="{{ p.centro_trabajo or '' }}" data-te="{{ p.tiempo_estimado or '' }}" data-desc="{{ p.descripcion or '' }}" style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px; border-bottom:1px solid #f0f0f0;">
-          <div>
-            <div style="font-weight:600;">{{ p.centro_trabajo or 'C.T.?' }} - {{ p.operacion or p.nombre }}</div>
-            <div style="font-size:12px; color:#666;">{{ p.descripcion }}</div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <thead>
+              <tr style="background:#f7fafc;">
+                <th style="text-align:left; padding:10px 8px; border-bottom:2px solid #e2e8f0; color:#4a5568; font-weight:600; white-space:nowrap;">#</th>
+                <th style="text-align:left; padding:10px 8px; border-bottom:2px solid #e2e8f0; color:#4a5568; font-weight:600;">C.T. / Operación</th>
+                <th style="text-align:left; padding:10px 8px; border-bottom:2px solid #e2e8f0; color:#4a5568; font-weight:600; white-space:nowrap;">T/E</th>
+                <th style="text-align:left; padding:10px 8px; border-bottom:2px solid #e2e8f0; color:#4a5568; font-weight:600; white-space:nowrap;">T/CT</th>
+                <th style="text-align:left; padding:10px 8px; border-bottom:2px solid #e2e8f0; color:#4a5568; font-weight:600; white-space:nowrap;">T/CO</th>
+                <th style="text-align:left; padding:10px 8px; border-bottom:2px solid #e2e8f0; color:#4a5568; font-weight:600; white-space:nowrap;">T/O</th>
+                <th style="text-align:left; padding:10px 8px; border-bottom:2px solid #e2e8f0; color:#4a5568; font-weight:600; white-space:nowrap;">Total</th>
+                <th style="text-align:left; padding:10px 8px; border-bottom:2px solid #e2e8f0; color:#4a5568; font-weight:600;">Notas</th>
+                <th style="text-align:center; padding:10px 8px; border-bottom:2px solid #e2e8f0; color:#4a5568; font-weight:600;">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbodySecuencia">
+              {% for cp in clave_sel.procesos %}
+              <tr style="border-bottom:1px solid #edf2f7;">
+                <td style="padding:8px;">
+                  <input type="number" name="orden[]" value="{{ cp.orden }}" style="width:50px; padding:6px 8px; border:1px solid #e2e8f0; border-radius:6px; font-size:13px;">
+                </td>
+                <td style="padding:8px;">
+                  <input type="text" name="ct[]" value="{{ cp.centro_trabajo or cp.proceso.centro_trabajo or '' }}" placeholder="C.T." style="width:100%; max-width:120px; padding:6px 8px; border:1px solid #e2e8f0; border-radius:6px; margin-bottom:4px; font-size:13px;">
+                  <input type="text" name="operacion[]" value="{{ cp.operacion or cp.proceso.operacion or '' }}" placeholder="Operación" style="width:100%; padding:6px 8px; border:1px solid #e2e8f0; border-radius:6px; font-size:13px;">
+                </td>
+                <td style="padding:8px;"><input type="text" name="t_e[]" value="{{ cp.t_e or cp.proceso.tiempo_estimado or '' }}" placeholder="T/E" style="width:80px; padding:6px 8px; border:1px solid #e2e8f0; border-radius:6px; font-size:13px;" class="input-te"></td>
+                <td style="padding:8px;"><input type="text" name="t_tct[]" value="{{ cp.t_tct or '' }}" placeholder="T/CT" style="width:80px; padding:6px 8px; border:1px solid #e2e8f0; border-radius:6px; font-size:13px;"></td>
+                <td style="padding:8px;"><input type="text" name="t_tco[]" value="{{ cp.t_tco or '' }}" placeholder="T/CO" style="width:80px; padding:6px 8px; border:1px solid #e2e8f0; border-radius:6px; font-size:13px;"></td>
+                <td style="padding:8px;"><input type="text" name="t_to[]" value="{{ cp.t_to or '' }}" placeholder="T/O" style="width:80px; padding:6px 8px; border:1px solid #e2e8f0; border-radius:6px; font-size:13px;"></td>
+                <td style="padding:8px;"><input type="text" name="tiempo_est[]" value="{{ cp.tiempo_estimado or '' }}" placeholder="Total" style="width:80px; padding:6px 8px; border:1px solid #e2e8f0; border-radius:6px; font-size:13px;"></td>
+                <td style="padding:8px;">
+                  <input type="text" name="notas[]" value="{{ cp.notas or '' }}" placeholder="Notas" style="width:100%; padding:6px 8px; border:1px solid #e2e8f0; border-radius:6px; font-size:13px;">
+                </td>
+                <td style="padding:8px; white-space:nowrap; text-align:center;">
+                  <input type="hidden" name="proceso_id[]" value="{{ cp.proceso_id }}">
+                  <button type="button" class="btnUp" title="Subir" style="padding:6px 10px; border:1px solid #e2e8f0; background:#fff; border-radius:4px; cursor:pointer; font-size:14px;">▲</button>
+                  <button type="button" class="btnDown" title="Bajar" style="padding:6px 10px; border:1px solid #e2e8f0; background:#fff; border-radius:4px; cursor:pointer; font-size:14px;">▼</button>
+                  <button type="button" class="btnRemove" title="Quitar" style="padding:6px 10px; border:1px solid #fc8181; background:#fff; color:#c53030; border-radius:4px; cursor:pointer; font-size:14px;">✖</button>
+                </td>
+              </tbody>
+            </table>
           </div>
-          <div style="display:flex; gap:6px;">
-            <button type="button" class="btnEditProc" style="padding:6px 8px;">Editar</button>
-            <form action="{{ url_for('procesos_base_delete', proc_id=p.id) }}" method="POST" onsubmit="return confirm('¿Eliminar proceso?');">
-              <button type="submit" style="padding:6px 8px; color:#b71c1c;">Eliminar</button>
-            </form>
+          <div style="text-align:right; margin-top:16px;">
+            <button type="submit" class="btn" style="padding:10px 16px; border:none; background:#3182ce; color:#fff; border-radius:8px; cursor:pointer; font-size:14px; font-weight:500; transition:background 0.2s;">💾 Guardar secuencia</button>
           </div>
-        </div>
-        {% else %}
-        <div style="color:#999; padding:12px;">Sin procesos en catálogo</div>
-        {% endfor %}
+        </form>
+        {% endif %}
       </div>
     </div>
   </div>
-</div>
+
+  <style>
+    /* Hover effects */
+    .btn:hover { opacity: 0.9; }
+    .clave-item:hover { background-color: #edf2f7; }
+    .itemProc:hover { background-color: #f7fafc; }
+    
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .procesos-layout {
+        grid-template-columns: 1fr !important;
+      }
+      .procesos-layout > div:first-child {
+        order: 2;
+      }
+      .procesos-layout > div:last-child {
+        order: 1;
+      }
+    }
+    
+    @media (max-width: 768px) {
+      .admin-container {
+        padding: 16px !important;
+      }
+      table {
+        font-size: 12px !important;
+      }
+      input, select, textarea, button {
+        font-size: 13px !important;
+    }
+  </style>
 
 <script>
   // Filtro rápido en listas
