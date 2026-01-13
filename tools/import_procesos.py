@@ -181,7 +181,8 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
             # Si overwrite, limpiar secuencia previa de esta clave
             if overwrite:
                 deleted_count = ClaveProceso.query.filter_by(clave_id=clave_obj.id).delete()
-                db.session.flush()  # Forzar flush del delete antes de continuar
+                # COMMIT inmediato para asegurar que DELETE se ejecuta antes de INSERT
+                db.session.commit()
                 if deleted_count > 0:
                     print(f"  Limpiadas {deleted_count} filas previas de {clave_code}")
 
