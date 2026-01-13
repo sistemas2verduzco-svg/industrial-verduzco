@@ -52,6 +52,7 @@ def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
     records = []
     current_clave = None
     current_nombre = None
+    current_block_id = {}  # Contador de bloques por clave
     orden = 0
     
     # Patrón para detectar claves válidas: letras seguidas de números (AS01, BY01/BY02, etc.)
@@ -63,8 +64,10 @@ def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
         
         # Detectar fila de clave (debe coincidir con el patrón AS01, BY01, etc.)
         if col_b and clave_pattern.match(col_b):
-            # Es una clave nueva
+            # Es una clave nueva (o repetida)
             current_clave = col_b.upper()
+            # Incrementar el ID de bloque para esta clave
+            current_block_id[current_clave] = current_block_id.get(current_clave, -1) + 1
             # El nombre está en columnas posteriores (E, F, G, H aprox.)
             nombre_parts = []
             for i in range(4, 12):
@@ -93,6 +96,7 @@ def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
                 records.append({
                     'clave': current_clave,
                     'nombre_clave': current_nombre,
+                    'block_id': current_block_id.get(current_clave, 0),  # Identificador de bloque
                     'orden': orden,
                     'centro_trabajo': ct,
                     'operacion': operacion,
@@ -152,12 +156,23 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
     if missing:
         raise ValueError(f"Faltan columnas requeridas: {missing}\nColumnas disponibles: {list(df.columns)}")
 
-    # Detectar claves duplicadas (para información)
-    claves_duplicadas = df['clave'].value_counts()
-    claves_repetidas = claves_duplicadas[claves_duplicadas > 10]  # Más de 10 pasos probablemente es duplicado
-    if len(claves_repetidas) > 0:
-        print(f"\n⚠ Claves con muchos pasos (posibles duplicados): {dict(claves_repetidas)}")
-        print(f"   Con --overwrite, se usará la última aparición de cada clave")
+    # Detectar claves duplicadas (múltiples bloques)
+    if 'block_id' in df.columns:
+        max_block_per_clave = df.groupby('clave')['block_id'].max()
+        claves_duplicadas = max_block_per_clave[max_block_per_clave > 0]
+        if len(claves_duplicadas) > 0:
+            print(f"\n⚠ Claves duplicadas detectadas (se usará última aparición):")
+            for clave, max_block in claves_duplicadas.items():
+                count = df[df['clave'] == clave].groupby('block_id').size()
+                print(f"   {clave}: {max_block+1} apariciones - filas por bloque: {list(count)}")
+            
+            # Filtrar: mantener solo el último bloque de cada clave
+            df['_max_block'] = df.groupby('clave')['block_id'].transform('max')
+            df = df[df['block_id'] == df['_max_block']].copy()
+            df = df.drop(columns=['block_id', '_max_block'])
+            print(f"   Mantenidos {len(df)} registros de últimas apariciones")
+        else:
+            df = df.drop(columns=['block_id'])
     
     df = df.sort_values(["clave", "orden"])  # asegura orden correcto
 
