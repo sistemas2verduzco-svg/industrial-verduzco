@@ -68,12 +68,14 @@ def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
             current_clave = col_b.upper()
             # Incrementar el ID de bloque para esta clave
             current_block_id[current_clave] = current_block_id.get(current_clave, -1) + 1
-            # El nombre está en columnas posteriores (E, F, G, H aprox.)
+            # El nombre está en columnas posteriores (C, D, E, F aprox.)
+            # Intentar primero columna C (índice 2), si no hay datos seguir con D, E, F, etc.
             nombre_parts = []
-            for i in range(4, 12):
+            for i in range(2, 12):  # Columnas C hasta L (índices 2-11)
                 if i < len(row) and pd.notna(row.iloc[i]):
                     val = str(row.iloc[i]).strip()
-                    if val and val.upper() != current_clave and not val.startswith("Unnamed"):
+                    # Descartar valores que sean códigos, encabezados comunes, o unnamed
+                    if val and val.upper() != current_clave and not val.startswith("Unnamed") and val.upper() not in ["PROC.", "C.T.", "OPERACIÓN", "T/E", "T/CT", "T/O", "T/TCT", "KG.BRUTO", "$ -"]:
                         nombre_parts.append(val)
             current_nombre = " ".join(nombre_parts).strip() if nombre_parts else None
             orden = 0
