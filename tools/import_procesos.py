@@ -201,7 +201,9 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
                 key_proc = (ct.lower(), oper.lower())
                 proc_obj = proc_cache.get(key_proc)
                 if not proc_obj:
-                    proc_obj = ProcesoCatalogo.query.filter_by(centro_trabajo=ct, operacion=oper).first()
+                    # Deshabilitar autoflush para evitar conflictos con ClaveProceso pendientes
+                    with db.session.no_autoflush:
+                        proc_obj = ProcesoCatalogo.query.filter_by(centro_trabajo=ct, operacion=oper).first()
                 if not proc_obj:
                     proc_obj = ProcesoCatalogo(
                         centro_trabajo=ct,
