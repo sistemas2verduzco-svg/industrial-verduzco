@@ -175,6 +175,21 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
             df = df.drop(columns=['block_id'])
     
     df = df.sort_values(["clave", "orden"])  # asegura orden correcto
+    
+    # Deduplicar procesos repetidos dentro de cada clave:
+    # Mantener solo la PRIMERA ocurrencia de cada combinación única (centro_trabajo, operacion)
+    df['_dedup_key'] = df['centro_trabajo'] + '|' + df['operacion']
+    df['_grupo_clave'] = df.groupby('clave', sort=False)['_dedup_key'].rank(method='first')
+    # Marcar como duplicado si la primera ocurrencia de esta (ct, op) en la clave no es esta fila
+    df['_es_duplicado'] = df.groupby(['clave', '_dedup_key']).cumcount() > 0
+    duplicados_eliminados = df['_es_duplicado'].sum()
+    if duplicados_eliminados > 0:
+        print(f"\n⚠ Eliminados {duplicados_eliminados} procesos duplicados dentro de claves")
+        df = df[~df['_es_duplicado']].copy()
+    df = df.drop(columns=['_dedup_key', '_grupo_clave', '_es_duplicado'])
+    
+    # Reordenar orden después de deduplicar
+    df['orden'] = df.groupby('clave', sort=False).cumcount() + 1
 
     # Agrupamos por clave para poder limpiar secuencia por clave si overwrite=True
     grouped = df.groupby("clave", sort=False)
