@@ -608,13 +608,13 @@ def api_crear_hoja_ruta():
                 hoja_ruta_id=hoja.id,
                 nombre=f"{cp.operacion or cp.proceso.operacion or cp.proceso.nombre}",
                 pro_c=str(idx),  # Número de proceso
-                centro_trabajo=cp.centro_trabajo or cp.proceso.centro_trabajo,
-                operacion=cp.operacion or cp.proceso.operacion or cp.proceso.nombre,
+                centro_trabajo=cp.centro_trabajo or cp.proceso.centro_trabajo or '',
+                operacion=cp.operacion or cp.proceso.operacion or cp.proceso.nombre or '',
                 orden=cp.orden,
-                t_e=cp.t_e or cp.proceso.tiempo_estimado,
-                t_tct=cp.t_tct,
-                t_tco=cp.t_tco,
-                t_to=cp.t_to,
+                t_e=cp.t_e or cp.proceso.tiempo_estimado or '',
+                t_tct=cp.t_tct or '',
+                t_tco=cp.t_tco or '',
+                t_to=cp.t_to or '',
                 total_piezas=None,  # Dejarlo en blanco
                 estado='pendiente'
             )
@@ -656,16 +656,24 @@ def api_claves_procesos():
         claves = ClaveProducto.query.filter_by(activo=True).order_by(ClaveProducto.clave.asc()).all()
         result = []
         for clave in claves:
-            # Obtener último T/O de la secuencia
-            ultimo_proceso = ClaveProceso.query.filter_by(clave_id=clave.id).order_by(ClaveProceso.orden.desc()).first()
-            tiempo_to = ultimo_proceso.t_to if ultimo_proceso and ultimo_proceso.t_to else "00:00:00"
+            # Obtener todos los procesos de la clave ordenados
+            procesos = ClaveProceso.query.filter_by(clave_id=clave.id).order_by(ClaveProceso.orden).all()
+            
+            # El T/O es el del último proceso (suma acumulada)
+            tiempo_to = "00:00:00"
+            if procesos:
+                # Buscar el último proceso que tenga T/O
+                for cp in reversed(procesos):
+                    if cp.t_to:
+                        tiempo_to = cp.t_to
+                        break
             
             result.append({
                 'id': clave.id,
                 'clave': clave.clave,
-                'nombre': clave.nombre,
-                'tiempo_to': tiempo_to,  # Tiempo total de producción (T/O)
-                'procesos': [p.to_dict() for p in clave.procesos]
+                'nombre': clave.nombre or clave.clave,
+                'tiempo_to': tiempo_to,
+                'procesos': [p.to_dict() for p in procesos]
             })
         return jsonify(result), 200
     except Exception as e:

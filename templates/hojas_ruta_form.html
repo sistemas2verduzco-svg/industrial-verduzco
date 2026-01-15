@@ -34,7 +34,7 @@
                 <div class="grid">
                     <div>
                         <label>Nombre de hoja</label>
-                        <input name="nombre" required placeholder="Ej: Hoja ruta pieza X">
+                        <input name="nombre" id="nombre" required placeholder="Se asignará automáticamente" readonly style="background:#f5f7fb;">
                     </div>
                     <div>
                         <label>Clave *</label>
@@ -190,8 +190,10 @@
                     opt.textContent = `${c.clave} - ${c.nombre || 'Sin nombre'}`;
                     opt.dataset.tiempo_to = c.tiempo_to;
                     opt.dataset.clave = c.clave;
+                    opt.dataset.nombre_clave = c.nombre || c.clave;
                     select.appendChild(opt);
                 });
+                console.log('Claves cargadas:', clavesData);
             }
         } catch (err) {
             console.error('Error cargando claves:', err);
