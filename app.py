@@ -615,7 +615,7 @@ def api_crear_hoja_ruta():
                 t_tct=cp.t_tct,
                 t_tco=cp.t_tco,
                 t_to=cp.t_to,
-                total_piezas=cantidad_piezas,
+                total_piezas=None,  # Dejarlo en blanco
                 estado='pendiente'
             )
             db.session.add(estacion)

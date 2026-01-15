@@ -46,11 +46,9 @@
                         <label>Calidad (Supervisor)</label>
                         <select name="calidad" id="calidad">
                             <option value="">Selecciona supervisor</option>
-                            <option>Rodrigo Gomez</option>
-                            <option>Jose Nemesio</option>
-                            <option>Otro...</option>
+                            <option>Evelyn</option>
+                            <option>Moisés</option>
                         </select>
-                        <input id="calidad_otro" name="calidad_otro" placeholder="Nombre del supervisor" style="margin-top:6px; display:none;">
                     </div>
                     <div>
                         <label>Fecha de salida</label>
@@ -278,11 +276,6 @@
         const fd = new FormData(form);
         const payload = {};
         fd.forEach((v, k) => { payload[k] = v; });
-        
-        // Calidad: si elige "Otro..." usar el campo libre
-        if (payload['calidad'] === 'Otro...') {
-            payload['calidad'] = fd.get('calidad_otro') || '';
-        }
 
         if (!payload.nombre || !payload.clave_id || !payload.cantidad_piezas) {
             alert('Nombre, clave y cantidad de piezas son obligatorios');
@@ -340,14 +333,7 @@
         });
     }
 
-    // Mostrar input de calidad cuando selecciona "Otro..."
-    const selCal = document.getElementById('calidad');
-    const calOtro = document.getElementById('calidad_otro');
-    if (selCal && calOtro) {
-        selCal.addEventListener('change', () => {
-            calOtro.style.display = selCal.value === 'Otro...' ? '' : 'none';
-        });
-    }
+
     </script>
 </body>
 </html>
