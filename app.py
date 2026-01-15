@@ -551,54 +551,82 @@ def qc_estaciones_maquina(maquina_id):
 @app.route('/api/hojas_ruta', methods=['POST'])
 @login_required
 def api_crear_hoja_ruta():
-    """Crear una nueva hoja de ruta para una máquina."""
+    """Crear una nueva hoja de ruta con estaciones desde la clave seleccionada."""
     data = request.get_json()
-    maquina_id = data.get('maquina_id')
     nombre = data.get('nombre')
-    descripcion = data.get('descripcion')
+    clave_id = data.get('clave_id')
+    cantidad_piezas = data.get('cantidad_piezas')
 
     if not nombre:
         return jsonify({'error': 'nombre requerido'}), 400
+    if not clave_id:
+        return jsonify({'error': 'clave_id requerido'}), 400
+    if not cantidad_piezas or cantidad_piezas <= 0:
+        return jsonify({'error': 'cantidad_piezas debe ser mayor a 0'}), 400
 
-    def parse_bool(val):
-        if val is None:
-            return False
-        if isinstance(val, bool):
-            return val
-        return str(val).lower() in ['1', 'true', 'si', 'sí', 'on', 'yes']
+    # Obtener la clave y sus procesos
+    clave = ClaveProducto.query.get(clave_id)
+    if not clave:
+        return jsonify({'error': 'Clave no encontrada'}), 404
 
-    hoja = HojaRuta(
-        maquina_id=int(maquina_id) if maquina_id else None,
-        nombre=nombre,
-        descripcion=descripcion,
-        estado=data.get('estado', 'activa'),
-        producto=data.get('producto'),
-        calidad=data.get('calidad'),
-        pn=data.get('clave') or data.get('pn'),
-        revision=data.get('revision'),
-        fecha_salida=datetime.fromisoformat(data['fecha_salida']) if data.get('fecha_salida') else None,
-        cantidad_piezas=int(data['cantidad_piezas']) if data.get('cantidad_piezas') else None,
-        orden_trabajo_hr=data.get('orden_trabajo_hr'),
-        orden_trabajo_pt=data.get('orden_trabajo_pt'),
-        almacen=data.get('almacen'),
-        no_sin_orden=data.get('no_sin_orden'),
-        materia_prima=data.get('materia_prima'),
-        total_tiempo=data.get('total_tiempo'),
-        dias_a_laborar=float(data['dias_a_laborar']) if data.get('dias_a_laborar') else None,
-        fecha_termino=datetime.fromisoformat(data['fecha_termino']) if data.get('fecha_termino') else None,
-        aprobada=parse_bool(data.get('aprobada')),
-        rechazada=parse_bool(data.get('rechazada')),
-        scrap=parse_bool(data.get('scrap')),
-        retrabajo=parse_bool(data.get('retrabajo')),
-        supervisor=data.get('ingeniero') or data.get('supervisor'),
-        operador=data.get('operador'),
-        eficiencia=float(data['eficiencia']) if data.get('eficiencia') else None
-    )
-    db.session.add(hoja)
-    db.session.commit()
+    try:
+        # Crear hoja de ruta
+        hoja = HojaRuta(
+            maquina_id=int(data.get('maquina_id')) if data.get('maquina_id') else None,
+            nombre=nombre,
+            descripcion=data.get('descripcion'),
+            estado=data.get('estado', 'activa'),
+            producto=clave.nombre,  # Nombre del producto desde la clave
+            calidad=data.get('calidad'),
+            pn=clave.clave,  # Clave del producto
+            revision=data.get('revision'),
+            fecha_salida=datetime.fromisoformat(data['fecha_salida']) if data.get('fecha_salida') else None,
+            cantidad_piezas=int(cantidad_piezas),
+            orden_trabajo_hr=data.get('orden_trabajo'),  # Campo unificado
+            orden_trabajo_pt=data.get('orden_trabajo_pt'),
+            almacen=data.get('almacen'),
+            no_sin_orden=data.get('no_sin_orden'),
+            materia_prima=data.get('materia_prima'),
+            total_tiempo=data.get('total_tiempo'),
+            dias_a_laborar=float(data['dias_a_laborar']) if data.get('dias_a_laborar') else None,
+            fecha_termino=datetime.fromisoformat(data['fecha_termino']) if data.get('fecha_termino') else None,
+            aprobada=False,
+            rechazada=False,
+            scrap=data.get('scrap'),  # Ahora es texto
+            retrabajo=data.get('retrabajo'),  # Ahora es texto
+            supervisor=data.get('supervisor'),
+            operador=data.get('operador'),
+            eficiencia=float(data['eficiencia']) if data.get('eficiencia') else None
+        )
+        db.session.add(hoja)
+        db.session.flush()  # Obtener el ID de la hoja
 
-    logger.info(f"[HOJAS_RUTA] Nueva hoja creada: {hoja.id} para máquina {maquina_id}")
-    return jsonify(hoja.to_dict()), 201
+        # Crear estaciones desde los procesos de la clave
+        procesos = ClaveProceso.query.filter_by(clave_id=clave_id).order_by(ClaveProceso.orden).all()
+        for idx, cp in enumerate(procesos, start=1):
+            estacion = EstacionTrabajo(
+                hoja_ruta_id=hoja.id,
+                nombre=f"{cp.operacion or cp.proceso.operacion or cp.proceso.nombre}",
+                pro_c=str(idx),  # Número de proceso
+                centro_trabajo=cp.centro_trabajo or cp.proceso.centro_trabajo,
+                operacion=cp.operacion or cp.proceso.operacion or cp.proceso.nombre,
+                orden=cp.orden,
+                t_e=cp.t_e or cp.proceso.tiempo_estimado,
+                t_tct=cp.t_tct,
+                t_tco=cp.t_tco,
+                t_to=cp.t_to,
+                total_piezas=cantidad_piezas,
+                estado='pendiente'
+            )
+            db.session.add(estacion)
+
+        db.session.commit()
+        logger.info(f"[HOJAS_RUTA] Nueva hoja creada: {hoja.id} con {len(procesos)} estaciones desde clave {clave.clave}")
+        return jsonify(hoja.to_dict()), 201
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error creando hoja de ruta: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/hojas_ruta/<int:hoja_id>', methods=['PUT'])
@@ -618,6 +646,31 @@ def api_actualizar_hoja_ruta(hoja_id):
     db.session.commit()
     logger.info(f"[HOJAS_RUTA] Hoja actualizada: {hoja_id}")
     return jsonify(hoja.to_dict()), 200
+
+
+@app.route('/api/claves_procesos', methods=['GET'])
+@login_required
+def api_claves_procesos():
+    """Obtener todas las claves con sus procesos y tiempo total T/O."""
+    try:
+        claves = ClaveProducto.query.filter_by(activo=True).order_by(ClaveProducto.clave.asc()).all()
+        result = []
+        for clave in claves:
+            # Obtener último T/O de la secuencia
+            ultimo_proceso = ClaveProceso.query.filter_by(clave_id=clave.id).order_by(ClaveProceso.orden.desc()).first()
+            tiempo_to = ultimo_proceso.t_to if ultimo_proceso and ultimo_proceso.t_to else "00:00:00"
+            
+            result.append({
+                'id': clave.id,
+                'clave': clave.clave,
+                'nombre': clave.nombre,
+                'tiempo_to': tiempo_to,  # Tiempo total de producción (T/O)
+                'procesos': [p.to_dict() for p in clave.procesos]
+            })
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"Error obteniendo claves/procesos: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/estaciones', methods=['POST'])

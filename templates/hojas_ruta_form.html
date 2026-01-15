@@ -37,74 +37,75 @@
                         <input name="nombre" required placeholder="Ej: Hoja ruta pieza X">
                     </div>
                     <div>
-                        <label>Producto</label>
-                        <input name="producto" placeholder="Producto">
+                        <label>Clave *</label>
+                        <select name="clave_id" id="clave_id" required>
+                            <option value="">Selecciona clave</option>
+                        </select>
                     </div>
                     <div>
-                        <label>Calidad</label>
-                        <input name="calidad" placeholder="Calidad">
-                    </div>
-                    <div>
-                        <label>Clave</label>
-                        <input name="clave" placeholder="CLAVE">
+                        <label>Calidad (Supervisor)</label>
+                        <select name="calidad" id="calidad">
+                            <option value="">Selecciona supervisor</option>
+                            <option>Rodrigo Gomez</option>
+                            <option>Jose Nemesio</option>
+                            <option>Otro...</option>
+                        </select>
+                        <input id="calidad_otro" name="calidad_otro" placeholder="Nombre del supervisor" style="margin-top:6px; display:none;">
                     </div>
                     <div>
                         <label>Fecha de salida</label>
                         <input type="datetime-local" name="fecha_salida">
                     </div>
                     <div>
-                        <label>Cantidad de piezas</label>
-                        <input type="number" name="cantidad_piezas" min="0" step="1">
+                        <label>Cantidad de piezas *</label>
+                        <input type="number" name="cantidad_piezas" id="cantidad_piezas" min="1" step="1" required>
                     </div>
                     <div>
-                        <label>Orden de trabajo H.R</label>
-                        <input name="orden_trabajo_hr">
-                    </div>
-                    <div>
-                        <label>Orden de trabajo P.T</label>
-                        <input name="orden_trabajo_pt">
+                        <label>Orden de trabajo</label>
+                        <input name="orden_trabajo" placeholder="OT o NR">
                     </div>
                     <div>
                         <label>Almacén</label>
-                        <input name="almacen">
+                        <select name="almacen">
+                            <option value="">Selecciona almacén</option>
+                            <option>AlmacenPT</option>
+                            <option>AlmacenMP</option>
+                            <option>Maquinaria</option>
+                        </select>
                     </div>
                     <div>
-                        <label>No. sin orden</label>
-                        <input name="no_sin_orden">
+                        <label>No de orden</label>
+                        <input name="no_sin_orden" placeholder="OT o NR">
                     </div>
                     <div>
                         <label>Materia prima</label>
-                        <input name="materia_prima">
+                        <select name="materia_prima" id="materia_prima">
+                            <option value="">Cargar al tener datos</option>
+                        </select>
                     </div>
                     <div>
-                        <label>Revisión (opcional)</label>
-                        <input name="revision" placeholder="Ej: 02">
+                        <label>Total de tiempo (calculado)</label>
+                        <input name="total_tiempo" id="total_tiempo" placeholder="00:00:00" readonly style="background:#f5f7fb;">
                     </div>
                     <div>
-                        <label>Total de tiempo (HH:MM:SS)</label>
-                        <input name="total_tiempo" placeholder="00:00:00">
+                        <label>Días a laborar (calculado)</label>
+                        <input type="text" name="dias_a_laborar" id="dias_a_laborar" readonly style="background:#f5f7fb;">
                     </div>
                     <div>
-                        <label>Días a laborar</label>
-                        <input type="number" name="dias_a_laborar" step="0.1" min="0">
-                    </div>
-                    <div>
-                        <label>Fecha de término</label>
-                        <input type="date" name="fecha_termino">
+                        <label>Fecha de término (calculada)</label>
+                        <input type="datetime-local" name="fecha_termino" id="fecha_termino" readonly style="background:#f5f7fb;">
                     </div>
                 </div>
 
-                <div class="section-title">Responsables y estado</div>
+                <div class="section-title">Datos opcionales</div>
                 <div class="grid">
                     <div>
-                        <label>Ingeniero</label>
-                        <select name="ingeniero" id="ingeniero">
-                            <option value="">Selecciona ingeniero</option>
-                            <option>Rodrigo Gomez</option>
-                            <option>Jose Nemesio</option>
-                            <option>Otro...</option>
-                        </select>
-                        <input id="ingeniero_otro" name="ingeniero_otro" placeholder="Nombre del ingeniero" style="margin-top:6px; display:none;">
+                        <label>Scrap (opcional)</label>
+                        <input name="scrap" placeholder="Información de scrap">
+                    </div>
+                    <div>
+                        <label>Retrabajo (opcional)</label>
+                        <input name="retrabajo" placeholder="Información de retrabajo">
                     </div>
                     <div>
                         <label>Operador</label>
@@ -114,12 +115,6 @@
                         <label>Eficiencia (%)</label>
                         <input type="number" name="eficiencia" step="0.01" min="0" max="100" placeholder="0-100">
                     </div>
-                </div>
-                <div class="inline" style="margin-top:10px;">
-                    <div class="flag"><input type="checkbox" name="aprobada" id="aprobada"> <label for="aprobada">Aprobada</label></div>
-                    <div class="flag"><input type="checkbox" name="rechazada" id="rechazada"> <label for="rechazada">Rechazada</label></div>
-                    <div class="flag"><input type="checkbox" name="scrap" id="scrap"> <label for="scrap">Scrap</label></div>
-                    <div class="flag"><input type="checkbox" name="retrabajo" id="retrabajo"> <label for="retrabajo">Retrabajo</label></div>
                 </div>
 
                 <div class="section-title">Descripción</div>
@@ -181,28 +176,126 @@
     </div>
 
     <script>
+    let clavesData = []; // Almacenar claves con sus procesos y tiempo T/O
+    
+    // Cargar claves al inicio
+    async function cargarClaves() {
+        try {
+            const res = await fetch('/api/claves_procesos');
+            if (res.ok) {
+                clavesData = await res.json();
+                const select = document.getElementById('clave_id');
+                select.innerHTML = '<option value="">Selecciona clave</option>';
+                clavesData.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c.id;
+                    opt.textContent = `${c.clave} - ${c.nombre || 'Sin nombre'}`;
+                    opt.dataset.tiempo_to = c.tiempo_to;
+                    opt.dataset.clave = c.clave;
+                    select.appendChild(opt);
+                });
+            }
+        } catch (err) {
+            console.error('Error cargando claves:', err);
+        }
+    }
+
+    // Función para parsear tiempo HH:MM:SS a segundos
+    function parseTime(str) {
+        if (!str) return 0;
+        const parts = String(str).split(':').map(p => parseInt(p.trim()) || 0);
+        if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
+        if (parts.length === 2) return parts[0]*60 + parts[1];
+        return parts[0] || 0;
+    }
+
+    // Función para formatear segundos a HH:MM:SS
+    function formatTime(sec) {
+        sec = Math.round(sec || 0);
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        const s = sec % 60;
+        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }
+
+    // Calcular tiempos cuando cambia clave o cantidad
+    function calcularTiempos() {
+        const claveId = document.getElementById('clave_id').value;
+        const cantidadPiezas = parseInt(document.getElementById('cantidad_piezas').value) || 0;
+        
+        if (!claveId || cantidadPiezas <= 0) {
+            document.getElementById('total_tiempo').value = '';
+            document.getElementById('dias_a_laborar').value = '';
+            document.getElementById('fecha_termino').value = '';
+            return;
+        }
+
+        const select = document.getElementById('clave_id');
+        const option = select.querySelector(`option[value="${claveId}"]`);
+        const tiempoTO = option ? option.dataset.tiempo_to : '00:00:00';
+        
+        // Tiempo base por pieza (en segundos)
+        const segundosPorPieza = parseTime(tiempoTO);
+        
+        // Total tiempo = T/O × piezas
+        const totalSegundos = segundosPorPieza * cantidadPiezas;
+        document.getElementById('total_tiempo').value = formatTime(totalSegundos);
+        
+        // Jornada: 6:30-12:00 (5.5h) + 12:30-16:00 (3.5h) = 9 horas por día
+        // Corrección: 6:30-12:00 = 5.5h, 12:30-16:00 = 3.5h → total 9h
+        // Pero mencionaste 7.5h, verifico: 6:30-12:00 = 5.5h, 12:30-4pm = 3.5h → 9h
+        // Usaré 9 horas por día como en el horario dado
+        const horasPorDia = 9;
+        const segundosPorDia = horasPorDia * 3600;
+        const diasALaborar = totalSegundos / segundosPorDia;
+        document.getElementById('dias_a_laborar').value = diasALaborar.toFixed(2);
+        
+        // Fecha de término: hoy + días laborales
+        const ahora = new Date();
+        const diasCompletos = Math.ceil(diasALaborar);
+        const fechaTermino = new Date(ahora);
+        fechaTermino.setDate(fechaTermino.getDate() + diasCompletos);
+        
+        // Formato datetime-local: YYYY-MM-DDTHH:MM
+        const year = fechaTermino.getFullYear();
+        const month = String(fechaTermino.getMonth() + 1).padStart(2, '0');
+        const day = String(fechaTermino.getDate()).padStart(2, '0');
+        const hours = String(fechaTermino.getHours()).padStart(2, '0');
+        const minutes = String(fechaTermino.getMinutes()).padStart(2, '0');
+        document.getElementById('fecha_termino').value = `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+
+    // Event listeners
+    document.getElementById('clave_id').addEventListener('change', calcularTiempos);
+    document.getElementById('cantidad_piezas').addEventListener('input', calcularTiempos);
+
+    // Cargar claves al inicio
+    cargarClaves();
+
     const form = document.getElementById('hojaForm');
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const fd = new FormData(form);
         const payload = {};
         fd.forEach((v, k) => { payload[k] = v; });
-        // Ingeniero: si elige "Otro..." usar el campo libre
-        if (payload['ingeniero'] === 'Otro...') {
-            payload['ingeniero'] = fd.get('ingeniero_otro') || '';
+        
+        // Calidad: si elige "Otro..." usar el campo libre
+        if (payload['calidad'] === 'Otro...') {
+            payload['calidad'] = fd.get('calidad_otro') || '';
         }
 
-        if (!payload.nombre || !payload.clave) {
-            alert('Nombre y clave son obligatorios');
+        if (!payload.nombre || !payload.clave_id || !payload.cantidad_piezas) {
+            alert('Nombre, clave y cantidad de piezas son obligatorios');
             return;
         }
 
-        // Normalizar checkboxes y vacíos
-        ['aprobada','rechazada','scrap','retrabajo'].forEach(key => {
-            payload[key] = fd.get(key) ? true : false;
-        });
-        ['dias_a_laborar','cantidad_piezas','eficiencia'].forEach(key => {
-            if (payload[key] === '') payload[key] = null; else payload[key] = payload[key];
+        // Convertir clave_id a entero
+        payload.clave_id = parseInt(payload.clave_id);
+        payload.cantidad_piezas = parseInt(payload.cantidad_piezas);
+        
+        // Normalizar vacíos
+        ['dias_a_laborar','eficiencia'].forEach(key => {
+            if (payload[key] === '') payload[key] = null; else payload[key] = parseFloat(payload[key]);
         });
         if (payload.fecha_salida === '') payload.fecha_salida = null; 
         if (payload.fecha_termino === '') payload.fecha_termino = null;
@@ -210,6 +303,9 @@
         // Adapt datetime-local to ISO
         if (payload.fecha_salida) {
             payload.fecha_salida = payload.fecha_salida.replace('T', ' ');
+        }
+        if (payload.fecha_termino) {
+            payload.fecha_termino = payload.fecha_termino.replace('T', ' ');
         }
 
         try {
@@ -220,8 +316,7 @@
             });
             const data = await res.json();
             if (res.ok && (data.id || data.hoja || data.success)) {
-                alert('Hoja creada');
-                // Permanecer en esta página para ver el listado actualizado
+                alert('Hoja creada correctamente');
                 window.location.reload();
             } else {
                 alert('Error: ' + (data.error || 'No se pudo crear la hoja'));
@@ -245,12 +340,12 @@
         });
     }
 
-    // Mostrar input de ingeniero cuando selecciona "Otro..."
-    const selIng = document.getElementById('ingeniero');
-    const ingOtro = document.getElementById('ingeniero_otro');
-    if (selIng && ingOtro) {
-        selIng.addEventListener('change', () => {
-            ingOtro.style.display = selIng.value === 'Otro...' ? '' : 'none';
+    // Mostrar input de calidad cuando selecciona "Otro..."
+    const selCal = document.getElementById('calidad');
+    const calOtro = document.getElementById('calidad_otro');
+    if (selCal && calOtro) {
+        selCal.addEventListener('change', () => {
+            calOtro.style.display = selCal.value === 'Otro...' ? '' : 'none';
         });
     }
     </script>

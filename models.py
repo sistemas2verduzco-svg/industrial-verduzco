@@ -482,8 +482,8 @@ class HojaRuta(db.Model):
 
     aprobada = db.Column(db.Boolean, default=False)
     rechazada = db.Column(db.Boolean, default=False)
-    scrap = db.Column(db.Boolean, default=False)
-    retrabajo = db.Column(db.Boolean, default=False)
+    scrap = db.Column(db.String(255), nullable=True)  # Cambiado a texto opcional
+    retrabajo = db.Column(db.String(255), nullable=True)  # Cambiado a texto opcional
 
     supervisor = db.Column(db.String(200), nullable=True)
     operador = db.Column(db.String(200), nullable=True)
