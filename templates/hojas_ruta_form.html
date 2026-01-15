@@ -279,8 +279,15 @@
         const payload = {};
         fd.forEach((v, k) => { payload[k] = v; });
 
-        if (!payload.nombre || !payload.clave_id || !payload.cantidad_piezas) {
-            alert('Nombre, clave y cantidad de piezas son obligatorios');
+        // Validar que clave y cantidad estén seleccionadas
+        if (!payload.clave_id || !payload.cantidad_piezas) {
+            alert('Clave y cantidad de piezas son obligatorios');
+            return;
+        }
+
+        // Asegurarse de que el nombre se asignó automáticamente
+        if (!payload.nombre || payload.nombre.trim() === '') {
+            alert('Por favor selecciona una clave y cantidad de piezas primero');
             return;
         }
 
