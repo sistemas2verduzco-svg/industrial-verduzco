@@ -223,6 +223,17 @@
         const claveId = document.getElementById('clave_id').value;
         const cantidadPiezas = parseInt(document.getElementById('cantidad_piezas').value) || 0;
         
+        const select = document.getElementById('clave_id');
+        const option = select.querySelector(`option[value="${claveId}"]`);
+        
+        // Asignar nombre de la hoja automáticamente si hay clave seleccionada
+        if (claveId && option) {
+            const nombreClave = option.dataset.nombre_clave || option.dataset.clave;
+            document.getElementById('nombre').value = `Hoja Ruta - ${nombreClave}`;
+        } else {
+            document.getElementById('nombre').value = '';
+        }
+        
         if (!claveId || cantidadPiezas <= 0) {
             document.getElementById('total_tiempo').value = '';
             document.getElementById('dias_a_laborar').value = '';
@@ -230,8 +241,6 @@
             return;
         }
 
-        const select = document.getElementById('clave_id');
-        const option = select.querySelector(`option[value="${claveId}"]`);
         const tiempoTO = option ? option.dataset.tiempo_to : '00:00:00';
         
         // Tiempo base por pieza (en segundos)
