@@ -1,0 +1,26 @@
+        async function devolverTicket(ticketId) {
+            if (!confirm('¿Devolver este ticket a la bandeja? Se pondrá como "nuevo" nuevamente.')) return;
+
+            try {
+                const response = await fetch(`/api/tickets/${ticketId}/devolver`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    mostrarAlerta(data.error ; 'Error', 'error');
+                    return;
+                }
+
+                mostrarAlerta('↩️ Ticket devuelto a la bandeja', 'success');
+                cerrarModal();
+                cargarDatos();
+            } catch (error) {
+                console.error('Error:', error);
+                mostrarAlerta('Error', 'error');
+            }
+        }

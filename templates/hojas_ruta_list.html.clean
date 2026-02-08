@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hojas de Ruta de Producción</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .maquina-card {
+            border: 1px solid #e6e6e6;
+            border-radius: 8px;
+            padding: 16px;
+            background: #fff;
+            margin-bottom: 12px;
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+        .maquina-image {
+            width: 120px;
+            height: 120px;
+            background: #f5f5f5;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .maquina-image img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        .maquina-info {
+            flex: 1;
+        }
+        .maquina-nombre {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .maquina-desc {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .status-produciendo {
+            background: #c8e6c9;
+            color: #1b5e20;
+        }
+        .status-parado {
+            background: #ffccbc;
+            color: #bf360c;
+        }
+        .maquina-actions {
+            display: flex;
+            gap: 8px;
+            flex-direction: column;
+        }
+        .btn-small {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #fff;
+            cursor: pointer;
+            font-size: 13px;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        .btn-small:hover {
+            background: #f9f9f9;
+            border-color: #0b74de;
+            color: #0b74de;
+        }
+        .btn-primary-small {
+            background: #0b74de;
+            color: #fff;
+            border-color: #0b74de;
+        }
+        .btn-primary-small:hover {
+            background: #0963cc;
+        }
+    </style>
+</head>
+<body>
+    {% include '_sidebar.html' %}
+
+    <div class="container">
+        <h2>Hojas de Ruta — Producción en Máquinas</h2>
+        <p style="color: #666; margin-top: 8px;">Selecciona una máquina para ver y gestionar sus hojas de ruta y estaciones de trabajo.</p>
+
+        <div style="margin-top: 24px;">
+            {% if maquinas %}
+                {% for maq in maquinas %}
+                <div class="maquina-card">
+                    <div class="maquina-image">
+                        {% if maq.imagen_url %}
+                            <img src="{{ maq.imagen_url }}" alt="{{ maq.nombre }}" />
+                        {% else %}
+                            <div style="color: #aaa; font-size: 12px; text-align: center;">Sin imagen</div>
+                        {% endif %}
+                    </div>
+                    <div class="maquina-info">
+                        <div class="maquina-nombre">{{ maq.nombre }}</div>
+                        <div class="maquina-desc">{{ maq.descripcion }}</div>
+                        <div>
+                            {% if maq.hoja_activa %}
+                                <span class="status-badge status-produciendo">🏭 Produciendo</span>
+                                <div style="margin-top: 4px; font-size: 12px; color: #666;">
+                                    Hoja: <strong>{{ maq.hoja_activa.nombre }}</strong><br>
+                                    Estación actual: <strong>{{ maq.estacion_actual }}</strong>
+                                </div>
+                            {% else %}
+                                <span class="status-badge status-parado">⏸ Sin producción</span>
+                            {% endif %}
+                            <!-- Indicador de activación de la máquina -->
+                            <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px;">
+                                <div style="display: flex; align-items: center; padding: 6px 12px; border-radius: 20px; {% if maq.activo %}background: linear-gradient(90deg, #28a745, #2ecc71); color: white; font-weight: 600;{% else %}background: linear-gradient(90deg, #dc3545, #e74c3c); color: white; font-weight: 600;{% endif %}">
+                                    <span style="font-size: 16px; margin-right: 6px;">{{ '⚡' if maq.activo else '⛔' }}</span>
+                                    <span style="font-size: 13px;">{{ 'Máquina Activada' if maq.activo else 'Máquina Desactivada' }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="maquina-actions">
+                        <a href="/hojas_ruta/{{ maq.id }}" class="btn-small btn-primary-small">Ver hojas</a>
+                        <a href="/control_calidad/{{ maq.id }}" class="btn-small">Control QC</a>
+                        <button class="btn-small" onclick="aprobarOT({{ maq.id }})">Aprobar OT</button>
+                        {% if maq.activo %}
+                            <button class="btn-small" style="background:#f44336; color:#fff; border-color:#f44336;" onclick="toggleActivacion({{ maq.id }}, false)">Desactivar Máquina</button>
+                        {% else %}
+                            <button class="btn-small" style="background:#2196f3; color:#fff; border-color:#2196f3;" onclick="toggleActivacion({{ maq.id }}, true)">Activar Máquina</button>
+                        {% endif %}
+                        <button class="btn-small" style="background:#4caf50; color:#fff; border-color:#4caf50;" onclick="abrirFormPiezas({{ maq.id }}, '{{ maq.nombre|tojson|safe }}', '{{ maq.tipo or '' }}', '{{ maq.plantilla_default or ''|tojson|safe }}')">Ingresar piezas</button>
+                        <button class="btn-small" title="Asignar plantilla por defecto a esta máquina" onclick="asignarPlantillaRapida({{ maq.id }}, '{{ maq.tipo or '' }}')">Asignar Plantilla</button>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div style="text-align: center; padding: 40px; color: #aaa;">
+                    No hay máquinas registradas.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Modal para ingresar piezas -->
+    <div id="modalPiezas" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2000; align-items:center; justify-content:center;">
+        <div style="background:#fff; padding:24px; border-radius:8px; width:90%; max-width:500px; box-shadow:0 4px 16px rgba(0,0,0,0.2);">
+            <h3 style="margin:0 0 16px 0;">Ingresar Piezas — <span id="maqNombre"></span></h3>
+            
+            <div style="margin-bottom:12px;">
+                <label style="display:block; font-weight:600; margin-bottom:6px; font-size:14px;">Cantidad de piezas</label>
+                <input type="number" id="cantidadPiezas" min="1" placeholder="Ej: 100" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; font-size:14px; box-sizing:border-box;" />
+            </div>
+
+            <div style="margin-bottom:12px;">
+                <label style="display:block; font-weight:600; margin-bottom:6px; font-size:14px;">Clave de la pieza</label>
+                <input type="text" id="clavePieza" placeholder="Ej: P-2025-001" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; font-size:14px; box-sizing:border-box;" />
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <label style="display:block; font-weight:600; margin-bottom:6px; font-size:14px;">Tiempo total (HH:MM:SS) - opcional</label>
+                <input type="text" id="tiempoTotal" placeholder="00:00:00" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; font-size:14px; box-sizing:border-box;" />
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <label style="display:block; font-weight:600; margin-bottom:6px; font-size:14px;">Plantilla (opcional)</label>
+                <select id="plantillaSelect" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; font-size:14px; box-sizing:border-box;">
+                    <option value="">Usar plantilla por defecto / Ninguna</option>
+                </select>
+            </div>
+
+            <div style="display:flex; gap:8px; justify-content:flex-end;">
+                <button style="padding:8px 16px; border:1px solid #ddd; border-radius:4px; background:#fff; cursor:pointer; font-size:14px;" onclick="cerrarFormPiezas()">Cancelar</button>
+                <button style="padding:8px 16px; border:none; border-radius:4px; background:#4caf50; color:#fff; cursor:pointer; font-size:14px; font-weight:600;" onclick="guardarPiezas()">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    let maquinaIdActual = null;
+
+    function abrirFormPiezas(maquinaId, maquinaNombre, maquinaTipo, plantillaDefault) {
+        maquinaIdActual = maquinaId;
+        document.getElementById('maqNombre').textContent = maquinaNombre;
+        document.getElementById('cantidadPiezas').value = '';
+        document.getElementById('clavePieza').value = '';
+        document.getElementById('tiempoTotal').value = '';
+        // cargar plantillas disponibles para este tipo
+        const select = document.getElementById('plantillaSelect');
+        select.innerHTML = '<option value="">Usar plantilla por defecto / Ninguna</option>';
+        if (maquinaTipo) {
+            fetch('/api/plantillas_estaciones/nombres?maquina_tipo=' + encodeURIComponent(maquinaTipo))
+            .then(res => res.json())
+            .then(data => {
+                if (data.nombres && data.nombres.length) {
+                    data.nombres.forEach(n => {
+                        const opt = document.createElement('option'); opt.value = n; opt.textContent = n; 
+                        if (plantillaDefault && plantillaDefault === n) opt.selected = true;
+                        select.appendChild(opt);
+                    });
+                }
+            }).catch(err => { console.error('No se pudieron cargar plantillas', err); });
+        }
+        document.getElementById('modalPiezas').style.display = 'flex';
+    }
+
+    function asignarPlantillaRapida(maquinaId, maquinaTipo) {
+        if (!maquinaTipo) {
+            alert('Esta máquina no tiene tipo definido.');
+            return;
+        }
+        fetch('/api/plantillas_estaciones/nombres?maquina_tipo=' + encodeURIComponent(maquinaTipo))
+        .then(res => res.json())
+        .then(data => {
+            const nombres = (data.nombres || []);
+            if (!nombres.length) {
+                alert('No hay plantillas disponibles para este tipo de máquina.');
+                return;
+            }
+            const lista = nombres.join('\n');
+            const seleccion = prompt('Plantillas disponibles:\n' + lista + '\n\nEscribe el nombre exacto de la plantilla para asignarla (dejar vacío para limpiar):');
+            if (seleccion === null) return; // cancel
+            const payload = { plantilla_nombre: seleccion.trim() };
+            fetch('/api/maquinas/' + maquinaId + '/plantilla_default', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(r => { if (r.success) { alert('Plantilla actualizada'); window.location.reload(); } else alert('Error: ' + (r.error || 'no se pudo actualizar')); })
+            .catch(err => { console.error(err); alert('Error al conectar con el servidor'); });
+        })
+        .catch(err => { console.error(err); alert('No se pudieron cargar plantillas'); });
+    }
+
+    function cerrarFormPiezas() {
+        document.getElementById('modalPiezas').style.display = 'none';
+        maquinaIdActual = null;
+    }
+
+    function guardarPiezas() {
+        const cantidad = document.getElementById('cantidadPiezas').value.trim();
+        const clave = document.getElementById('clavePieza').value.trim();
+        const tiempo = document.getElementById('tiempoTotal').value.trim();
+
+        if (!cantidad || !clave) {
+            alert('Por favor completa todos los campos obligatorios');
+            return;
+        }
+
+        if (isNaN(cantidad) || cantidad <= 0) {
+            alert('La cantidad debe ser un número válido mayor a 0');
+            return;
+        }
+
+        const plantillaSeleccionada = document.getElementById('plantillaSelect').value;
+        const payload = { maquina_id: maquinaIdActual, cantidad: parseInt(cantidad), clave: clave, tiempo_total: tiempo };
+        if (plantillaSeleccionada) payload.plantilla_nombre = plantillaSeleccionada;
+
+        fetch('/api/produccion/ingresar_piezas', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data && (data.ok || data.success)) {
+                alert('Piezas registradas. Hoja de ruta creada.');
+                cerrarFormPiezas();
+                window.location.href = '/hojas_ruta/' + maquinaIdActual;
+            } else {
+                alert('Error: ' + (data.error || 'No se pudo crear la hoja'));
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Error al conectar con el servidor');
+        });
+    }
+
+    function aprobarOT(maquinaId) {
+        fetch('/api/produccion/aprobar_ot', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ maquina_id: maquinaId })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data && (data.ok || data.success)) {
+                alert('OT aprobada. Puedes activar la máquina.');
+                window.location.reload();
+            } else {
+                alert('Error al aprobar OT');
+            }
+        })
+        .catch(err => { console.error(err); alert('Error al conectar'); });
+    }        function toggleActivacion(maquinaId, activar) {
+        const url = '/api/maquinas/' + maquinaId + (activar ? '/activar' : '/desactivar');
+        console.log('Enviando solicitud a:', url);
+        
+        fetch(url, { 
+            method: 'POST',
+            credentials: 'same-origin'
+        })
+        .then(res => {
+            console.log('Status:', res.status);
+            if (!res.ok) {
+                return res.text().then(text => {
+                    throw new Error(`HTTP ${res.status}: ${text}`);
+                });
+            }
+            return res.json();
+        })
+        .then(data => {
+            console.log('Respuesta:', data);
+            if (data ; (data.ok ; data.success)) {
+                console.log('✓ Máquina actualizada exitosamente');
+                alert('Máquina actualizada');
+                setTimeout(() => window.location.reload(), 300);
+            } else {
+                console.error('Respuesta inválida:', data);
+                alert('Error: ' + (data.error ; 'Respuesta inválida del servidor'));
+            }
+        })
+        .catch(err => {
+            console.error('Error:', err);
+            alert('Error: ' + err.message);
+        });
+    })
+        .then(res => {
+            if (!res.ok) {
+                throw new Error(`HTTP error! status: ${res.status}`);
+            }
+            return res.json();
+        })
+        .then(data => {
+            console.log('Response:', data);
+            if (data ; (data.ok ; data.success)) {
+                console.log('Máquina actualizada exitosamente');
+                setTimeout(() => window.location.reload(), 500);
+            } else {
+                console.error('Respuesta inesperada:', data);
+                alert('Error al actualizar estado: ' + (data.message ; 'Respuesta inválida'));
+            }
+        })
+        .catch(err => {
+            console.error('Error en la solicitud:', err);
+            alert('Error al conectar: ' + err.message);
+        });
+    }
+
+    // Cerrar modal si se presiona Escape
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            cerrarFormPiezas();
+        }
+    });
+    </script>
+
