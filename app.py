@@ -15,6 +15,7 @@ import logging
 from openpyxl import Workbook
 from io import BytesIO
 import uuid
+import math
 
 # Configurar logging
 logging.basicConfig(
@@ -2027,7 +2028,8 @@ def precios_compra_sync():
         'actualizados_precio': 0,
         'creados_historial': 0,
         'ignorados': 0,
-        'errores': 0
+        'errores': 0,
+        'errores_muestra': []
     }
 
     for idx, item in enumerate(items, start=1):
@@ -2042,9 +2044,18 @@ def precios_compra_sync():
                 stats['ignorados'] += 1
                 continue
 
+            # Enforce column sizes
+            if len(product_key) > 100:
+                product_key = product_key[:100]
+            if len(proveedor_nombre) > 255:
+                proveedor_nombre = proveedor_nombre[:255]
+
             try:
                 precio = float(precio)
             except (TypeError, ValueError):
+                stats['errores'] += 1
+                continue
+            if not math.isfinite(precio):
                 stats['errores'] += 1
                 continue
 
@@ -2112,8 +2123,14 @@ def precios_compra_sync():
                 ))
                 stats['creados_historial'] += 1
 
-        except Exception:
+        except Exception as e:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
             stats['errores'] += 1
+            if len(stats['errores_muestra']) < 5:
+                stats['errores_muestra'].append(str(e))
             continue
 
     db.session.commit()
