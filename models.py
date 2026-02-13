@@ -182,6 +182,7 @@ class ProductoProveedor(db.Model):
     proveedor_id = db.Column(db.Integer, db.ForeignKey('proveedores.id'), nullable=False)
     precio_proveedor = db.Column(db.Float, nullable=False)
     fecha_precio = db.Column(db.Date, default=datetime.utcnow)
+    divisa = db.Column(db.String(10), nullable=True)
     cantidad_minima = db.Column(db.Integer, default=1)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     
@@ -196,6 +197,7 @@ class ProductoProveedor(db.Model):
             'proveedor': self.proveedor.to_dict() if self.proveedor else None,
             'precio_proveedor': self.precio_proveedor,
             'fecha_precio': self.fecha_precio.isoformat() if self.fecha_precio else None,
+            'divisa': self.divisa,
             'cantidad_minima': self.cantidad_minima,
             'fecha_creacion': self.fecha_creacion.isoformat(),
             'historial_precios': [hp.to_dict() for hp in self.historial_precios]
@@ -209,6 +211,7 @@ class HistorialPreciosProveedor(db.Model):
     precio = db.Column(db.Float, nullable=False)
     fecha_precio = db.Column(db.Date, nullable=False)
     notas = db.Column(db.Text, nullable=True)
+    divisa = db.Column(db.String(10), nullable=True)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     
     def to_dict(self):
@@ -218,6 +221,7 @@ class HistorialPreciosProveedor(db.Model):
             'precio': self.precio,
             'fecha_precio': self.fecha_precio.isoformat() if self.fecha_precio else None,
             'notas': self.notas,
+            'divisa': self.divisa,
             'fecha_creacion': self.fecha_creacion.isoformat()
         }
 

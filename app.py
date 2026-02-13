@@ -2038,6 +2038,7 @@ def precios_compra_sync():
             descripcion = (item.get('Description') or item.get('descripcion') or '').strip()
             proveedor_nombre = (item.get('BusinessEntityName') or item.get('proveedor') or '').strip()
             precio = item.get('UnitPrice') if 'UnitPrice' in item else item.get('precio')
+            divisa = (item.get('Currency') or item.get('Divisa') or item.get('divisa') or '').strip()
             fecha_documento = _parse_date(item.get('DateDocument') or item.get('fecha_documento'))
 
             if not product_key or precio is None:
@@ -2049,6 +2050,8 @@ def precios_compra_sync():
                 product_key = product_key[:100]
             if len(proveedor_nombre) > 255:
                 proveedor_nombre = proveedor_nombre[:255]
+            if len(divisa) > 10:
+                divisa = divisa[:10]
 
             try:
                 precio = float(precio)
@@ -2095,6 +2098,7 @@ def precios_compra_sync():
                     proveedor_id=proveedor.id,
                     precio_proveedor=precio,
                     fecha_precio=fecha_documento or datetime.utcnow().date(),
+                    divisa=divisa or None,
                     cantidad_minima=1
                 )
                 db.session.add(asignacion)
@@ -2106,6 +2110,8 @@ def precios_compra_sync():
                 asignacion.precio_proveedor = precio
                 if fecha_documento:
                     asignacion.fecha_precio = fecha_documento
+                if divisa:
+                    asignacion.divisa = divisa
                 stats['actualizados_precio'] += 1
 
             fecha_hist = fecha_documento or asignacion.fecha_precio or datetime.utcnow().date()
@@ -2119,7 +2125,8 @@ def precios_compra_sync():
                     producto_proveedor_id=asignacion.id,
                     precio=precio,
                     fecha_precio=fecha_hist,
-                    notas='sync_planta'
+                    notas='sync_planta',
+                    divisa=divisa or None
                 ))
                 stats['creados_historial'] += 1
 
