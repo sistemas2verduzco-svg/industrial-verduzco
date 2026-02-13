@@ -146,6 +146,7 @@ class Producto(db.Model):
     __tablename__ = 'productos'
     
     id = db.Column(db.Integer, primary_key=True)
+    clave = db.Column(db.String(100), nullable=True, unique=True)
     nombre = db.Column(db.String(255), nullable=False)
     descripcion = db.Column(db.Text, nullable=True)
     precio = db.Column(db.Float, nullable=False)
@@ -161,6 +162,7 @@ class Producto(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
+            'clave': self.clave,
             'nombre': self.nombre,
             'descripcion': self.descripcion,
             'precio': self.precio,

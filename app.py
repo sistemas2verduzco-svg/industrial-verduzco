@@ -34,6 +34,9 @@ FAILED_LOGINS = {}
 MAX_LOGIN_ATTEMPTS = int(os.getenv('MAX_LOGIN_ATTEMPTS', '5'))
 LOCKOUT_SECONDS = int(os.getenv('LOCKOUT_SECONDS', '300'))  # default 5 minutes
 
+# API key for plant sync
+SYNC_API_KEY = os.getenv('SYNC_API_KEY', '').strip()
+
 load_dotenv()
 
 app = Flask(__name__)
@@ -87,6 +90,32 @@ def is_root_user():
     """Return True only if logged-in user is 'root' (exact match)."""
     username = session.get('user')
     return username == 'root'
+
+
+def _require_sync_key():
+    if not SYNC_API_KEY:
+        return False, (jsonify({'error': 'SYNC_API_KEY no configurado'}), 500)
+    provided = request.headers.get('X-API-KEY', '')
+    if not provided or not secrets.compare_digest(provided, SYNC_API_KEY):
+        return False, (jsonify({'error': 'No autorizado'}), 401)
+    return True, None
+
+
+def _parse_date(value):
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace('Z', '+00:00')).date()
+        except ValueError:
+            for fmt in ('%Y-%m-%d', '%Y-%m-%d %H:%M:%S'):
+                try:
+                    return datetime.strptime(value, fmt).date()
+                except ValueError:
+                    continue
+    return None
 
 
 # Registrar accesos (IP, UA, path) en cada petición - evita estáticos
@@ -1971,6 +2000,124 @@ def desasignar_proveedor(producto_id, proveedor_id):
     db.session.commit()
     
     return jsonify({'mensaje': 'Proveedor desasignado correctamente'})
+
+
+# ==================== SYNC PRECIOS COMPRA (PLANTA) ====================
+
+@app.route('/api/precios_compra_sync', methods=['POST'])
+def precios_compra_sync():
+    ok, err = _require_sync_key()
+    if not ok:
+        return err
+
+    payload = request.get_json(silent=True)
+    if payload is None:
+        return jsonify({'error': 'JSON requerido'}), 400
+
+    items = payload
+    if isinstance(payload, dict):
+        items = payload.get('items', [])
+
+    if not isinstance(items, list):
+        return jsonify({'error': 'Formato invalido, se espera lista'}), 400
+
+    stats = {
+        'creados_producto': 0,
+        'creados_proveedor': 0,
+        'actualizados_precio': 0,
+        'creados_historial': 0,
+        'ignorados': 0,
+        'errores': 0
+    }
+
+    for idx, item in enumerate(items, start=1):
+        try:
+            product_key = (item.get('ProductKey') or item.get('product_key') or '').strip()
+            descripcion = (item.get('Description') or item.get('descripcion') or '').strip()
+            proveedor_nombre = (item.get('BusinessEntityName') or item.get('proveedor') or '').strip()
+            precio = item.get('UnitPrice') if 'UnitPrice' in item else item.get('precio')
+            fecha_documento = _parse_date(item.get('DateDocument') or item.get('fecha_documento'))
+
+            if not product_key or precio is None:
+                stats['ignorados'] += 1
+                continue
+
+            try:
+                precio = float(precio)
+            except (TypeError, ValueError):
+                stats['errores'] += 1
+                continue
+
+            producto = Producto.query.filter_by(clave=product_key).first()
+            if not producto:
+                producto = Producto(
+                    clave=product_key,
+                    nombre=descripcion or product_key,
+                    descripcion=descripcion,
+                    precio=precio,
+                    cantidad=0,
+                    categoria='Compras'
+                )
+                db.session.add(producto)
+                stats['creados_producto'] += 1
+
+            proveedor = None
+            if proveedor_nombre:
+                proveedor = Proveedor.query.filter_by(nombre=proveedor_nombre).first()
+                if not proveedor:
+                    proveedor = Proveedor(nombre=proveedor_nombre)
+                    db.session.add(proveedor)
+                    stats['creados_proveedor'] += 1
+
+            if not proveedor:
+                stats['ignorados'] += 1
+                continue
+
+            asignacion = ProductoProveedor.query.filter_by(
+                producto_id=producto.id,
+                proveedor_id=proveedor.id
+            ).first()
+
+            if not asignacion:
+                asignacion = ProductoProveedor(
+                    producto_id=producto.id,
+                    proveedor_id=proveedor.id,
+                    precio_proveedor=precio,
+                    fecha_precio=fecha_documento or datetime.utcnow().date(),
+                    cantidad_minima=1
+                )
+                db.session.add(asignacion)
+                stats['actualizados_precio'] += 1
+            else:
+                if fecha_documento and asignacion.fecha_precio and fecha_documento < asignacion.fecha_precio:
+                    stats['ignorados'] += 1
+                    continue
+                asignacion.precio_proveedor = precio
+                if fecha_documento:
+                    asignacion.fecha_precio = fecha_documento
+                stats['actualizados_precio'] += 1
+
+            fecha_hist = fecha_documento or asignacion.fecha_precio or datetime.utcnow().date()
+            existente_hist = HistorialPreciosProveedor.query.filter_by(
+                producto_proveedor_id=asignacion.id,
+                precio=precio,
+                fecha_precio=fecha_hist
+            ).first()
+            if not existente_hist:
+                db.session.add(HistorialPreciosProveedor(
+                    producto_proveedor_id=asignacion.id,
+                    precio=precio,
+                    fecha_precio=fecha_hist,
+                    notas='sync_planta'
+                ))
+                stats['creados_historial'] += 1
+
+        except Exception:
+            stats['errores'] += 1
+            continue
+
+    db.session.commit()
+    return jsonify({'ok': True, 'stats': stats})
 
 # ==================== ENDPOINTS DE HISTORIAL DE PRECIOS ====================
 
