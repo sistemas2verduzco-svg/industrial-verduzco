@@ -53,7 +53,7 @@ function cargarProveedoresProducto(productoId) {
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div style="flex: 1;">
                             <strong>${pp.proveedor.nombre}</strong><br>
-                            <small style="color: #666;">Precio Actual: $${pp.precio_proveedor.toFixed(2)} | Fecha: ${pp.fecha_precio}</small>
+                            <small style="color: #666;">Precio Actual: $${pp.precio_proveedor.toFixed(2)} ${pp.divisa || ''} | Fecha: ${pp.fecha_precio}</small>
                         </div>
                         <div style="display: flex; gap: 0.3rem;">
                             <button type="button" class="btn btn-info" onclick="mostrarModalHistorialPrecios(${productoId}, ${pp.proveedor_id}, '${pp.proveedor.nombre}')" style="padding: 0.3rem 0.6rem; font-size: 0.8rem; background: #2196F3; color: white;">

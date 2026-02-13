@@ -2185,18 +2185,22 @@ def agregar_precio_historico(producto_id, proveedor_id):
     
     try:
         fecha_precio = datetime.strptime(data.get('fecha_precio'), '%Y-%m-%d').date()
+        divisa = data.get('divisa')
         
         # Crear nuevo registro de precio histórico
         nuevo_precio = HistorialPreciosProveedor(
             producto_proveedor_id=asignacion.id,
             precio=float(data.get('precio')),
             fecha_precio=fecha_precio,
-            notas=data.get('notas', '')
+            notas=data.get('notas', ''),
+            divisa=divisa
         )
         
         # Actualizar el precio actual en ProductoProveedor
         asignacion.precio_proveedor = float(data.get('precio'))
         asignacion.fecha_precio = fecha_precio
+        if divisa:
+            asignacion.divisa = divisa
         
         db.session.add(nuevo_precio)
         db.session.commit()

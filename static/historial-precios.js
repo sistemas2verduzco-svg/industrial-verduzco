@@ -42,6 +42,11 @@ function mostrarModalHistorialPrecios(productoId, proveedorId, nombreProveedor) 
                             <label for="hist-fecha-input">Fecha *</label>
                             <input type="date" id="hist-fecha-input" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px;">
                         </div>
+                        
+                        <div class="form-group">
+                            <label for="hist-divisa-input">Divisa</label>
+                            <input type="text" id="hist-divisa-input" placeholder="MN o USD" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px;">
+                        </div>
                     </div>
                     
                     <div class="form-group">
@@ -99,7 +104,7 @@ function cargarHistorialPrecios(productoId, proveedorId) {
                 <div style="background: #f9f9f9; padding: 0.75rem; border-radius: 6px; margin-bottom: 0.5rem; border-left: 4px solid ${index === 0 ? '#4CAF50' : '#2196F3'};">
                     <div style="display: flex; justify-content: space-between; align-items: start;">
                         <div>
-                            <strong style="font-size: 1.1rem; color: var(--color-primary);">$${h.precio.toFixed(2)}</strong>
+                            <strong style="font-size: 1.1rem; color: var(--color-primary);">$${h.precio.toFixed(2)} ${h.divisa || ''}</strong>
                             <small style="color: #666; display: block; margin-top: 0.3rem;">📅 ${h.fecha_precio}</small>
                             ${h.notas ? `<small style="color: #888; display: block; margin-top: 0.3rem; font-style: italic;">"${h.notas}"</small>` : ''}
                             <small style="color: #999; display: block; margin-top: 0.3rem;">Agregado: ${new Date(h.fecha_creacion).toLocaleDateString()}</small>
@@ -122,6 +127,7 @@ function agregarPrecioHistorico() {
     const precio = document.getElementById('hist-precio-input').value;
     const fecha = document.getElementById('hist-fecha-input').value;
     const notas = document.getElementById('hist-notas-input').value;
+    const divisa = document.getElementById('hist-divisa-input').value;
     
     if (!precio) {
         alert('❌ Debes ingresar un precio');
@@ -136,7 +142,8 @@ function agregarPrecioHistorico() {
     const data = {
         precio: parseFloat(precio),
         fecha_precio: fecha,
-        notas: notas
+        notas: notas,
+        divisa: divisa
     };
     
     fetch(`/api/productos/${productoActualHistorial}/proveedores/${proveedorActualHistorial}/historial`, {
@@ -156,6 +163,7 @@ function agregarPrecioHistorico() {
             // Limpiar inputs
             document.getElementById('hist-precio-input').value = '';
             document.getElementById('hist-notas-input').value = '';
+            document.getElementById('hist-divisa-input').value = '';
             
             // Recargar historial
             cargarHistorialPrecios(productoActualHistorial, proveedorActualHistorial);
