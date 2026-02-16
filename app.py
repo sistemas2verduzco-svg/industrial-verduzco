@@ -2105,7 +2105,12 @@ def precios_compra_sync():
                 stats['actualizados_precio'] += 1
             else:
                 if fecha_documento and asignacion.fecha_precio and fecha_documento < asignacion.fecha_precio:
-                    stats['ignorados'] += 1
+                    # Only fill divisa if missing, do not downgrade price/date
+                    if divisa and not asignacion.divisa:
+                        asignacion.divisa = divisa
+                        stats['actualizados_precio'] += 1
+                    else:
+                        stats['ignorados'] += 1
                     continue
                 asignacion.precio_proveedor = precio
                 if fecha_documento:
