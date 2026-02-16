@@ -59,6 +59,19 @@
             return res.json();
         }
 
+        function formatCompraInfo(producto) {
+            const divisa = producto.divisa_ultima || '-';
+            const precio = Number(producto.precio_compra_ultimo);
+            if (!Number.isFinite(precio)) {
+                return `Divisa: ${divisa}`;
+            }
+            return `Compra: $${precio.toFixed(2)} ${divisa}`;
+        }
+
+        function formatClave(producto) {
+            return producto.clave ? `Clave: ${producto.clave}` : 'Clave: -';
+        }
+
         function renderProductos(productos) {
             const container = document.getElementById('consulta-productos');
             if (!productos || productos.length === 0) {
@@ -73,9 +86,11 @@
                     <div class="producto-imagen">${p.imagen_url ? `<img src="${p.imagen_url}" alt="${p.nombre}">` : '<div class="no-image">Sin imagen</div>'}</div>
                     <div class="producto-info">
                         <h3>${p.nombre}</h3>
+                        <p class="clave">${formatClave(p)}</p>
                         <p class="categoria">${p.categoria || 'Sin categoría'}</p>
                         <p class="descripcion">${p.descripcion || ''}</p>
                         <div class="precio-stock"><span class="precio">$${(p.precio||0).toFixed(2)}</span></div>
+                        <p class="divisa">${formatCompraInfo(p)}</p>
                     </div>
                 `;
                 container.appendChild(card);

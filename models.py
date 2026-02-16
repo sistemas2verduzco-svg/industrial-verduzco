@@ -160,6 +160,14 @@ class Producto(db.Model):
     proveedores = db.relationship('ProductoProveedor', backref='producto', lazy=True, cascade='all, delete-orphan')
     
     def to_dict(self):
+        ultimo_pp = None
+        if self.proveedores:
+            def _pp_key(pp):
+                return pp.fecha_precio or datetime.min.date()
+            try:
+                ultimo_pp = max(self.proveedores, key=_pp_key)
+            except ValueError:
+                ultimo_pp = None
         return {
             'id': self.id,
             'clave': self.clave,
@@ -171,6 +179,10 @@ class Producto(db.Model):
             'categoria': self.categoria,
             'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,
             'fecha_actualizacion': self.fecha_actualizacion.isoformat() if self.fecha_actualizacion else None,
+            'divisa_ultima': ultimo_pp.divisa if ultimo_pp else None,
+            'precio_compra_ultimo': ultimo_pp.precio_proveedor if ultimo_pp else None,
+            'proveedor_ultimo': ultimo_pp.proveedor.nombre if ultimo_pp and ultimo_pp.proveedor else None,
+            'fecha_precio_ultimo': ultimo_pp.fecha_precio.isoformat() if ultimo_pp and ultimo_pp.fecha_precio else None,
             'proveedores': [pp.to_dict() for pp in self.proveedores]
         }
 

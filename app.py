@@ -1329,14 +1329,27 @@ def catalogo_consulta():
 
 
 def _producto_sanitizado(p):
+    ultimo_pp = None
+    if p.proveedores:
+        def _pp_key(pp):
+            return pp.fecha_precio or datetime.min.date()
+        try:
+            ultimo_pp = max(p.proveedores, key=_pp_key)
+        except ValueError:
+            ultimo_pp = None
     return {
         'id': p.id,
+        'clave': p.clave,
         'nombre': p.nombre,
         'descripcion': p.descripcion,
         'precio': p.precio,
         'cantidad': p.cantidad,
         'imagen_url': p.imagen_url,
-        'categoria': p.categoria
+        'categoria': p.categoria,
+        'divisa_ultima': ultimo_pp.divisa if ultimo_pp else None,
+        'precio_compra_ultimo': ultimo_pp.precio_proveedor if ultimo_pp else None,
+        'proveedor_ultimo': ultimo_pp.proveedor.nombre if ultimo_pp and ultimo_pp.proveedor else None,
+        'fecha_precio_ultimo': ultimo_pp.fecha_precio.isoformat() if ultimo_pp and ultimo_pp.fecha_precio else None
     }
 
 

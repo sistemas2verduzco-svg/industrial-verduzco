@@ -85,6 +85,19 @@
             return response.json();
         }
 
+        function formatCompraInfo(producto) {
+            const divisa = producto.divisa_ultima || '-';
+            const precio = Number(producto.precio_compra_ultimo);
+            if (!Number.isFinite(precio)) {
+                return `Divisa: ${divisa}`;
+            }
+            return `Compra: $${precio.toFixed(2)} ${divisa}`;
+        }
+
+        function formatClave(producto) {
+            return producto.clave ? `Clave: ${producto.clave}` : 'Clave: -';
+        }
+
         // Cargar productos y estadísticas al iniciar
         document.addEventListener('DOMContentLoaded', function() {
             cargarProductos();
@@ -243,12 +256,14 @@
                             </div>
                             <div class="producto-info">
                                 <h3>${producto.nombre}</h3>
+                                <p class="clave">${formatClave(producto)}</p>
                                 <p class="categoria">${producto.categoria || 'Sin categoría'}</p>
                                 <p class="descripcion">${producto.descripcion || 'Sin descripción'}</p>
                                 <div class="precio-stock">
                                     <span class="precio">$${producto.precio.toFixed(2)}</span>
                                     <span class="stock">Stock: ${producto.cantidad}</span>
                                 </div>
+                                <p class="divisa">${formatCompraInfo(producto)}</p>
                             </div>
                         `;
                         container.appendChild(card);
@@ -319,12 +334,14 @@
                             </div>
                             <div class="producto-info">
                                 <h3>${producto.nombre}</h3>
+                                <p class="clave">${formatClave(producto)}</p>
                                 <p class="categoria">${producto.categoria || 'Sin categoría'}</p>
                                 <p class="descripcion">${producto.descripcion || 'Sin descripción'}</p>
                                 <div class="precio-stock">
                                     <span class="precio">$${producto.precio.toFixed(2)}</span>
                                     <span class="stock">Stock: ${producto.cantidad}</span>
                                 </div>
+                                <p class="divisa">${formatCompraInfo(producto)}</p>
                             </div>
                         `;
                         container.appendChild(card);
