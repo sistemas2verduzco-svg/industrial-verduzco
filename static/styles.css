@@ -307,6 +307,96 @@ body {
     color: #666;
 }
 
+/* ==================== PRODUCTO DETALLE ==================== */
+.detalle-wrapper {
+    background: linear-gradient(180deg, #ffffff 0%, #f7f9fc 100%);
+    border-radius: 14px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+    padding: 1.75rem;
+    margin-top: 1.5rem;
+    border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.detalle-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1.5rem;
+    align-items: center;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    padding-bottom: 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.detalle-header h2 {
+    font-size: 1.8rem;
+    color: #1c2a3a;
+    letter-spacing: 0.2px;
+}
+
+.detalle-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #6b7a90;
+    margin-bottom: 0.4rem;
+}
+
+.detalle-clave {
+    font-weight: 600;
+    color: #3a4a5a;
+    margin-top: 0.4rem;
+}
+
+.detalle-thumb {
+    width: 140px;
+    height: 140px;
+    border-radius: 16px;
+    overflow: hidden;
+    background: #edf1f5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+.detalle-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.detalle-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+}
+
+.detalle-card {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 1rem 1.2rem;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.detalle-text {
+    color: #2a3b4d;
+    margin-top: 0.4rem;
+    font-size: 0.95rem;
+}
+
+@media (max-width: 768px) {
+    .detalle-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .detalle-thumb {
+        width: 100%;
+        height: auto;
+        max-height: 220px;
+    }
+}
+
 /* ==================== ADMIN PANEL ==================== */
 .admin-container {
     background: white;

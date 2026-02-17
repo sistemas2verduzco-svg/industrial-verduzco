@@ -10,16 +10,36 @@
     {% include '_sidebar.html' %}
     <div class="container" style="margin-top:2rem;">
         <a href="/" class="btn btn-secondary">← Volver al catálogo</a>
-        <div class="detalle-producto-card">
-            <h2>{{ producto.nombre }}</h2>
-            {% if producto.imagen_url %}
-                <img src="{{ producto.imagen_url }}" alt="Imagen de {{ producto.nombre }}" style="max-width:220px; max-height:220px; border-radius:8px; margin-bottom:1rem;">
-            {% endif %}
-            <p><strong>Descripción:</strong> {{ producto.descripcion or 'Sin descripción' }}</p>
-            <p><strong>Categoría:</strong> {{ producto.categoria or 'Sin categoría' }}</p>
-            <p><strong>Precio:</strong> ${{ '%.2f'|format(producto.precio) }}</p>
-            <p><strong>Stock:</strong> {{ producto.cantidad }}</p>
-            <p><strong>Fecha de creación:</strong> {{ producto.fecha_creacion or 'N/A' }}</p>
+        <div class="detalle-wrapper">
+            <div class="detalle-header">
+                <div>
+                    <p class="detalle-label">Producto</p>
+                    <h2>{{ producto.nombre }}</h2>
+                    <p class="detalle-clave">Clave: {{ producto.clave or 'N/A' }}</p>
+                </div>
+                {% if producto.imagen_url %}
+                    <div class="detalle-thumb">
+                        <img src="{{ producto.imagen_url }}" alt="Imagen de {{ producto.nombre }}">
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="detalle-grid">
+                <div class="detalle-card">
+                    <p class="detalle-label">Descripcion</p>
+                    <p class="detalle-text">{{ producto.descripcion or 'Sin descripcion' }}</p>
+                </div>
+                <div class="detalle-card">
+                    <p class="detalle-label">Ultima compra</p>
+                    {% if ultima_compra %}
+                        <p class="detalle-text">Proveedor: {{ ultima_compra.proveedor.nombre if ultima_compra.proveedor else 'N/A' }}</p>
+                        <p class="detalle-text">Precio: ${{ '%.2f'|format(ultima_compra.precio_proveedor) }} {{ ultima_compra.divisa or '-' }}</p>
+                        <p class="detalle-text">Fecha OC: {{ ultima_compra.fecha_precio or 'N/A' }}</p>
+                    {% else %}
+                        <p class="detalle-text">Sin compras registradas</p>
+                    {% endif %}
+                </div>
+            </div>
         </div>
 
         <div class="detalle-proveedores" style="margin-top:2rem;">
@@ -31,8 +51,7 @@
                             <th>Proveedor</th>
                             <th>Precio</th>
                             <th>Divisa</th>
-                            <th>Fecha precio</th>
-                            <th>Cantidad mínima</th>
+                            <th>Fecha OC</th>
                             <th>Historial de Precios</th>
                         </tr>
                     </thead>
@@ -43,7 +62,6 @@
                             <td>${{ '%.2f'|format(p.precio_proveedor) }}</td>
                             <td>{{ p.divisa or '-' }}</td>
                             <td>{{ p.fecha_precio or 'N/A' }}</td>
-                            <td>{{ p.cantidad_minima }}</td>
                             <td>
                                 {% if p.historial_precios and p.historial_precios|length > 0 %}
                                     <ul style="margin:0; padding-left:1em;">

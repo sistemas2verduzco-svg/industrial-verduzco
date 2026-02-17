@@ -356,7 +356,10 @@ def producto_detalle(producto_id):
     producto = Producto.query.get_or_404(producto_id)
     # Traer proveedores y precios relacionados
     proveedores = []
-    for pp in producto.proveedores:
+    def _pp_date_key(pp):
+        return pp.fecha_precio or datetime.min.date()
+    proveedores_ordenados = sorted(producto.proveedores, key=_pp_date_key, reverse=True)
+    for pp in proveedores_ordenados:
         prov = pp.proveedor.to_dict() if pp.proveedor else None
         historial = [h.to_dict() for h in pp.historial_precios]
         proveedores.append({
@@ -365,9 +368,11 @@ def producto_detalle(producto_id):
             'precio_proveedor': pp.precio_proveedor,
             'fecha_precio': pp.fecha_precio.isoformat() if pp.fecha_precio else None,
             'cantidad_minima': pp.cantidad_minima,
+            'divisa': pp.divisa,
             'historial_precios': historial
         })
-    return render_template('producto_detalle.html', producto=producto, proveedores=proveedores)
+    ultima_compra = proveedores[0] if proveedores else None
+    return render_template('producto_detalle.html', producto=producto, proveedores=proveedores, ultima_compra=ultima_compra)
 
 
 @app.route('/control_calidad')
