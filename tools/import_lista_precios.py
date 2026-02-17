@@ -1,6 +1,11 @@
+import os
 import sys
 from decimal import Decimal, InvalidOperation
 from openpyxl import load_workbook
+
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
 from app import app
 from models import db, Producto
