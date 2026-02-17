@@ -7,9 +7,11 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <meta name="theme-color" content="#1976d2">
+    <style>
+        body.consulta-solo > .container { margin-left: 0; }
+    </style>
 </head>
-<body>
-    {% include '_sidebar.html' %}
+<body class="consulta-solo">
 
     <div class="container">
         <div class="filtros-section">
@@ -47,10 +49,6 @@
             <div class="loading">Cargando productos...</div>
         </div>
     </div>
-
-    <footer style="margin-top:2rem; padding:1rem; text-align:center; color:#888; border-top:1px solid #eee;">
-        <p>&copy; 2025 Catálogo - Consulta</p>
-    </footer>
 
     <script>
         async function fetchJson(url) {
