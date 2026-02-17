@@ -8,46 +8,171 @@
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <meta name="theme-color" content="#1976d2">
     <style>
+        :root {
+            --consulta-bg: #f7f7f5;
+            --consulta-card: #ffffff;
+            --consulta-text: #1a1a1a;
+            --consulta-muted: #5f5f5f;
+            --consulta-accent: #1b6f6a;
+            --consulta-border: #e2e2e2;
+        }
+
+        body.consulta-solo {
+            background: var(--consulta-bg);
+            color: var(--consulta-text);
+            font-size: 18px;
+        }
+
         body.consulta-solo > .container { margin-left: 0; }
+
+        .consulta-page {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 1.5rem 1.25rem 2.5rem;
+        }
+
+        .consulta-hero {
+            background: #ffffff;
+            border: 1px solid var(--consulta-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+        }
+
+        .consulta-hero h1 {
+            font-size: 1.8rem;
+            margin-bottom: 0.4rem;
+            color: var(--consulta-text);
+        }
+
+        .consulta-hero p {
+            color: var(--consulta-muted);
+            margin-bottom: 1rem;
+        }
+
+        .consulta-search {
+            display: grid;
+            gap: 0.75rem;
+        }
+
+        .consulta-search label {
+            font-weight: 600;
+        }
+
+        .consulta-search input {
+            font-size: 1rem;
+            padding: 0.85rem 1rem;
+            border-radius: 12px;
+            border: 1px solid var(--consulta-border);
+        }
+
+        .consulta-categories {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+            margin-top: 1rem;
+        }
+
+        .consulta-categories button {
+            border: 1px solid var(--consulta-border);
+            background: #ffffff;
+            color: var(--consulta-text);
+            padding: 0.6rem 1rem;
+            border-radius: 999px;
+            font-size: 0.95rem;
+            cursor: pointer;
+        }
+
+        .consulta-categories button.active {
+            background: var(--consulta-accent);
+            color: #ffffff;
+            border-color: var(--consulta-accent);
+        }
+
+        .consulta-grid {
+            margin-top: 1.5rem;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1.2rem;
+        }
+
+        .consulta-card {
+            background: var(--consulta-card);
+            border: 1px solid var(--consulta-border);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
+        }
+
+        .consulta-card img {
+            width: 100%;
+            height: 220px;
+            object-fit: cover;
+            background: #ededed;
+        }
+
+        .consulta-card-body {
+            padding: 1.2rem;
+        }
+
+        .consulta-card h3 {
+            font-size: 1.2rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .consulta-card .consulta-desc {
+            color: var(--consulta-muted);
+            margin-bottom: 0.8rem;
+        }
+
+        .consulta-card .consulta-price {
+            font-weight: 700;
+            font-size: 1.4rem;
+            color: var(--consulta-accent);
+        }
+
+        .consulta-card .consulta-meta {
+            margin-top: 0.6rem;
+            color: var(--consulta-muted);
+            font-size: 0.95rem;
+        }
+
+        @media (min-width: 768px) {
+            .consulta-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .consulta-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
     </style>
 </head>
 <body class="consulta-solo">
-
-    <div class="container">
-        <div class="filtros-section">
-            <h3>Consulta de Productos</h3>
-            <div class="filtros-grid">
-                <div class="form-group" style="position: relative;">
-                    <label for="consulta-buscar">Buscar producto</label>
-                    <input id="consulta-buscar" type="search" placeholder="Producto..." class="filtro-input" autocomplete="off" aria-autocomplete="list" aria-controls="consulta-sugerencias" style="padding-right: 2.8rem;">
-                    <button type="button" id="consulta-clear" aria-label="Limpiar búsqueda" style="position: absolute; right: 0.4rem; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 1.6rem; color: #555; cursor: pointer; display: none; width: 1.8rem; height: 1.8rem; z-index: 10; padding: 0; line-height: 1; font-weight: bold;">&times;</button>
-
-                    <ul id="consulta-sugerencias" role="listbox" aria-label="Sugerencias" style="position: absolute; left: 0; right: 0; top: calc(100% + 0.4rem); background: #fff; border: 1px solid #ddd; box-shadow: 0 2px 8px rgba(0,0,0,0.08); list-style: none; margin: 0; padding: 0; max-height: 12rem; overflow-y: auto; z-index: 3; display: none;">
-                    </ul>
-
-                    <style>
-                        @media (max-width:600px){ #consulta-clear{ font-size:1.8rem !important; width:2rem !important; height:2rem !important; right:0.4rem !important; } }
-                        /* Ocultar X nativa del input type=search */
-                        #consulta-buscar::-webkit-search-cancel-button { display: none; }
-                        #consulta-buscar::-moz-search-cancel-button { display: none; }
-                        #consulta-sugerencias li{ padding:0.6rem 0.8rem; border-bottom:1px solid #f0f0f0; cursor:pointer }
-                        #consulta-sugerencias li.selected{ background:#f5faff }
-                        #consulta-sugerencias .small{ display:block; color:#666; font-size:0.85rem; margin-top:0.15rem }
-                    </style>
-                </div>
-                <div class="form-group">
-                    <label for="consulta-categoria">Categoria</label>
-                    <select id="consulta-categoria" class="filtro-input">
-                        <option value="">Todas las categorias</option>
-                    </select>
-                </div>
-                <button id="consulta-buscar-btn" class="btn btn-primary">Buscar</button>
+    <div class="consulta-page">
+        <section class="consulta-hero">
+            <h1>Catalogo de Refacciones</h1>
+            <p>Refacciones para maquinaria de tortillas. Interfaz sencilla y clara.</p>
+            <div class="consulta-search" style="position: relative;">
+                <label for="consulta-buscar">Buscar producto</label>
+                <input id="consulta-buscar" type="search" placeholder="Ej. motor, quemador..." autocomplete="off" aria-autocomplete="list" aria-controls="consulta-sugerencias" style="padding-right: 2.8rem;">
+                <button type="button" id="consulta-clear" aria-label="Limpiar búsqueda" style="position: absolute; right: 0.6rem; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 1.6rem; color: #555; cursor: pointer; display: none; width: 2rem; height: 2rem; z-index: 10; padding: 0; line-height: 1; font-weight: bold;">&times;</button>
+                <ul id="consulta-sugerencias" role="listbox" aria-label="Sugerencias" style="position: absolute; left: 0; right: 0; top: calc(100% + 0.4rem); background: #fff; border: 1px solid #ddd; box-shadow: 0 2px 8px rgba(0,0,0,0.08); list-style: none; margin: 0; padding: 0; max-height: 12rem; overflow-y: auto; z-index: 3; display: none;"></ul>
             </div>
-        </div>
+            <div class="consulta-categories">
+                <button type="button" class="active" data-categoria="">Todos</button>
+                <button type="button" data-categoria="Motors">Motors</button>
+                <button type="button" data-categoria="Burners">Burners</button>
+                <button type="button" data-categoria="Electrical Parts">Electrical Parts</button>
+                <button type="button" data-categoria="Mechanical Parts">Mechanical Parts</button>
+            </div>
+        </section>
 
-        <div id="consulta-productos" class="productos-grid">
+        <section id="consulta-productos" class="consulta-grid">
             <div class="loading">Cargando productos...</div>
-        </div>
+        </section>
     </div>
 
     <script>
@@ -57,17 +182,13 @@
             return res.json();
         }
 
-        function formatCompraInfo(producto) {
-            const divisa = producto.divisa_ultima || '-';
+        function formatPrecioCompra(producto) {
+            const divisa = producto.divisa_ultima || '';
             const precio = Number(producto.precio_compra_ultimo);
             if (!Number.isFinite(precio)) {
-                return `Divisa: ${divisa}`;
+                return 'Precio: N/A';
             }
-            return `Compra: $${precio.toFixed(2)} ${divisa}`;
-        }
-
-        function formatClave(producto) {
-            return producto.clave ? `Clave: ${producto.clave}` : 'Clave: -';
+            return `Precio: $${precio.toFixed(2)} ${divisa}`.trim();
         }
 
         function renderProductos(productos) {
@@ -79,35 +200,18 @@
             container.innerHTML = '';
             productos.forEach(p => {
                 const card = document.createElement('div');
-                card.className = 'producto-card';
+                card.className = 'consulta-card';
                 card.innerHTML = `
-                    <div class="producto-imagen">${p.imagen_url ? `<img src="${p.imagen_url}" alt="${p.nombre}">` : '<div class="no-image">Sin imagen</div>'}</div>
-                    <div class="producto-info">
+                    ${p.imagen_url ? `<img src="${p.imagen_url}" alt="${p.nombre}">` : '<img src="" alt="Sin imagen">'}
+                    <div class="consulta-card-body">
                         <h3>${p.nombre}</h3>
-                        <p class="clave">${formatClave(p)}</p>
-                        <p class="categoria">${p.categoria || 'Sin categoría'}</p>
-                        <p class="descripcion">${p.descripcion || ''}</p>
-                        <div class="precio-stock"><span class="precio">$${(p.precio||0).toFixed(2)}</span></div>
-                        <p class="divisa">${formatCompraInfo(p)}</p>
+                        <p class="consulta-desc">${p.descripcion || 'Sin descripcion'}</p>
+                        <div class="consulta-price">${formatPrecioCompra(p)}</div>
+                        <div class="consulta-meta">${p.categoria || ''}</div>
                     </div>
                 `;
                 container.appendChild(card);
             });
-        }
-
-        async function cargarCategorias() {
-            try {
-                const cats = await fetchJson('/public/categorias');
-                const sel = document.getElementById('consulta-categoria');
-                cats.forEach(c => {
-                    const opt = document.createElement('option');
-                    opt.value = c;
-                    opt.textContent = c;
-                    sel.appendChild(opt);
-                });
-            } catch (e) {
-                console.warn('No se pudieron cargar categorías (todavía).', e);
-            }
         }
 
         async function cargarProductosConsulta(params) {
@@ -123,21 +227,29 @@
         }
 
         document.addEventListener('DOMContentLoaded', function(){
-            cargarCategorias();
             cargarProductosConsulta();
 
             const input = document.getElementById('consulta-buscar');
-            const btn = document.getElementById('consulta-buscar-btn');
             const clearBtn = document.getElementById('consulta-clear');
             const sugerencias = document.getElementById('consulta-sugerencias');
+            const categoryButtons = document.querySelectorAll('[data-categoria]');
+            let categoriaActual = '';
 
-            btn.addEventListener('click', function(){
+            function aplicarFiltros() {
                 const q = input.value.trim();
-                const cat = document.getElementById('consulta-categoria').value;
                 const params = {};
                 if (q) params.q = q;
-                if (cat) params.categoria = cat;
+                if (categoriaActual) params.categoria = categoriaActual;
                 cargarProductosConsulta(params);
+            }
+
+            categoryButtons.forEach(btn => {
+                btn.addEventListener('click', function(){
+                    categoryButtons.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    categoriaActual = btn.dataset.categoria || '';
+                    aplicarFiltros();
+                });
             });
 
             // Debounce helper
@@ -161,8 +273,8 @@
                     const li = document.createElement('li');
                     li.dataset.index = i;
                     li.innerHTML = `<strong>${escapeHtml(p.nombre)}</strong><span class="small">${escapeHtml(p.categoria||'')}</span>`;
-                    li.addEventListener('click', function(){ input.value = p.nombre; sugerencias.style.display = 'none'; btn.click(); });
-                    li.addEventListener('touchstart', function(e){ e.preventDefault(); input.value = p.nombre; sugerencias.style.display = 'none'; btn.click(); });
+                    li.addEventListener('click', function(){ input.value = p.nombre; sugerencias.style.display = 'none'; aplicarFiltros(); });
+                    li.addEventListener('touchstart', function(e){ e.preventDefault(); input.value = p.nombre; sugerencias.style.display = 'none'; aplicarFiltros(); });
                     sugerencias.appendChild(li);
                 });
                 sugerencias.style.display = 'block';
@@ -178,7 +290,6 @@
                     renderSugerenciasConsulta(results);
                 } else {
                     renderSugerenciasConsulta([]);
-                    // mostrar todos
                     cargarProductosConsulta();
                 }
             }, 300);
@@ -198,11 +309,11 @@
 
             document.addEventListener('click', function(e){ if (!e.target.closest || (!e.target.closest('#consulta-sugerencias') && !e.target.closest('#consulta-buscar'))) sugerencias.style.display = 'none'; });
 
-            function limpiarConsultaBuscador(){ input.value = ''; clearBtn.style.display = 'none'; renderSugerenciasConsulta([]); cargarProductosConsulta(); }
+            function limpiarConsultaBuscador(){ input.value = ''; clearBtn.style.display = 'none'; renderSugerenciasConsulta([]); aplicarFiltros(); }
             clearBtn.addEventListener('click', limpiarConsultaBuscador);
             clearBtn.addEventListener('touchstart', function(e){ e.preventDefault(); limpiarConsultaBuscador(); });
 
-            input.addEventListener('keypress', function(e){ if (e.key === 'Enter') btn.click(); });
+            input.addEventListener('keypress', function(e){ if (e.key === 'Enter') aplicarFiltros(); });
         });
 
         // Alinear la X respecto al input (para corregir desalineados en distintos navegadores)
