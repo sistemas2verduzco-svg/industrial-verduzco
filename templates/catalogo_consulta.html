@@ -202,9 +202,17 @@
             const divisa = producto.divisa_ultima || '';
             const precio = Number(producto.precio_compra_ultimo);
             if (!Number.isFinite(precio)) {
-                return 'Precio: N/A';
+                return 'Compa: N/A';
             }
-            return `Precio: $${precio.toFixed(2)} ${divisa}`.trim();
+            return `Compa: $${precio.toFixed(2)} ${divisa}`.trim();
+        }
+
+        function formatPrecioVenta(producto) {
+            const precio = Number(producto.precio);
+            if (!Number.isFinite(precio)) {
+                return 'Venta: N/A';
+            }
+            return `Venta: $${precio.toFixed(2)}`;
         }
 
         function renderProductos(productos) {
@@ -225,7 +233,8 @@
                     <div class="consulta-card-body">
                         <h3>${p.nombre}</h3>
                         <p class="consulta-desc">${p.descripcion || 'Sin descripcion'}</p>
-                        <div class="consulta-price">${formatPrecioCompra(p)}</div>
+                        <div class="consulta-price">${formatPrecioVenta(p)}</div>
+                        <div class="consulta-meta">${formatPrecioCompra(p)}</div>
                         <div class="consulta-meta">${p.categoria || ''}</div>
                     </div>
                 `;
