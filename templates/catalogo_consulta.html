@@ -385,8 +385,26 @@
                     const li = document.createElement('li');
                     li.dataset.index = i;
                     li.innerHTML = `<strong>${escapeHtml(p.nombre)}</strong><span class="small">${escapeHtml(p.categoria||'')}</span>`;
-                    li.addEventListener('click', function(){ input.value = p.nombre; sugerencias.style.display = 'none'; aplicarFiltros(); });
-                    li.addEventListener('touchstart', function(e){ e.preventDefault(); input.value = p.nombre; sugerencias.style.display = 'none'; aplicarFiltros(); });
+                    li.addEventListener('click', function(){
+                        input.value = p.nombre;
+                        sugerencias.style.display = 'none';
+                        aplicarFiltros();
+                    });
+
+                    let moved = false;
+                    li.addEventListener('touchstart', function(){
+                        moved = false;
+                    }, {passive: true});
+                    li.addEventListener('touchmove', function(){
+                        moved = true;
+                    }, {passive: true});
+                    li.addEventListener('touchend', function(e){
+                        if (moved) return;
+                        e.preventDefault();
+                        input.value = p.nombre;
+                        sugerencias.style.display = 'none';
+                        aplicarFiltros();
+                    });
                     sugerencias.appendChild(li);
                 });
                 sugerencias.style.display = 'block';
