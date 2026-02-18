@@ -388,6 +388,7 @@
                     li.addEventListener('click', function(){
                         input.value = p.nombre;
                         sugerencias.style.display = 'none';
+                        input.blur();
                         aplicarFiltros();
                     });
 
@@ -403,6 +404,7 @@
                         e.preventDefault();
                         input.value = p.nombre;
                         sugerencias.style.display = 'none';
+                        input.blur();
                         aplicarFiltros();
                     });
                     sugerencias.appendChild(li);
