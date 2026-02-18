@@ -446,6 +446,16 @@
             clearBtn.addEventListener('touchstart', function(e){ e.preventDefault(); limpiarConsultaBuscador(); });
 
             input.addEventListener('keypress', function(e){ if (e.key === 'Enter') aplicarFiltros(); });
+
+            sugerencias.addEventListener('scroll', function(){
+                input.blur();
+            }, {passive: true});
+
+            window.addEventListener('scroll', function(){
+                if (document.activeElement === input) {
+                    input.blur();
+                }
+            }, {passive: true});
         });
 
         // Alinear la X respecto al input (para corregir desalineados en distintos navegadores)
