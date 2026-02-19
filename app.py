@@ -1388,7 +1388,8 @@ def public_buscar_productos():
             productos_q = productos_q.filter(
                 db.or_(
                     Producto.nombre.ilike(f'%{query}%'),
-                    Producto.descripcion.ilike(f'%{query}%')
+                    Producto.descripcion.ilike(f'%{query}%'),
+                    Producto.clave.ilike(f'%{query}%')
                 )
             )
         if categoria:
@@ -1536,7 +1537,8 @@ def buscar_productos():
         productos = productos.filter(
             db.or_(
                 Producto.nombre.ilike(f'%{query}%'),
-                Producto.descripcion.ilike(f'%{query}%')
+                Producto.descripcion.ilike(f'%{query}%'),
+                Producto.clave.ilike(f'%{query}%')
             )
         )
     
