@@ -262,11 +262,8 @@
                 <ul id="consulta-sugerencias" class="consulta-sugerencias" role="listbox" aria-label="Sugerencias"></ul>
             </div>
             <div class="consulta-categories">
-                <button type="button" class="active" data-categoria="">Todos</button>
-                <button type="button" data-categoria="Motors">Motors</button>
-                <button type="button" data-categoria="Burners">Burners</button>
-                <button type="button" data-categoria="Electrical Parts">Electrical Parts</button>
-                <button type="button" data-categoria="Mechanical Parts">Mechanical Parts</button>
+                <button type="button" class="active" data-clasificacion="">Todos</button>
+                <button type="button" data-clasificacion="CH">CH</button>
             </div>
         </section>
 
@@ -349,14 +346,14 @@
             const input = document.getElementById('consulta-buscar');
             const clearBtn = document.getElementById('consulta-clear');
             const sugerencias = document.getElementById('consulta-sugerencias');
-            const categoryButtons = document.querySelectorAll('[data-categoria]');
-            let categoriaActual = '';
+            const categoryButtons = document.querySelectorAll('[data-clasificacion]');
+            let clasificacionActual = '';
 
             function aplicarFiltros() {
                 const q = input.value.trim();
                 const params = {};
                 if (q) params.q = q;
-                if (categoriaActual) params.categoria = categoriaActual;
+                if (clasificacionActual) params.clasificacion = clasificacionActual;
                 cargarProductosConsulta(params);
             }
 
@@ -364,7 +361,7 @@
                 btn.addEventListener('click', function(){
                     categoryButtons.forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
-                    categoriaActual = btn.dataset.categoria || '';
+                    clasificacionActual = btn.dataset.clasificacion || '';
                     aplicarFiltros();
                 });
             });

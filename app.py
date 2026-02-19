@@ -1381,6 +1381,7 @@ def public_buscar_productos():
     try:
         query = request.args.get('q', '').lower()
         categoria = request.args.get('categoria', '').lower()
+        clasificacion = request.args.get('clasificacion', '').lower()
 
         productos_q = Producto.query
         if query:
@@ -1392,6 +1393,8 @@ def public_buscar_productos():
             )
         if categoria:
             productos_q = productos_q.filter(Producto.categoria.ilike(f'%{categoria}%'))
+        if clasificacion:
+            productos_q = productos_q.filter(Producto.clasificacion.ilike(f'%{clasificacion}%'))
 
         productos = productos_q.all()
         return jsonify([_producto_sanitizado(p) for p in productos])
