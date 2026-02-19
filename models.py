@@ -150,9 +150,14 @@ class Producto(db.Model):
     nombre = db.Column(db.String(255), nullable=False)
     descripcion = db.Column(db.Text, nullable=True)
     precio = db.Column(db.Float, nullable=False)
+    divisa_venta = db.Column(db.String(10), nullable=True)
     cantidad = db.Column(db.Integer, default=0)
     imagen_url = db.Column(db.String(500), nullable=True)
     categoria = db.Column(db.String(100), nullable=True)
+    unidad = db.Column(db.String(50), nullable=True)
+    linea = db.Column(db.String(50), nullable=True)
+    clasificacion = db.Column(db.String(100), nullable=True)
+    clasificacion_departamento = db.Column(db.String(150), nullable=True)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -174,9 +179,14 @@ class Producto(db.Model):
             'nombre': self.nombre,
             'descripcion': self.descripcion,
             'precio': self.precio,
+            'divisa_venta': self.divisa_venta,
             'cantidad': self.cantidad,
             'imagen_url': self.imagen_url,
             'categoria': self.categoria,
+            'unidad': self.unidad,
+            'linea': self.linea,
+            'clasificacion': self.clasificacion,
+            'clasificacion_departamento': self.clasificacion_departamento,
             'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,
             'fecha_actualizacion': self.fecha_actualizacion.isoformat() if self.fecha_actualizacion else None,
             'divisa_ultima': ultimo_pp.divisa if ultimo_pp else None,

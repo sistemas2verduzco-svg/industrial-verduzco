@@ -259,6 +259,7 @@
                                 <p class="clave">${formatClave(producto)}</p>
                                 <p class="categoria">${producto.categoria || 'Sin categoría'}</p>
                                 <p class="descripcion">${producto.descripcion || 'Sin descripción'}</p>
+                                <p class="categoria">${[producto.clasificacion ? `Clasificacion: ${producto.clasificacion}` : null, producto.unidad ? `Unidad: ${producto.unidad}` : null, producto.linea ? `Linea: ${producto.linea}` : null].filter(Boolean).join(' | ')}</p>
                                 <div class="precio-stock">
                                     <span class="precio">Venta: $${producto.precio.toFixed(2)}</span>
                                     <span class="stock">Stock: ${producto.cantidad}</span>
@@ -337,6 +338,7 @@
                                 <p class="clave">${formatClave(producto)}</p>
                                 <p class="categoria">${producto.categoria || 'Sin categoría'}</p>
                                 <p class="descripcion">${producto.descripcion || 'Sin descripción'}</p>
+                                <p class="categoria">${[producto.clasificacion ? `Clasificacion: ${producto.clasificacion}` : null, producto.unidad ? `Unidad: ${producto.unidad}` : null, producto.linea ? `Linea: ${producto.linea}` : null].filter(Boolean).join(' | ')}</p>
                                 <div class="precio-stock">
                                     <span class="precio">Venta: $${producto.precio.toFixed(2)}</span>
                                     <span class="stock">Stock: ${producto.cantidad}</span>

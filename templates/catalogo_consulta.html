@@ -312,6 +312,11 @@
                 const imagenHtml = p.imagen_url
                     ? `<img src="${p.imagen_url}" alt="${p.nombre}">`
                     : '<span>Sin imagen</span>';
+                const metaParts = [
+                    p.clasificacion ? `Clasificacion: ${p.clasificacion}` : null,
+                    p.unidad ? `Unidad: ${p.unidad}` : null,
+                    p.linea ? `Linea: ${p.linea}` : null
+                ].filter(Boolean);
                 card.innerHTML = `
                     <div class="consulta-card-media">${imagenHtml}</div>
                     <div class="consulta-card-body">
@@ -319,7 +324,7 @@
                         <p class="consulta-desc">${p.descripcion || 'Sin descripcion'}</p>
                         <div class="consulta-price">${formatPrecioVenta(p)}</div>
                         <div class="consulta-meta">${formatPrecioCompra(p)}</div>
-                        <div class="consulta-meta">${p.categoria || ''}</div>
+                        <div class="consulta-meta">${metaParts.join(' | ')}</div>
                     </div>
                 `;
                 container.appendChild(card);
