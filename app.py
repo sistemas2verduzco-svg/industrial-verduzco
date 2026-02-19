@@ -2302,7 +2302,6 @@ def upload_imagen():
 
 # GET - Servir imagen (ruta para acceso de archivos)
 @app.route('/uploads/productos/<filename>')
-@login_required
 def descargar_imagen(filename):
     from flask import send_from_directory
     try:

@@ -264,6 +264,7 @@
             <div class="consulta-categories">
                 <button type="button" class="active" data-clasificacion="">Todos</button>
                 <button type="button" data-clasificacion="CH">CH</button>
+                <button type="button" data-clasificacion="VENTAS">Ventas</button>
             </div>
         </section>
 
@@ -307,7 +308,7 @@
                 const card = document.createElement('div');
                 card.className = 'consulta-card';
                 const imagenHtml = p.imagen_url
-                    ? `<img src="${p.imagen_url}" alt="${p.nombre}">`
+                    ? `<img src="${p.imagen_url}" alt="${p.nombre}" onerror="this.remove(); this.parentNode.textContent='Sin imagen';">`
                     : '<span>Sin imagen</span>';
                 const metaParts = [
                     p.clasificacion ? `Clasificacion: ${p.clasificacion}` : null,
@@ -318,6 +319,7 @@
                     <div class="consulta-card-media">${imagenHtml}</div>
                     <div class="consulta-card-body">
                         <h3>${p.nombre}</h3>
+                        <p class="consulta-meta">Clave: ${p.clave || 'N/A'}</p>
                         <p class="consulta-desc">${p.descripcion || 'Sin descripcion'}</p>
                         <div class="consulta-price">${formatPrecioVenta(p)}</div>
                         <div class="consulta-meta">${formatPrecioCompra(p)}</div>

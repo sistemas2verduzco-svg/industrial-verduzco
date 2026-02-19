@@ -252,7 +252,7 @@
                         };
                         card.innerHTML = `
                             <div class="producto-imagen">
-                                ${producto.imagen_url ? `<img src="${producto.imagen_url}" alt="${producto.nombre}">` : '<div class="no-image">Sin imagen</div>'}
+                                ${producto.imagen_url ? `<img src="${producto.imagen_url}" alt="${producto.nombre}" onerror="this.remove(); this.parentNode.innerHTML='<div class=\"no-image\">Sin imagen</div>';">` : '<div class="no-image">Sin imagen</div>'}
                             </div>
                             <div class="producto-info">
                                 <h3>${producto.nombre}</h3>
@@ -331,7 +331,7 @@
                         };
                         card.innerHTML = `
                             <div class="producto-imagen">
-                                ${producto.imagen_url ? `<img src="${producto.imagen_url}" alt="${producto.nombre}">` : '<div class="no-image">Sin imagen</div>'}
+                                ${producto.imagen_url ? `<img src="${producto.imagen_url}" alt="${producto.nombre}" onerror="this.remove(); this.parentNode.innerHTML='<div class=\"no-image\">Sin imagen</div>';">` : '<div class="no-image">Sin imagen</div>'}
                             </div>
                             <div class="producto-info">
                                 <h3>${producto.nombre}</h3>
