@@ -46,7 +46,19 @@ def _find_header_row(ws, max_rows=5):
     return None
 
 
-def import_lista_precios(path, sheet_name='Hoja1'):
+def _merge_clasificacion(*values):
+    items = []
+    for value in values:
+        if not value:
+            continue
+        for part in str(value).split(','):
+            clean = part.strip().upper()
+            if clean and clean not in items:
+                items.append(clean)
+    return ','.join(items) if items else None
+
+
+def import_lista_precios(path, sheet_name='Hoja1', clasificacion_tag='VENTAS'):
     wb = load_workbook(path, data_only=True)
     if sheet_name not in wb.sheetnames:
         raise ValueError(f"Hoja no encontrada: {sheet_name}")
@@ -111,7 +123,9 @@ def import_lista_precios(path, sheet_name='Hoja1'):
             if linea_idx is not None and linea_idx < len(row):
                 producto.linea = str(row[linea_idx]).strip() if row[linea_idx] else producto.linea
             if clasif_idx is not None and clasif_idx < len(row):
-                producto.clasificacion = str(row[clasif_idx]).strip() if row[clasif_idx] else producto.clasificacion
+                producto.clasificacion = _merge_clasificacion(producto.clasificacion, row[clasif_idx], clasificacion_tag)
+            else:
+                producto.clasificacion = _merge_clasificacion(producto.clasificacion, clasificacion_tag)
             if clasif_dep_idx is not None and clasif_dep_idx < len(row):
                 producto.clasificacion_departamento = str(row[clasif_dep_idx]).strip() if row[clasif_dep_idx] else producto.clasificacion_departamento
             stats['actualizados'] += 1
@@ -131,7 +145,11 @@ def main():
     if len(sys.argv) > 2:
         sheet_name = sys.argv[2]
 
-    stats = import_lista_precios(path, sheet_name=sheet_name)
+    clasificacion_tag = 'VENTAS'
+    if len(sys.argv) > 3:
+        clasificacion_tag = sys.argv[3]
+
+    stats = import_lista_precios(path, sheet_name=sheet_name, clasificacion_tag=clasificacion_tag)
     print('Import terminado:', stats)
 
 
