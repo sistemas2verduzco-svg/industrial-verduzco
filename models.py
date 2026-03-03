@@ -444,6 +444,9 @@ class Máquina(db.Model):
     # Plantilla por defecto asignada a la máquina (nombre de plantilla)
     plantilla_default = db.Column(db.String(255), nullable=True)
     activo = db.Column(db.Boolean, default=True)
+    # Posición en el mapa (px) para la vista de planta
+    pos_x = db.Column(db.Integer, nullable=True)
+    pos_y = db.Column(db.Integer, nullable=True)
 
     # Relaciones
     componentes = db.relationship('ComponenteMáquina', backref='maquina', lazy=True, cascade='all, delete-orphan')
@@ -457,6 +460,8 @@ class Máquina(db.Model):
             'tipo': self.tipo,
             'descripcion': self.descripcion,
             'imagen_url': self.imagen_url,
+            'pos_x': self.pos_x,
+            'pos_y': self.pos_y,
             'fecha_creacion': self.fecha_creacion.isoformat(),
             'fecha_actualizacion': self.fecha_actualizacion.isoformat(),
             'componentes': [c.to_dict() for c in self.componentes]

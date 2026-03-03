@@ -520,6 +520,58 @@ def hojas_ruta_list():
     return render_template('hojas_ruta_list.html', maquinas=maquinas_data)
 
 
+@app.route('/mapa_maquinas')
+@login_required
+def mapa_maquinas():
+    """Vista de mapa de maquinas con estado en tiempo real."""
+    return render_template('mapa_maquinas.html')
+
+
+@app.route('/api/mapa_maquinas')
+@login_required
+def api_mapa_maquinas():
+    """Datos para el mapa de maquinas (estado, hoja activa, pieza, tiempo)."""
+    maquinas = Máquina.query.order_by(Máquina.nombre.asc()).all()
+    data = []
+    for idx, maq in enumerate(maquinas):
+        hoja_activa = HojaRuta.query.filter_by(maquina_id=maq.id, estado='activa').first()
+        estacion_actual = None
+        if hoja_activa:
+            estacion_actual = EstacionTrabajo.query.filter_by(
+                hoja_ruta_id=hoja_activa.id,
+                estado='en_curso'
+            ).order_by(EstacionTrabajo.orden).first()
+
+        if hoja_activa:
+            if estacion_actual:
+                estado_code = 'produciendo'
+                estado_label = 'En curso'
+            else:
+                estado_code = 'activa'
+                estado_label = 'Activa'
+        else:
+            estado_code = 'sin_hoja'
+            estado_label = 'Sin hoja'
+
+        data.append({
+            'id': maq.id,
+            'nombre': maq.nombre,
+            'descripcion': maq.descripcion,
+            'tipo': maq.tipo,
+            'plantilla_default': maq.plantilla_default,
+            'pos_x': getattr(maq, 'pos_x', None),
+            'pos_y': getattr(maq, 'pos_y', None),
+            'estado_code': estado_code,
+            'estado_label': estado_label,
+            'estacion_actual': estacion_actual.nombre if estacion_actual else None,
+            'hoja_serie': hoja_activa.nombre if hoja_activa else None,
+            'pieza': hoja_activa.pn if hoja_activa else None,
+            'tiempo_total': hoja_activa.total_tiempo if hoja_activa else None
+        })
+
+    return jsonify({'maquinas': data})
+
+
 @app.route('/hojas_ruta_form')
 @login_required
 def hojas_ruta_form():

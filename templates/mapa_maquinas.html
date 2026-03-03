@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mapa de Maquinas</title>
+    <style>
+        :root {
+            --bg-1: #f2f0ea;
+            --bg-2: #dfe6e1;
+            --ink: #1e1d1b;
+            --muted: #5c5b58;
+            --panel: #ffffff;
+            --ok: #2e8b57;
+            --warn: #c47f00;
+            --idle: #6b7280;
+            --shadow: 0 10px 30px rgba(0,0,0,0.12);
+            --line: #e5e2dc;
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: "Space Grotesk", "Montserrat", "Trebuchet MS", Verdana, sans-serif;
+            color: var(--ink);
+            background: radial-gradient(1200px 600px at 10% 10%, #f8f5ef 0, var(--bg-1) 60%),
+                        linear-gradient(120deg, var(--bg-2), #f6f2ea);
+            min-height: 100vh;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 28px 12px;
+        }
+
+        .title {
+            font-size: 22px;
+            letter-spacing: 0.5px;
+            font-weight: 700;
+        }
+
+        .legend {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            display: inline-block;
+            margin-right: 6px;
+        }
+
+        .map-wrap {
+            position: relative;
+            margin: 0 18px 24px;
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(250,248,243,0.8));
+            box-shadow: var(--shadow);
+            min-height: 70vh;
+            overflow: hidden;
+        }
+
+        .grid-floor {
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(to right, rgba(0,0,0,0.04) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0,0,0,0.04) 1px, transparent 1px);
+            background-size: 40px 40px;
+            opacity: 0.35;
+            pointer-events: none;
+        }
+
+        .machine-card {
+            position: absolute;
+            width: 240px;
+            min-height: 150px;
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 12px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .machine-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 26px rgba(0,0,0,0.12);
+        }
+
+        .machine-top {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .machine-svg {
+            width: 64px;
+            height: 64px;
+            flex: 0 0 auto;
+        }
+
+        .machine-name {
+            font-size: 15px;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .machine-state {
+            font-size: 12px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 999px;
+            display: inline-block;
+            margin-top: 4px;
+        }
+
+        .state-produciendo { background: rgba(46,139,87,0.12); color: var(--ok); }
+        .state-activa { background: rgba(196,127,0,0.12); color: var(--warn); }
+        .state-sin_hoja { background: rgba(107,114,128,0.12); color: var(--idle); }
+
+        .machine-body {
+            margin-top: 10px;
+            font-size: 12px;
+            color: var(--muted);
+            display: grid;
+            gap: 4px;
+        }
+
+        .machine-body strong {
+            color: var(--ink);
+            font-weight: 600;
+        }
+
+        .refresh {
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        @media (max-width: 900px) {
+            .machine-card { width: 200px; }
+        }
+
+        @media (max-width: 700px) {
+            header { flex-direction: column; align-items: flex-start; gap: 8px; }
+            .map-wrap { margin: 0 10px 20px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="title">Mapa de Maquinas en Produccion</div>
+        <div class="legend">
+            <span><span class="legend-dot" style="background: var(--ok);"></span>En curso</span>
+            <span><span class="legend-dot" style="background: var(--warn);"></span>Activa</span>
+            <span><span class="legend-dot" style="background: var(--idle);"></span>Sin hoja</span>
+            <span class="refresh" id="refreshInfo">Actualizando...</span>
+        </div>
+    </header>
+
+    <div class="map-wrap" id="mapWrap">
+        <div class="grid-floor"></div>
+    </div>
+
+    <script>
+        const MAP_REFRESH_MS = 5000;
+        const MAP_PADDING = 16;
+        const CARD_W = 240;
+        const CARD_H = 170;
+        const GRID_COLS = 4;
+
+        function machineSvg(color) {
+            return `
+            <svg class="machine-svg" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+                <rect x="10" y="60" width="100" height="40" rx="8" fill="#e9ecef" stroke="#c9c5bf" />
+                <rect x="20" y="30" width="50" height="30" rx="6" fill="#f4f1ec" stroke="#c9c5bf" />
+                <rect x="74" y="36" width="26" height="18" rx="4" fill="#fff" stroke="#c9c5bf" />
+                <circle cx="28" cy="92" r="6" fill="${color}" />
+                <circle cx="92" cy="92" r="6" fill="${color}" />
+                <path d="M26 52h18" stroke="#9c9a94" stroke-width="3" />
+                <path d="M60 78h22" stroke="#9c9a94" stroke-width="3" />
+            </svg>`;
+        }
+
+        function stateColor(code) {
+            if (code === 'produciendo') return '#2e8b57';
+            if (code === 'activa') return '#c47f00';
+            return '#6b7280';
+        }
+
+        function computeFallbackPosition(idx) {
+            const col = idx % GRID_COLS;
+            const row = Math.floor(idx / GRID_COLS);
+            return {
+                x: MAP_PADDING + col * (CARD_W + 18),
+                y: MAP_PADDING + row * (CARD_H + 16)
+            };
+        }
+
+        function renderMachines(list) {
+            const wrap = document.getElementById('mapWrap');
+            wrap.querySelectorAll('.machine-card').forEach(el => el.remove());
+
+            list.forEach((m, idx) => {
+                const pos = (Number.isFinite(m.pos_x) && Number.isFinite(m.pos_y))
+                    ? { x: m.pos_x, y: m.pos_y }
+                    : computeFallbackPosition(idx);
+
+                const card = document.createElement('div');
+                card.className = `machine-card state-${m.estado_code}`;
+                card.style.left = `${pos.x}px`;
+                card.style.top = `${pos.y}px`;
+
+                card.innerHTML = `
+                    <div class="machine-top">
+                        ${machineSvg(stateColor(m.estado_code))}
+                        <div>
+                            <div class="machine-name">${m.nombre}</div>
+                            <div class="machine-state state-${m.estado_code}">${m.estado_label}</div>
+                        </div>
+                    </div>
+                    <div class="machine-body">
+                        <div><strong>Pieza:</strong> ${m.pieza || 'N/A'}</div>
+                        <div><strong>Hoja:</strong> ${m.hoja_serie || 'N/A'}</div>
+                        <div><strong>Tiempo:</strong> ${m.tiempo_total || 'N/A'}</div>
+                        <div><strong>Estacion:</strong> ${m.estacion_actual || 'Sin produccion'}</div>
+                    </div>
+                `;
+
+                wrap.appendChild(card);
+            });
+        }
+
+        async function loadMapa() {
+            const info = document.getElementById('refreshInfo');
+            try {
+                const res = await fetch('/api/mapa_maquinas');
+                const data = await res.json();
+                renderMachines(data.maquinas || []);
+                info.textContent = `Actualizado ${new Date().toLocaleTimeString()}`;
+            } catch (err) {
+                info.textContent = 'Error actualizando';
+                console.error(err);
+            }
+        }
+
+        loadMapa();
+        setInterval(loadMapa, MAP_REFRESH_MS);
+    </script>
+</body>
+</html>
