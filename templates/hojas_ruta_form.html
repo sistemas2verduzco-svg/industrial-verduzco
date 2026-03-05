@@ -455,7 +455,11 @@
                     throw new Error(data.error || 'No se pudo crear la hoja');
                 }
 
-                alert('Hoja creada: ' + (data.nombre || 'OK'));
+                let msg = 'Hoja creada: ' + (data.nombre || 'OK');
+                if (data.ya_paso_por_maquina) {
+                    msg += '\nAviso: esta clave ya habia pasado por esta maquina ' + data.veces_previas_maquina + ' vez/veces.';
+                }
+                alert(msg);
                 window.location.reload();
             } catch (err) {
                 console.error(err);

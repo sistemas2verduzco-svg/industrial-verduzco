@@ -9,7 +9,7 @@ from sqlalchemy import text
 from functools import wraps
 import secrets
 from werkzeug.utils import secure_filename
-from datetime import datetime
+from datetime import datetime, timedelta
 from time import time
 import logging
 from openpyxl import Workbook
@@ -28,6 +28,181 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Jornada laboral para planeacion de hojas de ruta
+WORKDAY_BLOCKS = ((6, 30, 12, 0), (12, 30, 16, 0))
+WORKDAY_SECONDS = (5 * 3600 + 30 * 60) + (3 * 3600 + 30 * 60)  # 9h
+
+
+def _norm_text(value):
+    text = str(value or '').upper().strip()
+    return (text.replace('Á', 'A')
+                .replace('É', 'E')
+                .replace('Í', 'I')
+                .replace('Ó', 'O')
+                .replace('Ú', 'U'))
+
+
+def _parse_time_to_seconds(value):
+    if value is None:
+        return 0
+    raw = str(value).strip()
+    if not raw:
+        return 0
+
+    try:
+        parts = [int(p) for p in raw.split(':')]
+    except Exception:
+        return 0
+
+    if len(parts) == 3:
+        h, m, s = parts
+        return max(0, h * 3600 + m * 60 + s)
+    if len(parts) == 2:
+        m, s = parts
+        return max(0, m * 60 + s)
+    if len(parts) == 1:
+        return max(0, parts[0])
+    return 0
+
+
+def _format_seconds_to_hms(total_seconds):
+    sec = max(0, int(total_seconds or 0))
+    h = sec // 3600
+    m = (sec % 3600) // 60
+    s = sec % 60
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
+
+def _station_seconds(est):
+    for field in ('t_e', 't_tct', 't_tco', 't_to'):
+        sec = _parse_time_to_seconds(getattr(est, field, None))
+        if sec > 0:
+            return sec
+    return 0
+
+
+def _stations_for_machine_type(estaciones, maquina_tipo):
+    if not maquina_tipo:
+        return estaciones
+
+    tipo = _norm_text(maquina_tipo)
+    filtered = []
+    for est in estaciones:
+        haystack = ' '.join([
+            _norm_text(getattr(est, 'centro_trabajo', '')),
+            _norm_text(getattr(est, 'nombre', '')),
+            _norm_text(getattr(est, 'operacion', '')),
+        ])
+        if tipo and tipo in haystack:
+            filtered.append(est)
+    return filtered or estaciones
+
+
+def _align_to_work_slot(dt):
+    base = dt if isinstance(dt, datetime) else datetime.utcnow()
+    b1s = base.replace(hour=WORKDAY_BLOCKS[0][0], minute=WORKDAY_BLOCKS[0][1], second=0, microsecond=0)
+    b1e = base.replace(hour=WORKDAY_BLOCKS[0][2], minute=WORKDAY_BLOCKS[0][3], second=0, microsecond=0)
+    b2s = base.replace(hour=WORKDAY_BLOCKS[1][0], minute=WORKDAY_BLOCKS[1][1], second=0, microsecond=0)
+    b2e = base.replace(hour=WORKDAY_BLOCKS[1][2], minute=WORKDAY_BLOCKS[1][3], second=0, microsecond=0)
+
+    if base < b1s:
+        return b1s
+    if b1s <= base < b1e:
+        return base
+    if b1e <= base < b2s:
+        return b2s
+    if b2s <= base < b2e:
+        return base
+    next_day = base + timedelta(days=1)
+    return next_day.replace(hour=WORKDAY_BLOCKS[0][0], minute=WORKDAY_BLOCKS[0][1], second=0, microsecond=0)
+
+
+def _add_work_seconds(start_dt, seconds):
+    remaining = max(0, int(seconds or 0))
+    current = _align_to_work_slot(start_dt)
+
+    if remaining == 0:
+        return current
+
+    while remaining > 0:
+        b1s = current.replace(hour=WORKDAY_BLOCKS[0][0], minute=WORKDAY_BLOCKS[0][1], second=0, microsecond=0)
+        b1e = current.replace(hour=WORKDAY_BLOCKS[0][2], minute=WORKDAY_BLOCKS[0][3], second=0, microsecond=0)
+        b2s = current.replace(hour=WORKDAY_BLOCKS[1][0], minute=WORKDAY_BLOCKS[1][1], second=0, microsecond=0)
+        b2e = current.replace(hour=WORKDAY_BLOCKS[1][2], minute=WORKDAY_BLOCKS[1][3], second=0, microsecond=0)
+
+        if b1s <= current < b1e:
+            block_end = b1e
+        elif b2s <= current < b2e:
+            block_end = b2e
+        else:
+            current = _align_to_work_slot(current)
+            continue
+
+        available = max(0, int((block_end - current).total_seconds()))
+        if remaining <= available:
+            return current + timedelta(seconds=remaining)
+
+        remaining -= available
+        current = _align_to_work_slot(block_end + timedelta(seconds=1))
+
+    return current
+
+
+def _working_seconds_between(start_dt, end_dt):
+    if not isinstance(start_dt, datetime) or not isinstance(end_dt, datetime):
+        return 0
+    if end_dt <= start_dt:
+        return 0
+
+    total = 0
+    day = start_dt.date()
+    end_day = end_dt.date()
+
+    while day <= end_day:
+        for h1, m1, h2, m2 in WORKDAY_BLOCKS:
+            block_start = datetime.combine(day, datetime.min.time()).replace(hour=h1, minute=m1)
+            block_end = datetime.combine(day, datetime.min.time()).replace(hour=h2, minute=m2)
+
+            overlap_start = max(block_start, start_dt)
+            overlap_end = min(block_end, end_dt)
+            if overlap_end > overlap_start:
+                total += int((overlap_end - overlap_start).total_seconds())
+
+        day += timedelta(days=1)
+
+    return max(0, total)
+
+
+def _apply_hoja_time_plan(hoja, estaciones, maquina_tipo=None, fallback_total_time=None):
+    cantidad = max(1, int(hoja.cantidad_piezas or 0))
+    estaciones_base = _stations_for_machine_type(estaciones, maquina_tipo)
+
+    per_piece_seconds = sum(_station_seconds(e) for e in estaciones_base)
+
+    # Si no hubo tiempos por proceso, usar último T/O o fallback provisto
+    if per_piece_seconds <= 0:
+        for est in sorted(estaciones_base, key=lambda x: getattr(x, 'orden', 0), reverse=True):
+            sec = _parse_time_to_seconds(getattr(est, 't_to', None))
+            if sec > 0:
+                per_piece_seconds = sec
+                break
+
+    total_seconds = per_piece_seconds * cantidad
+    if total_seconds <= 0 and fallback_total_time:
+        total_seconds = _parse_time_to_seconds(fallback_total_time)
+
+    if total_seconds <= 0:
+        hoja.total_tiempo = None
+        hoja.dias_a_laborar = None
+        hoja.fecha_termino = None
+        return
+
+    hoja.total_tiempo = _format_seconds_to_hms(total_seconds)
+    hoja.dias_a_laborar = round(total_seconds / WORKDAY_SECONDS, 2)
+
+    inicio = hoja.fecha_salida or datetime.utcnow()
+    hoja.fecha_termino = _add_work_seconds(inicio, total_seconds)
 
 # Simple in-memory login rate limiter
 # Keys: by IP address. Tracks [attempt_count, first_attempt_ts, locked_until_ts]
@@ -520,16 +695,22 @@ def hojas_ruta_list():
 
     maquinas = sorted(maquinas, key=maquina_sort_key)
     
+    hojas_pendientes = HojaRuta.query.filter_by(maquina_id=None, estado='activa').order_by(HojaRuta.fecha_creacion.asc()).all()
+
     # Obtener hoja activa para cada máquina
     maquinas_data = []
     for maq in maquinas:
         hoja_activa = HojaRuta.query.filter_by(maquina_id=maq.id, estado='activa').first()
         estacion_actual = None
+        tiempo_real = None
         if hoja_activa:
             estacion_actual = EstacionTrabajo.query.filter_by(
                 hoja_ruta_id=hoja_activa.id, 
                 estado='en_curso'
             ).order_by(EstacionTrabajo.orden).first()
+            if hoja_activa.fecha_salida:
+                elapsed = _working_seconds_between(hoja_activa.fecha_salida, datetime.utcnow())
+                tiempo_real = _format_seconds_to_hms(elapsed)
         
         maquinas_data.append({
             'id': maq.id,
@@ -539,11 +720,23 @@ def hojas_ruta_list():
             'hoja_activa': hoja_activa.to_dict() if hoja_activa else None,
             'activo': getattr(maq, 'activo', False),
             'estacion_actual': estacion_actual.nombre if estacion_actual else 'Sin producción',
+            'tiempo_real': tiempo_real,
             'tipo': getattr(maq, 'tipo', None),
             'plantilla_default': getattr(maq, 'plantilla_default', None)
         })
-    
-    return render_template('hojas_ruta_list.html', maquinas=maquinas_data)
+
+    pendientes_data = []
+    for h in hojas_pendientes:
+        pendientes_data.append({
+            'id': h.id,
+            'serie': h.nombre,
+            'clave': h.pn,
+            'cantidad_piezas': h.cantidad_piezas,
+            'tiempo_total': h.total_tiempo,
+            'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None,
+        })
+
+    return render_template('hojas_ruta_list.html', maquinas=maquinas_data, hojas_pendientes=pendientes_data)
 
 
 @app.route('/mapa_maquinas')
@@ -593,7 +786,8 @@ def api_mapa_maquinas():
             'estacion_actual': estacion_actual.nombre if estacion_actual else None,
             'hoja_serie': hoja_activa.nombre if hoja_activa else None,
             'pieza': hoja_activa.pn if hoja_activa else None,
-            'tiempo_total': hoja_activa.total_tiempo if hoja_activa else None
+            'tiempo_total': hoja_activa.total_tiempo if hoja_activa else None,
+            'fecha_termino': hoja_activa.fecha_termino.isoformat() if (hoja_activa and hoja_activa.fecha_termino) else None
         })
 
     return jsonify({'maquinas': data})
@@ -696,15 +890,26 @@ def api_crear_hoja_ruta():
     if not clave:
         return jsonify({'error': 'Clave no encontrada'}), 404
 
+    maquina_id = int(data.get('maquina_id')) if data.get('maquina_id') else None
+    if maquina_id:
+        hoja_activa_misma_clave = HojaRuta.query.filter_by(maquina_id=maquina_id, pn=clave.clave, estado='activa').first()
+        if hoja_activa_misma_clave:
+            return jsonify({'error': 'La clave ya tiene una hoja activa en esta máquina'}), 409
+
+    veces_previas_maquina = 0
+    if maquina_id:
+        veces_previas_maquina = HojaRuta.query.filter_by(maquina_id=maquina_id, pn=clave.clave).count()
+
     procesos = ClaveProceso.query.filter_by(clave_id=clave_id).order_by(ClaveProceso.orden).all()
     if not procesos:
         return jsonify({'error': 'La clave seleccionada no tiene procesos definidos'}), 400
 
     try:
         fecha_actual = datetime.utcnow()
+        maquina = Máquina.query.get(int(data.get('maquina_id'))) if data.get('maquina_id') else None
 
         hoja = HojaRuta(
-            maquina_id=int(data.get('maquina_id')) if data.get('maquina_id') else None,
+            maquina_id=maquina_id,
             nombre='PENDIENTE_SERIE',
             descripcion=comentarios or None,
             estado='activa',
@@ -737,6 +942,7 @@ def api_crear_hoja_ruta():
         clave_segura = ''.join(ch for ch in (clave.clave or '') if ch.isalnum())[:10] or 'CLAVE'
         hoja.nombre = f"HR-{fecha_actual.strftime('%Y%m%d')}-{clave_segura}-{hoja.id:04d}"
 
+        estaciones_creadas = []
         for idx, cp in enumerate(procesos, start=1):
             estacion = EstacionTrabajo(
                 hoja_ruta_id=hoja.id,
@@ -756,12 +962,23 @@ def api_crear_hoja_ruta():
                 estado='pendiente'
             )
             db.session.add(estacion)
+            estaciones_creadas.append(estacion)
+
+        _apply_hoja_time_plan(
+            hoja,
+            estaciones_creadas,
+            maquina_tipo=maquina.tipo if maquina else None,
+            fallback_total_time=hoja.total_tiempo,
+        )
 
         db.session.commit()
         logger.info(
             f"[HOJAS_RUTA] Nueva hoja creada {hoja.nombre} ({hoja.id}) con {len(procesos)} estaciones para clave {clave.clave}"
         )
-        return jsonify(hoja.to_dict()), 201
+        result = hoja.to_dict()
+        result['ya_paso_por_maquina'] = veces_previas_maquina > 0
+        result['veces_previas_maquina'] = veces_previas_maquina
+        return jsonify(result), 201
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error creando hoja de ruta: {e}")
@@ -801,6 +1018,15 @@ def api_actualizar_hoja_ruta(hoja_id):
         if cantidad <= 0:
             return jsonify({'error': 'cantidad_piezas debe ser mayor a 0'}), 400
         hoja.cantidad_piezas = cantidad
+
+    estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
+    maquina = Máquina.query.get(hoja.maquina_id) if hoja.maquina_id else None
+    _apply_hoja_time_plan(
+        hoja,
+        estaciones,
+        maquina_tipo=maquina.tipo if maquina else None,
+        fallback_total_time=hoja.total_tiempo,
+    )
     
     db.session.commit()
     logger.info(f"[HOJAS_RUTA] Hoja actualizada: {hoja_id}")
@@ -912,6 +1138,93 @@ def api_desactivar_maquina(maquina_id):
         return jsonify({'error': 'No se pudo desactivar la máquina.'}), 500
 
 
+@app.route('/api/maquinas/<int:maquina_id>/paro_mantenimiento', methods=['POST'])
+@login_required
+def api_paro_mantenimiento(maquina_id):
+    """Poner máquina en paro por mantenimiento (desactivada)."""
+    maq = Máquina.query.get_or_404(maquina_id)
+    try:
+        maq.activo = False
+        db.session.commit()
+        logger.info(f"[MAQUINA] Paro mantenimiento maquina {maquina_id}")
+        return jsonify({'ok': True, 'maquina_id': maquina_id, 'activo': False, 'motivo': 'mantenimiento'}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error en paro mantenimiento: {e}", exc_info=True)
+        return jsonify({'error': 'No se pudo registrar el paro por mantenimiento'}), 500
+
+
+@app.route('/api/maquinas/<int:maquina_id>/asignar_hoja', methods=['POST'])
+@login_required
+def api_asignar_hoja_maquina(maquina_id):
+    """Asignar hoja de ruta pendiente (sin máquina) a una máquina."""
+    maq = Máquina.query.get_or_404(maquina_id)
+    data = request.get_json() or {}
+    hoja_id = data.get('hoja_id')
+    if not hoja_id:
+        return jsonify({'error': 'hoja_id requerido'}), 400
+
+    hoja = HojaRuta.query.get_or_404(int(hoja_id))
+    if hoja.maquina_id and hoja.maquina_id != maq.id:
+        return jsonify({'error': 'La hoja ya está asignada a otra máquina'}), 409
+
+    activa_actual = HojaRuta.query.filter_by(maquina_id=maq.id, estado='activa').first()
+    if activa_actual and activa_actual.id != hoja.id:
+        return jsonify({'error': 'La máquina ya tiene una hoja activa asignada'}), 409
+
+    try:
+        hoja.maquina_id = maq.id
+        if not hoja.fecha_salida:
+            hoja.fecha_salida = datetime.utcnow()
+        hoja.estado = 'activa'
+
+        estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
+        _apply_hoja_time_plan(
+            hoja,
+            estaciones,
+            maquina_tipo=maq.tipo,
+            fallback_total_time=hoja.total_tiempo,
+        )
+
+        db.session.commit()
+        logger.info(f"[HOJAS_RUTA] Hoja {hoja.id} asignada a maquina {maquina_id}")
+        return jsonify({'success': True, 'hoja': hoja.to_dict()}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error asignando hoja a maquina: {e}", exc_info=True)
+        return jsonify({'error': 'No se pudo asignar la hoja a la máquina'}), 500
+
+
+@app.route('/api/maquinas/<int:maquina_id>/retirar_hoja', methods=['POST'])
+@login_required
+def api_retirar_hoja_maquina(maquina_id):
+    """Retirar/desasignar hoja activa de la máquina y marcarla como completada."""
+    maq = Máquina.query.get_or_404(maquina_id)
+    data = request.get_json() or {}
+    hoja_id = data.get('hoja_id')
+
+    if hoja_id:
+        hoja = HojaRuta.query.get_or_404(int(hoja_id))
+        if hoja.maquina_id != maq.id:
+            return jsonify({'error': 'La hoja no pertenece a esta máquina'}), 409
+    else:
+        hoja = HojaRuta.query.filter_by(maquina_id=maq.id, estado='activa').order_by(HojaRuta.fecha_creacion.desc()).first()
+        if not hoja:
+            return jsonify({'error': 'No hay hoja activa asignada a esta máquina'}), 404
+
+    try:
+        hoja.estado = 'completada'
+        hoja.fecha_termino = datetime.utcnow()
+        hoja.maquina_id = None
+        db.session.commit()
+        logger.info(f"[HOJAS_RUTA] Hoja {hoja.id} retirada de maquina {maquina_id}")
+        return jsonify({'success': True, 'hoja': hoja.to_dict()}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error retirando hoja de maquina: {e}", exc_info=True)
+        return jsonify({'error': 'No se pudo retirar la hoja de la máquina'}), 500
+
+
 @app.route('/api/produccion/ingresar_piezas', methods=['POST'])
 @login_required
 def api_ingresar_piezas():
@@ -929,9 +1242,21 @@ def api_ingresar_piezas():
         return jsonify({'error': 'maquina_id, cantidad y clave son requeridos'}), 400
 
     try:
+        maquina_id_int = int(maquina_id)
+    except Exception:
+        return jsonify({'error': 'maquina_id inválido'}), 400
+
+    hoja_activa_misma_clave = HojaRuta.query.filter_by(maquina_id=maquina_id_int, pn=clave, estado='activa').first()
+    if hoja_activa_misma_clave:
+        return jsonify({'error': 'Esta pieza/clave ya tiene hoja activa en esta máquina'}), 409
+
+    veces_previas_maquina = HojaRuta.query.filter_by(maquina_id=maquina_id_int, pn=clave).count()
+
+    try:
         nombre = f"Producción {clave}"
+        maquina = Máquina.query.get(maquina_id_int)
         hoja = HojaRuta(
-            maquina_id=maquina_id,
+            maquina_id=maquina_id_int,
             nombre=nombre,
             producto=producto or clave,
             pn=clave,
@@ -943,9 +1268,31 @@ def api_ingresar_piezas():
         db.session.add(hoja)
         db.session.flush()  # obtener id sin commit
 
-        # Clonar plantillas de estaciones según plantilla_nombre (si viene) o por tipo de la máquina
-        try:
-            maquina = Máquina.query.get(maquina_id)
+        estaciones_creadas = []
+
+        # Preferir procesos por clave (modulo procesos y claves)
+        clave_obj = ClaveProducto.query.filter_by(clave=clave).first()
+        if clave_obj:
+            procesos = ClaveProceso.query.filter_by(clave_id=clave_obj.id).order_by(ClaveProceso.orden).all()
+            for idx, cp in enumerate(procesos, start=1):
+                est = EstacionTrabajo(
+                    hoja_ruta_id=hoja.id,
+                    nombre=f"{cp.operacion or cp.proceso.operacion or cp.proceso.nombre}",
+                    pro_c=str(idx),
+                    centro_trabajo=cp.centro_trabajo or cp.proceso.centro_trabajo or '',
+                    operacion=cp.operacion or cp.proceso.operacion or cp.proceso.nombre or '',
+                    orden=cp.orden,
+                    t_e=cp.t_e or cp.proceso.tiempo_estimado or '',
+                    t_tct=cp.t_tct or '',
+                    t_tco=cp.t_tco or '',
+                    t_to=cp.t_to or '',
+                    estado='pendiente'
+                )
+                db.session.add(est)
+                estaciones_creadas.append(est)
+
+        # Fallback: plantillas por tipo si la clave no existe o no tiene procesos
+        if not estaciones_creadas:
             plantilla_nombre = data.get('plantilla_nombre')
             if plantilla_nombre:
                 plantillas = EstacionPlantilla.query.filter_by(maquina_tipo=maquina.tipo if maquina else None, plantilla_nombre=plantilla_nombre).order_by(EstacionPlantilla.orden).all()
@@ -967,12 +1314,23 @@ def api_ingresar_piezas():
                     t_to=p.t_to
                 )
                 db.session.add(est)
-        except Exception as e2:
-            logger.warning(f"No se clonaron plantillas para maquina {maquina_id}: {e2}")
+                estaciones_creadas.append(est)
+
+        _apply_hoja_time_plan(
+            hoja,
+            estaciones_creadas,
+            maquina_tipo=maquina.tipo if maquina else None,
+            fallback_total_time=tiempo_total,
+        )
 
         db.session.commit()
-        logger.info(f"[PRODUCCION] Hoja creada {hoja.id} para maquina {maquina_id} y plantillas clonadas")
-        return jsonify({'success': True, 'hoja': hoja.to_dict()}), 201
+        logger.info(f"[PRODUCCION] Hoja creada {hoja.id} para maquina {maquina_id} con {len(estaciones_creadas)} procesos")
+        return jsonify({
+            'success': True,
+            'hoja': hoja.to_dict(),
+            'ya_paso_por_maquina': veces_previas_maquina > 0,
+            'veces_previas_maquina': veces_previas_maquina
+        }), 201
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error creando hoja de ruta desde ingreso de piezas: {e}", exc_info=True)

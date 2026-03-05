@@ -519,6 +519,7 @@
             meta.appendChild(makeMetaRow('Hoja', machine.hoja_serie));
             meta.appendChild(makeMetaRow('Estacion', machine.estacion_actual || 'Sin produccion'));
             meta.appendChild(makeMetaRow('Tiempo', machine.tiempo_total));
+            meta.appendChild(makeMetaRow('Termino', machine.fecha_termino ? new Date(machine.fecha_termino).toLocaleString() : 'N/A'));
 
             const link = document.createElement('a');
             link.className = 'machine-link';
