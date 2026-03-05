@@ -587,6 +587,7 @@ def hojas_ruta_form():
             'clave': h.pn,
             'calidad': h.calidad,
             'almacen': h.almacen,
+            'orden_trabajo': h.orden_trabajo_hr,
             'estado': h.estado,
             'cantidad_piezas': h.cantidad_piezas,
             'fecha_salida': h.fecha_salida.isoformat() if h.fecha_salida else None,
@@ -645,6 +646,7 @@ def api_crear_hoja_ruta():
     clave_id = data.get('clave_id')
     calidad = (data.get('calidad') or '').strip()
     almacen = (data.get('almacen') or '').strip()
+    orden_trabajo = (data.get('orden_trabajo') or '').strip()
     cantidad_piezas = data.get('cantidad_piezas')
 
     if not clave_id:
@@ -679,7 +681,7 @@ def api_crear_hoja_ruta():
             revision=None,
             fecha_salida=fecha_actual,
             cantidad_piezas=int(cantidad_piezas),
-            orden_trabajo_hr=None,
+            orden_trabajo_hr=orden_trabajo or None,
             orden_trabajo_pt=None,
             almacen=almacen,
             no_sin_orden=None,
@@ -736,9 +738,9 @@ def api_crear_hoja_ruta():
 @app.route('/api/hojas_ruta/<int:hoja_id>', methods=['PUT'])
 @login_required
 def api_actualizar_hoja_ruta(hoja_id):
-    """Actualizar estado de una hoja de ruta."""
+    """Actualizar campos editables de una hoja de ruta."""
     hoja = HojaRuta.query.get_or_404(hoja_id)
-    data = request.get_json()
+    data = request.get_json() or {}
     
     if 'estado' in data:
         hoja.estado = data['estado']
@@ -746,6 +748,20 @@ def api_actualizar_hoja_ruta(hoja_id):
         hoja.nombre = data['nombre']
     if 'descripcion' in data:
         hoja.descripcion = data['descripcion']
+    if 'calidad' in data:
+        hoja.calidad = (data.get('calidad') or '').strip() or None
+    if 'almacen' in data:
+        hoja.almacen = (data.get('almacen') or '').strip() or None
+    if 'orden_trabajo' in data:
+        hoja.orden_trabajo_hr = (data.get('orden_trabajo') or '').strip() or None
+    if 'cantidad_piezas' in data:
+        try:
+            cantidad = int(data.get('cantidad_piezas') or 0)
+        except Exception:
+            return jsonify({'error': 'cantidad_piezas inválida'}), 400
+        if cantidad <= 0:
+            return jsonify({'error': 'cantidad_piezas debe ser mayor a 0'}), 400
+        hoja.cantidad_piezas = cantidad
     
     db.session.commit()
     logger.info(f"[HOJAS_RUTA] Hoja actualizada: {hoja_id}")
