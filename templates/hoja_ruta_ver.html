@@ -375,16 +375,19 @@
 
         <div class="sign-row">
           <div class="sign-box">
-            <div class="k">Responsable Produccion</div>
-            <div class="sign-line">Firma y nombre</div>
+            <div class="k">ING. JOSE NEMESIO</div>
+            <div class="v">{{ hoja.supervisor or 'PENDIENTE' }}</div>
+            <div class="sign-line">Firma de autorizacion</div>
           </div>
           <div class="sign-box">
-            <div class="k">Supervisor Calidad</div>
-            <div class="sign-line">Firma y nombre</div>
+            <div class="k">ING. RODRIGO GOMEZ</div>
+            <div class="v">{{ hoja.operador or 'PENDIENTE' }}</div>
+            <div class="sign-line">Firma de autorizacion</div>
           </div>
           <div class="sign-box">
-            <div class="k">Almacen</div>
-            <div class="sign-line">Recibido / entrega</div>
+            <div class="k">Control de validacion</div>
+            <div class="v">OT: {{ hoja.orden_trabajo_hr or 'N/A' }}</div>
+            <div class="sign-line">Refacciones especiales</div>
           </div>
         </div>
 

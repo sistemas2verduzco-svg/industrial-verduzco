@@ -589,6 +589,8 @@ def hojas_ruta_form():
             'almacen': h.almacen,
             'orden_trabajo': h.orden_trabajo_hr,
             'comentarios': h.descripcion,
+            'firma_ing_jose': h.supervisor,
+            'firma_ing_rodrigo': h.operador,
             'estado': h.estado,
             'cantidad_piezas': h.cantidad_piezas,
             'fecha_salida': h.fecha_salida.isoformat() if h.fecha_salida else None,
@@ -649,6 +651,8 @@ def api_crear_hoja_ruta():
     almacen = (data.get('almacen') or '').strip()
     orden_trabajo = (data.get('orden_trabajo') or '').strip()
     comentarios = (data.get('comentarios') or '').strip()
+    firma_ing_jose = (data.get('firma_ing_jose') or '').strip()
+    firma_ing_rodrigo = (data.get('firma_ing_rodrigo') or '').strip()
     cantidad_piezas = data.get('cantidad_piezas')
 
     if not clave_id:
@@ -695,8 +699,8 @@ def api_crear_hoja_ruta():
             rechazada=False,
             scrap=None,
             retrabajo=None,
-            supervisor=None,
-            operador=None,
+            supervisor=firma_ing_jose or None,
+            operador=firma_ing_rodrigo or None,
             eficiencia=None,
         )
         db.session.add(hoja)
@@ -752,6 +756,10 @@ def api_actualizar_hoja_ruta(hoja_id):
         hoja.descripcion = data['descripcion']
     if 'comentarios' in data:
         hoja.descripcion = (data.get('comentarios') or '').strip() or None
+    if 'firma_ing_jose' in data:
+        hoja.supervisor = (data.get('firma_ing_jose') or '').strip() or None
+    if 'firma_ing_rodrigo' in data:
+        hoja.operador = (data.get('firma_ing_rodrigo') or '').strip() or None
     if 'calidad' in data:
         hoja.calidad = (data.get('calidad') or '').strip() or None
     if 'almacen' in data:

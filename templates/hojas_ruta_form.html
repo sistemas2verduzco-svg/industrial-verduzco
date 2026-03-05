@@ -176,6 +176,20 @@
                         <label>Comentarios (refacciones especiales)</label>
                         <textarea id="comentarios" name="comentarios" placeholder="Especifica tipo de refaccion, marca, medida o nota tecnica"></textarea>
                     </div>
+                    <div>
+                        <label>Firma ING. JOSE NEMESIO</label>
+                        <select id="firma_ing_jose" name="firma_ing_jose">
+                            <option value="">Pendiente</option>
+                            <option value="AUTORIZADO">AUTORIZADO</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>Firma ING. RODRIGO GOMEZ</label>
+                        <select id="firma_ing_rodrigo" name="firma_ing_rodrigo">
+                            <option value="">Pendiente</option>
+                            <option value="AUTORIZADO">AUTORIZADO</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="hint">Los procesos se cargan automaticamente desde el modulo de Procesos y Claves segun la clave seleccionada.</div>
@@ -223,6 +237,8 @@
                         <th>Almacen</th>
                         <th>Orden Trabajo</th>
                         <th>Comentarios</th>
+                        <th>Firma Jose</th>
+                        <th>Firma Rodrigo</th>
                         <th>Estado</th>
                         <th>Accion</th>
                     </tr>
@@ -239,6 +255,8 @@
                         <td>{{ h.almacen or '' }}</td>
                         <td>{{ h.orden_trabajo or '' }}</td>
                         <td>{{ (h.comentarios or '')[:70] }}{% if h.comentarios and h.comentarios|length > 70 %}...{% endif %}</td>
+                        <td>{{ h.firma_ing_jose or 'Pendiente' }}</td>
+                        <td>{{ h.firma_ing_rodrigo or 'Pendiente' }}</td>
                         <td>{{ h.estado or '' }}</td>
                         <td>
                             <button
@@ -250,6 +268,8 @@
                                 data-orden="{{ (h.orden_trabajo or '')|e }}"
                                 data-estado="{{ (h.estado or '')|e }}"
                                 data-comentarios='{{ (h.comentarios or "")|tojson }}'
+                                data-firma-jose="{{ (h.firma_ing_jose or '')|e }}"
+                                data-firma-rodrigo="{{ (h.firma_ing_rodrigo or '')|e }}"
                                 onclick="abrirModalEdicion(this)">
                                 Editar
                             </button>
@@ -299,6 +319,20 @@
                 <div style="grid-column: 1 / -1;">
                     <label>Comentarios</label>
                     <textarea id="edit_comentarios" placeholder="Especificacion de refaccion o notas tecnicas"></textarea>
+                </div>
+                <div>
+                    <label>Firma ING. JOSE NEMESIO</label>
+                    <select id="edit_firma_ing_jose">
+                        <option value="">Pendiente</option>
+                        <option value="AUTORIZADO">AUTORIZADO</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Firma ING. RODRIGO GOMEZ</label>
+                    <select id="edit_firma_ing_rodrigo">
+                        <option value="">Pendiente</option>
+                        <option value="AUTORIZADO">AUTORIZADO</option>
+                    </select>
                 </div>
                 <div>
                     <label>Estado</label>
@@ -398,7 +432,9 @@
                 cantidad_piezas: parseInt(document.getElementById('cantidad_piezas').value, 10),
                 almacen: document.getElementById('almacen').value,
                 orden_trabajo: document.getElementById('orden_trabajo').value.trim(),
-                comentarios: document.getElementById('comentarios').value.trim()
+                comentarios: document.getElementById('comentarios').value.trim(),
+                firma_ing_jose: document.getElementById('firma_ing_jose').value,
+                firma_ing_rodrigo: document.getElementById('firma_ing_rodrigo').value
             };
 
             if (!payload.clave_id || !payload.calidad || !payload.cantidad_piezas || !payload.almacen) {
@@ -444,6 +480,8 @@
             } catch (e) {
                 document.getElementById('edit_comentarios').value = '';
             }
+            document.getElementById('edit_firma_ing_jose').value = btn.dataset.firmaJose || '';
+            document.getElementById('edit_firma_ing_rodrigo').value = btn.dataset.firmaRodrigo || '';
             document.getElementById('editModal').style.display = 'flex';
         }
 
@@ -459,6 +497,8 @@
                 almacen: document.getElementById('edit_almacen').value,
                 orden_trabajo: document.getElementById('edit_orden').value.trim(),
                 comentarios: document.getElementById('edit_comentarios').value.trim(),
+                firma_ing_jose: document.getElementById('edit_firma_ing_jose').value,
+                firma_ing_rodrigo: document.getElementById('edit_firma_ing_rodrigo').value,
                 estado: document.getElementById('edit_estado').value
             };
 
