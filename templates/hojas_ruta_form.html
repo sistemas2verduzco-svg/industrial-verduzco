@@ -6,117 +6,135 @@
     <title>Nueva Hoja de Ruta</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <style>
-        .form-card { background:#fff; border:1px solid #e0e0e0; border-radius:10px; padding:18px; box-shadow:0 4px 12px rgba(0,0,0,0.05); }
-        .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:12px; }
-        label { font-weight:600; font-size:13px; color:#333; }
-        input, select, textarea { width:100%; padding:8px; border:1px solid #d4d4d4; border-radius:6px; font-size:14px; }
-        textarea { resize: vertical; min-height: 80px; }
-        .section-title { margin:18px 0 8px; font-weight:700; color:#0b74de; }
-        .actions { display:flex; gap:10px; justify-content:flex-end; margin-top:14px; }
-        .btn { padding:10px 14px; border:none; border-radius:6px; cursor:pointer; font-weight:700; }
-        .btn-primary { background:#0b74de; color:#fff; }
-        .btn-secondary { background:#eef2f5; color:#333; }
-        .inline { display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
-        .flag { display:flex; gap:8px; align-items:center; }
+        .card {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 16px;
+            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.05);
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+        }
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #1f2937;
+        }
+        input, select {
+            width: 100%;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            padding: 8px;
+            font-size: 14px;
+        }
+        input[readonly] {
+            background: #f3f4f6;
+            color: #374151;
+        }
+        .section-title {
+            margin: 18px 0 10px;
+            font-size: 15px;
+            font-weight: 700;
+            color: #0b74de;
+        }
+        .actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 14px;
+        }
+        .btn {
+            border: none;
+            border-radius: 6px;
+            padding: 10px 14px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .btn-primary {
+            background: #0b74de;
+            color: #fff;
+        }
+        .btn-secondary {
+            background: #edf2f7;
+            color: #111827;
+        }
+        .hint {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #6b7280;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 8px;
+            border-bottom: 1px solid #f0f0f0;
+            text-align: left;
+            font-size: 13px;
+        }
+        th {
+            background: #f7f9fb;
+            font-weight: 700;
+        }
+        .proc-table th, .proc-table td {
+            font-size: 12px;
+            padding: 6px;
+        }
     </style>
 </head>
 <body>
     {% include '_sidebar.html' %}
 
     <div class="container">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-            <h2 style="margin:0;">Nueva Hoja de Ruta</h2>
-            <div></div>
-        </div>
+        <h2 style="margin: 0 0 14px 0;">Nueva Hoja de Ruta</h2>
 
-        <div class="form-card">
+        <div class="card">
             <form id="hojaForm">
                 <div class="grid">
                     <div>
-                        <label>Nombre de hoja</label>
-                        <input name="nombre" id="nombre" required placeholder="Se asignará automáticamente" readonly style="background:#f5f7fb;">
-                    </div>
-                    <div>
                         <label>Clave *</label>
-                        <select name="clave_id" id="clave_id" required>
+                        <select id="clave_id" name="clave_id" required>
                             <option value="">Selecciona clave</option>
                         </select>
                     </div>
                     <div>
-                        <label>Calidad (Supervisor)</label>
-                        <select name="calidad" id="calidad">
-                            <option value="">Selecciona supervisor</option>
-                            <option>Evelyn</option>
-                            <option>Moisés</option>
+                        <label>Calidad *</label>
+                        <select id="calidad" name="calidad" required>
+                            <option value="">Selecciona calidad</option>
+                            <option value="Evelyn">Evelyn</option>
+                            <option value="Moises">Moises</option>
                         </select>
                     </div>
                     <div>
-                        <label>Fecha de salida</label>
-                        <input type="datetime-local" name="fecha_salida">
+                        <label>Fecha (automatica)</label>
+                        <input id="fecha_auto" type="text" readonly>
                     </div>
                     <div>
                         <label>Cantidad de piezas *</label>
-                        <input type="number" name="cantidad_piezas" id="cantidad_piezas" min="1" step="1" required>
+                        <input id="cantidad_piezas" name="cantidad_piezas" type="number" min="1" step="1" required>
                     </div>
                     <div>
-                        <label>Orden de trabajo</label>
-                        <input name="orden_trabajo" placeholder="OT o NR">
+                        <label>Serie hoja de ruta (automatica)</label>
+                        <input id="serie_preview" type="text" readonly placeholder="Se genera al guardar">
                     </div>
                     <div>
-                        <label>Almacén</label>
-                        <select name="almacen">
-                            <option value="">Selecciona almacén</option>
-                            <option>AlmacenPT</option>
-                            <option>AlmacenMP</option>
-                            <option>Maquinaria</option>
+                        <label>Almacen *</label>
+                        <select id="almacen" name="almacen" required>
+                            <option value="">Selecciona almacen</option>
+                            {% for a in almacenes %}
+                            <option value="{{ a }}">{{ a }}</option>
+                            {% endfor %}
                         </select>
-                    </div>
-                    <div>
-                        <label>No de orden</label>
-                        <input name="no_sin_orden" placeholder="OT o NR">
-                    </div>
-                    <div>
-                        <label>Materia prima</label>
-                        <select name="materia_prima" id="materia_prima">
-                            <option value="">Cargar al tener datos</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label>Total de tiempo (calculado)</label>
-                        <input name="total_tiempo" id="total_tiempo" placeholder="00:00:00" readonly style="background:#f5f7fb;">
-                    </div>
-                    <div>
-                        <label>Días a laborar (calculado)</label>
-                        <input type="text" name="dias_a_laborar" id="dias_a_laborar" readonly style="background:#f5f7fb;">
-                    </div>
-                    <div>
-                        <label>Fecha de término (calculada)</label>
-                        <input type="datetime-local" name="fecha_termino" id="fecha_termino" readonly style="background:#f5f7fb;">
                     </div>
                 </div>
 
-                <div class="section-title">Datos opcionales</div>
-                <div class="grid">
-                    <div>
-                        <label>Scrap (opcional)</label>
-                        <input name="scrap" placeholder="Información de scrap">
-                    </div>
-                    <div>
-                        <label>Retrabajo (opcional)</label>
-                        <input name="retrabajo" placeholder="Información de retrabajo">
-                    </div>
-                    <div>
-                        <label>Operador</label>
-                        <input name="operador">
-                    </div>
-                    <div>
-                        <label>Eficiencia (%)</label>
-                        <input type="number" name="eficiencia" step="0.01" min="0" max="100" placeholder="0-100">
-                    </div>
-                </div>
-
-                <div class="section-title">Descripción</div>
-                <textarea name="descripcion" placeholder="Notas de la hoja"></textarea>
+                <div class="hint">Los procesos se cargan automaticamente desde el modulo de Procesos y Claves segun la clave seleccionada.</div>
 
                 <div class="actions">
                     <button type="button" class="btn btn-secondary" onclick="history.back()">Cancelar</button>
@@ -125,233 +143,177 @@
             </form>
         </div>
 
-        {% if hojas %}
-        <div class="section-title">Hojas de ruta creadas recientemente</div>
-        <div class="form-card" style="margin-top:10px;">
-            <div class="inline" style="margin-bottom:10px;">
-                <div>
-                    <label>Filtrar por máquina</label>
-                    <select id="filtroMaquina">
-                        <option value="">Todas</option>
-                        {% for m in maquinas %}
-                        <option value="{{ m.nombre }}">{{ m.nombre }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
-            <div style="overflow-x:auto;">
-                <table style="width:100%; border-collapse:collapse;">
-                    <thead>
-                        <tr style="background:#f5f7fb;">
-                            <th style="text-align:left; padding:8px; border-bottom:1px solid #e0e0e0;">ID</th>
-                            <th style="text-align:left; padding:8px; border-bottom:1px solid #e0e0e0;">Máquina</th>
-                            <th style="text-align:left; padding:8px; border-bottom:1px solid #e0e0e0;">Nombre</th>
-                            <th style="text-align:left; padding:8px; border-bottom:1px solid #e0e0e0;">Estado</th>
-                            <th style="text-align:left; padding:8px; border-bottom:1px solid #e0e0e0;">Piezas</th>
-                            <th style="text-align:left; padding:8px; border-bottom:1px solid #e0e0e0;">Creada</th>
-                            <th style="text-align:left; padding:8px; border-bottom:1px solid #e0e0e0;">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tablaHojas">
-                        {% for h in hojas %}
-                        <tr data-maq="{{ h.maquina }}" data-maquina_id="{{ h.maquina_id }}">
-                            <td style="padding:8px; border-bottom:1px solid #f0f0f0;">{{ h.id }}</td>
-                            <td style="padding:8px; border-bottom:1px solid #f0f0f0;">{{ h.maquina }}</td>
-                            <td style="padding:8px; border-bottom:1px solid #f0f0f0;">{{ h.nombre }}</td>
-                            <td style="padding:8px; border-bottom:1px solid #f0f0f0;">{{ h.estado }}</td>
-                            <td style="padding:8px; border-bottom:1px solid #f0f0f0;">{{ h.cantidad_piezas or '' }}</td>
-                            <td style="padding:8px; border-bottom:1px solid #f0f0f0;">{{ h.fecha_creacion[:16] if h.fecha_creacion }}</td>
-                            <td style="padding:8px; border-bottom:1px solid #f0f0f0;"><a href="/hoja/{{ h.id }}">Ver</a></td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+        <div class="section-title">Procesos de la clave seleccionada</div>
+        <div class="card" style="overflow:auto;">
+            <table class="proc-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Proceso</th>
+                        <th>Centro trabajo</th>
+                        <th>Operacion</th>
+                        <th>T/E</th>
+                        <th>T/CT</th>
+                        <th>T/CO</th>
+                        <th>T/O</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyProcesos">
+                    <tr><td colspan="8" style="color:#6b7280;">Selecciona una clave para visualizar sus procesos.</td></tr>
+                </tbody>
+            </table>
         </div>
-        {% else %}
-        <div class="form-card" style="margin-top:10px; color:#777;">Aún no hay hojas registradas.</div>
-        {% endif %}
+
+        <div class="section-title">Hojas recientes</div>
+        <div class="card" style="overflow:auto;">
+            {% if hojas %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Serie</th>
+                        <th>Clave</th>
+                        <th>Calidad</th>
+                        <th>Fecha</th>
+                        <th>Piezas</th>
+                        <th>Almacen</th>
+                        <th>Estado</th>
+                        <th>Accion</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for h in hojas %}
+                    <tr>
+                        <td>{{ h.id }}</td>
+                        <td>{{ h.serie or '' }}</td>
+                        <td>{{ h.clave or '' }}</td>
+                        <td>{{ h.calidad or '' }}</td>
+                        <td>{{ h.fecha_salida[:16] if h.fecha_salida else '' }}</td>
+                        <td>{{ h.cantidad_piezas or '' }}</td>
+                        <td>{{ h.almacen or '' }}</td>
+                        <td>{{ h.estado or '' }}</td>
+                        <td><a href="/hoja/{{ h.id }}">Ver</a></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div style="color:#6b7280;">Aun no hay hojas registradas.</div>
+            {% endif %}
+        </div>
     </div>
 
     <script>
-    let clavesData = []; // Almacenar claves con sus procesos y tiempo T/O
-    
-    // Cargar claves al inicio
-    async function cargarClaves() {
-        try {
-            const res = await fetch('/api/claves_procesos');
-            if (res.ok) {
+        let clavesData = [];
+
+        function renderNow() {
+            const now = new Date();
+            document.getElementById('fecha_auto').value = now.toLocaleString();
+        }
+
+        function updateSeriePreview() {
+            const sel = document.getElementById('clave_id');
+            const opt = sel.options[sel.selectedIndex];
+            const claveTxt = opt && opt.dataset.clave ? opt.dataset.clave.replace(/[^a-zA-Z0-9]/g, '').slice(0, 10) : '';
+            if (!claveTxt) {
+                document.getElementById('serie_preview').value = '';
+                return;
+            }
+            const d = new Date();
+            const ymd = d.getFullYear().toString() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+            document.getElementById('serie_preview').value = `HR-${ymd}-${claveTxt}-XXXX`;
+        }
+
+        function renderProcesos(claveId) {
+            const tbody = document.getElementById('tbodyProcesos');
+            const clave = clavesData.find(c => String(c.id) === String(claveId));
+
+            if (!clave || !Array.isArray(clave.procesos) || !clave.procesos.length) {
+                tbody.innerHTML = '<tr><td colspan="8" style="color:#6b7280;">Esta clave no tiene procesos definidos.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = '';
+            clave.procesos.forEach((p, idx) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${idx + 1}</td>
+                    <td>${p.proceso_nombre || ''}</td>
+                    <td>${p.centro_trabajo || ''}</td>
+                    <td>${p.operacion || ''}</td>
+                    <td>${p.t_e || ''}</td>
+                    <td>${p.t_tct || ''}</td>
+                    <td>${p.t_tco || ''}</td>
+                    <td>${p.t_to || ''}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function loadClaves() {
+            const select = document.getElementById('clave_id');
+            try {
+                const res = await fetch('/api/claves_procesos', { credentials: 'same-origin' });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+
                 clavesData = await res.json();
-                const select = document.getElementById('clave_id');
                 select.innerHTML = '<option value="">Selecciona clave</option>';
                 clavesData.forEach(c => {
                     const opt = document.createElement('option');
                     opt.value = c.id;
-                    opt.textContent = `${c.clave} - ${c.nombre || 'Sin nombre'}`;
-                    opt.dataset.tiempo_to = c.tiempo_to;
-                    opt.dataset.clave = c.clave;
-                    opt.dataset.nombre_clave = c.nombre || c.clave;
+                    opt.dataset.clave = c.clave || '';
+                    opt.textContent = (c.clave || '') + ' - ' + (c.nombre || c.clave || 'Sin nombre');
                     select.appendChild(opt);
                 });
-                console.log('Claves cargadas:', clavesData);
+            } catch (err) {
+                console.error(err);
+                alert('No se pudieron cargar las claves');
             }
-        } catch (err) {
-            console.error('Error cargando claves:', err);
-        }
-    }
-
-    // Función para parsear tiempo HH:MM:SS a segundos
-    function parseTime(str) {
-        if (!str) return 0;
-        const parts = String(str).split(':').map(p => parseInt(p.trim()) || 0);
-        if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
-        if (parts.length === 2) return parts[0]*60 + parts[1];
-        return parts[0] || 0;
-    }
-
-    // Función para formatear segundos a HH:MM:SS
-    function formatTime(sec) {
-        sec = Math.round(sec || 0);
-        const h = Math.floor(sec / 3600);
-        const m = Math.floor((sec % 3600) / 60);
-        const s = sec % 60;
-        return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-    }
-
-    // Calcular tiempos cuando cambia clave o cantidad
-    function calcularTiempos() {
-        const claveId = document.getElementById('clave_id').value;
-        const cantidadPiezas = parseInt(document.getElementById('cantidad_piezas').value) || 0;
-        
-        const select = document.getElementById('clave_id');
-        const option = select.querySelector(`option[value="${claveId}"]`);
-        
-        // Asignar nombre de la hoja automáticamente si hay clave seleccionada
-        if (claveId && option) {
-            const nombreClave = option.dataset.nombre_clave || option.dataset.clave;
-            document.getElementById('nombre').value = `Hoja Ruta - ${nombreClave}`;
-        } else {
-            document.getElementById('nombre').value = '';
-        }
-        
-        if (!claveId || cantidadPiezas <= 0) {
-            document.getElementById('total_tiempo').value = '';
-            document.getElementById('dias_a_laborar').value = '';
-            document.getElementById('fecha_termino').value = '';
-            return;
         }
 
-        const tiempoTO = option ? option.dataset.tiempo_to : '00:00:00';
-        
-        // Tiempo base por pieza (en segundos)
-        const segundosPorPieza = parseTime(tiempoTO);
-        
-        // Total tiempo = T/O × piezas
-        const totalSegundos = segundosPorPieza * cantidadPiezas;
-        document.getElementById('total_tiempo').value = formatTime(totalSegundos);
-        
-        // Jornada: 6:30-12:00 (5.5h) + 12:30-16:00 (3.5h) = 9 horas por día
-        // Corrección: 6:30-12:00 = 5.5h, 12:30-16:00 = 3.5h → total 9h
-        // Pero mencionaste 7.5h, verifico: 6:30-12:00 = 5.5h, 12:30-4pm = 3.5h → 9h
-        // Usaré 9 horas por día como en el horario dado
-        const horasPorDia = 9;
-        const segundosPorDia = horasPorDia * 3600;
-        const diasALaborar = totalSegundos / segundosPorDia;
-        document.getElementById('dias_a_laborar').value = diasALaborar.toFixed(2);
-        
-        // Fecha de término: hoy + días laborales
-        const ahora = new Date();
-        const diasCompletos = Math.ceil(diasALaborar);
-        const fechaTermino = new Date(ahora);
-        fechaTermino.setDate(fechaTermino.getDate() + diasCompletos);
-        
-        // Formato datetime-local: YYYY-MM-DDTHH:MM
-        const year = fechaTermino.getFullYear();
-        const month = String(fechaTermino.getMonth() + 1).padStart(2, '0');
-        const day = String(fechaTermino.getDate()).padStart(2, '0');
-        const hours = String(fechaTermino.getHours()).padStart(2, '0');
-        const minutes = String(fechaTermino.getMinutes()).padStart(2, '0');
-        document.getElementById('fecha_termino').value = `${year}-${month}-${day}T${hours}:${minutes}`;
-    }
-
-    // Event listeners
-    document.getElementById('clave_id').addEventListener('change', calcularTiempos);
-    document.getElementById('cantidad_piezas').addEventListener('input', calcularTiempos);
-
-    // Cargar claves al inicio
-    cargarClaves();
-
-    const form = document.getElementById('hojaForm');
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const fd = new FormData(form);
-        const payload = {};
-        fd.forEach((v, k) => { payload[k] = v; });
-
-        // Validar que clave y cantidad estén seleccionadas
-        if (!payload.clave_id || !payload.cantidad_piezas) {
-            alert('Clave y cantidad de piezas son obligatorios');
-            return;
-        }
-
-        // Asegurarse de que el nombre se asignó automáticamente
-        if (!payload.nombre || payload.nombre.trim() === '') {
-            alert('Por favor selecciona una clave y cantidad de piezas primero');
-            return;
-        }
-
-        // Convertir clave_id a entero
-        payload.clave_id = parseInt(payload.clave_id);
-        payload.cantidad_piezas = parseInt(payload.cantidad_piezas);
-        
-        // Normalizar vacíos
-        ['dias_a_laborar','eficiencia'].forEach(key => {
-            if (payload[key] === '') payload[key] = null; else payload[key] = parseFloat(payload[key]);
+        document.getElementById('clave_id').addEventListener('change', (e) => {
+            updateSeriePreview();
+            renderProcesos(e.target.value);
         });
-        if (payload.fecha_salida === '') payload.fecha_salida = null; 
-        if (payload.fecha_termino === '') payload.fecha_termino = null;
 
-        // Adapt datetime-local to ISO
-        if (payload.fecha_salida) {
-            payload.fecha_salida = payload.fecha_salida.replace('T', ' ');
-        }
-        if (payload.fecha_termino) {
-            payload.fecha_termino = payload.fecha_termino.replace('T', ' ');
-        }
+        document.getElementById('hojaForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const payload = {
+                clave_id: parseInt(document.getElementById('clave_id').value, 10),
+                calidad: document.getElementById('calidad').value,
+                cantidad_piezas: parseInt(document.getElementById('cantidad_piezas').value, 10),
+                almacen: document.getElementById('almacen').value
+            };
 
-        try {
-            const res = await fetch('/api/hojas_ruta', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const data = await res.json();
-            if (res.ok && (data.id || data.hoja || data.success)) {
-                alert('Hoja creada correctamente');
+            if (!payload.clave_id || !payload.calidad || !payload.cantidad_piezas || !payload.almacen) {
+                alert('Completa los campos obligatorios');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/hojas_ruta', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    throw new Error(data.error || 'No se pudo crear la hoja');
+                }
+
+                alert('Hoja creada: ' + (data.nombre || 'OK'));
                 window.location.reload();
-            } else {
-                alert('Error: ' + (data.error || 'No se pudo crear la hoja'));
+            } catch (err) {
+                console.error(err);
+                alert('Error: ' + err.message);
             }
-        } catch (err) {
-            console.error(err);
-            alert('Error al conectar');
-        }
-    });
-
-    // Filtro por máquina
-    const filtro = document.getElementById('filtroMaquina');
-    const tbody = document.getElementById('tablaHojas');
-    if (filtro && tbody) {
-        filtro.addEventListener('change', () => {
-            const term = filtro.value.trim();
-            Array.from(tbody.querySelectorAll('tr')).forEach(tr => {
-                const m = tr.getAttribute('data-maq') || '';
-                tr.style.display = !term || m === term ? '' : 'none';
-            });
         });
-    }
 
-
+        renderNow();
+        setInterval(renderNow, 60000);
+        loadClaves();
     </script>
 </body>
 </html>

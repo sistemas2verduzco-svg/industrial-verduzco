@@ -575,22 +575,24 @@ def api_mapa_maquinas():
 @app.route('/hojas_ruta_form')
 @login_required
 def hojas_ruta_form():
-    """Formulario para crear una hoja de ruta con todos los campos del formato."""
-    maquinas = Máquina.query.order_by(Máquina.nombre.asc()).all()
+    """Formulario simplificado para crear hojas de ruta de produccion."""
+    almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria']
     # Listado reciente (máximo 50) para consulta rápida
     hojas = HojaRuta.query.order_by(HojaRuta.fecha_creacion.desc()).limit(50).all()
     hojas_data = []
     for h in hojas:
         hojas_data.append({
             'id': h.id,
-            'maquina': h.maquina.nombre if getattr(h, 'maquina', None) else str(h.maquina_id),
-            'maquina_id': h.maquina_id,
-            'nombre': h.nombre,
+            'serie': h.nombre,
+            'clave': h.pn,
+            'calidad': h.calidad,
+            'almacen': h.almacen,
             'estado': h.estado,
             'cantidad_piezas': h.cantidad_piezas,
-            'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None
+            'fecha_salida': h.fecha_salida.isoformat() if h.fecha_salida else None,
+            'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None,
         })
-    return render_template('hojas_ruta_form.html', maquinas=maquinas, hojas=hojas_data)
+    return render_template('hojas_ruta_form.html', hojas=hojas_data, almacenes=almacenes)
 
 
 @app.route('/hoja/<int:hoja_id>')
@@ -638,16 +640,19 @@ def qc_estaciones_maquina(maquina_id):
 @app.route('/api/hojas_ruta', methods=['POST'])
 @login_required
 def api_crear_hoja_ruta():
-    """Crear una nueva hoja de ruta con estaciones desde la clave seleccionada."""
-    data = request.get_json()
-    nombre = data.get('nombre')
+    """Crear una hoja de ruta con formato simplificado y procesos desde la clave."""
+    data = request.get_json() or {}
     clave_id = data.get('clave_id')
+    calidad = (data.get('calidad') or '').strip()
+    almacen = (data.get('almacen') or '').strip()
     cantidad_piezas = data.get('cantidad_piezas')
 
-    if not nombre:
-        return jsonify({'error': 'nombre requerido'}), 400
     if not clave_id:
         return jsonify({'error': 'clave_id requerido'}), 400
+    if not calidad:
+        return jsonify({'error': 'calidad requerida'}), 400
+    if not almacen:
+        return jsonify({'error': 'almacen requerido'}), 400
     if not cantidad_piezas or cantidad_piezas <= 0:
         return jsonify({'error': 'cantidad_piezas debe ser mayor a 0'}), 400
 
@@ -656,45 +661,52 @@ def api_crear_hoja_ruta():
     if not clave:
         return jsonify({'error': 'Clave no encontrada'}), 404
 
+    procesos = ClaveProceso.query.filter_by(clave_id=clave_id).order_by(ClaveProceso.orden).all()
+    if not procesos:
+        return jsonify({'error': 'La clave seleccionada no tiene procesos definidos'}), 400
+
     try:
-        # Crear hoja de ruta
+        fecha_actual = datetime.utcnow()
+
         hoja = HojaRuta(
             maquina_id=int(data.get('maquina_id')) if data.get('maquina_id') else None,
-            nombre=nombre,
-            descripcion=data.get('descripcion'),
-            estado=data.get('estado', 'activa'),
-            producto=clave.nombre,  # Nombre del producto desde la clave
-            calidad=data.get('calidad'),
-            pn=clave.clave,  # Clave del producto
-            revision=data.get('revision'),
-            fecha_salida=datetime.fromisoformat(data['fecha_salida']) if data.get('fecha_salida') else None,
+            nombre='PENDIENTE_SERIE',
+            descripcion=None,
+            estado='activa',
+            producto=clave.nombre,
+            calidad=calidad,
+            pn=clave.clave,
+            revision=None,
+            fecha_salida=fecha_actual,
             cantidad_piezas=int(cantidad_piezas),
-            orden_trabajo_hr=data.get('orden_trabajo'),  # Campo unificado
-            orden_trabajo_pt=data.get('orden_trabajo_pt'),
-            almacen=data.get('almacen'),
-            no_sin_orden=data.get('no_sin_orden'),
-            materia_prima=data.get('materia_prima'),
-            total_tiempo=data.get('total_tiempo'),
-            dias_a_laborar=float(data['dias_a_laborar']) if data.get('dias_a_laborar') else None,
-            fecha_termino=datetime.fromisoformat(data['fecha_termino']) if data.get('fecha_termino') else None,
+            orden_trabajo_hr=None,
+            orden_trabajo_pt=None,
+            almacen=almacen,
+            no_sin_orden=None,
+            materia_prima=None,
+            total_tiempo=None,
+            dias_a_laborar=None,
+            fecha_termino=None,
             aprobada=False,
             rechazada=False,
-            scrap=data.get('scrap'),  # Ahora es texto
-            retrabajo=data.get('retrabajo'),  # Ahora es texto
-            supervisor=data.get('supervisor'),
-            operador=data.get('operador'),
-            eficiencia=float(data['eficiencia']) if data.get('eficiencia') else None
+            scrap=None,
+            retrabajo=None,
+            supervisor=None,
+            operador=None,
+            eficiencia=None,
         )
         db.session.add(hoja)
-        db.session.flush()  # Obtener el ID de la hoja
+        db.session.flush()
 
-        # Crear estaciones desde los procesos de la clave
-        procesos = ClaveProceso.query.filter_by(clave_id=clave_id).order_by(ClaveProceso.orden).all()
+        # Serie automatica: HR-YYYYMMDD-CLAVE-####
+        clave_segura = ''.join(ch for ch in (clave.clave or '') if ch.isalnum())[:10] or 'CLAVE'
+        hoja.nombre = f"HR-{fecha_actual.strftime('%Y%m%d')}-{clave_segura}-{hoja.id:04d}"
+
         for idx, cp in enumerate(procesos, start=1):
             estacion = EstacionTrabajo(
                 hoja_ruta_id=hoja.id,
                 nombre=f"{cp.operacion or cp.proceso.operacion or cp.proceso.nombre}",
-                pro_c=str(idx),  # Número de proceso
+                pro_c=str(idx),
                 centro_trabajo=cp.centro_trabajo or cp.proceso.centro_trabajo or '',
                 operacion=cp.operacion or cp.proceso.operacion or cp.proceso.nombre or '',
                 orden=cp.orden,
@@ -711,7 +723,9 @@ def api_crear_hoja_ruta():
             db.session.add(estacion)
 
         db.session.commit()
-        logger.info(f"[HOJAS_RUTA] Nueva hoja creada: {hoja.id} con {len(procesos)} estaciones desde clave {clave.clave}")
+        logger.info(
+            f"[HOJAS_RUTA] Nueva hoja creada {hoja.nombre} ({hoja.id}) con {len(procesos)} estaciones para clave {clave.clave}"
+        )
         return jsonify(hoja.to_dict()), 201
     except Exception as e:
         db.session.rollback()
