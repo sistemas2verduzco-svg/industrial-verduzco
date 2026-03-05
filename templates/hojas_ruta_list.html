@@ -76,7 +76,7 @@
             padding: 12px;
             margin: 14px 0;
             display: grid;
-            grid-template-columns: 1fr 1fr auto;
+            grid-template-columns: 1fr 1fr auto auto;
             gap: 10px;
             align-items: end;
         }
@@ -109,6 +109,28 @@
             font-weight: 700;
         }
 
+        .toggle-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border: 1px solid #c6d5e6;
+            border-radius: 8px;
+            background: #fff;
+            min-height: 38px;
+            color: #17324d;
+            font-weight: 700;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .toggle-wrap input {
+            width: 16px;
+            height: 16px;
+            margin: 0;
+        }
+
         .cards-wrap {
             margin-top: 18px;
             display: grid;
@@ -130,6 +152,13 @@
             border-color: #a6c4e4;
             box-shadow: 0 8px 18px rgba(12, 40, 73, 0.1);
         }
+
+        .tipo-cnc { border-left: 6px solid #1d4ed8; }
+        .tipo-torno { border-left: 6px solid #7c3aed; }
+        .tipo-fresadora { border-left: 6px solid #0f766e; }
+        .tipo-taladro { border-left: 6px solid #b45309; }
+        .tipo-cepillo { border-left: 6px solid #be123c; }
+        .tipo-escoplo { border-left: 6px solid #334155; }
 
         .maquina-image {
             width: 120px;
@@ -160,6 +189,19 @@
             font-size: 13px;
             color: var(--muted);
             margin-bottom: 10px;
+        }
+
+        .tipo-chip {
+            display: inline-block;
+            margin-left: 8px;
+            padding: 3px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            border: 1px solid #c6d5e6;
+            color: #17324d;
+            background: #eef5ff;
+            vertical-align: middle;
         }
         .status-badge {
             display: inline-block;
@@ -288,13 +330,18 @@
                 <label>Buscar hoja activa</label>
                 <input type="text" id="filtroHoja" placeholder="Ej: Produccion pieza X...">
             </div>
+            <label class="toggle-wrap">
+                <input type="checkbox" id="filtroActivas" checked>
+                Solo activas
+            </label>
             <button onclick="limpiarFiltros()" class="btn-light">Limpiar</button>
         </div>
 
         <div id="listContainer" class="cards-wrap">
             {% if maquinas %}
                 {% for maq in maquinas %}
-                <div class="maquina-card" data-maq-nombre="{{ maq.nombre.lower() }}" data-hoja-nombre="{% if maq.hoja_activa %}{{ maq.hoja_activa.nombre.lower() }}{% endif %}">
+                {% set tipo_norm = (maq.tipo or 'otro')|lower|replace('á','a')|replace('é','e')|replace('í','i')|replace('ó','o')|replace('ú','u')|replace(' ','_') %}
+                <div class="maquina-card tipo-{{ tipo_norm }}" data-maq-nombre="{{ maq.nombre.lower() }}" data-hoja-nombre="{% if maq.hoja_activa %}{{ maq.hoja_activa.nombre.lower() }}{% endif %}" data-activo="{{ '1' if maq.activo else '0' }}">
                     <div class="maquina-image">
                         {% if maq.imagen_url %}
                             <img src="{{ maq.imagen_url }}" alt="{{ maq.nombre }}" />
@@ -303,7 +350,7 @@
                         {% endif %}
                     </div>
                     <div class="maquina-info">
-                        <div class="maquina-nombre">{{ maq.nombre }}</div>
+                        <div class="maquina-nombre">{{ maq.nombre }}<span class="tipo-chip">{{ maq.tipo or 'SIN TIPO' }}</span></div>
                         <div class="maquina-desc">{{ maq.descripcion }}</div>
                         <div>
                             {% if maq.hoja_activa %}
@@ -493,19 +540,23 @@
     // Filtrado por máquina y hoja activa
     const filtroMaq = document.getElementById('filtroMaquina');
     const filtroHoja = document.getElementById('filtroHoja');
+    const filtroActivas = document.getElementById('filtroActivas');
 
     function aplicarFiltros() {
         const termMaq = (filtroMaq.value || '').toLowerCase();
         const termHoja = (filtroHoja.value || '').toLowerCase();
+        const soloActivas = filtroActivas && filtroActivas.checked;
         const cards = document.querySelectorAll('.maquina-card');
         let visibles = 0;
 
         cards.forEach(card => {
             const maqNombre = card.getAttribute('data-maq-nombre') || '';
             const hojaNombre = card.getAttribute('data-hoja-nombre') || '';
+            const activo = card.getAttribute('data-activo') === '1';
             const cumpleMaq = !termMaq || maqNombre.includes(termMaq);
             const cumpteHoja = !termHoja || hojaNombre.includes(termHoja);
-            const mostrar = cumpleMaq && cumpteHoja;
+            const cumpleActivo = !soloActivas || activo;
+            const mostrar = cumpleMaq && cumpteHoja && cumpleActivo;
             card.style.display = mostrar ? '' : 'none';
             if (mostrar) visibles++;
         });
@@ -529,12 +580,14 @@
     function limpiarFiltros() {
         filtroMaq.value = '';
         filtroHoja.value = '';
+        if (filtroActivas) filtroActivas.checked = true;
         aplicarFiltros();
     }
 
     if (filtroMaq && filtroHoja) {
         filtroMaq.addEventListener('input', aplicarFiltros);
         filtroHoja.addEventListener('input', aplicarFiltros);
+        if (filtroActivas) filtroActivas.addEventListener('change', aplicarFiltros);
     }
 
     // Enlaza los botones sin usar inline JS para evitar problemas de comillas

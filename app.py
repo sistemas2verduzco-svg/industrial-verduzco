@@ -16,6 +16,7 @@ from openpyxl import Workbook
 from io import BytesIO
 import uuid
 import math
+import re
 
 # Configurar logging
 logging.basicConfig(
@@ -492,7 +493,32 @@ def uploaded_file(filename):
 @login_required
 def hojas_ruta_list():
     """Lista de máquinas con sus hojas de ruta activas y estado de producción."""
-    maquinas = Máquina.query.order_by(Máquina.nombre.asc()).all()
+    maquinas = Máquina.query.all()
+
+    # Orden operativo por tipo y consecutivo (#01, #02, ...)
+    tipo_priority = {
+        'CNC': 1,
+        'TORNO': 2,
+        'FRESADORA': 3,
+        'TALADRO': 4,
+        'CEPILLO': 5,
+        'ESCOPLO': 6,
+    }
+
+    def maquina_sort_key(m):
+        tipo = (getattr(m, 'tipo', None) or '').strip().upper()
+        nombre = (getattr(m, 'nombre', None) or '').strip().upper()
+
+        match_num = re.search(r'#\s*(\d+)', nombre)
+        numero = int(match_num.group(1)) if match_num else 9999
+
+        base = re.sub(r'#\s*\d+', '', nombre).strip()
+        tipo_ref = tipo or base
+        prioridad = tipo_priority.get(tipo_ref, 99)
+
+        return (prioridad, tipo_ref, numero, nombre)
+
+    maquinas = sorted(maquinas, key=maquina_sort_key)
     
     # Obtener hoja activa para cada máquina
     maquinas_data = []
