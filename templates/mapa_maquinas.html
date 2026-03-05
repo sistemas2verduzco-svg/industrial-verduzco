@@ -114,9 +114,7 @@
         }
 
         .main-zone {
-            display: grid;
-            grid-template-rows: auto auto;
-            gap: 12px;
+            display: block;
             min-width: 0;
         }
 
@@ -144,15 +142,6 @@
             gap: 10px;
         }
 
-        .secondary-grid {
-            padding: 12px;
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-            gap: 8px;
-            max-height: 320px;
-            overflow: auto;
-        }
-
         .machine-card {
             background: linear-gradient(180deg, rgba(11, 45, 78, 0.85), rgba(8, 31, 58, 0.85));
             border: 1px solid #2a638f;
@@ -167,12 +156,6 @@
         .machine-card:hover {
             transform: translateY(-2px);
             border-color: #40b5ff;
-        }
-
-        .machine-card.compact {
-            min-height: 96px;
-            padding: 7px;
-            gap: 6px;
         }
 
         .state-produciendo {
@@ -427,7 +410,7 @@
             <div class="logo-pill">M</div>
             <div class="title-group">
                 <div class="title">Mapa de Maquinas - Produccion</div>
-                <div class="subtitle">Vista operacional tipo tablero, con prioridad a mas maquinas visibles</div>
+                <div class="subtitle">Vista operacional de maquinas activas</div>
             </div>
         </div>
         <div class="topbar-right">
@@ -440,18 +423,10 @@
         <section class="main-zone">
             <section class="panel">
                 <div class="panel-title">
-                    <span>Area Principal (maquinas en operacion)</span>
+                    <span>Maquinas en operacion</span>
                     <span id="primaryCount">0 equipos</span>
                 </div>
                 <div class="primary-grid" id="primaryGrid"></div>
-            </section>
-
-            <section class="panel">
-                <div class="panel-title">
-                    <span>Capacidad Extendida (sin grafica, espacio para mas maquinas)</span>
-                    <span id="secondaryCount">0 equipos</span>
-                </div>
-                <div class="secondary-grid" id="secondaryGrid"></div>
             </section>
         </section>
 
@@ -494,7 +469,6 @@
 
     <script>
         const MAP_REFRESH_MS = 6000;
-        const PRIMARY_LIMIT = 10;
 
         function safeText(value, fallback) {
             if (value === null || value === undefined || value === '') {
@@ -512,12 +486,9 @@
             return row;
         }
 
-        function buildMachineCard(machine, compact) {
+        function buildMachineCard(machine) {
             const card = document.createElement('article');
             card.className = 'machine-card state-' + safeText(machine.estado_code, 'sin_hoja');
-            if (compact) {
-                card.classList.add('compact');
-            }
 
             const head = document.createElement('div');
             head.className = 'machine-head';
@@ -546,10 +517,8 @@
             meta.className = 'machine-meta';
             meta.appendChild(makeMetaRow('Pieza', machine.pieza));
             meta.appendChild(makeMetaRow('Hoja', machine.hoja_serie));
-            if (!compact) {
-                meta.appendChild(makeMetaRow('Estacion', machine.estacion_actual || 'Sin produccion'));
-                meta.appendChild(makeMetaRow('Tiempo', machine.tiempo_total));
-            }
+            meta.appendChild(makeMetaRow('Estacion', machine.estacion_actual || 'Sin produccion'));
+            meta.appendChild(makeMetaRow('Tiempo', machine.tiempo_total));
 
             const link = document.createElement('a');
             link.className = 'machine-link';
@@ -564,33 +533,20 @@
 
         function renderMachineGroups(maquinas) {
             const primary = document.getElementById('primaryGrid');
-            const secondary = document.getElementById('secondaryGrid');
             primary.innerHTML = '';
-            secondary.innerHTML = '';
 
-            const mainList = maquinas.slice(0, PRIMARY_LIMIT);
-            const extraList = maquinas.slice(PRIMARY_LIMIT);
+            const mainList = maquinas;
 
             if (!mainList.length) {
                 const emptyMain = document.createElement('div');
                 emptyMain.className = 'empty';
-                emptyMain.textContent = 'No hay maquinas registradas para mostrar.';
+                emptyMain.textContent = 'No hay maquinas activas para mostrar.';
                 primary.appendChild(emptyMain);
             } else {
-                mainList.forEach(m => primary.appendChild(buildMachineCard(m, false)));
-            }
-
-            if (!extraList.length) {
-                const emptySec = document.createElement('div');
-                emptySec.className = 'empty';
-                emptySec.textContent = 'Sin maquinas adicionales por ahora.';
-                secondary.appendChild(emptySec);
-            } else {
-                extraList.forEach(m => secondary.appendChild(buildMachineCard(m, true)));
+                mainList.forEach(m => primary.appendChild(buildMachineCard(m)));
             }
 
             document.getElementById('primaryCount').textContent = mainList.length + ' equipos';
-            document.getElementById('secondaryCount').textContent = extraList.length + ' equipos';
         }
 
         function renderStats(maquinas) {
@@ -619,7 +575,7 @@
                 }
 
                 const data = await res.json();
-                const maquinas = Array.isArray(data.maquinas) ? data.maquinas : [];
+                const maquinas = Array.isArray(data.maquinas) ? data.maquinas.filter(m => m.activo) : [];
                 renderMachineGroups(maquinas);
                 renderStats(maquinas);
                 info.textContent = 'Actualizado ' + new Date().toLocaleTimeString();

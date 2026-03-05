@@ -559,6 +559,7 @@ def api_mapa_maquinas():
             'descripcion': maq.descripcion,
             'tipo': maq.tipo,
             'plantilla_default': maq.plantilla_default,
+            'activo': bool(getattr(maq, 'activo', False)),
             'pos_x': getattr(maq, 'pos_x', None),
             'pos_y': getattr(maq, 'pos_y', None),
             'estado_code': estado_code,
