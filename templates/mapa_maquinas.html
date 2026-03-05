@@ -6,249 +6,626 @@
     <title>Mapa de Maquinas</title>
     <style>
         :root {
-            --bg-1: #f2f0ea;
-            --bg-2: #dfe6e1;
-            --ink: #1e1d1b;
-            --muted: #5c5b58;
-            --panel: #ffffff;
-            --ok: #2e8b57;
-            --warn: #c47f00;
-            --idle: #6b7280;
-            --shadow: 0 10px 30px rgba(0,0,0,0.12);
-            --line: #e5e2dc;
+            --bg-1: #061428;
+            --bg-2: #031024;
+            --panel: #091d35;
+            --panel-2: #0d2746;
+            --line: #1e4d78;
+            --txt: #d9edff;
+            --muted: #8eb5d6;
+            --ok: #14c678;
+            --warn: #f4b400;
+            --idle: #95a4b5;
+            --accent: #19b5ff;
         }
 
-        * { box-sizing: border-box; }
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             margin: 0;
-            font-family: "Space Grotesk", "Montserrat", "Trebuchet MS", Verdana, sans-serif;
-            color: var(--ink);
-            background: radial-gradient(1200px 600px at 10% 10%, #f8f5ef 0, var(--bg-1) 60%),
-                        linear-gradient(120deg, var(--bg-2), #f6f2ea);
+            color: var(--txt);
+            background:
+                radial-gradient(1200px 500px at 0% -10%, #103158 0%, transparent 65%),
+                radial-gradient(900px 550px at 100% 0%, #0d2a50 0%, transparent 60%),
+                linear-gradient(140deg, var(--bg-1), var(--bg-2));
+            font-family: "Rajdhani", "Segoe UI", Tahoma, sans-serif;
             min-height: 100vh;
         }
 
-        header {
+        .topbar {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 20px 28px 12px;
+            gap: 14px;
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(37, 93, 146, 0.5);
+            background: linear-gradient(180deg, rgba(7, 27, 51, 0.96), rgba(7, 27, 51, 0.75));
+            backdrop-filter: blur(4px);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .topbar-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            min-width: 0;
+        }
+
+        .logo-pill {
+            width: 38px;
+            height: 38px;
+            border-radius: 8px;
+            border: 1px solid #2b6a9a;
+            display: grid;
+            place-items: center;
+            background: linear-gradient(160deg, #09355c, #051f3f);
+            color: #8ed5ff;
+            font-weight: 700;
+        }
+
+        .title-group {
+            min-width: 0;
         }
 
         .title {
             font-size: 22px;
-            letter-spacing: 0.5px;
+            line-height: 1;
             font-weight: 700;
-        }
-
-        .legend {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-            font-size: 13px;
-            color: var(--muted);
-        }
-
-        .legend-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 999px;
-            display: inline-block;
-            margin-right: 6px;
-        }
-
-        .map-wrap {
-            position: relative;
-            margin: 0 18px 24px;
-            border: 1px solid var(--line);
-            border-radius: 18px;
-            background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(250,248,243,0.8));
-            box-shadow: var(--shadow);
-            min-height: 70vh;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
             overflow: hidden;
+            text-overflow: ellipsis;
         }
 
-        .grid-floor {
-            position: absolute;
-            inset: 0;
-            background-image:
-                linear-gradient(to right, rgba(0,0,0,0.04) 1px, transparent 1px),
-                linear-gradient(to bottom, rgba(0,0,0,0.04) 1px, transparent 1px);
-            background-size: 40px 40px;
-            opacity: 0.35;
-            pointer-events: none;
+        .subtitle {
+            margin-top: 4px;
+            color: var(--muted);
+            font-size: 13px;
         }
 
-        .machine-card {
-            position: absolute;
-            width: 240px;
-            min-height: 150px;
-            background: var(--panel);
-            border: 1px solid var(--line);
-            border-radius: 14px;
-            padding: 12px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.08);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-
-        .machine-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 12px 26px rgba(0,0,0,0.12);
-        }
-
-        .machine-top {
+        .topbar-right {
             display: flex;
             align-items: center;
             gap: 10px;
+            color: var(--muted);
+            font-size: 12px;
         }
 
-        .machine-svg {
-            width: 64px;
-            height: 64px;
+        .btn {
+            border: 1px solid #2d6996;
+            background: linear-gradient(180deg, #0b3259, #072542);
+            color: #cde9ff;
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 12px;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 310px;
+            gap: 14px;
+            padding: 14px;
+        }
+
+        .main-zone {
+            display: grid;
+            grid-template-rows: auto auto;
+            gap: 12px;
+            min-width: 0;
+        }
+
+        .panel {
+            background: linear-gradient(180deg, rgba(8, 31, 56, 0.9), rgba(7, 23, 44, 0.9));
+            border: 1px solid rgba(40, 102, 157, 0.6);
+            border-radius: 12px;
+            box-shadow: inset 0 1px 0 rgba(120, 180, 220, 0.12), 0 8px 28px rgba(0, 0, 0, 0.35);
+        }
+
+        .panel-title {
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(43, 107, 162, 0.45);
+            font-size: 13px;
+            color: #93cfff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .primary-grid {
+            padding: 12px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+            gap: 10px;
+        }
+
+        .secondary-grid {
+            padding: 12px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 8px;
+            max-height: 320px;
+            overflow: auto;
+        }
+
+        .machine-card {
+            background: linear-gradient(180deg, rgba(11, 45, 78, 0.85), rgba(8, 31, 58, 0.85));
+            border: 1px solid #2a638f;
+            border-radius: 10px;
+            padding: 8px;
+            display: grid;
+            gap: 8px;
+            min-height: 130px;
+            transition: transform 0.15s ease, border-color 0.15s ease;
+        }
+
+        .machine-card:hover {
+            transform: translateY(-2px);
+            border-color: #40b5ff;
+        }
+
+        .machine-card.compact {
+            min-height: 96px;
+            padding: 7px;
+            gap: 6px;
+        }
+
+        .state-produciendo {
+            box-shadow: inset 0 0 0 1px rgba(20, 198, 120, 0.35);
+        }
+
+        .state-activa {
+            box-shadow: inset 0 0 0 1px rgba(244, 180, 0, 0.35);
+        }
+
+        .state-sin_hoja {
+            box-shadow: inset 0 0 0 1px rgba(149, 164, 181, 0.25);
+        }
+
+        .machine-head {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            min-width: 0;
+        }
+
+        .machine-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 6px;
+            border: 1px solid #2f7bb0;
+            background: linear-gradient(180deg, #11406b, #0a2d4c);
+            position: relative;
             flex: 0 0 auto;
         }
 
+        .machine-icon::before {
+            content: "";
+            position: absolute;
+            left: 7px;
+            top: 6px;
+            width: 18px;
+            height: 12px;
+            border: 1px solid #7ac7ff;
+            border-radius: 2px;
+            background: rgba(117, 191, 243, 0.16);
+        }
+
+        .machine-icon::after {
+            content: "";
+            position: absolute;
+            left: 12px;
+            bottom: 5px;
+            width: 8px;
+            height: 4px;
+            border-radius: 2px;
+            background: #8ad4ff;
+            opacity: 0.85;
+        }
+
         .machine-name {
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 700;
-            line-height: 1.2;
+            line-height: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
-        .machine-state {
-            font-size: 12px;
-            font-weight: 600;
-            padding: 2px 8px;
-            border-radius: 999px;
-            display: inline-block;
+        .machine-badge {
             margin-top: 4px;
+            font-size: 11px;
+            border-radius: 999px;
+            padding: 2px 7px;
+            display: inline-block;
+            font-weight: 700;
+            letter-spacing: 0.2px;
         }
 
-        .state-produciendo { background: rgba(46,139,87,0.12); color: var(--ok); }
-        .state-activa { background: rgba(196,127,0,0.12); color: var(--warn); }
-        .state-sin_hoja { background: rgba(107,114,128,0.12); color: var(--idle); }
+        .badge-produciendo {
+            color: #9ff5cf;
+            background: rgba(20, 198, 120, 0.15);
+        }
 
-        .machine-body {
-            margin-top: 10px;
-            font-size: 12px;
+        .badge-activa {
+            color: #ffe093;
+            background: rgba(244, 180, 0, 0.15);
+        }
+
+        .badge-sin_hoja {
+            color: #c2cfdd;
+            background: rgba(149, 164, 181, 0.16);
+        }
+
+        .machine-meta {
+            font-size: 11px;
             color: var(--muted);
             display: grid;
             gap: 4px;
         }
 
-        .machine-body strong {
-            color: var(--ink);
-            font-weight: 600;
+        .machine-meta b {
+            color: #d5ecff;
+            font-weight: 700;
         }
 
-        .refresh {
+        .machine-link {
+            margin-top: auto;
+            text-align: right;
+            color: #5ec6ff;
+            text-decoration: none;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .rail {
+            display: grid;
+            gap: 10px;
+            align-content: start;
+        }
+
+        .stat-card {
+            padding: 10px;
+        }
+
+        .stat-title {
+            font-size: 12px;
+            color: #8abbe2;
+        }
+
+        .stat-value {
+            margin-top: 6px;
+            font-size: 34px;
+            line-height: 1;
+            font-weight: 700;
+            color: #e4f4ff;
+        }
+
+        .split-stats {
+            margin-top: 10px;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 6px;
+        }
+
+        .split-box {
+            border: 1px solid rgba(50, 107, 155, 0.5);
+            border-radius: 8px;
+            padding: 8px 6px;
+            text-align: center;
+            background: rgba(6, 24, 44, 0.55);
+        }
+
+        .split-box .k {
+            display: block;
+            color: var(--muted);
+            font-size: 10px;
+            margin-bottom: 2px;
+        }
+
+        .split-box .v {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .progress-wrap {
+            margin-top: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .ring {
+            --pct: 0;
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: conic-gradient(var(--accent) calc(var(--pct) * 1%), #123252 0);
+            display: grid;
+            place-items: center;
+        }
+
+        .ring::before {
+            content: "";
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: #0b213f;
+            border: 1px solid #295e8f;
+        }
+
+        .progress-text {
             font-size: 12px;
             color: var(--muted);
         }
 
-        @media (max-width: 900px) {
-            .machine-card { width: 200px; }
+        .legend {
+            display: grid;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--muted);
         }
 
-        @media (max-width: 700px) {
-            header { flex-direction: column; align-items: flex-start; gap: 8px; }
-            .map-wrap { margin: 0 10px 20px; }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .empty {
+            padding: 28px 14px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        @media (max-width: 1080px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+
+            .rail {
+                grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            }
+        }
+
+        @media (max-width: 640px) {
+            .title {
+                font-size: 18px;
+            }
+
+            .subtitle {
+                font-size: 12px;
+            }
+
+            .topbar {
+                flex-wrap: wrap;
+            }
+
+            .topbar-right {
+                width: 100%;
+                justify-content: space-between;
+            }
         }
     </style>
 </head>
 <body>
-    <header>
-        <div class="title">Mapa de Maquinas en Produccion</div>
-        <div class="legend">
-            <span><span class="legend-dot" style="background: var(--ok);"></span>En curso</span>
-            <span><span class="legend-dot" style="background: var(--warn);"></span>Activa</span>
-            <span><span class="legend-dot" style="background: var(--idle);"></span>Sin hoja</span>
-            <span class="refresh" id="refreshInfo">Actualizando...</span>
+    <header class="topbar">
+        <div class="topbar-left">
+            <div class="logo-pill">M</div>
+            <div class="title-group">
+                <div class="title">Mapa de Maquinas - Produccion</div>
+                <div class="subtitle">Vista operacional tipo tablero, con prioridad a mas maquinas visibles</div>
+            </div>
+        </div>
+        <div class="topbar-right">
+            <a class="btn" href="/hojas_ruta">Volver a Estaciones</a>
+            <span id="refreshInfo">Actualizando...</span>
         </div>
     </header>
 
-    <div class="map-wrap" id="mapWrap">
-        <div class="grid-floor"></div>
-    </div>
+    <main class="dashboard">
+        <section class="main-zone">
+            <section class="panel">
+                <div class="panel-title">
+                    <span>Area Principal (maquinas en operacion)</span>
+                    <span id="primaryCount">0 equipos</span>
+                </div>
+                <div class="primary-grid" id="primaryGrid"></div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-title">
+                    <span>Capacidad Extendida (sin grafica, espacio para mas maquinas)</span>
+                    <span id="secondaryCount">0 equipos</span>
+                </div>
+                <div class="secondary-grid" id="secondaryGrid"></div>
+            </section>
+        </section>
+
+        <aside class="rail">
+            <section class="panel stat-card">
+                <div class="stat-title">Total de Maquinas</div>
+                <div class="stat-value" id="totalMaquinas">0</div>
+
+                <div class="split-stats">
+                    <div class="split-box">
+                        <span class="k">En curso</span>
+                        <span class="v" id="countProduciendo">0</span>
+                    </div>
+                    <div class="split-box">
+                        <span class="k">Activa</span>
+                        <span class="v" id="countActiva">0</span>
+                    </div>
+                    <div class="split-box">
+                        <span class="k">Sin hoja</span>
+                        <span class="v" id="countSinHoja">0</span>
+                    </div>
+                </div>
+
+                <div class="progress-wrap">
+                    <div class="ring" id="prodRing"></div>
+                    <div class="progress-text" id="prodText">0% en curso</div>
+                </div>
+            </section>
+
+            <section class="panel stat-card">
+                <div class="stat-title">Leyenda de Estado</div>
+                <div class="legend" style="margin-top:8px;">
+                    <div class="legend-item"><span class="dot" style="background:var(--ok);"></span> Produciendo</div>
+                    <div class="legend-item"><span class="dot" style="background:var(--warn);"></span> Activa sin estacion</div>
+                    <div class="legend-item"><span class="dot" style="background:var(--idle);"></span> Sin hoja activa</div>
+                </div>
+            </section>
+        </aside>
+    </main>
 
     <script>
-        const MAP_REFRESH_MS = 5000;
-        const MAP_PADDING = 16;
-        const CARD_W = 240;
-        const CARD_H = 170;
-        const GRID_COLS = 4;
+        const MAP_REFRESH_MS = 6000;
+        const PRIMARY_LIMIT = 10;
 
-        function machineSvg(color) {
-            return `
-            <svg class="machine-svg" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
-                <rect x="10" y="60" width="100" height="40" rx="8" fill="#e9ecef" stroke="#c9c5bf" />
-                <rect x="20" y="30" width="50" height="30" rx="6" fill="#f4f1ec" stroke="#c9c5bf" />
-                <rect x="74" y="36" width="26" height="18" rx="4" fill="#fff" stroke="#c9c5bf" />
-                <circle cx="28" cy="92" r="6" fill="${color}" />
-                <circle cx="92" cy="92" r="6" fill="${color}" />
-                <path d="M26 52h18" stroke="#9c9a94" stroke-width="3" />
-                <path d="M60 78h22" stroke="#9c9a94" stroke-width="3" />
-            </svg>`;
+        function safeText(value, fallback) {
+            if (value === null || value === undefined || value === '') {
+                return fallback;
+            }
+            return String(value);
         }
 
-        function stateColor(code) {
-            if (code === 'produciendo') return '#2e8b57';
-            if (code === 'activa') return '#c47f00';
-            return '#6b7280';
+        function makeMetaRow(label, value) {
+            const row = document.createElement('div');
+            const b = document.createElement('b');
+            b.textContent = label + ': ';
+            row.appendChild(b);
+            row.appendChild(document.createTextNode(safeText(value, 'N/A')));
+            return row;
         }
 
-        function computeFallbackPosition(idx) {
-            const col = idx % GRID_COLS;
-            const row = Math.floor(idx / GRID_COLS);
-            return {
-                x: MAP_PADDING + col * (CARD_W + 18),
-                y: MAP_PADDING + row * (CARD_H + 16)
-            };
+        function buildMachineCard(machine, compact) {
+            const card = document.createElement('article');
+            card.className = 'machine-card state-' + safeText(machine.estado_code, 'sin_hoja');
+            if (compact) {
+                card.classList.add('compact');
+            }
+
+            const head = document.createElement('div');
+            head.className = 'machine-head';
+
+            const icon = document.createElement('div');
+            icon.className = 'machine-icon';
+
+            const titleWrap = document.createElement('div');
+            titleWrap.style.minWidth = '0';
+
+            const name = document.createElement('div');
+            name.className = 'machine-name';
+            name.textContent = safeText(machine.nombre, 'Maquina sin nombre');
+
+            const badge = document.createElement('div');
+            const code = safeText(machine.estado_code, 'sin_hoja');
+            badge.className = 'machine-badge badge-' + code;
+            badge.textContent = safeText(machine.estado_label, 'Sin hoja');
+
+            titleWrap.appendChild(name);
+            titleWrap.appendChild(badge);
+            head.appendChild(icon);
+            head.appendChild(titleWrap);
+
+            const meta = document.createElement('div');
+            meta.className = 'machine-meta';
+            meta.appendChild(makeMetaRow('Pieza', machine.pieza));
+            meta.appendChild(makeMetaRow('Hoja', machine.hoja_serie));
+            if (!compact) {
+                meta.appendChild(makeMetaRow('Estacion', machine.estacion_actual || 'Sin produccion'));
+                meta.appendChild(makeMetaRow('Tiempo', machine.tiempo_total));
+            }
+
+            const link = document.createElement('a');
+            link.className = 'machine-link';
+            link.href = '/hojas_ruta/' + machine.id;
+            link.textContent = 'Abrir detalle >';
+
+            card.appendChild(head);
+            card.appendChild(meta);
+            card.appendChild(link);
+            return card;
         }
 
-        function renderMachines(list) {
-            const wrap = document.getElementById('mapWrap');
-            wrap.querySelectorAll('.machine-card').forEach(el => el.remove());
+        function renderMachineGroups(maquinas) {
+            const primary = document.getElementById('primaryGrid');
+            const secondary = document.getElementById('secondaryGrid');
+            primary.innerHTML = '';
+            secondary.innerHTML = '';
 
-            list.forEach((m, idx) => {
-                const pos = (Number.isFinite(m.pos_x) && Number.isFinite(m.pos_y))
-                    ? { x: m.pos_x, y: m.pos_y }
-                    : computeFallbackPosition(idx);
+            const mainList = maquinas.slice(0, PRIMARY_LIMIT);
+            const extraList = maquinas.slice(PRIMARY_LIMIT);
 
-                const card = document.createElement('div');
-                card.className = `machine-card state-${m.estado_code}`;
-                card.style.left = `${pos.x}px`;
-                card.style.top = `${pos.y}px`;
+            if (!mainList.length) {
+                const emptyMain = document.createElement('div');
+                emptyMain.className = 'empty';
+                emptyMain.textContent = 'No hay maquinas registradas para mostrar.';
+                primary.appendChild(emptyMain);
+            } else {
+                mainList.forEach(m => primary.appendChild(buildMachineCard(m, false)));
+            }
 
-                card.innerHTML = `
-                    <div class="machine-top">
-                        ${machineSvg(stateColor(m.estado_code))}
-                        <div>
-                            <div class="machine-name">${m.nombre}</div>
-                            <div class="machine-state state-${m.estado_code}">${m.estado_label}</div>
-                        </div>
-                    </div>
-                    <div class="machine-body">
-                        <div><strong>Pieza:</strong> ${m.pieza || 'N/A'}</div>
-                        <div><strong>Hoja:</strong> ${m.hoja_serie || 'N/A'}</div>
-                        <div><strong>Tiempo:</strong> ${m.tiempo_total || 'N/A'}</div>
-                        <div><strong>Estacion:</strong> ${m.estacion_actual || 'Sin produccion'}</div>
-                    </div>
-                `;
+            if (!extraList.length) {
+                const emptySec = document.createElement('div');
+                emptySec.className = 'empty';
+                emptySec.textContent = 'Sin maquinas adicionales por ahora.';
+                secondary.appendChild(emptySec);
+            } else {
+                extraList.forEach(m => secondary.appendChild(buildMachineCard(m, true)));
+            }
 
-                wrap.appendChild(card);
-            });
+            document.getElementById('primaryCount').textContent = mainList.length + ' equipos';
+            document.getElementById('secondaryCount').textContent = extraList.length + ' equipos';
+        }
+
+        function renderStats(maquinas) {
+            const total = maquinas.length;
+            const produciendo = maquinas.filter(m => m.estado_code === 'produciendo').length;
+            const activa = maquinas.filter(m => m.estado_code === 'activa').length;
+            const sinHoja = maquinas.filter(m => m.estado_code === 'sin_hoja').length;
+
+            document.getElementById('totalMaquinas').textContent = String(total);
+            document.getElementById('countProduciendo').textContent = String(produciendo);
+            document.getElementById('countActiva').textContent = String(activa);
+            document.getElementById('countSinHoja').textContent = String(sinHoja);
+
+            const pct = total ? Math.round((produciendo * 100) / total) : 0;
+            const ring = document.getElementById('prodRing');
+            ring.style.setProperty('--pct', String(pct));
+            document.getElementById('prodText').textContent = pct + '% en curso';
         }
 
         async function loadMapa() {
             const info = document.getElementById('refreshInfo');
             try {
-                const res = await fetch('/api/mapa_maquinas');
+                const res = await fetch('/api/mapa_maquinas', { credentials: 'same-origin' });
+                if (!res.ok) {
+                    throw new Error('HTTP ' + res.status);
+                }
+
                 const data = await res.json();
-                renderMachines(data.maquinas || []);
-                info.textContent = `Actualizado ${new Date().toLocaleTimeString()}`;
-            } catch (err) {
-                info.textContent = 'Error actualizando';
-                console.error(err);
+                const maquinas = Array.isArray(data.maquinas) ? data.maquinas : [];
+                renderMachineGroups(maquinas);
+                renderStats(maquinas);
+                info.textContent = 'Actualizado ' + new Date().toLocaleTimeString();
+            } catch (error) {
+                console.error(error);
+                info.textContent = 'Error al actualizar';
             }
         }
 
