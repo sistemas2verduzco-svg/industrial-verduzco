@@ -6,136 +6,381 @@
   <title>Hoja de Ruta</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   <style>
-    .card {
-      background: #fff;
-      border: 1px solid #e5e7eb;
-      border-radius: 10px;
-      padding: 16px;
-      box-shadow: 0 3px 12px rgba(0, 0, 0, 0.05);
+    :root {
+      --ink: #0f172a;
+      --muted: #475569;
+      --line: #dbe4f0;
+      --line-strong: #b8c7dc;
+      --panel: #ffffff;
+      --head: #f4f8ff;
+      --accent: #124f95;
     }
-    .head-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+
+    body {
+      background: #f3f6fa;
+      color: var(--ink);
+    }
+
+    .sheet-shell {
+      max-width: 1080px;
+      margin: 0 auto;
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       gap: 10px;
       margin-bottom: 12px;
     }
-    .k {
-      font-size: 12px;
-      color: #6b7280;
-      margin-bottom: 3px;
-    }
-    .v {
-      font-weight: 700;
-      color: #111827;
-      font-size: 14px;
-      word-break: break-word;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    th, td {
-      border-bottom: 1px solid #f0f0f0;
-      text-align: left;
-      padding: 8px;
+
+    .btn {
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      color: #0f172a;
+      border-radius: 8px;
+      padding: 8px 12px;
+      text-decoration: none;
+      font-weight: 600;
+      cursor: pointer;
       font-size: 13px;
     }
-    th {
-      background: #f7f9fb;
-      font-weight: 700;
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
     }
+
+    .paper {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
+    }
+
+    .doc-header {
+      display: grid;
+      grid-template-columns: 110px 1fr auto;
+      align-items: center;
+      gap: 14px;
+      border: 1px solid var(--line-strong);
+      background: var(--head);
+      padding: 12px;
+      border-radius: 10px;
+      margin-bottom: 12px;
+    }
+
+    .logo-box {
+      width: 96px;
+      height: 96px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .logo-box img {
+      width: 78px;
+      height: 78px;
+      object-fit: contain;
+    }
+
+    .doc-title {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      color: #0b2f63;
+    }
+
+    .doc-subtitle {
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .doc-badge {
+      text-align: right;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+      min-width: 180px;
+    }
+
     .status {
       display: inline-block;
       font-size: 12px;
       border-radius: 999px;
-      padding: 3px 8px;
+      padding: 4px 10px;
       font-weight: 700;
       background: #e5e7eb;
       color: #374151;
+      margin-top: 6px;
     }
+
     .st-activa { background: #d1fae5; color: #065f46; }
     .st-pausada { background: #fef3c7; color: #92400e; }
     .st-completada { background: #dbeafe; color: #1e3a8a; }
+
+    .head-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 12px;
+    }
+
+    .field {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      min-height: 58px;
+      background: #fff;
+    }
+
+    .k {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      font-weight: 700;
+    }
+
+    .v {
+      font-weight: 700;
+      color: var(--ink);
+      font-size: 14px;
+      word-break: break-word;
+    }
+
+    .table-wrap {
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      padding: 7px;
+      font-size: 12px;
+      vertical-align: top;
+    }
+
+    th {
+      background: #eef4fc;
+      color: #0f2f5f;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      font-size: 11px;
+    }
+
+    .sign-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .sign-box {
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      padding: 8px;
+      min-height: 74px;
+    }
+
+    .sign-line {
+      margin-top: 26px;
+      border-top: 1px solid #6b7280;
+      font-size: 11px;
+      color: var(--muted);
+      padding-top: 4px;
+      text-align: center;
+    }
+
+    .footer-note {
+      margin-top: 10px;
+      font-size: 11px;
+      color: var(--muted);
+      text-align: right;
+    }
+
+    @media (max-width: 860px) {
+      .doc-header {
+        grid-template-columns: 1fr;
+        text-align: center;
+      }
+      .logo-box {
+        margin: 0 auto;
+      }
+      .doc-badge {
+        text-align: center;
+      }
+      .head-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .sign-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @page {
+      size: A4 portrait;
+      margin: 10mm;
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+      .app-sidebar,
+      .toolbar,
+      a[href],
+      .no-print {
+        display: none !important;
+      }
+      body > .container {
+        margin-left: 0 !important;
+      }
+      .sheet-shell {
+        max-width: none;
+      }
+      .paper {
+        border: none;
+        box-shadow: none;
+        border-radius: 0;
+        padding: 0;
+      }
+      .table-wrap {
+        overflow: visible;
+      }
+      tr, td, th {
+        page-break-inside: avoid;
+      }
+    }
   </style>
 </head>
 <body>
   {% include '_sidebar.html' %}
 
   <div class="container">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px;">
-      <a href="/hojas_ruta_form" style="text-decoration:none;color:#0b74de;">← Volver a formulario</a>
-      <h2 style="margin:0;">Hoja de Ruta</h2>
-      <span class="status st-{{ hoja.estado or 'activa' }}">{{ hoja.estado or 'activa' }}</span>
-    </div>
-
-    <div class="card" style="margin-bottom:12px;">
-      <div class="head-grid">
-        <div>
-          <div class="k">Serie</div>
-          <div class="v">{{ hoja.nombre or '' }}</div>
-        </div>
-        <div>
-          <div class="k">Clave</div>
-          <div class="v">{{ hoja.pn or '' }}</div>
-        </div>
-        <div>
-          <div class="k">Calidad</div>
-          <div class="v">{{ hoja.calidad or '' }}</div>
-        </div>
-        <div>
-          <div class="k">Fecha</div>
-          <div class="v">{{ hoja.fecha_salida[:16] if hoja.fecha_salida else '' }}</div>
-        </div>
-        <div>
-          <div class="k">Cantidad</div>
-          <div class="v">{{ hoja.cantidad_piezas or '' }}</div>
-        </div>
-        <div>
-          <div class="k">Almacen</div>
-          <div class="v">{{ hoja.almacen or '' }}</div>
-        </div>
+    <div class="sheet-shell">
+      <div class="toolbar no-print">
+        <a href="/hojas_ruta_form" class="btn">← Volver a formulario</a>
+        <button class="btn btn-primary" onclick="window.print()">Imprimir hoja</button>
       </div>
-    </div>
 
-    <div class="card">
-      <h3 style="margin:0 0 10px 0;">Procesos de la hoja</h3>
-      <div style="overflow:auto;">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Proceso</th>
-              <th>Centro trabajo</th>
-              <th>Operacion</th>
-              <th>T/E</th>
-              <th>T/CT</th>
-              <th>T/CO</th>
-              <th>T/O</th>
-              <th>Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% if hoja.estaciones %}
-              {% for est in hoja.estaciones|sort(attribute='orden') %}
+      <div class="paper">
+        <div class="doc-header">
+          <div class="logo-box">
+            <img src="{{ url_for('static', filename='img/logo_ttm.jpg') }}" alt="Logo empresa TTM">
+          </div>
+          <div>
+            <div class="doc-title">Hoja De Ruta De Produccion</div>
+            <div class="doc-subtitle">Control operacional para ciclo de produccion y seguimiento de procesos por clave</div>
+          </div>
+          <div class="doc-badge">
+            <div><strong>Serie:</strong> {{ hoja.nombre or '' }}</div>
+            <div><strong>Fecha:</strong> {{ hoja.fecha_salida[:16] if hoja.fecha_salida else '' }}</div>
+            <span class="status st-{{ hoja.estado or 'activa' }}">{{ hoja.estado or 'activa' }}</span>
+          </div>
+        </div>
+
+        <div class="head-grid">
+          <div class="field">
+            <div class="k">Clave</div>
+            <div class="v">{{ hoja.pn or '' }}</div>
+          </div>
+          <div class="field">
+            <div class="k">Calidad</div>
+            <div class="v">{{ hoja.calidad or '' }}</div>
+          </div>
+          <div class="field">
+            <div class="k">Cantidad De Piezas</div>
+            <div class="v">{{ hoja.cantidad_piezas or '' }}</div>
+          </div>
+          <div class="field">
+            <div class="k">Almacen</div>
+            <div class="v">{{ hoja.almacen or '' }}</div>
+          </div>
+          <div class="field">
+            <div class="k">Creada Por</div>
+            <div class="v">{{ hoja.usuario or 'Sistema' }}</div>
+          </div>
+          <div class="field">
+            <div class="k">Estado General</div>
+            <div class="v">{{ hoja.estado or '' }}</div>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
               <tr>
-                <td>{{ est.orden }}</td>
-                <td>{{ est.nombre or '' }}</td>
-                <td>{{ est.centro_trabajo or '' }}</td>
-                <td>{{ est.operacion or '' }}</td>
-                <td>{{ est.t_e or '' }}</td>
-                <td>{{ est.t_tct or '' }}</td>
-                <td>{{ est.t_tco or '' }}</td>
-                <td>{{ est.t_to or '' }}</td>
-                <td>{{ est.estado or '' }}</td>
+                <th>#</th>
+                <th>Proceso</th>
+                <th>Centro Trabajo</th>
+                <th>Operacion</th>
+                <th>T/E</th>
+                <th>T/CT</th>
+                <th>T/CO</th>
+                <th>T/O</th>
+                <th>Estado</th>
               </tr>
-              {% endfor %}
-            {% else %}
-              <tr>
-                <td colspan="9" style="color:#6b7280;">Esta hoja no tiene procesos cargados.</td>
-              </tr>
-            {% endif %}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {% if hoja.estaciones %}
+                {% for est in hoja.estaciones|sort(attribute='orden') %}
+                <tr>
+                  <td>{{ est.orden }}</td>
+                  <td>{{ est.nombre or '' }}</td>
+                  <td>{{ est.centro_trabajo or '' }}</td>
+                  <td>{{ est.operacion or '' }}</td>
+                  <td>{{ est.t_e or '' }}</td>
+                  <td>{{ est.t_tct or '' }}</td>
+                  <td>{{ est.t_tco or '' }}</td>
+                  <td>{{ est.t_to or '' }}</td>
+                  <td>{{ est.estado or '' }}</td>
+                </tr>
+                {% endfor %}
+              {% else %}
+                <tr>
+                  <td colspan="9" style="color:#64748b;">Esta hoja no tiene procesos cargados.</td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="sign-row">
+          <div class="sign-box">
+            <div class="k">Responsable Produccion</div>
+            <div class="sign-line">Firma y nombre</div>
+          </div>
+          <div class="sign-box">
+            <div class="k">Supervisor Calidad</div>
+            <div class="sign-line">Firma y nombre</div>
+          </div>
+          <div class="sign-box">
+            <div class="k">Almacen</div>
+            <div class="sign-line">Recibido / entrega</div>
+          </div>
+        </div>
+
+        <div class="footer-note">Documento generado por ERP - {{ hoja.fecha_actualizacion[:19] if hoja.fecha_actualizacion else '' }}</div>
       </div>
     </div>
   </div>
