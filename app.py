@@ -588,6 +588,7 @@ def hojas_ruta_form():
             'calidad': h.calidad,
             'almacen': h.almacen,
             'orden_trabajo': h.orden_trabajo_hr,
+            'comentarios': h.descripcion,
             'estado': h.estado,
             'cantidad_piezas': h.cantidad_piezas,
             'fecha_salida': h.fecha_salida.isoformat() if h.fecha_salida else None,
@@ -647,6 +648,7 @@ def api_crear_hoja_ruta():
     calidad = (data.get('calidad') or '').strip()
     almacen = (data.get('almacen') or '').strip()
     orden_trabajo = (data.get('orden_trabajo') or '').strip()
+    comentarios = (data.get('comentarios') or '').strip()
     cantidad_piezas = data.get('cantidad_piezas')
 
     if not clave_id:
@@ -673,7 +675,7 @@ def api_crear_hoja_ruta():
         hoja = HojaRuta(
             maquina_id=int(data.get('maquina_id')) if data.get('maquina_id') else None,
             nombre='PENDIENTE_SERIE',
-            descripcion=None,
+            descripcion=comentarios or None,
             estado='activa',
             producto=clave.nombre,
             calidad=calidad,
@@ -748,6 +750,8 @@ def api_actualizar_hoja_ruta(hoja_id):
         hoja.nombre = data['nombre']
     if 'descripcion' in data:
         hoja.descripcion = data['descripcion']
+    if 'comentarios' in data:
+        hoja.descripcion = (data.get('comentarios') or '').strip() or None
     if 'calidad' in data:
         hoja.calidad = (data.get('calidad') or '').strip() or None
     if 'almacen' in data:
