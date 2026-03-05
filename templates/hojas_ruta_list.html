@@ -6,21 +6,137 @@
     <title>Hojas de Ruta de Producción</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <style>
-        .maquina-card {
-            border: 1px solid #e6e6e6;
+        :root {
+            --bg: #f2f6fb;
+            --panel: #ffffff;
+            --ink: #10243d;
+            --muted: #60748a;
+            --line: #d9e4f0;
+            --brand: #0b74de;
+            --ok: #1f9d62;
+            --warn: #c24d2c;
+        }
+
+        body {
+            background: linear-gradient(180deg, #f7fbff, var(--bg));
+            color: var(--ink);
+            font-family: "Barlow", "Segoe UI", Tahoma, sans-serif;
+        }
+
+        .module-head {
+            background: linear-gradient(120deg, #0d3b66, #0b74de);
+            border-radius: 12px;
+            padding: 18px;
+            color: #fff;
+            box-shadow: 0 10px 22px rgba(11, 116, 222, 0.22);
+        }
+
+        .module-title {
+            margin: 0;
+            font-size: 24px;
+            letter-spacing: 0.3px;
+            font-weight: 700;
+        }
+
+        .module-sub {
+            margin-top: 6px;
+            color: #d7ebff;
+            font-size: 14px;
+        }
+
+        .stats-row {
+            margin-top: 14px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 10px;
+        }
+
+        .stat-box {
+            background: rgba(255, 255, 255, 0.14);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .stat-k {
+            font-size: 12px;
+            color: #d9ebff;
+        }
+
+        .stat-v {
+            font-size: 24px;
+            font-weight: 700;
+            margin-top: 2px;
+        }
+
+        .filter-wrap {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 12px;
+            margin: 14px 0;
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 10px;
+            align-items: end;
+        }
+
+        .filter-wrap input {
+            width: 100%;
+            padding: 9px 10px;
+            border: 1px solid #c9d8e8;
             border-radius: 8px;
-            padding: 16px;
+            font-size: 14px;
+        }
+
+        .filter-wrap label {
+            display: block;
+            font-weight: 700;
+            font-size: 12px;
+            color: #48627d;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .btn-light {
+            padding: 9px 12px;
+            border: 1px solid #c6d5e6;
+            border-radius: 8px;
             background: #fff;
-            margin-bottom: 12px;
+            color: #17324d;
+            cursor: pointer;
+            font-weight: 700;
+        }
+
+        .cards-wrap {
+            margin-top: 18px;
+            display: grid;
+            gap: 12px;
+        }
+
+        .maquina-card {
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 14px;
+            background: var(--panel);
+            box-shadow: 0 4px 12px rgba(12, 40, 73, 0.06);
             display: flex;
             gap: 16px;
             align-items: center;
         }
+
+        .maquina-card:hover {
+            border-color: #a6c4e4;
+            box-shadow: 0 8px 18px rgba(12, 40, 73, 0.1);
+        }
+
         .maquina-image {
             width: 120px;
             height: 120px;
-            background: #f5f5f5;
-            border-radius: 6px;
+            background: #f0f5fb;
+            border-radius: 10px;
+            border: 1px solid #d6e1ed;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -35,59 +151,81 @@
             flex: 1;
         }
         .maquina-nombre {
-            font-size: 18px;
-            font-weight: 600;
+            font-size: 20px;
+            font-weight: 700;
             margin-bottom: 4px;
+            letter-spacing: 0.2px;
         }
         .maquina-desc {
             font-size: 13px;
-            color: #666;
-            margin-bottom: 8px;
+            color: var(--muted);
+            margin-bottom: 10px;
         }
         .status-badge {
             display: inline-block;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
         }
         .status-produciendo {
-            background: #c8e6c9;
-            color: #1b5e20;
+            background: #d6f5e4;
+            color: #166946;
         }
         .status-parado {
-            background: #ffccbc;
-            color: #bf360c;
+            background: #ffe0d7;
+            color: #9f3b22;
         }
         .maquina-actions {
             display: flex;
-            gap: 8px;
+            gap: 7px;
             flex-direction: column;
         }
         .btn-small {
             padding: 8px 12px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+            border: 1px solid #c9d8e8;
+            border-radius: 8px;
             background: #fff;
             cursor: pointer;
-            font-size: 13px;
+            font-size: 12px;
+            font-weight: 700;
             text-decoration: none;
             display: inline-block;
             text-align: center;
             transition: all 0.2s;
         }
         .btn-small:hover {
-            background: #f9f9f9;
-            border-color: #0b74de;
-            color: #0b74de;
+            background: #f4f9ff;
+            border-color: var(--brand);
+            color: var(--brand);
         }
         .btn-primary-small {
-            background: #0b74de;
+            background: var(--brand);
             color: #fff;
-            border-color: #0b74de;
+            border-color: var(--brand);
         }
         .btn-primary-small:hover {
             background: #0963cc;
+        }
+
+        @media (max-width: 980px) {
+            .maquina-card {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .maquina-image {
+                width: 100%;
+                height: 150px;
+            }
+            .maquina-actions {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 8px;
+            }
+            .filter-wrap {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
     <script>
@@ -122,22 +260,38 @@
     {% include '_sidebar.html' %}
 
     <div class="container">
-        <h2>Hojas de Ruta — Producción en Máquinas</h2>
-        <p style="color: #666; margin-top: 8px;">Selecciona una máquina para ver y gestionar sus hojas de ruta y estaciones de trabajo.</p>
+        <section class="module-head">
+            <h2 class="module-title">Estaciones T - Produccion por Maquina</h2>
+            <div class="module-sub">Gestion centralizada de activacion, OT y seguimiento de hojas de ruta por equipo.</div>
+            <div class="stats-row">
+                <div class="stat-box">
+                    <div class="stat-k">Total maquinas</div>
+                    <div class="stat-v">{{ maquinas|length }}</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-k">Con hoja activa</div>
+                    <div class="stat-v">{{ maquinas|selectattr('hoja_activa')|list|length }}</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-k">Maquinas activadas</div>
+                    <div class="stat-v">{{ maquinas|selectattr('activo')|list|length }}</div>
+                </div>
+            </div>
+        </section>
 
-        <div style="background:#f9f9f9; padding:12px; border-radius:6px; margin:16px 0; display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
-            <div style="flex:1; min-width:200px;">
-                <label style="display:block; font-weight:600; font-size:13px; margin-bottom:4px;">Buscar máquina</label>
-                <input type="text" id="filtroMaquina" placeholder="Ej: Torno, Fresadora..." style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">
+        <div class="filter-wrap">
+            <div>
+                <label>Buscar maquina</label>
+                <input type="text" id="filtroMaquina" placeholder="Ej: Torno, Fresadora...">
             </div>
-            <div style="flex:1; min-width:200px;">
-                <label style="display:block; font-weight:600; font-size:13px; margin-bottom:4px;">Buscar hoja activa</label>
-                <input type="text" id="filtroHoja" placeholder="Ej: Producción pieza X..." style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">
+            <div>
+                <label>Buscar hoja activa</label>
+                <input type="text" id="filtroHoja" placeholder="Ej: Produccion pieza X...">
             </div>
-            <button onclick="limpiarFiltros()" style="padding:8px 12px; border:1px solid #ddd; border-radius:4px; background:#fff; cursor:pointer; font-size:13px;">Limpiar</button>
+            <button onclick="limpiarFiltros()" class="btn-light">Limpiar</button>
         </div>
 
-        <div style="margin-top: 24px;">
+        <div id="listContainer" class="cards-wrap">
             {% if maquinas %}
                 {% for maq in maquinas %}
                 <div class="maquina-card" data-maq-nombre="{{ maq.nombre.lower() }}" data-hoja-nombre="{% if maq.hoja_activa %}{{ maq.hoja_activa.nombre.lower() }}{% endif %}">
@@ -357,7 +511,7 @@
         });
 
         // Mostrar mensaje si no hay resultados
-        const contenedor = document.querySelector('[style*="margin-top: 24px"]');
+        const contenedor = document.getElementById('listContainer');
         let noResults = document.getElementById('noResults');
         if (visibles === 0 && (termMaq || termHoja)) {
             if (!noResults) {
