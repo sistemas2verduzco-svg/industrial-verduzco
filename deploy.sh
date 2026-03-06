@@ -39,6 +39,40 @@ contains_line() {
 require_cmd git
 require_cmd docker
 
+wait_for_app_ready() {
+  local timeout_secs="${1:-180}"
+  local interval_secs=3
+  local elapsed=0
+
+  log "Waiting for app container readiness (timeout: ${timeout_secs}s)"
+
+  while (( elapsed < timeout_secs )); do
+    local app_id
+    app_id="$(docker compose ps -q app 2>/dev/null || true)"
+
+    if [[ -n "$app_id" ]]; then
+      local running health
+      running="$(docker inspect -f '{{.State.Running}}' "$app_id" 2>/dev/null || echo false)"
+      health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$app_id" 2>/dev/null || echo unknown)"
+
+      if [[ "$running" == "true" ]]; then
+        if [[ "$health" == "healthy" || "$health" == "none" ]]; then
+          log "App is ready (running=$running, health=$health)."
+          return 0
+        fi
+      fi
+    fi
+
+    sleep "$interval_secs"
+    elapsed=$((elapsed + interval_secs))
+  done
+
+  echo "ERROR: App did not become ready within ${timeout_secs}s."
+  docker compose ps
+  docker compose logs --tail=120 app || true
+  return 1
+}
+
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "ERROR: This script must run inside a git repository."
   exit 1
@@ -158,6 +192,10 @@ fi
 if [[ "$NEED_NGINX_RELOAD" -eq 1 ]]; then
   log "Nginx config changed. Reloading nginx."
   docker compose exec -T nginx nginx -s reload || docker compose restart nginx
+fi
+
+if [[ "$NEED_REBUILD" -eq 1 || "$NEED_COMPOSE_APPLY" -eq 1 || "$NEED_APP_RESTART" -eq 1 ]]; then
+  wait_for_app_ready 180
 fi
 
 log "Service status"

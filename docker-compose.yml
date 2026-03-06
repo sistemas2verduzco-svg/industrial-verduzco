@@ -33,6 +33,12 @@ services:
       - .:/app
     restart: unless-stopped
     command: gunicorn -w 2 -b 0.0.0.0:5000 app:app
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.create_connection(('127.0.0.1', 5000), 2); s.close()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
 
   nginx:
     image: nginx:stable-alpine
