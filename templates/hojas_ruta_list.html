@@ -200,6 +200,18 @@
             cursor: pointer;
         }
 
+        .pending-scan {
+            border: 1px solid #0a8a73;
+            background: linear-gradient(120deg, #0f766e, #139a8f);
+            color: #fff;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.25px;
+            padding: 5px 8px;
+            cursor: pointer;
+        }
+
         .pending-list {
             max-height: 72vh;
             overflow: auto;
@@ -712,7 +724,7 @@
                         <span class="pending-count">{{ hojas_pendientes|length }}</span>
                     </div>
                     <div style="display:flex; gap:8px; align-items:center;">
-                        <button class="pending-toggle" type="button" onclick="abrirScannerAsignacion()">Escanear QR</button>
+                        <button class="pending-scan" type="button" onclick="abrirScannerAsignacion()">Escanear QR</button>
                         <button id="pendingToggleBtn" class="pending-toggle" type="button" onclick="togglePendingPanel()">Ocultar</button>
                     </div>
                 </div>
