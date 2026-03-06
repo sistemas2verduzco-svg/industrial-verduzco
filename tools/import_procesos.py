@@ -195,6 +195,9 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
 
     # Agrupamos por clave para poder limpiar secuencia por clave si overwrite=True
     grouped = df.groupby("clave", sort=False)
+    claves_detectadas = [str(k).strip() for k in grouped.groups.keys() if str(k).strip()]
+    imported_keys = []
+    total_pasos_importados = 0
 
     with app.app_context():
         for clave_code, gdf in grouped:
@@ -271,7 +274,27 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
 
             # Commit por clave para evitar transacción gigante
             db.session.commit()
+            imported_keys.append(clave_code)
+            total_pasos_importados += len(gdf)
             print(f"✓ Importada clave {clave_code} con {len(gdf)} pasos")
+
+        # Validación estricta: toda clave detectada por el parser debe quedar importada.
+        set_detectadas = set(claves_detectadas)
+        set_importadas = set(imported_keys)
+        faltantes = sorted(set_detectadas - set_importadas)
+
+        print("\n=== RESUMEN IMPORTACION PROCESOS/CLAVES ===")
+        print(f"Claves detectadas en archivo: {len(set_detectadas)}")
+        print(f"Claves importadas: {len(set_importadas)}")
+        print(f"Total de pasos importados: {total_pasos_importados}")
+
+        if faltantes:
+            print("\nERROR: Faltaron claves por importar:")
+            for c in faltantes:
+                print(f"  - {c}")
+            raise RuntimeError("Importacion incompleta: hay claves detectadas que no se importaron")
+
+        print("Importacion OK: todas las claves detectadas quedaron importadas.")
 
 
 # --- CLI ------------------------------------------------------------------
