@@ -25,13 +25,26 @@ def hhmmss(val: Optional[str]) -> Optional[str]:
     """Normalize a time-like value to HH:MM:SS; return None if empty/invalid."""
     if val is None:
         return None
+    # Soportar nulos de pandas (NaN/NaT) sin romper la importacion
+    try:
+        if pd.isna(val):
+            return None
+    except Exception:
+        pass
+
     text = str(val).strip()
-    if not text:
+    if not text or text.lower() in ('nan', 'nat', 'none', '-'):
         return None
     try:
         td = pd.to_timedelta(text)
     except Exception:
         return None
+    try:
+        if pd.isna(td):
+            return None
+    except Exception:
+        pass
+
     total_seconds = int(td.total_seconds())
     h, r = divmod(total_seconds, 3600)
     m, s = divmod(r, 60)
