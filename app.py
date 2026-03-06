@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response
 from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRuta, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso
 from auth import AuthManager
 from email_manager import EmailManager
@@ -789,7 +789,12 @@ def hojas_ruta_list():
         except Exception:
             db.session.rollback()
 
-    return render_template('hojas_ruta_list.html', maquinas=maquinas_data, hojas_pendientes=pendientes_data)
+    resp = make_response(render_template('hojas_ruta_list.html', maquinas=maquinas_data, hojas_pendientes=pendientes_data))
+    # Evita que navegador/proxy muestren HTML viejo tras deploy.
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
 
 
 @app.route('/mapa_maquinas')

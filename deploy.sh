@@ -145,6 +145,9 @@ elif [[ "$NEED_COMPOSE_APPLY" -eq 1 ]]; then
   docker compose up -d --remove-orphans
 else
   log "No rebuild needed. Code/template changes will auto-reload inside app container."
+  log "Forcing graceful gunicorn workers reload to avoid serving stale first request."
+  docker compose exec -T app sh -lc 'kill -HUP 1' || true
+  sleep 2
 fi
 
 if [[ "$NEED_NGINX_RELOAD" -eq 1 ]]; then
