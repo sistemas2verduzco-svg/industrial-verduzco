@@ -11,6 +11,7 @@ cd "$ROOT_DIR"
 
 BRANCH_ARG="${1:-}"
 FORCE_DIRTY="${FORCE_DIRTY:-0}"
+ALLOWED_DIRTY_REGEX="${ALLOWED_DIRTY_REGEX:-^(\.env|catalogo_app\.log|uploads/productos/)}"
 
 log() {
   printf "\n[%s] %s\n" "$(date +"%Y-%m-%d %H:%M:%S")" "$*"
@@ -48,9 +49,34 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ "$FORCE_DIRTY" != "1" ]] && [[ -n "$(git status --porcelain)" ]]; then
-  echo "ERROR: Working tree has local changes. Commit/stash them first, or run with FORCE_DIRTY=1."
-  exit 1
+DIRTY_STATUS="$(git status --porcelain)"
+if [[ "$FORCE_DIRTY" != "1" ]] && [[ -n "$DIRTY_STATUS" ]]; then
+  mapfile -t DIRTY_LINES <<< "$DIRTY_STATUS"
+  DISALLOWED_DIRTY=()
+  ALLOWED_DIRTY=()
+
+  for line in "${DIRTY_LINES[@]}"; do
+    entry="${line:3}"
+    entry="${entry## }"
+    # Manejar renombres: "old -> new"
+    path="${entry##* -> }"
+
+    if [[ "$path" =~ $ALLOWED_DIRTY_REGEX ]]; then
+      ALLOWED_DIRTY+=("$line")
+    else
+      DISALLOWED_DIRTY+=("$line")
+    fi
+  done
+
+  if [[ ${#DISALLOWED_DIRTY[@]} -gt 0 ]]; then
+    echo "ERROR: Working tree has local changes not allowed for auto-deploy:"
+    printf '  - %s\n' "${DISALLOWED_DIRTY[@]}"
+    echo "Commit/stash those changes, or run with FORCE_DIRTY=1 to override."
+    exit 1
+  fi
+
+  log "Detected only allowed runtime local changes. Continuing deploy."
+  printf '  - %s\n' "${ALLOWED_DIRTY[@]}"
 fi
 
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
