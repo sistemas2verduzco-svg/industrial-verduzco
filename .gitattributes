@@ -1,0 +1,11 @@
+# Keep shell scripts Linux-compatible when committing from Windows
+*.sh text eol=lf
+
+# Keep PowerShell scripts Windows-friendly
+*.ps1 text eol=crlf
+
+# Infra/config files should stay LF across platforms
+*.yml text eol=lf
+*.yaml text eol=lf
+*.conf text eol=lf
+*.md text eol=lf

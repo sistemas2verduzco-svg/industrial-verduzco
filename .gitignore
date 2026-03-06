@@ -1,1 +1,5 @@
 encryption.key
+
+# Temporary Office lock files (Windows)
+~$*
+data/~$*
