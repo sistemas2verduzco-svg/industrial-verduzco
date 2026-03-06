@@ -32,7 +32,7 @@ services:
     volumes:
       - .:/app
     restart: unless-stopped
-    command: gunicorn --reload --reload-engine=inotify -w 4 -b 0.0.0.0:5000 app:app
+    command: gunicorn -w 2 -b 0.0.0.0:5000 app:app
 
   nginx:
     image: nginx:stable-alpine
