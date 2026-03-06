@@ -167,6 +167,39 @@
             align-items: center;
         }
 
+        .pending-head-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pending-count {
+            min-width: 24px;
+            height: 24px;
+            border-radius: 999px;
+            background: #d9eafc;
+            color: #17446f;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 800;
+            padding: 0 6px;
+        }
+
+        .pending-toggle {
+            display: none;
+            border: 1px solid #b8cee6;
+            background: #fff;
+            color: #17446f;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.25px;
+            padding: 5px 8px;
+            cursor: pointer;
+        }
+
         .pending-list {
             max-height: 72vh;
             overflow: auto;
@@ -495,6 +528,21 @@
             }
             .pending-panel {
                 position: static;
+                order: -1;
+            }
+            .pending-toggle {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+            }
+            .pending-panel.collapsed .pending-list {
+                display: none;
+            }
+            .pending-panel.collapsed {
+                box-shadow: none;
+            }
+            .pending-list {
+                max-height: 46vh;
             }
             .maquina-card {
                 flex-direction: column;
@@ -508,6 +556,11 @@
                 display: grid;
                 grid-template-columns: repeat(2, minmax(0, 1fr));
                 gap: 8px;
+                min-width: 0;
+            }
+            .btn-small {
+                padding: 8px 9px;
+                font-size: 11px;
             }
             .filter-wrap {
                 grid-template-columns: 1fr;
@@ -654,8 +707,11 @@
 
             <aside class="pending-panel">
                 <div class="pending-head">
-                    <span>Hojas por asignar</span>
-                    <span>{{ hojas_pendientes|length }}</span>
+                    <div class="pending-head-left">
+                        <span>Hojas por asignar</span>
+                        <span class="pending-count">{{ hojas_pendientes|length }}</span>
+                    </div>
+                    <button id="pendingToggleBtn" class="pending-toggle" type="button" onclick="togglePendingPanel()">Ocultar</button>
                 </div>
                 <div class="pending-list">
                     {% if hojas_pendientes %}
@@ -924,6 +980,42 @@
             cerrarModalAsignar();
         }
     });
+
+    function isSmallScreen() {
+        return window.matchMedia('(max-width: 980px)').matches;
+    }
+
+    function syncPendingToggleLabel() {
+        const panel = document.querySelector('.pending-panel');
+        const btn = document.getElementById('pendingToggleBtn');
+        if (!panel || !btn) return;
+        btn.textContent = panel.classList.contains('collapsed') ? 'Mostrar' : 'Ocultar';
+    }
+
+    function togglePendingPanel(forceExpand) {
+        const panel = document.querySelector('.pending-panel');
+        if (!panel || !isSmallScreen()) return;
+        if (forceExpand === true) {
+            panel.classList.remove('collapsed');
+        } else {
+            panel.classList.toggle('collapsed');
+        }
+        syncPendingToggleLabel();
+    }
+
+    function applyResponsivePendingBehavior() {
+        const panel = document.querySelector('.pending-panel');
+        if (!panel) return;
+        if (isSmallScreen()) {
+            panel.classList.add('collapsed');
+        } else {
+            panel.classList.remove('collapsed');
+        }
+        syncPendingToggleLabel();
+    }
+
+    applyResponsivePendingBehavior();
+    window.addEventListener('resize', applyResponsivePendingBehavior);
     </script>
 </body>
 </html>
