@@ -1314,6 +1314,20 @@ def api_check_proceso_estacion(estacion_id):
         if not hoja.fecha_salida:
             hoja.fecha_salida = ahora
 
+        # Regla de validacion: solo marcar hoja como completada cuando
+        # todos los checks/procesos esten en estado completada.
+        total_estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).count()
+        estaciones_completadas = EstacionTrabajo.query.filter_by(
+            hoja_ruta_id=hoja.id,
+            estado='completada'
+        ).count()
+        if total_estaciones > 0 and estaciones_completadas == total_estaciones:
+            hoja.estado = 'completada'
+            hoja.fecha_termino = hoja.fecha_termino or ahora
+        else:
+            hoja.estado = 'activa'
+            hoja.fecha_termino = None
+
         db.session.commit()
 
         pendientes = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id, estado='pendiente').count()
