@@ -122,6 +122,7 @@ printf '  - %s\n' "${CHANGED_FILES[@]}"
 NEED_REBUILD=0
 NEED_COMPOSE_APPLY=0
 NEED_NGINX_RELOAD=0
+NEED_APP_RESTART=0
 
 for f in "${CHANGED_FILES[@]}"; do
   case "$f" in
@@ -134,6 +135,9 @@ for f in "${CHANGED_FILES[@]}"; do
     nginx/default.conf)
       NEED_NGINX_RELOAD=1
       ;;
+    *.py|templates/*|static/*)
+      NEED_APP_RESTART=1
+      ;;
   esac
 done
 
@@ -143,11 +147,12 @@ if [[ "$NEED_REBUILD" -eq 1 ]]; then
 elif [[ "$NEED_COMPOSE_APPLY" -eq 1 ]]; then
   log "Compose file changed. Applying compose changes."
   docker compose up -d --remove-orphans
-else
-  log "No rebuild needed. Code/template changes will auto-reload inside app container."
-  log "Forcing graceful gunicorn workers reload to avoid serving stale first request."
-  docker compose exec -T app sh -lc 'kill -HUP 1' || true
+elif [[ "$NEED_APP_RESTART" -eq 1 ]]; then
+  log "Application files changed. Restarting app container for consistent version on first request."
+  docker compose restart app
   sleep 2
+else
+  log "No app-level changes detected. Skipping app restart."
 fi
 
 if [[ "$NEED_NGINX_RELOAD" -eq 1 ]]; then
