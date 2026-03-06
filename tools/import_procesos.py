@@ -277,6 +277,19 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
     total_pasos_importados = 0
 
     with app.app_context():
+        if overwrite:
+            # Evitar ambigüedad en producción: eliminar claves compuestas (ej. SF10/SF11)
+            # porque ahora se importan separadas como SF10 y SF11.
+            compuestas = ClaveProducto.query.filter(ClaveProducto.clave.contains('/')).all()
+            if compuestas:
+                comp_ids = [c.id for c in compuestas]
+                comp_codes = [c.clave for c in compuestas]
+                deleted_steps = ClaveProceso.query.filter(ClaveProceso.clave_id.in_(comp_ids)).delete(synchronize_session=False)
+                deleted_keys = ClaveProducto.query.filter(ClaveProducto.id.in_(comp_ids)).delete(synchronize_session=False)
+                db.session.commit()
+                print(f"\n⚠ Limpieza previa overwrite: eliminadas {deleted_keys} claves compuestas y {deleted_steps} pasos")
+                print(f"   Claves removidas (muestra): {comp_codes[:15]}{' ...' if len(comp_codes) > 15 else ''}")
+
         for clave_code, gdf in grouped:
             clave_code = str(clave_code).strip()
             if not clave_code:
