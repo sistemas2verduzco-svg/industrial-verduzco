@@ -11,7 +11,7 @@ cd "$ROOT_DIR"
 
 BRANCH_ARG="${1:-}"
 FORCE_DIRTY="${FORCE_DIRTY:-0}"
-ALLOWED_DIRTY_REGEX="${ALLOWED_DIRTY_REGEX:-^(\.env|catalogo_app\.log|uploads/productos/)}"
+ALLOWED_DIRTY_REGEX="${ALLOWED_DIRTY_REGEX:-^(\.env|catalogo_app\.log|uploads/productos/|certbot/www/|certbot/conf/)}"
 
 log() {
   printf "\n[%s] %s\n" "$(date +"%Y-%m-%d %H:%M:%S")" "$*"
