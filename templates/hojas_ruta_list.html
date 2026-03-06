@@ -578,6 +578,67 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        @media (max-width: 640px) {
+            .module-head {
+                padding: 14px;
+            }
+
+            .module-title {
+                font-size: 20px;
+                line-height: 1.2;
+            }
+
+            .module-sub {
+                font-size: 13px;
+            }
+
+            .stats-row {
+                grid-template-columns: 1fr;
+            }
+
+            .toggle-wrap,
+            .btn-light,
+            .pending-scan,
+            .pending-toggle {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .pending-head {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
+            }
+
+            .pending-head > div:last-child {
+                display: grid !important;
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .maquina-card {
+                padding: 10px;
+            }
+
+            .maquina-actions {
+                grid-template-columns: 1fr;
+            }
+
+            .maquina-actions .btn-small,
+            .maquina-actions .btn-view {
+                width: 100%;
+                text-align: center;
+            }
+
+            .modal-card {
+                width: calc(100% - 16px);
+                padding: 12px;
+            }
+
+            .modal-actions {
+                flex-direction: column;
+            }
+        }
     </style>
     <script>
     function toggleActivacion(maquinaId, activar) {

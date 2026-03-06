@@ -20,6 +20,31 @@
         .modal-card { width:min(520px, calc(100% - 24px)); background:#fff; border-radius:12px; padding:14px; box-shadow:0 14px 36px rgba(15,23,42,.28); }
         .modal-actions { display:flex; justify-content:flex-end; margin-top:10px; }
         .btn-close { border:1px solid #d5dee8; background:#fff; color:#334155; border-radius:8px; padding:8px 12px; cursor:pointer; }
+
+        .table-wrap {
+            overflow: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .table-wrap table {
+            min-width: 860px;
+        }
+
+        @media (max-width: 860px) {
+            .container {
+                padding-left: 12px;
+                padding-right: 12px;
+            }
+
+            .btn-scan {
+                width: 100%;
+            }
+
+            .modal-card {
+                width: calc(100% - 16px);
+                padding: 12px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -34,7 +59,7 @@
             <button class="btn-scan" type="button" onclick="abrirScannerCalidad()">Escanear QR</button>
         </div>
 
-        <div class="card" style="margin-top:12px; overflow:auto;">
+        <div class="card table-wrap" style="margin-top:12px; overflow:auto;">
             {% if hojas_qc %}
             <table>
                 <thead>

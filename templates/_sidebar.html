@@ -1,12 +1,17 @@
-<aside class="app-sidebar" style="width:260px; position:fixed; left:0; top:0; bottom:0; background:linear-gradient(180deg, #0b2745 0%, #0f3a5f 100%); color:#fff; padding:20px; overflow-y:auto; box-shadow: 2px 0 10px rgba(0,0,0,0.2); z-index: 1000;">
-    
-    <!-- Logo / Título -->
+<button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Abrir menu" aria-expanded="false" aria-controls="appSidebar">
+    <span></span>
+    <span></span>
+    <span></span>
+</button>
+
+<div id="sidebarBackdrop" class="sidebar-backdrop"></div>
+
+<aside id="appSidebar" class="app-sidebar">
     <div style="margin-bottom:30px; font-weight:700; font-size:16px; color:#64b5f6; display:flex; align-items:center; gap:10px;">
         <span style="font-size:20px;">📊</span>
-        <span>ERP Catálogo</span>
+        <span>ERP Catalogo</span>
     </div>
 
-    <!-- User Info Card -->
     <div style="background:rgba(255,255,255,0.1); padding:12px; border-radius:8px; margin-bottom:20px; font-size:12px; border-left:3px solid #64b5f6;">
         <div style="margin-bottom:6px; color:#bbb;">Usuario</div>
         <div style="font-weight:600; margin-bottom:6px; word-break:break-word;">{{ current_user.username if current_user else 'Invitado' }}</div>
@@ -15,111 +20,288 @@
         {% endif %}
     </div>
 
-    <!-- Navigation Menu -->
     <nav style="display:flex; flex-direction:column; gap:4px;">
-        
-        <!-- CATÁLOGO SECTION -->
         {% if has_permission('catalog', 'view') or current_user and current_user.es_admin %}
-        <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">CATÁLOGO</div>
-        <a href="/" style="color:#fff; text-decoration:none; padding:10px 12px; border-radius:6px; display:flex; align-items:center; gap:8px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
-            <span>🏠</span> <span>Ver Catálogo</span>
-        </a>
-        <a href="/hojas_ruta_form" style="color:#fff; text-decoration:none; padding:10px 12px; border-radius:6px; display:flex; align-items:center; gap:8px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
-            <span>📄</span> <span>Hojas de ruta</span>
-        </a>
-        <a href="/procesos" style="color:#fff; text-decoration:none; padding:10px 12px; border-radius:6px; display:flex; align-items:center; gap:8px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
-            <span>🧩</span> <span>Procesos y Claves</span>
-        </a>
-        <a href="/control_calidad" style="color:#fff; text-decoration:none; padding:10px 12px; border-radius:6px; display:flex; align-items:center; gap:8px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
-            <span>🔍</span> <span>Control Calidad</span>
-        </a>
-        <a href="/hojas_ruta" style="color:#fff; text-decoration:none; padding:10px 12px; border-radius:6px; display:flex; align-items:center; gap:8px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
-            <span>🏭</span> <span>Estaciones T</span>
-        </a>
-        <a href="/mapa_maquinas" style="color:#fff; text-decoration:none; padding:10px 12px; margin-left:20px; border-radius:6px; display:flex; align-items:center; gap:8px; font-size:13px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
-            <span>🗺️</span> <span>Mapa de Maquinas</span>
-        </a>
-        
+        <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">CATALOGO</div>
+        <a href="/" class="sb-link" data-exact="1"><span>🏠</span> <span>Ver Catalogo</span></a>
+        <a href="/hojas_ruta_form" class="sb-link" data-base="/hojas_ruta_form" data-extra="/hoja/"><span>📄</span> <span>Hojas de ruta</span></a>
+        <a href="/procesos" class="sb-link" data-base="/procesos"><span>🧩</span> <span>Procesos y Claves</span></a>
+        <a href="/control_calidad" class="sb-link" data-base="/control_calidad"><span>🔍</span> <span>Control Calidad</span></a>
+        <a href="/hojas_ruta" class="sb-link" data-base="/hojas_ruta"><span>🏭</span> <span>Estaciones T</span></a>
+        <a href="/mapa_maquinas" class="sb-link sb-sub" data-base="/mapa_maquinas"><span>🗺️</span> <span>Mapa de Maquinas</span></a>
         {% endif %}
 
-        <!-- SOPORTE SECTION -->
         {% if has_permission('tickets', 'view') or current_user and current_user.es_admin %}
         <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">SOPORTE</div>
-        <a href="/soporte" style="color:#fff; text-decoration:none; padding:10px 12px; border-radius:6px; display:flex; align-items:center; gap:8px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
-            <span>🔧</span> <span>Sistema de Tickets</span>
-        </a>
-        <a href="/soporte" style="color:#fff; text-decoration:none; padding:10px 12px; margin-left:20px; border-radius:6px; display:flex; align-items:center; gap:8px; font-size:13px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
-            <span>📥</span> <span>Exportar</span>
-        </a>
-        <a href="/reportar" style="color:#fff; text-decoration:none; padding:10px 12px; margin-left:20px; border-radius:6px; display:flex; align-items:center; gap:8px; font-size:13px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
-            <span>📋</span> <span>Reportar Incidencia</span>
-        </a>
+        <a href="/soporte" class="sb-link" data-base="/soporte"><span>🔧</span> <span>Sistema de Tickets</span></a>
+        <a href="/soporte" class="sb-link sb-sub" data-base="/soporte"><span>📥</span> <span>Exportar</span></a>
+        <a href="/reportar" class="sb-link sb-sub" data-base="/reportar"><span>📋</span> <span>Reportar Incidencia</span></a>
         {% endif %}
 
-        <!-- ADMINISTRACIÓN CATÁLOGO SECTION -->
         {% if has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
-        <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">ADMINISTRACIÓN CATÁLOGO</div>
-        <a href="/admin" style="color:#fff; text-decoration:none; padding:10px 12px; border-radius:6px; display:flex; align-items:center; gap:8px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
-            <span>⚙️</span> <span>Administrar</span>
-        </a>
-        <a href="/proveedores" style="color:#fff; text-decoration:none; padding:10px 12px; margin-left:20px; border-radius:6px; display:flex; align-items:center; gap:8px; font-size:13px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
-            <span>🏢</span> <span>Proveedores</span>
-        </a>
+        <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">ADMINISTRACION CATALOGO</div>
+        <a href="/admin" class="sb-link" data-base="/admin"><span>⚙️</span> <span>Administrar</span></a>
+        <a href="/proveedores" class="sb-link sb-sub" data-base="/proveedores"><span>🏢</span> <span>Proveedores</span></a>
         {% endif %}
 
-        <!-- SEPARATOR -->
         <div style="height:1px; background:rgba(255,255,255,0.1); margin:15px 0;"></div>
-        <!-- CONFIGURACIÓN (solo admins) -->
+
         {% if current_user and current_user.es_admin %}
-        <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:8px; margin-bottom:8px; padding-left:8px;">CONFIGURACIÓN</div>
-        <a href="/admin/users" style="color:#fff; text-decoration:none; padding:10px 12px; border-radius:6px; display:flex; align-items:center; gap:8px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
-            <span>👥</span> <span>Usuarios</span>
-        </a>
-        <a href="/admin/puerta" style="color:#fff; text-decoration:none; padding:10px 12px; margin-left:0; border-radius:6px; display:flex; align-items:center; gap:8px; font-size:13px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,255,255,0.1)'; this.style.borderColor='#64b5f6';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
-            <span>🔐</span> <span>Puerta (Registros)</span>
-        </a>
+        <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:8px; margin-bottom:8px; padding-left:8px;">CONFIGURACION</div>
+        <a href="/admin/users" class="sb-link" data-base="/admin/users"><span>👥</span> <span>Usuarios</span></a>
+        <a href="/admin/puerta" class="sb-link" data-base="/admin/puerta"><span>🔐</span> <span>Puerta (Registros)</span></a>
         {% endif %}
 
-        <!-- LOGOUT -->
-        <a href="{{ url_for('logout') }}" style="color:#ff7675; text-decoration:none; padding:10px 12px; border-radius:6px; display:flex; align-items:center; gap:8px; transition:all 0.2s; border-left:3px solid transparent;" onmouseover="this.style.background='rgba(255,118,118,0.1)'; this.style.borderColor='#ff7675';" onmouseout="this.style.background='transparent'; this.style.borderColor='transparent';">
-            <span>🔒</span> <span>Cerrar Sesión</span>
-        </a>
+        <a href="{{ url_for('logout') }}" class="sb-link sb-logout"><span>🔒</span> <span>Cerrar Sesion</span></a>
     </nav>
 
-    <!-- Footer Info -->
-    <div style="position: absolute; bottom: 20px; left: 20px; right: 20px; font-size:11px; color:#90caf9; border-top:1px solid rgba(255,255,255,0.1); padding-top:12px;">
+    <div class="sb-footer">
         <div style="margin-bottom:4px;">ERP v1.0</div>
         <div style="color:#64b5f6; font-weight:600;">{% if current_user %}{{ current_user.username }}{% else %}Invitado{% endif %}</div>
     </div>
 </aside>
 
 <style>
-    /* Ajustar contenido principal para que no quede bajo el sidebar */
-    body > .container, 
+    .app-sidebar {
+        width: 260px;
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        background: linear-gradient(180deg, #0b2745 0%, #0f3a5f 100%);
+        color: #fff;
+        padding: 20px;
+        overflow-y: auto;
+        box-shadow: 2px 0 10px rgba(0,0,0,0.2);
+        z-index: 1000;
+        transition: transform 0.25s ease;
+    }
+
+    .sb-link {
+        color:#fff;
+        text-decoration:none;
+        padding:10px 12px;
+        border-radius:6px;
+        display:flex;
+        align-items:center;
+        gap:8px;
+        transition:all 0.2s;
+        border-left:3px solid transparent;
+    }
+
+    .sb-link:hover {
+        background: rgba(255,255,255,0.1);
+        border-left-color: #64b5f6;
+    }
+
+    .sb-link.active {
+        background: rgba(100, 181, 246, 0.22);
+        border-left-color: #64b5f6;
+        box-shadow: inset 0 0 0 1px rgba(100, 181, 246, 0.2);
+    }
+
+    .sb-sub {
+        margin-left: 20px;
+        font-size: 13px;
+    }
+
+    .sb-logout {
+        color: #ff7675;
+    }
+
+    .sb-logout:hover {
+        background: rgba(255,118,118,0.1);
+        border-left-color: #ff7675;
+    }
+
+    .sb-footer {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        right: 20px;
+        font-size:11px;
+        color:#90caf9;
+        border-top:1px solid rgba(255,255,255,0.1);
+        padding-top:12px;
+    }
+
+    .sidebar-toggle {
+        display: none;
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        width: 42px;
+        height: 42px;
+        border: 1px solid #2d6996;
+        background: linear-gradient(180deg, #0b3259, #072542);
+        border-radius: 10px;
+        z-index: 1202;
+        padding: 9px 8px;
+        cursor: pointer;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+    }
+
+    .sidebar-toggle span {
+        display: block;
+        height: 3px;
+        margin: 4px 0;
+        border-radius: 2px;
+        background: #d7ecff;
+        transition: transform 0.2s ease, opacity 0.2s ease;
+        transform-origin: center;
+    }
+
+    .sidebar-toggle.open span:nth-child(1) {
+        transform: translateY(7px) rotate(45deg);
+    }
+
+    .sidebar-toggle.open span:nth-child(2) {
+        opacity: 0;
+    }
+
+    .sidebar-toggle.open span:nth-child(3) {
+        transform: translateY(-7px) rotate(-45deg);
+    }
+
+    .sidebar-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(2, 15, 30, 0.45);
+        z-index: 1199;
+        display: none;
+    }
+
+    body > .container,
     body > .ingeniero-container,
     body > .admin-container,
     body > div > .admin-container {
         margin-left: 280px;
     }
 
-    /* Asegurar que navbar no tenga conflictos */
     .navbar {
         margin-left: 280px;
     }
 
-    /* Mobile: hide sidebar on small screens */
-    @media (max-width: 768px) {
-        .app-sidebar {
-            display: none;
+    @media (max-width: 980px) {
+        .sidebar-toggle {
+            display: block;
         }
-        body > .container, 
+
+        .app-sidebar {
+            transform: translateX(-100%);
+            width: min(280px, 82vw);
+            z-index: 1201;
+        }
+
+        .app-sidebar.open {
+            transform: translateX(0);
+        }
+
+        .sidebar-backdrop.open {
+            display: block;
+        }
+
+        .sb-footer {
+            position: static;
+            margin-top: 18px;
+        }
+
+        body > .container,
         body > .ingeniero-container,
         body > .admin-container,
-        body > div > .admin-container {
-            margin-left: 0;
-        }
+        body > div > .admin-container,
         .navbar {
             margin-left: 0;
         }
+
+        .container {
+            padding-top: 56px;
+        }
     }
 </style>
+
+<script>
+    (function() {
+        const sidebar = document.getElementById('appSidebar');
+        const toggle = document.getElementById('sidebarToggle');
+        const backdrop = document.getElementById('sidebarBackdrop');
+        if (!sidebar || !toggle || !backdrop) return;
+
+        function openSidebar() {
+            sidebar.classList.add('open');
+            backdrop.classList.add('open');
+            toggle.classList.add('open');
+            toggle.setAttribute('aria-expanded', 'true');
+            toggle.setAttribute('aria-label', 'Cerrar menu');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeSidebar() {
+            sidebar.classList.remove('open');
+            backdrop.classList.remove('open');
+            toggle.classList.remove('open');
+            toggle.setAttribute('aria-expanded', 'false');
+            toggle.setAttribute('aria-label', 'Abrir menu');
+            document.body.style.overflow = '';
+        }
+
+        function normalizePath(p) {
+            if (!p) return '/';
+            const out = p.replace(/\/+$/, '');
+            return out || '/';
+        }
+
+        function markActiveLinks() {
+            const current = normalizePath(window.location.pathname || '/');
+            sidebar.querySelectorAll('.sb-link').forEach(function(link) {
+                const exact = link.getAttribute('data-exact') === '1';
+                const base = normalizePath(link.getAttribute('data-base') || link.getAttribute('href') || '/');
+                const extra = normalizePath(link.getAttribute('data-extra') || '');
+                let active = false;
+
+                if (exact) {
+                    active = current === base;
+                } else {
+                    active = current === base || (base !== '/' && current.startsWith(base + '/'));
+                }
+
+                if (!active && extra && extra !== '/') {
+                    active = current.startsWith(extra + '/'.replace('//', '/')) || current.startsWith(extra);
+                }
+
+                if (active) link.classList.add('active');
+                else link.classList.remove('active');
+            });
+        }
+
+        function isMobile() {
+            return window.matchMedia('(max-width: 980px)').matches;
+        }
+
+        toggle.addEventListener('click', function() {
+            const opened = sidebar.classList.contains('open');
+            if (opened) closeSidebar();
+            else openSidebar();
+        });
+
+        backdrop.addEventListener('click', closeSidebar);
+
+        sidebar.querySelectorAll('a').forEach(function(link) {
+            link.addEventListener('click', function() {
+                if (isMobile()) closeSidebar();
+            });
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeSidebar();
+        });
+
+        window.addEventListener('resize', function() {
+            if (!isMobile()) {
+                closeSidebar();
+            }
+        });
+
+        markActiveLinks();
+    })();
+</script>

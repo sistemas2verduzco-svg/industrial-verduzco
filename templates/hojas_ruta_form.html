@@ -136,6 +136,63 @@
             gap: 8px;
             margin-top: 12px;
         }
+
+        .table-scroll {
+            overflow: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .table-scroll table {
+            min-width: 760px;
+        }
+
+        @media (max-width: 900px) {
+            .container {
+                padding-left: 12px;
+                padding-right: 12px;
+            }
+
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .actions {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .actions .btn {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 640px) {
+            h2 {
+                font-size: 22px;
+                line-height: 1.2;
+            }
+
+            .card {
+                padding: 12px;
+            }
+
+            .section-title {
+                font-size: 14px;
+            }
+
+            .modal-card {
+                width: min(560px, calc(100% - 16px));
+                padding: 12px;
+            }
+
+            .modal-actions {
+                flex-direction: column;
+            }
+
+            .modal-actions .btn {
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
@@ -216,7 +273,7 @@
         </div>
 
         <div class="section-title">Procesos de la clave seleccionada</div>
-        <div class="card" style="overflow:auto;">
+        <div class="card table-scroll" style="overflow:auto;">
             <table class="proc-table">
                 <thead>
                     <tr>
@@ -237,7 +294,7 @@
         </div>
 
         <div class="section-title">Hojas recientes</div>
-        <div class="card" style="overflow:auto;">
+        <div class="card table-scroll" style="overflow:auto;">
             {% if hojas %}
             <table>
                 <thead>

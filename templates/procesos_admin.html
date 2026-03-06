@@ -183,33 +183,72 @@
 </div>
 
   <style>
-    /* Hover effects */
     .btn:hover { opacity: 0.9; }
     .clave-item:hover { background-color: #edf2f7; }
     .itemProc:hover { background-color: #f7fafc; }
-    
-    /* Responsive */
-    @media (max-width: 1024px) {
+
+    @media (max-width: 1200px) {
+      .admin-container {
+        margin-left: 0 !important;
+        padding: 16px !important;
+      }
+
       .procesos-layout {
         grid-template-columns: 1fr !important;
       }
+
       .procesos-layout > div:first-child {
         order: 2;
       }
+
       .procesos-layout > div:last-child {
         order: 1;
       }
     }
-    
-    @media (max-width: 768px) {
+
+    @media (max-width: 900px) {
+      .admin-container h2 {
+        font-size: 22px !important;
+      }
+
+      .admin-container form[action$="/procesos/clave/save"] {
+        grid-template-columns: 1fr !important;
+      }
+
+      .admin-container form[action$="/procesos/clave/save"] > div[style*="grid-column"] {
+        grid-column: auto !important;
+      }
+
+      .admin-container div[style*="overflow-x:auto"] {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .admin-container table {
+        min-width: 860px;
+      }
+    }
+
+    @media (max-width: 640px) {
       .admin-container {
-        padding: 16px !important;
+        padding: 12px !important;
       }
-      table {
-        font-size: 12px !important;
+
+      .admin-container h2 {
+        font-size: 20px !important;
       }
-      input, select, textarea, button {
-        font-size: 13px !important;
+
+      .admin-container form[action$="/procesos/base/save"] div[style*="display:flex"],
+      .admin-container form#formSecuencia div[style*="display:flex"] {
+        flex-direction: column;
+        align-items: stretch !important;
+      }
+
+      #selectProceso,
+      #btnAgregarProceso,
+      #btnNuevaClave {
+        width: 100% !important;
+      }
     }
   </style>
 

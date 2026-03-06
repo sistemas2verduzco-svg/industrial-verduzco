@@ -409,6 +409,26 @@
             }
         }
 
+        @media (max-width: 840px) {
+            .primary-grid {
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                padding: 10px;
+                gap: 8px;
+            }
+
+            .machine-card {
+                min-height: 118px;
+            }
+
+            .split-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .stat-value {
+                font-size: 28px;
+            }
+        }
+
         @media (max-width: 640px) {
             .title {
                 font-size: 18px;
@@ -420,11 +440,32 @@
 
             .topbar {
                 flex-wrap: wrap;
+                padding: 12px;
             }
 
             .topbar-right {
                 width: 100%;
                 justify-content: space-between;
+            }
+
+            .dashboard {
+                padding: 10px;
+                gap: 10px;
+            }
+
+            .btn {
+                width: 100%;
+                text-align: center;
+            }
+
+            .topbar-right {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+
+            .progress-wrap {
+                justify-content: flex-start;
             }
         }
     </style>
