@@ -111,6 +111,26 @@
       min-width: 180px;
     }
 
+    .qr-box {
+      margin-top: 8px;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      background: #fff;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      padding: 6px;
+    }
+
+    .qr-note {
+      font-size: 10px;
+      color: #334155;
+      text-align: center;
+      line-height: 1.2;
+      max-width: 110px;
+    }
+
     .status {
       display: inline-block;
       font-size: 12px;
@@ -296,6 +316,10 @@
             <div><strong>Serie:</strong> {{ hoja.nombre or '' }}</div>
             <div><strong>Fecha:</strong> {{ hoja.fecha_salida[:16] if hoja.fecha_salida else '' }}</div>
             <span class="status st-{{ hoja.estado or 'activa' }}">{{ hoja.estado or 'activa' }}</span>
+            <div class="qr-box" id="qrContainer" data-payload="{{ hoja.qr_payload|e }}" data-deeplink="{{ hoja.qr_deeplink|e }}">
+              <div id="hojaQrCode"></div>
+              <div class="qr-note">Escanear para asignar o abrir QC</div>
+            </div>
           </div>
         </div>
 
@@ -395,5 +419,26 @@
       </div>
     </div>
   </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <script>
+    (function() {
+      var container = document.getElementById('qrContainer');
+      var target = document.getElementById('hojaQrCode');
+      if (!container || !target || typeof QRCode === 'undefined') return;
+      var payload = container.getAttribute('data-payload') || '';
+      var deeplink = container.getAttribute('data-deeplink') || '';
+      var value = payload || deeplink || '';
+      if (!value) return;
+      new QRCode(target, {
+        text: value,
+        width: 100,
+        height: 100,
+        colorDark: '#0f172a',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    })();
+  </script>
 </body>
 </html>

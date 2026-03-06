@@ -582,102 +582,164 @@ def producto_detalle(producto_id):
 @app.route('/control_calidad')
 @login_required
 def control_calidad_list():
-    """Lista las máquinas disponibles para control de calidad."""
-    maquinas = Máquina.query.order_by(Máquina.nombre.asc()).all()
-    return render_template('control_calidad_list.html', maquinas=maquinas)
+    """Lista de hojas de ruta con procesos completados pendientes de validación en calidad."""
+
+    def qc_status(estacion):
+        notas = estacion.notas or ''
+        m = re.search(r'STATUS=(QC_OK|QC_NOK)', notas)
+        return m.group(1) if m else None
+
+    hojas = HojaRuta.query.order_by(HojaRuta.fecha_creacion.desc()).all()
+    hojas_qc = []
+    for hoja in hojas:
+        estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden.asc()).all()
+        completadas = [e for e in estaciones if (e.estado or '').lower() == 'completada']
+        if not completadas:
+            continue
+
+        reviewed = 0
+        rechazadas = 0
+        for e in completadas:
+            status = qc_status(e)
+            if status in ('QC_OK', 'QC_NOK'):
+                reviewed += 1
+            if status == 'QC_NOK':
+                rechazadas += 1
+
+        pendientes = max(0, len(completadas) - reviewed)
+        hojas_qc.append({
+            'id': hoja.id,
+            'serie': hoja.nombre,
+            'clave': hoja.pn,
+            'calidad': hoja.calidad,
+            'piezas': hoja.cantidad_piezas,
+            'estado': hoja.estado,
+            'procesos_completados': len(completadas),
+            'procesos_revisados': reviewed,
+            'procesos_pendientes_qc': pendientes,
+            'procesos_rechazados_qc': rechazadas,
+            'fecha': hoja.fecha_creacion,
+        })
+
+    # Prioridad: hojas con pendientes QC arriba.
+    hojas_qc = sorted(
+        hojas_qc,
+        key=lambda h: (0 if h['procesos_pendientes_qc'] > 0 else 1, -(h['procesos_pendientes_qc']), h['fecha'] or datetime.min),
+        reverse=False,
+    )
+
+    return render_template('control_calidad_list.html', hojas_qc=hojas_qc)
 
 
-@app.route('/control_calidad/<int:maquina_id>', methods=['GET', 'POST'])
+@app.route('/control_calidad/hoja/<int:hoja_id>', methods=['GET', 'POST'])
 @login_required
-def control_calidad_maquina(maquina_id):
-    """Formulario de control de calidad para una máquina específica."""
-    maquina = Máquina.query.get_or_404(maquina_id)
+def control_calidad_hoja(hoja_id):
+    """Revisión de calidad por hoja de ruta y por proceso completado."""
+    hoja = HojaRuta.query.get_or_404(hoja_id)
 
-    # Obtener componentes configurados para esta máquina
-    componentes = ComponenteMáquina.query.filter_by(maquina_id=maquina_id).order_by(ComponenteMáquina.orden).all()
-    if not componentes:
-        # Si no hay componentes, crear una lista vacía
-        componentes = []
+    def qc_status(estacion):
+        notas = estacion.notas or ''
+        m = re.search(r'STATUS=(QC_OK|QC_NOK)', notas)
+        return m.group(1) if m else None
+
+    def qc_clean_block(notas_text):
+        src = notas_text or ''
+        # Reemplaza bloque QC previo para evitar crecimiento infinito de notas.
+        return re.sub(r'\n?\[QC_REVIEW_START\].*?\[QC_REVIEW_END\]\n?', '\n', src, flags=re.S).strip()
 
     informe_guardado = False
 
     if request.method == 'POST':
-        # Directorio para guardar evidencias
-        reports_dir = os.path.join('uploads', 'qc_reports')
-        images_dir = os.path.join(reports_dir, 'images')
-        os.makedirs(images_dir, exist_ok=True)
-        # Directorio para guardar modelos 3D (STL)
-        models_dir = os.path.join('uploads', 'models')
-        os.makedirs(models_dir, exist_ok=True)
+        estacion_id = request.form.get('estacion_id', type=int)
+        resultado = (request.form.get('resultado') or '').strip().lower()
+        observaciones = (request.form.get('observaciones') or '').strip()
 
-        # Crear QCReport
-        report = QCReport(maquina_id=maquina.id, usuario=session.get('user'), observaciones=request.form.get('observaciones'))
-        db.session.add(report)
-        db.session.flush()  # Obtener el ID del reporte
+        estacion = EstacionTrabajo.query.filter_by(id=estacion_id, hoja_ruta_id=hoja.id).first()
+        if not estacion:
+            return jsonify({'error': 'Proceso no encontrado para esta hoja'}), 404
+        if (estacion.estado or '').lower() != 'completada':
+            return jsonify({'error': 'Solo se pueden validar procesos completados'}), 409
 
-        # Crear QCItem por cada componente
-        for idx, comp in enumerate(componentes):
-            checked = bool(request.form.get(f'check_{idx}'))
-            evidencia_file = request.files.get(f'evidence_{idx}')
-            model_file = request.files.get(f'model_{idx}')
-            evidence_url = None
-            if evidencia_file and evidencia_file.filename:
-                filename = secure_filename(f"qc_m{maquina.id}_{comp.id}_{int(time())}_{evidencia_file.filename}")
-                save_path = os.path.join(images_dir, filename)
-                evidencia_file.save(save_path)
-                evidence_url = os.path.relpath(save_path, start=os.getcwd())
+        # Checklist estándar para refacciones (sinfines, engranes, etc.)
+        check_dimensional = bool(request.form.get('chk_dimensional'))
+        check_visual = bool(request.form.get('chk_visual'))
+        check_rebaba = bool(request.form.get('chk_rebaba'))
+        check_material = bool(request.form.get('chk_material'))
+        check_ajuste = bool(request.form.get('chk_ajuste'))
+        check_limpieza = bool(request.form.get('chk_limpieza'))
 
-            # Guardar modelo STL (si se sube)
-            stl_url = None
-            if model_file and model_file.filename:
-                # Forzar extensión .stl si viene con nombre válido
-                model_filename = secure_filename(f"model_m{maquina.id}_c{comp.id}_{int(time())}_{model_file.filename}")
-                # asegurarse de que la extensión sea .stl
-                if not model_filename.lower().endswith('.stl'):
-                    model_filename = model_filename + '.stl'
-                model_save_path = os.path.join(models_dir, model_filename)
-                try:
-                    model_file.save(model_save_path)
-                    stl_url = os.path.relpath(model_save_path, start=os.getcwd())
-                except Exception as e:
-                    logger.error(f"Error guardando STL: {e}", exc_info=True)
+        status_tag = 'QC_OK' if resultado == 'aprobado' else 'QC_NOK'
+        usuario_qc = session.get('user') or 'sistema'
+        ahora = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
 
-            item = QCItem(report_id=report.id, nombre=comp.nombre, checked=checked, evidence_url=evidence_url)
-            db.session.add(item)
+        bloque = (
+            "[QC_REVIEW_START]\n"
+            f"STATUS={status_tag}\n"
+            f"USUARIO={usuario_qc}\n"
+            f"FECHA={ahora}\n"
+            f"DIMENSIONAL={'OK' if check_dimensional else 'NO'}\n"
+            f"VISUAL={'OK' if check_visual else 'NO'}\n"
+            f"REBABA={'OK' if check_rebaba else 'NO'}\n"
+            f"MATERIAL={'OK' if check_material else 'NO'}\n"
+            f"AJUSTE={'OK' if check_ajuste else 'NO'}\n"
+            f"LIMPIEZA={'OK' if check_limpieza else 'NO'}\n"
+            f"OBSERVACIONES={observaciones}\n"
+            "[QC_REVIEW_END]"
+        )
 
-        try:
-            db.session.commit()
-            informe_guardado = True
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"Error guardando informe QC en BD: {e}", exc_info=True)
+        base_notas = qc_clean_block(estacion.notas)
+        estacion.notas = (base_notas + "\n" + bloque).strip() if base_notas else bloque
+        estacion.firma_supervisor = status_tag
+        estacion.operador = usuario_qc
 
-    # Crear estructura de datos para la plantilla (incluye id y posible STL)
-    models_dir = os.path.join('uploads', 'models')
-    comp_list = []
-    for c in componentes:
-        # Buscar un STL existente para este componente (por convención de nombre)
-        stl_url = None
-        try:
-            if os.path.exists(models_dir):
-                for fname in os.listdir(models_dir):
-                    if fname.lower().startswith(f"model_m{maquina.id}_c{c.id}_") and fname.lower().endswith('.stl'):
-                        # tomar el primero (más reciente sería mejor, pero esto es suficiente)
-                        stl_url = os.path.relpath(os.path.join(models_dir, fname), start=os.getcwd())
-                        break
-        except Exception:
-            stl_url = None
+        # Estado de hoja por consolidación QC de procesos completados
+        completadas = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id, estado='completada').all()
+        statuses = [qc_status(e) for e in completadas]
+        pendientes = any(s not in ('QC_OK', 'QC_NOK') for s in statuses)
+        hay_rechazo = any(s == 'QC_NOK' for s in statuses)
 
-        comp_list.append({
-            'id': c.id,
-            'nombre': c.nombre,
-            'descripcion': c.descripcion,
-            'image_url': None,
-            'checked': False,
-            'stl_url': stl_url
+        if pendientes:
+            hoja.aprobada = False
+            hoja.rechazada = False
+        else:
+            hoja.aprobada = not hay_rechazo
+            hoja.rechazada = hay_rechazo
+
+        db.session.commit()
+        informe_guardado = True
+
+    estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden.asc()).all()
+    procesos_completados = []
+    for e in estaciones:
+        if (e.estado or '').lower() != 'completada':
+            continue
+        status = qc_status(e)
+        procesos_completados.append({
+            'id': e.id,
+            'orden': e.orden,
+            'centro_trabajo': e.centro_trabajo,
+            'operacion': e.operacion,
+            'status_qc': status,
+            'notas': e.notas,
+            'fecha_finalizacion': e.fecha_finalizacion,
         })
 
-    return render_template('control_calidad_detalle.html', maquina=maquina, componentes=comp_list, informe_guardado=informe_guardado)
+    pendientes_qc = sum(1 for p in procesos_completados if p['status_qc'] not in ('QC_OK', 'QC_NOK'))
+
+    return render_template(
+        'control_calidad_detalle.html',
+        hoja=hoja,
+        procesos=procesos_completados,
+        pendientes_qc=pendientes_qc,
+        informe_guardado=informe_guardado,
+    )
+
+
+@app.route('/control_calidad/<int:maquina_id>')
+@login_required
+def control_calidad_legacy_maquina(maquina_id):
+    """Compatibilidad con links antiguos de Control Calidad por maquina."""
+    return redirect(url_for('control_calidad_list'))
 
 
 @app.route('/uploads/<path:filename>')
@@ -891,10 +953,12 @@ def hojas_ruta_form():
     hojas = HojaRuta.query.order_by(HojaRuta.fecha_creacion.desc()).limit(50).all()
     hojas_data = []
     for h in hojas:
+        qr_payload = f"HRID:{h.id};SERIE:{h.nombre or ''}"
         hojas_data.append({
             'id': h.id,
             'maquina_id': h.maquina_id,
             'serie': h.nombre,
+            'qr_payload': qr_payload,
             'clave': h.pn,
             'calidad': h.calidad,
             'almacen': h.almacen,
@@ -916,9 +980,63 @@ def hoja_ruta_ver(hoja_id):
     """Vista independiente para ver una hoja por ID, sin requerir máquina."""
     hoja = HojaRuta.query.get_or_404(hoja_id)
     h = hoja.to_dict()
+    h['qr_payload'] = f"HRID:{hoja.id};SERIE:{hoja.nombre or ''}"
+    h['qr_deeplink'] = request.url_root.rstrip('/') + f"/hoja/{hoja.id}"
     estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
     h['estaciones'] = [e.to_dict() for e in estaciones]
     return render_template('hoja_ruta_ver.html', hoja=h)
+
+
+@app.route('/api/hojas_ruta/resolver_codigo', methods=['POST'])
+@login_required
+def api_resolver_codigo_hoja_ruta():
+    """Resuelve texto escaneado (QR/codigo) a una hoja de ruta."""
+    data = request.get_json() or {}
+    raw_value = (data.get('value') or '').strip()
+    if not raw_value:
+        return jsonify({'error': 'Codigo vacio'}), 400
+
+    value = raw_value.strip()
+    upper_value = value.upper()
+
+    hoja_id = None
+
+    # 1) URL tipo /hoja/<id>
+    m_url = re.search(r'/hoja/(\d+)', value)
+    if m_url:
+        hoja_id = int(m_url.group(1))
+
+    # 2) Payload tipo HRID:<id>
+    if hoja_id is None:
+        m_hrid = re.search(r'HRID\s*[:=]\s*(\d+)', upper_value)
+        if m_hrid:
+            hoja_id = int(m_hrid.group(1))
+
+    # 3) Si viene solo el numero
+    if hoja_id is None and value.isdigit():
+        hoja_id = int(value)
+
+    hoja = None
+    if hoja_id is not None:
+        hoja = HojaRuta.query.get(hoja_id)
+
+    # 4) Fallback por serie exacta
+    if hoja is None:
+        hoja = HojaRuta.query.filter_by(nombre=value).first()
+
+    if hoja is None:
+        return jsonify({'error': 'No se encontro hoja para el codigo escaneado'}), 404
+
+    return jsonify({
+        'ok': True,
+        'hoja': {
+            'id': hoja.id,
+            'serie': hoja.nombre,
+            'clave': hoja.pn,
+            'estado': hoja.estado,
+            'maquina_id': hoja.maquina_id,
+        }
+    }), 200
 
 
 @app.route('/hojas_ruta/<int:maquina_id>')

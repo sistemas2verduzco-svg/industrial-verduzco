@@ -711,7 +711,10 @@
                         <span>Hojas por asignar</span>
                         <span class="pending-count">{{ hojas_pendientes|length }}</span>
                     </div>
-                    <button id="pendingToggleBtn" class="pending-toggle" type="button" onclick="togglePendingPanel()">Ocultar</button>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <button class="pending-toggle" type="button" onclick="abrirScannerAsignacion()">Escanear QR</button>
+                        <button id="pendingToggleBtn" class="pending-toggle" type="button" onclick="togglePendingPanel()">Ocultar</button>
+                    </div>
                 </div>
                 <div class="pending-list">
                     {% if hojas_pendientes %}
@@ -766,8 +769,22 @@
         </div>
     </div>
 
+    <div id="modalScannerAsignacion" class="modal-backdrop">
+        <div class="modal-card" style="max-width:520px;">
+            <h3 style="margin:0 0 10px 0;">Escanear hoja de ruta</h3>
+            <div style="font-size:13px; color:#5f7184; margin-bottom:8px;">Apunta la camara al QR/codigo de la hoja para abrir asignacion.</div>
+            <div id="qr-reader-estaciones" style="width:100%; min-height:260px; border:1px solid #e5e7eb; border-radius:8px;"></div>
+            <div class="modal-actions">
+                <button class="btn-light" onclick="cerrarScannerAsignacion()">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/html5-qrcode" defer></script>
+
     <script>
     const hojasPendientes = {{ hojas_pendientes|tojson }};
+    let qrScannerAsignacion = null;
 
     function abrirModalAsignar(maquinaId, maquinaNombre, preselectHojaId) {
         const maquinaInput = document.getElementById('asignarMaquinaId');
@@ -800,6 +817,74 @@
 
     function cerrarModalAsignar() {
         document.getElementById('modalAsignar').style.display = 'none';
+    }
+
+    async function resolverHojaPorCodigo(scanValue) {
+        const res = await fetch('/api/hojas_ruta/resolver_codigo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ value: scanValue })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'No se pudo resolver el codigo');
+        }
+        return data.hoja;
+    }
+
+    async function abrirScannerAsignacion() {
+        if (typeof Html5Qrcode === 'undefined') {
+            alert('El lector QR aun no esta disponible. Recarga la pagina e intenta de nuevo.');
+            return;
+        }
+
+        document.getElementById('modalScannerAsignacion').style.display = 'flex';
+        qrScannerAsignacion = new Html5Qrcode('qr-reader-estaciones');
+        const formatos = (typeof Html5QrcodeSupportedFormats !== 'undefined')
+            ? [
+                Html5QrcodeSupportedFormats.QR_CODE,
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8
+            ]
+            : undefined;
+
+        try {
+            await qrScannerAsignacion.start(
+                { facingMode: 'environment' },
+                { fps: 10, qrbox: { width: 220, height: 220 }, formatsToSupport: formatos },
+                async (decodedText) => {
+                    try {
+                        await cerrarScannerAsignacion();
+                        const hoja = await resolverHojaPorCodigo(decodedText);
+                        abrirModalAsignar(null, null, hoja.id);
+                    } catch (err) {
+                        alert('Error al procesar codigo: ' + err.message);
+                    }
+                },
+                () => {}
+            );
+        } catch (err) {
+            alert('No se pudo iniciar la camara: ' + (err.message || err));
+            await cerrarScannerAsignacion();
+        }
+    }
+
+    async function cerrarScannerAsignacion() {
+        const modal = document.getElementById('modalScannerAsignacion');
+        modal.style.display = 'none';
+        if (qrScannerAsignacion) {
+            try {
+                await qrScannerAsignacion.stop();
+            } catch (_) {}
+            try {
+                await qrScannerAsignacion.clear();
+            } catch (_) {}
+            qrScannerAsignacion = null;
+        }
+        const reader = document.getElementById('qr-reader-estaciones');
+        if (reader) reader.innerHTML = '';
     }
 
     async function guardarAsignacion() {
@@ -919,6 +1004,7 @@
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             cerrarModalAsignar();
+            cerrarScannerAsignacion();
         }
     });
 
@@ -978,6 +1064,12 @@
     document.getElementById('modalAsignar').addEventListener('click', (e) => {
         if (e.target.id === 'modalAsignar') {
             cerrarModalAsignar();
+        }
+    });
+
+    document.getElementById('modalScannerAsignacion').addEventListener('click', (e) => {
+        if (e.target.id === 'modalScannerAsignacion') {
+            cerrarScannerAsignacion();
         }
     });
 

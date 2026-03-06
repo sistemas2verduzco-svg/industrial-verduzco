@@ -133,7 +133,7 @@
                     </div>
                     <div class="maquina-actions">
                         <a href="/hojas_ruta/{{ maq.id }}" class="btn-small btn-primary-small">Ver hojas</a>
-                        <a href="/control_calidad/{{ maq.id }}" class="btn-small">Control QC</a>
+                        <a href="/control_calidad" class="btn-small">Control QC</a>
                         <button class="btn-small" onclick="aprobarOT({{ maq.id }})">Aprobar OT</button>
                         {% if maq.activo %}
                             <button class="btn-small" style="background:#f44336; color:#fff; border-color:#f44336;" onclick="toggleActivacion({{ maq.id }}, false)">Desactivar Máquina</button>

@@ -3,164 +3,113 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control de Calidad — {{ maquina.nombre }}</title>
+    <title>Control Calidad - {{ hoja.nombre or ('HOJA #' ~ hoja.id) }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .card { background:#fff; border:1px solid #e6e6e6; border-radius:10px; padding:14px; }
+        .row { display:flex; gap:12px; flex-wrap:wrap; }
+        .field { display:flex; flex-direction:column; gap:4px; min-width:140px; }
+        .field label { font-size:12px; color:#5f7184; }
+        .field input, .field select, .field textarea { border:1px solid #d5dee8; border-radius:6px; padding:8px; }
+        .badge { display:inline-block; border-radius:999px; padding:3px 8px; font-size:11px; font-weight:700; }
+        .b-pending { background:#fff6df; color:#8a5b14; }
+        .b-ok { background:#e7f8ee; color:#1f7a4f; }
+        .b-bad { background:#ffe7e7; color:#9a2525; }
+        .proc { border:1px solid #e7edf4; border-radius:10px; padding:12px; margin-top:12px; }
+        .checkgrid { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:8px; margin-top:8px; }
+        .btn-primary { background:#0b74de; color:#fff; border:0; border-radius:6px; padding:8px 12px; font-weight:700; cursor:pointer; }
+        .btn-back { text-decoration:none; border:1px solid #d5dee8; border-radius:6px; padding:8px 12px; color:#274764; }
+    </style>
 </head>
 <body>
     {% include '_sidebar.html' %}
 
     <div class="container">
-        <h2>Control de Calidad — {{ maquina.nombre }}</h2>
-
-        <div style="display:flex; gap:24px; margin-top:12px; align-items:flex-start;">
-            <div style="width:420px; border:1px solid #e6e6e6; padding:12px; border-radius:8px; background:#fff;">
-                {% if maquina.imagen_url %}
-                    <img src="{{ maquina.imagen_url }}" alt="{{ maquina.nombre }}" style="width:100%; height:auto; object-fit:contain;" />
-                {% else %}
-                    <div style="height:240px; display:flex; align-items:center; justify-content:center; color:#aaa;">Sin imagen de la máquina</div>
-                {% endif %}
-                <div style="margin-top:8px; color:#666;">{{ maquina.descripcion }}</div>
+        <div class="row" style="justify-content:space-between; align-items:center;">
+            <div>
+                <h2 style="margin-bottom:4px;">Control Calidad por Hoja</h2>
+                <div style="font-size:13px; color:#5f7184;">
+                    Hoja: <strong>{{ hoja.nombre or ('HOJA #' ~ hoja.id) }}</strong>
+                    | Clave: <strong>{{ hoja.pn or '-' }}</strong>
+                    | Piezas: <strong>{{ hoja.cantidad_piezas or 0 }}</strong>
+                </div>
             </div>
+            <div>
+                <a href="/control_calidad" class="btn-back">Volver</a>
+            </div>
+        </div>
 
-            <div style="flex:1;">
-                <form method="post" enctype="multipart/form-data">
-                    <div style="background:#fff; padding:12px; border-radius:8px; border:1px solid #e6e6e6;">
-                        <h4>Checklist de componentes</h4>
-                        <p style="color:#666; font-size:13px;">Marca la casilla si el componente funciona correctamente. Puedes subir evidencias (foto por componente).</p>
+        {% if informe_guardado %}
+        <div class="card" style="margin-top:10px; background:#e8f5e9; border-color:#c8e6c9; color:#256029;">
+            Revisión de calidad guardada correctamente.
+        </div>
+        {% endif %}
 
-                        {% for comp in componentes %}
-                        <div style="display:flex; gap:12px; align-items:center; margin:10px 0; border-bottom:1px dashed #f0f0f0; padding-bottom:8px;">
-                            <div style="width:90px; height:70px; background:#fafafa; display:flex; align-items:center; justify-content:center; border-radius:6px; overflow:hidden;">
-                                {% if comp.image_url %}
-                                    <img src="{{ comp.image_url }}" style="max-width:100%; max-height:100%; object-fit:cover;" />
-                                {% else %}
-                                    <div style="color:#aaa; font-size:12px; text-align:center;">Imagen<br>no disponible</div>
-                                {% endif %}
-                            </div>
-                            <div style="flex:1;">
-                                <div style="font-weight:600;">{{ comp.nombre }}</div>
-                            </div>
-                            <div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
-                                <label style="display:flex; gap:6px; align-items:center;">
-                                    <input type="checkbox" name="check_{{ loop.index0 }}" value="1" {% if comp.checked %}checked{% endif %} />
-                                    <span>OK</span>
-                                </label>
-                                <input type="file" name="evidence_{{ loop.index0 }}" accept="image/*" />
-                                <div style="margin-top:6px; display:flex; gap:6px; align-items:center;">
-                                    <input type="file" name="model_{{ loop.index0 }}" accept=".stl" />
-                                    {% if comp.stl_url %}
-                                        <button type="button" class="btn" onclick="openSTLViewer('{{ comp.stl_url }}')" style="padding:6px 8px; border:1px solid #ddd; background:#fff;">Ver 3D</button>
-                                    {% endif %}
-                                </div>
-                            </div>
+        <div class="card" style="margin-top:12px;">
+            <strong>Resumen</strong>
+            <div style="font-size:13px; color:#5f7184; margin-top:6px;">
+                Procesos completados: {{ procesos|length }}
+                | Pendientes de QC: <span class="badge b-pending">{{ pendientes_qc }}</span>
+            </div>
+        </div>
+
+        {% if procesos %}
+            {% for p in procesos %}
+            <div class="proc">
+                <div class="row" style="justify-content:space-between; align-items:center;">
+                    <div>
+                        <strong>Proceso {{ p.orden }} - {{ p.centro_trabajo }}</strong>
+                        <div style="font-size:12px; color:#64748b; margin-top:4px;">{{ p.operacion or '' }}</div>
+                    </div>
+                    <div>
+                        {% if p.status_qc == 'QC_OK' %}
+                            <span class="badge b-ok">Aprobado</span>
+                        {% elif p.status_qc == 'QC_NOK' %}
+                            <span class="badge b-bad">Rechazado</span>
+                        {% else %}
+                            <span class="badge b-pending">Pendiente</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <form method="post" style="margin-top:10px;">
+                    <input type="hidden" name="estacion_id" value="{{ p.id }}">
+
+                    <div class="checkgrid">
+                        <label><input type="checkbox" name="chk_dimensional" value="1"> Dimensional</label>
+                        <label><input type="checkbox" name="chk_visual" value="1"> Acabado visual</label>
+                        <label><input type="checkbox" name="chk_rebaba" value="1"> Rebabas/aristas</label>
+                        <label><input type="checkbox" name="chk_material" value="1"> Material/dureza</label>
+                        <label><input type="checkbox" name="chk_ajuste" value="1"> Rosca/ajuste</label>
+                        <label><input type="checkbox" name="chk_limpieza" value="1"> Limpieza</label>
+                    </div>
+
+                    <div class="row" style="margin-top:10px;">
+                        <div class="field" style="min-width:180px;">
+                            <label>Resultado</label>
+                            <select name="resultado" required>
+                                <option value="">Seleccionar</option>
+                                <option value="aprobado">Aprobado</option>
+                                <option value="rechazado">Rechazado</option>
+                            </select>
                         </div>
-                        {% endfor %}
-
-                        <div style="margin-top:12px; display:flex; gap:8px; align-items:center;">
-                            <label style="font-size:13px; color:#666;">Observaciones:</label>
-                            <input type="text" name="observaciones" style="flex:1; padding:8px; border-radius:6px; border:1px solid #ddd;" />
+                        <div class="field" style="flex:1; min-width:260px;">
+                            <label>Observaciones</label>
+                            <textarea name="observaciones" rows="2" placeholder="Notas de calidad, causa de rechazo o evidencia"></textarea>
                         </div>
+                    </div>
 
-                        <div style="margin-top:12px; display:flex; gap:8px;">
-                            <button type="submit" class="btn btn-primary" style="padding:8px 12px; background:#0b74de; color:#fff; border-radius:6px; border:none;">Guardar informe</button>
-                            <a href="/control_calidad" class="btn" style="padding:8px 12px; border-radius:6px; border:1px solid #ddd; text-decoration:none;">Volver</a>
-                        </div>
+                    <div style="margin-top:10px;">
+                        <button type="submit" class="btn-primary">Guardar Revision QC</button>
                     </div>
                 </form>
             </div>
+            {% endfor %}
+        {% else %}
+        <div class="card" style="margin-top:12px; color:#6b7280;">
+            Esta hoja aun no tiene procesos completados para revisar en calidad.
         </div>
-        
-        {% if informe_guardado %}
-        <div style="margin-top:12px; padding:10px; background:#e8f5e9; border:1px solid #c8e6c9; border-radius:6px; color:#256029;">Informe guardado.</div>
         {% endif %}
     </div>
-    <!-- Modal / visor 3D -->
-    <div id="stlModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); align-items:center; justify-content:center; z-index:9999;">
-        <div style="width:80%; height:80%; background:#fff; position:relative; border-radius:8px; overflow:hidden;">
-            <button id="stlClose" style="position:absolute; right:10px; top:10px; z-index:10; padding:6px 8px;">Cerrar</button>
-            <div id="stlViewer" style="width:100%; height:100%;"></div>
-        </div>
-    </div>
-
-    <script type="module">
-    import * as THREE from 'https://unpkg.com/three@0.152.2/build/three.module.js';
-    import { STLLoader } from 'https://unpkg.com/three@0.152.2/examples/jsm/loaders/STLLoader.js';
-
-    let renderer, scene, camera, currentMesh, animationId;
-
-    function initRenderer(container){
-        if(renderer) return;
-        const el = container;
-        renderer = new THREE.WebGLRenderer({antialias:true});
-        renderer.setSize(el.clientWidth, el.clientHeight);
-        renderer.setPixelRatio(window.devicePixelRatio || 1);
-        el.appendChild(renderer.domElement);
-        scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xf0f0f0);
-        camera = new THREE.PerspectiveCamera(45, el.clientWidth / el.clientHeight, 0.1, 1000);
-        camera.position.set(0, 0, 100);
-        const light = new THREE.DirectionalLight(0xffffff, 1);
-        light.position.set(0, 0, 1).normalize();
-        scene.add(light);
-        const amb = new THREE.AmbientLight(0x888888);
-        scene.add(amb);
-    }
-
-    function fitCameraToObject(object, camera, offset = 1.25) {
-        const box = new THREE.Box3().setFromObject(object);
-        const size = box.getSize(new THREE.Vector3());
-        const center = box.getCenter(new THREE.Vector3());
-        const maxSize = Math.max(size.x, size.y, size.z);
-        const fitHeightDistance = maxSize / (2 * Math.atan(Math.PI * camera.fov / 360));
-        const distance = fitHeightDistance * offset;
-        camera.position.copy(center);
-        camera.position.x += distance;
-        camera.position.y += distance;
-        camera.position.z += distance;
-        camera.lookAt(center);
-        camera.updateProjectionMatrix();
-    }
-
-    function animate(){
-        animationId = requestAnimationFrame(animate);
-        if(currentMesh) currentMesh.rotation.y += 0.01;
-        renderer.render(scene, camera);
-    }
-
-    window.openSTLViewer = function(url){
-        const modal = document.getElementById('stlModal');
-        const viewer = document.getElementById('stlViewer');
-        modal.style.display = 'flex';
-        if(renderer){
-            while(viewer.firstChild) viewer.removeChild(viewer.firstChild);
-            renderer = null; scene = null; camera = null; currentMesh = null;
-        }
-        initRenderer(viewer);
-        const loader = new STLLoader();
-        const absUrl = '/' + url.replace(/\\\\/g, '/');
-        loader.load(absUrl, function(geometry){
-            const material = new THREE.MeshStandardMaterial({color:0x7f7f7f, metalness:0.5, roughness:0.5});
-            const mesh = new THREE.Mesh(geometry, material);
-            scene.add(mesh);
-            currentMesh = mesh;
-            fitCameraToObject(mesh, camera, 2.0);
-            animate();
-        }, undefined, function(err){
-            console.error('Error cargando STL', err);
-            alert('No se pudo cargar el archivo STL.');
-        });
-    }
-
-    document.getElementById('stlClose').addEventListener('click', function(){
-        const modal = document.getElementById('stlModal');
-        modal.style.display = 'none';
-        if(animationId) cancelAnimationFrame(animationId);
-        if(renderer && renderer.domElement && renderer.domElement.parentNode){
-            renderer.domElement.parentNode.removeChild(renderer.domElement);
-        }
-        renderer = null; scene = null; camera = null; currentMesh = null;
-    });
-    </script>
 </body>
 </html>
-<!-- Template removed: control_calidad_detalle (reverted) -->

@@ -3,32 +3,170 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control de Calidad</title>
+    <title>Control Calidad</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .card { background:#fff; border:1px solid #e6e6e6; border-radius:10px; padding:14px; }
+        table { width:100%; border-collapse:collapse; }
+        th, td { padding:10px 8px; border-bottom:1px solid #f0f0f0; text-align:left; font-size:13px; }
+        th { background:#f8fafc; font-weight:700; }
+        .badge { display:inline-block; border-radius:999px; padding:3px 8px; font-size:11px; font-weight:700; }
+        .b-warn { background:#fff6df; color:#8a5b14; }
+        .b-ok { background:#e7f8ee; color:#1f7a4f; }
+        .b-bad { background:#ffe7e7; color:#9a2525; }
+        .btn-go { background:#0b74de; color:#fff; padding:7px 10px; border-radius:6px; text-decoration:none; font-size:12px; font-weight:700; }
+        .btn-scan { background:#0f766e; color:#fff; border:0; border-radius:8px; padding:8px 12px; font-weight:700; cursor:pointer; }
+        .modal-backdrop { position:fixed; inset:0; background:rgba(15,23,42,.55); display:none; align-items:center; justify-content:center; z-index:1200; }
+        .modal-card { width:min(520px, calc(100% - 24px)); background:#fff; border-radius:12px; padding:14px; box-shadow:0 14px 36px rgba(15,23,42,.28); }
+        .modal-actions { display:flex; justify-content:flex-end; margin-top:10px; }
+        .btn-close { border:1px solid #d5dee8; background:#fff; color:#334155; border-radius:8px; padding:8px 12px; cursor:pointer; }
+    </style>
 </head>
 <body>
     {% include '_sidebar.html' %}
 
     <div class="container">
-        <h2>Control de Calidad - Máquinas</h2>
-        <div style="display:flex; flex-wrap:wrap; gap:16px; margin-top:12px;">
-            {% for maquina in maquinas %}
-            <div style="width:220px; border:1px solid #e6e6e6; border-radius:8px; padding:10px; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,0.05);">
-                <div style="height:140px; display:flex; align-items:center; justify-content:center; overflow:hidden;">
-                    {% if maquina.imagen_url %}
-                        <img src="{{ maquina.imagen_url }}" alt="{{ maquina.nombre }}" style="max-width:100%; max-height:140px; object-fit:contain;" />
-                    {% else %}
-                        <div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:#888;">Sin imagen</div>
-                    {% endif %}
-                </div>
-                <div style="margin-top:8px; font-weight:600;">{{ maquina.nombre }}</div>
-                <div style="margin-top:8px; display:flex; gap:8px;">
-                    <a href="/control_calidad/{{ maquina.id }}" class="btn btn-primary" style="text-decoration:none; padding:6px 10px; background:#0b74de; color:#fff; border-radius:6px;">Abrir</a>
-                </div>
+        <div style="display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap;">
+            <div>
+                <h2>Control Calidad</h2>
+                <p style="margin-top:6px; color:#5f7184; font-size:13px;">Listado de hojas de ruta con procesos completados para revisión de calidad.</p>
             </div>
-            {% endfor %}
+            <button class="btn-scan" type="button" onclick="abrirScannerCalidad()">Escanear QR</button>
+        </div>
+
+        <div class="card" style="margin-top:12px; overflow:auto;">
+            {% if hojas_qc %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Serie</th>
+                        <th>Clave</th>
+                        <th>Piezas</th>
+                        <th>Estado Hoja</th>
+                        <th>Completados</th>
+                        <th>Revisados</th>
+                        <th>Pendientes QC</th>
+                        <th>Rechazados</th>
+                        <th>Accion</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for h in hojas_qc %}
+                    <tr>
+                        <td><strong>{{ h.serie or ('HOJA #' ~ h.id) }}</strong></td>
+                        <td>{{ h.clave or '' }}</td>
+                        <td>{{ h.piezas or '' }}</td>
+                        <td>{{ h.estado or '' }}</td>
+                        <td>{{ h.procesos_completados }}</td>
+                        <td>{{ h.procesos_revisados }}</td>
+                        <td>
+                            {% if h.procesos_pendientes_qc > 0 %}
+                                <span class="badge b-warn">{{ h.procesos_pendientes_qc }}</span>
+                            {% else %}
+                                <span class="badge b-ok">0</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if h.procesos_rechazados_qc > 0 %}
+                                <span class="badge b-bad">{{ h.procesos_rechazados_qc }}</span>
+                            {% else %}
+                                <span class="badge b-ok">0</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a class="btn-go" href="/control_calidad/hoja/{{ h.id }}">Revisar</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div style="padding:20px; color:#6b7280;">No hay procesos completados pendientes de calidad.</div>
+            {% endif %}
         </div>
     </div>
+
+    <div id="modalScannerCalidad" class="modal-backdrop">
+        <div class="modal-card">
+            <h3 style="margin:0 0 8px 0;">Escanear hoja para Calidad</h3>
+            <div style="font-size:13px; color:#5f7184; margin-bottom:8px;">Al escanear el QR/codigo se abrira directo la revision de la hoja.</div>
+            <div id="qr-reader-calidad" style="width:100%; min-height:260px; border:1px solid #e5e7eb; border-radius:8px;"></div>
+            <div class="modal-actions">
+                <button class="btn-close" type="button" onclick="cerrarScannerCalidad()">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/html5-qrcode" defer></script>
+    <script>
+        let qrScannerCalidad = null;
+
+        async function resolverHojaPorCodigo(scanValue) {
+            const res = await fetch('/api/hojas_ruta/resolver_codigo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ value: scanValue })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'No se pudo resolver el codigo');
+            return data.hoja;
+        }
+
+        async function abrirScannerCalidad() {
+            if (typeof Html5Qrcode === 'undefined') {
+                alert('El lector QR aun no esta disponible. Recarga la pagina e intenta de nuevo.');
+                return;
+            }
+            document.getElementById('modalScannerCalidad').style.display = 'flex';
+            qrScannerCalidad = new Html5Qrcode('qr-reader-calidad');
+            const formatos = (typeof Html5QrcodeSupportedFormats !== 'undefined')
+                ? [
+                    Html5QrcodeSupportedFormats.QR_CODE,
+                    Html5QrcodeSupportedFormats.CODE_128,
+                    Html5QrcodeSupportedFormats.EAN_13,
+                    Html5QrcodeSupportedFormats.EAN_8
+                ]
+                : undefined;
+            try {
+                await qrScannerCalidad.start(
+                    { facingMode: 'environment' },
+                    { fps: 10, qrbox: { width: 220, height: 220 }, formatsToSupport: formatos },
+                    async (decodedText) => {
+                        try {
+                            await cerrarScannerCalidad();
+                            const hoja = await resolverHojaPorCodigo(decodedText);
+                            window.location.href = '/control_calidad/hoja/' + hoja.id;
+                        } catch (err) {
+                            alert('Error al procesar codigo: ' + err.message);
+                        }
+                    },
+                    () => {}
+                );
+            } catch (err) {
+                alert('No se pudo iniciar la camara: ' + (err.message || err));
+                await cerrarScannerCalidad();
+            }
+        }
+
+        async function cerrarScannerCalidad() {
+            document.getElementById('modalScannerCalidad').style.display = 'none';
+            if (qrScannerCalidad) {
+                try { await qrScannerCalidad.stop(); } catch (_) {}
+                try { await qrScannerCalidad.clear(); } catch (_) {}
+                qrScannerCalidad = null;
+            }
+            const reader = document.getElementById('qr-reader-calidad');
+            if (reader) reader.innerHTML = '';
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') cerrarScannerCalidad();
+        });
+
+        document.getElementById('modalScannerCalidad').addEventListener('click', (e) => {
+            if (e.target.id === 'modalScannerCalidad') cerrarScannerCalidad();
+        });
+    </script>
 </body>
 </html>
-<!-- Template removed: control_calidad_list (reverted) -->
