@@ -14,6 +14,9 @@
       --panel: #ffffff;
       --head: #f4f8ff;
       --accent: #124f95;
+      --accent-2: #1f7a8c;
+      --field-bg: #f8fbff;
+      --field-k: #36547a;
     }
 
     body {
@@ -66,7 +69,7 @@
       align-items: center;
       gap: 14px;
       border: 1px solid var(--line-strong);
-      background: var(--head);
+      background: linear-gradient(135deg, #eff6ff 0%, #f0f9ff 55%, #ecfeff 100%);
       padding: 12px;
       border-radius: 10px;
       margin-bottom: 12px;
@@ -95,6 +98,7 @@
       font-weight: 800;
       letter-spacing: 0.4px;
       color: #0b2f63;
+      text-transform: uppercase;
     }
 
     .doc-subtitle {
@@ -140,6 +144,7 @@
       background: #e5e7eb;
       color: #374151;
       margin-top: 6px;
+      border: 1px solid #cfd8e3;
     }
 
     .st-activa { background: #d1fae5; color: #065f46; }
@@ -161,12 +166,13 @@
       border-radius: 8px;
       padding: 8px;
       min-height: 58px;
-      background: #fff;
+      background: var(--field-bg);
+      border-left: 4px solid #8ab6e8;
     }
 
     .k {
       font-size: 11px;
-      color: var(--muted);
+      color: var(--field-k);
       margin-bottom: 4px;
       text-transform: uppercase;
       letter-spacing: 0.4px;
@@ -200,12 +206,20 @@
     }
 
     th {
-      background: #eef4fc;
-      color: #0f2f5f;
+      background: #dbeafe;
+      color: #102a4d;
       font-weight: 800;
       text-transform: uppercase;
       letter-spacing: 0.3px;
       font-size: 11px;
+    }
+
+    tbody tr:nth-child(odd) {
+      background: #fbfdff;
+    }
+
+    tbody tr:nth-child(even) {
+      background: #f4f8ff;
     }
 
     .sign-row {
@@ -220,6 +234,7 @@
       border-radius: 8px;
       padding: 8px;
       min-height: 74px;
+      background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
     }
 
     .sign-line {
@@ -236,6 +251,8 @@
       font-size: 11px;
       color: var(--muted);
       text-align: right;
+      border-top: 1px dashed #b8c7dc;
+      padding-top: 6px;
     }
 
     @media (max-width: 860px) {
@@ -267,6 +284,8 @@
         background: #fff;
         font-size: 10px;
         line-height: 1.15;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
       }
       .app-sidebar,
       .toolbar,
@@ -286,6 +305,15 @@
         box-shadow: none;
         border-radius: 0;
         padding: 0;
+      }
+
+      .doc-header,
+      .field,
+      th,
+      tbody tr,
+      .sign-box {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
       }
 
       .doc-header {
@@ -348,6 +376,7 @@
       .field {
         min-height: 44px;
         padding: 5px;
+        border-left-width: 3px;
       }
 
       .v {
