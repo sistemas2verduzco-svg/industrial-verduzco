@@ -2,6 +2,7 @@ import argparse
 import os
 import sys
 from typing import Optional
+import re
 
 # Obtener la ruta del directorio raíz (padre de tools/)
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -128,6 +129,66 @@ def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
     return df
 
 
+def _split_clave_code(raw_clave: str) -> list[str]:
+    """Expande claves compuestas (ej. SF10/SF11 -> [SF10, SF11])."""
+    text = str(raw_clave or '').strip().upper()
+    if not text:
+        return []
+
+    if '/' not in text:
+        return [text]
+
+    parts = [p.strip().upper() for p in text.split('/') if p and p.strip()]
+    if not parts:
+        return []
+
+    # Si alguna parte viene solo numérica, tomar prefijo alfabético de la primera parte.
+    m = re.match(r'^([A-Z]+)', parts[0])
+    base_prefix = m.group(1) if m else ''
+
+    expanded = []
+    for part in parts:
+        if re.match(r'^[A-Z]+\d+[A-Z0-9-]*$', part):
+            expanded.append(part)
+            continue
+        if re.match(r'^\d+[A-Z0-9-]*$', part) and base_prefix:
+            expanded.append(base_prefix + part)
+            continue
+        expanded.append(part)
+
+    # Evitar repetidos conservando orden
+    seen = set()
+    unique_expanded = []
+    for item in expanded:
+        if item not in seen:
+            seen.add(item)
+            unique_expanded.append(item)
+    return unique_expanded
+
+
+def expand_composite_claves(df: pd.DataFrame) -> pd.DataFrame:
+    """Duplica filas de procesos para cada clave cuando la clave viene compuesta con '/' ."""
+    rows = []
+    expanded_count = 0
+    for _, row in df.iterrows():
+        claves = _split_clave_code(row.get('clave'))
+        if not claves:
+            continue
+        if len(claves) > 1:
+            expanded_count += 1
+
+        for c in claves:
+            new_row = row.copy()
+            new_row['clave'] = c
+            rows.append(new_row)
+
+    out = pd.DataFrame(rows)
+    if expanded_count > 0:
+        print(f"\nℹ Claves compuestas expandidas: {expanded_count} filas origen")
+        print(f"   Total filas despues de expansion: {len(out)}")
+    return out
+
+
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Mapea nombres de columnas flexibles a nombres estándar."""
     mapping = {
@@ -189,6 +250,9 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
         else:
             df = df.drop(columns=['block_id'])
     
+    # Expandir claves compuestas (ej. SF10/SF11) para importar por separado.
+    df = expand_composite_claves(df)
+
     df = df.sort_values(["clave", "orden"])  # asegura orden correcto
     
     # Deduplicar procesos repetidos dentro de cada clave:
