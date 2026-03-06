@@ -813,11 +813,35 @@ def api_mapa_maquinas():
     for idx, maq in enumerate(maquinas):
         hoja_activa = HojaRuta.query.filter_by(maquina_id=maq.id, estado='activa').first()
         estacion_actual = None
+        tiempo_objetivo = None
+        tiempo_transcurrido = None
+        tiempo_restante = None
+        proceso_culminado = False
+        progreso_pct = 0
+        tiempo_proceso_pieza = None
         if hoja_activa:
             estacion_actual = EstacionTrabajo.query.filter_by(
                 hoja_ruta_id=hoja_activa.id,
                 estado='en_curso'
             ).order_by(EstacionTrabajo.orden).first()
+
+            if estacion_actual:
+                cantidad = max(1, int(hoja_activa.cantidad_piezas or 0))
+                sec_por_pieza = _station_seconds(estacion_actual)
+                objetivo_sec = max(0, sec_por_pieza * cantidad)
+
+                inicio = estacion_actual.fecha_inicio or hoja_activa.fecha_salida
+                transcurrido_sec = _working_seconds_between(inicio, datetime.utcnow()) if inicio else 0
+                restante_sec = max(0, objetivo_sec - transcurrido_sec)
+
+                if sec_por_pieza > 0:
+                    tiempo_proceso_pieza = _format_seconds_to_hms(sec_por_pieza)
+                if objetivo_sec > 0:
+                    tiempo_objetivo = _format_seconds_to_hms(objetivo_sec)
+                    tiempo_transcurrido = _format_seconds_to_hms(transcurrido_sec)
+                    tiempo_restante = _format_seconds_to_hms(restante_sec)
+                    proceso_culminado = restante_sec <= 0
+                    progreso_pct = min(100, int((transcurrido_sec * 100) / objetivo_sec))
 
         if hoja_activa:
             if estacion_actual:
@@ -845,7 +869,14 @@ def api_mapa_maquinas():
             'hoja_serie': hoja_activa.nombre if hoja_activa else None,
             'pieza': hoja_activa.pn if hoja_activa else None,
             'tiempo_total': hoja_activa.total_tiempo if hoja_activa else None,
-            'fecha_termino': hoja_activa.fecha_termino.isoformat() if (hoja_activa and hoja_activa.fecha_termino) else None
+            'fecha_termino': hoja_activa.fecha_termino.isoformat() if (hoja_activa and hoja_activa.fecha_termino) else None,
+            'tiempo_proceso_pieza': tiempo_proceso_pieza,
+            'tiempo_objetivo_proceso': tiempo_objetivo,
+            'tiempo_transcurrido_proceso': tiempo_transcurrido,
+            'tiempo_restante_proceso': tiempo_restante,
+            'proceso_culminado': proceso_culminado,
+            'progreso_proceso_pct': progreso_pct,
+            'estacion_actual_id': estacion_actual.id if estacion_actual else None,
         })
 
     return jsonify({'maquinas': data})

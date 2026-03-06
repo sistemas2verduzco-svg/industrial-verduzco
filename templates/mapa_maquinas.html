@@ -374,6 +374,31 @@
             font-size: 13px;
         }
 
+        .toast-zone {
+            position: fixed;
+            right: 16px;
+            bottom: 16px;
+            z-index: 40;
+            display: grid;
+            gap: 8px;
+            max-width: min(360px, 90vw);
+        }
+
+        .toast {
+            border: 1px solid #2a6b96;
+            background: linear-gradient(160deg, #0d2f54, #0b2342);
+            border-radius: 10px;
+            padding: 10px 12px;
+            color: #d7ecff;
+            font-size: 12px;
+            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.38);
+        }
+
+        .toast.ok {
+            border-color: rgba(20, 198, 120, 0.6);
+            background: linear-gradient(160deg, #0f3f39, #0a2d2a);
+        }
+
         @media (max-width: 1080px) {
             .dashboard {
                 grid-template-columns: 1fr;
@@ -467,8 +492,11 @@
         </aside>
     </main>
 
+    <div class="toast-zone" id="toastZone"></div>
+
     <script>
         const MAP_REFRESH_MS = 6000;
+        const notifiedDone = new Set();
 
         function safeText(value, fallback) {
             if (value === null || value === undefined || value === '') {
@@ -518,8 +546,14 @@
             meta.appendChild(makeMetaRow('Pieza', machine.pieza));
             meta.appendChild(makeMetaRow('Hoja', machine.hoja_serie));
             meta.appendChild(makeMetaRow('Estacion', machine.estacion_actual || 'Sin produccion'));
-            meta.appendChild(makeMetaRow('Tiempo', machine.tiempo_total));
+            meta.appendChild(makeMetaRow('Tiempo pza/proceso', machine.tiempo_proceso_pieza || 'N/A'));
+            meta.appendChild(makeMetaRow('Objetivo proceso', machine.tiempo_objetivo_proceso || 'N/A'));
+            meta.appendChild(makeMetaRow('Transcurrido', machine.tiempo_transcurrido_proceso || 'N/A'));
+            meta.appendChild(makeMetaRow('Restante', machine.tiempo_restante_proceso || 'N/A'));
             meta.appendChild(makeMetaRow('Termino', machine.fecha_termino ? new Date(machine.fecha_termino).toLocaleString() : 'N/A'));
+            if (machine.proceso_culminado) {
+                meta.appendChild(makeMetaRow('Estado proceso', 'CULMINADO'));
+            }
 
             const link = document.createElement('a');
             link.className = 'machine-link';
@@ -530,6 +564,31 @@
             card.appendChild(meta);
             card.appendChild(link);
             return card;
+        }
+
+        function pushToast(message, kind = 'ok') {
+            const zone = document.getElementById('toastZone');
+            if (!zone) return;
+
+            const toast = document.createElement('div');
+            toast.className = 'toast ' + kind;
+            toast.textContent = message;
+            zone.appendChild(toast);
+
+            setTimeout(() => {
+                toast.remove();
+            }, 9000);
+        }
+
+        function processCompletionNotifications(maquinas) {
+            maquinas.forEach(m => {
+                if (!m || !m.proceso_culminado) return;
+                const key = `${m.id}-${m.hoja_serie || ''}-${m.estacion_actual_id || ''}`;
+                if (notifiedDone.has(key)) return;
+
+                notifiedDone.add(key);
+                pushToast(`Proceso culminado en ${m.nombre}. Hoja: ${m.hoja_serie || 'N/A'}`);
+            });
         }
 
         function renderMachineGroups(maquinas) {
@@ -579,6 +638,7 @@
                 const maquinas = Array.isArray(data.maquinas) ? data.maquinas.filter(m => m.activo) : [];
                 renderMachineGroups(maquinas);
                 renderStats(maquinas);
+                processCompletionNotifications(maquinas);
                 info.textContent = 'Actualizado ' + new Date().toLocaleTimeString();
             } catch (error) {
                 console.error(error);
