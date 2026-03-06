@@ -18,7 +18,7 @@ echo "[HTTPS] Starting nginx/http for ACME challenge..."
 docker compose up -d nginx
 
 echo "[HTTPS] Requesting Let's Encrypt certificate..."
-docker compose run --rm --no-deps certbot -c "certbot certonly --webroot -w /var/www/certbot -d $DOMAIN -d www.$DOMAIN --email $EMAIL --agree-tos --no-eff-email --rsa-key-size 4096"
+docker compose run --rm --no-deps certbot -c "certbot certonly --webroot -w /var/www/certbot -d $DOMAIN -d www.$DOMAIN --email $EMAIL --agree-tos --no-eff-email --rsa-key-size 4096 --non-interactive --expand"
 
 echo "[HTTPS] Activating HTTPS nginx config..."
 cp nginx/default-https.conf nginx/default.conf

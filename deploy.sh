@@ -11,7 +11,7 @@ cd "$ROOT_DIR"
 
 BRANCH_ARG="${1:-}"
 FORCE_DIRTY="${FORCE_DIRTY:-0}"
-ALLOWED_DIRTY_REGEX="${ALLOWED_DIRTY_REGEX:-^(\.env|catalogo_app\.log|uploads/productos/|certbot/www/|certbot/conf/)}"
+ALLOWED_DIRTY_REGEX="${ALLOWED_DIRTY_REGEX:-^(\.env|catalogo_app\.log|uploads/productos/|certbot/www/|certbot/conf/|nginx/default\.conf)}"
 
 log() {
   printf "\n[%s] %s\n" "$(date +"%Y-%m-%d %H:%M:%S")" "$*"
@@ -166,7 +166,7 @@ for f in "${CHANGED_FILES[@]}"; do
     docker-compose.yml)
       NEED_COMPOSE_APPLY=1
       ;;
-    nginx/default.conf)
+    nginx/default.conf|nginx/default-https.conf)
       NEED_NGINX_RELOAD=1
       ;;
     *.py|templates/*|static/*)
