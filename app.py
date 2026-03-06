@@ -1198,7 +1198,7 @@ def api_asignar_hoja_maquina(maquina_id):
 @app.route('/api/maquinas/<int:maquina_id>/retirar_hoja', methods=['POST'])
 @login_required
 def api_retirar_hoja_maquina(maquina_id):
-    """Retirar/desasignar hoja activa de la máquina y marcarla como completada."""
+    """Retirar/desasignar hoja activa de la máquina y devolverla a pendientes."""
     maq = Máquina.query.get_or_404(maquina_id)
     data = request.get_json() or {}
     hoja_id = data.get('hoja_id')
@@ -1213,9 +1213,11 @@ def api_retirar_hoja_maquina(maquina_id):
             return jsonify({'error': 'No hay hoja activa asignada a esta máquina'}), 404
 
     try:
-        hoja.estado = 'completada'
-        hoja.fecha_termino = datetime.utcnow()
+        hoja.estado = 'activa'
         hoja.maquina_id = None
+        # Al volver a pendientes, reiniciar ventanas de tiempo para futura reasignacion.
+        hoja.fecha_salida = None
+        hoja.fecha_termino = None
         db.session.commit()
         logger.info(f"[HOJAS_RUTA] Hoja {hoja.id} retirada de maquina {maquina_id}")
         return jsonify({'success': True, 'hoja': hoja.to_dict()}), 200

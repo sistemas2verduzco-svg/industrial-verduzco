@@ -610,7 +610,7 @@
     }
 
     async function retirarHojaRuta(maquinaId) {
-        if (!confirm('¿Retirar hoja de ruta activa de esta máquina y marcarla como completada?')) {
+        if (!confirm('¿Retirar hoja de ruta activa de esta máquina y regresarla a hojas por asignar?')) {
             return;
         }
         try {
@@ -629,27 +629,6 @@
         } catch (err) {
             alert('Error: ' + err.message);
         }
-    }
-
-    function aprobarOT(maquinaId) {
-        fetch('/api/produccion/aprobar_ot', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ maquina_id: maquinaId })
-        })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    alert('OT aprobada. Puedes activar la máquina.');
-                    window.location.reload();
-                } else {
-                    alert('Error al aprobar OT');
-                }
-            })
-            .catch(err => {
-                console.error(err);
-                alert('Error al conectar');
-            });
     }
 
     document.addEventListener('keydown', function(e) {
