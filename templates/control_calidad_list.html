@@ -116,6 +116,11 @@
             <h3 style="margin:0 0 8px 0;">Escanear hoja para Calidad</h3>
             <div style="font-size:13px; color:#5f7184; margin-bottom:8px;">Al escanear el QR/codigo se abrira directo la revision de la hoja.</div>
             <div id="qr-reader-calidad" style="width:100%; min-height:260px; border:1px solid #e5e7eb; border-radius:8px;"></div>
+            <div style="margin-top:10px; display:grid; gap:8px;">
+                <button class="btn-close" type="button" onclick="escanearImagenCalidad()">Escanear desde imagen</button>
+                <input id="inputQrImagenCalidad" type="file" accept="image/*" style="display:none;" onchange="procesarImagenCalidad(event)">
+                <div style="font-size:12px; color:#64748b;">Si la camara falla, sube una foto del QR/codigo.</div>
+            </div>
             <div class="modal-actions">
                 <button class="btn-close" type="button" onclick="cerrarScannerCalidad()">Cerrar</button>
             </div>
@@ -143,6 +148,9 @@
                 alert('El lector QR aun no esta disponible. Recarga la pagina e intenta de nuevo.');
                 return;
             }
+            if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                alert('Camara bloqueada: abre la app en HTTPS. En HTTP el navegador no permite camara. Puedes usar "Escanear desde imagen".');
+            }
             document.getElementById('modalScannerCalidad').style.display = 'flex';
             qrScannerCalidad = new Html5Qrcode('qr-reader-calidad');
             const formatos = (typeof Html5QrcodeSupportedFormats !== 'undefined')
@@ -169,8 +177,39 @@
                     () => {}
                 );
             } catch (err) {
-                alert('No se pudo iniciar la camara: ' + (err.message || err));
+                const msg = String(err && err.message ? err.message : err);
+                let detalle = 'No se pudo iniciar la camara.';
+                if (/NotAllowedError|Permission|denied/i.test(msg)) {
+                    detalle = 'Permiso de camara denegado. Habilitalo en el navegador o usa "Escanear desde imagen".';
+                } else if (/NotFoundError|DevicesNotFoundError|OverconstrainedError/i.test(msg)) {
+                    detalle = 'No se detecto camara disponible en este dispositivo/navegador.';
+                } else if (/secure|https/i.test(msg)) {
+                    detalle = 'La camara requiere HTTPS.';
+                }
+                alert(detalle + ' Detalle: ' + msg);
                 await cerrarScannerCalidad();
+            }
+        }
+
+        function escanearImagenCalidad() {
+            document.getElementById('inputQrImagenCalidad').click();
+        }
+
+        async function procesarImagenCalidad(event) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+            try {
+                if (typeof Html5Qrcode === 'undefined') throw new Error('Lector QR no disponible');
+                const scanner = new Html5Qrcode('qr-reader-calidad');
+                const decoded = await scanner.scanFile(file, true);
+                try { await scanner.clear(); } catch (_) {}
+                const hoja = await resolverHojaPorCodigo(decoded);
+                await cerrarScannerCalidad();
+                window.location.href = '/control_calidad/hoja/' + hoja.id;
+            } catch (err) {
+                alert('No se pudo leer el codigo desde imagen: ' + (err.message || err));
+            } finally {
+                event.target.value = '';
             }
         }
 
