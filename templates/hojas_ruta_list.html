@@ -213,6 +213,92 @@
             padding: 4px 8px;
         }
 
+        .process-box {
+            margin-top: 8px;
+            border: 1px solid #c7d9ec;
+            background: #f3f9ff;
+            border-radius: 8px;
+            padding: 7px;
+            max-height: 130px;
+            overflow: auto;
+        }
+
+        .process-title {
+            margin: 0 0 6px 0;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.25px;
+            color: #244b73;
+            text-transform: uppercase;
+        }
+
+        .process-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: #3e556d;
+            margin-bottom: 5px;
+        }
+
+        .process-item input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: #0b74de;
+        }
+
+        .process-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .process-item.done {
+            color: #6f7f90;
+            text-decoration: line-through;
+        }
+
+        .process-chip {
+            display: inline-block;
+            border-radius: 999px;
+            font-size: 10px;
+            padding: 2px 6px;
+            font-weight: 700;
+            border: 1px solid #d2dce8;
+            background: #fff;
+            color: #516376;
+        }
+
+        .process-chip.en-curso {
+            border-color: #b7d3ef;
+            background: #e8f4ff;
+            color: #1d5d96;
+        }
+
+        .process-chip.completada {
+            border-color: #b7e0c6;
+            background: #ebf9f0;
+            color: #23784c;
+        }
+
+        .process-chip.pendiente {
+            border-color: #e0d4b4;
+            background: #fff8e7;
+            color: #8a5b14;
+        }
+
+        .process-empty {
+            font-size: 12px;
+            color: #708397;
+        }
+
+        .process-box.pending {
+            margin-top: 8px;
+            max-height: 110px;
+        }
+
+        .process-box.pending .process-item {
+            font-size: 11px;
+        }
+
         .modal-backdrop {
             position: fixed;
             inset: 0;
@@ -455,6 +541,24 @@
                                         Estación actual: <strong>{{ maq.estacion_actual }}</strong>
                                     </div>
                                     <div class="time-real">Tiempo real: {{ maq.tiempo_real or '00:00:00' }}</div>
+                                    <div class="process-box">
+                                        <div class="process-title">Validación de procesos</div>
+                                        {% if maq.hoja_activa.estaciones %}
+                                            {% for est in maq.hoja_activa.estaciones|sort(attribute='orden') %}
+                                            <label class="process-item {% if est.estado == 'completada' %}done{% endif %}">
+                                                <input
+                                                    type="checkbox"
+                                                    {% if est.estado == 'completada' %}checked{% endif %}
+                                                    onchange="toggleProceso({{ est.id }}, this.checked)"
+                                                >
+                                                <span>{{ est.operacion or est.nombre or ('Proceso ' ~ loop.index) }}</span>
+                                                <span class="process-chip {{ (est.estado or 'pendiente')|replace('_','-') }}">{{ est.estado or 'pendiente' }}</span>
+                                            </label>
+                                            {% endfor %}
+                                        {% else %}
+                                            <div class="process-empty">Esta hoja no tiene procesos configurados.</div>
+                                        {% endif %}
+                                    </div>
                                 {% else %}
                                     <span class="status-badge status-parado">⏸ Sin producción</span>
                                 {% endif %}
@@ -498,6 +602,20 @@
                                 Clave: <strong>{{ h.clave or '' }}</strong><br>
                                 Piezas: <strong>{{ h.cantidad_piezas or '' }}</strong><br>
                                 Tiempo: <strong>{{ h.tiempo_total or 'N/A' }}</strong>
+                            </div>
+                            <div class="process-box pending">
+                                <div class="process-title">Checks de validación</div>
+                                {% if h.estaciones %}
+                                    {% for est in h.estaciones|sort(attribute='orden') %}
+                                    <label class="process-item {% if est.estado == 'completada' %}done{% endif %}">
+                                        <input type="checkbox" {% if est.estado == 'completada' %}checked{% endif %} disabled>
+                                        <span>{{ est.operacion or ('Proceso ' ~ loop.index) }}</span>
+                                        <span class="process-chip {{ (est.estado or 'pendiente')|replace('_','-') }}">{{ est.estado or 'pendiente' }}</span>
+                                    </label>
+                                    {% endfor %}
+                                {% else %}
+                                    <div class="process-empty">Sin procesos para validar.</div>
+                                {% endif %}
                             </div>
                             <div class="pending-actions">
                                 <button class="btn-small" onclick="abrirModalAsignar(null, null, {{ h.id }})">Asignar</button>
@@ -628,6 +746,30 @@
             window.location.reload();
         } catch (err) {
             alert('Error: ' + err.message);
+        }
+    }
+
+    async function toggleProceso(estacionId, checked) {
+        try {
+            const res = await fetch('/api/estaciones/' + estacionId + '/check_proceso', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ completada: checked })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.error || 'No se pudo actualizar el proceso');
+            }
+
+            if (data.hoja && data.hoja.estado === 'completada') {
+                alert('Todos los procesos de la hoja se completaron.');
+            }
+
+            window.location.reload();
+        } catch (err) {
+            alert('Error: ' + err.message);
+            window.location.reload();
         }
     }
 

@@ -727,6 +727,7 @@ def hojas_ruta_list():
 
     pendientes_data = []
     for h in hojas_pendientes:
+        estaciones_h = EstacionTrabajo.query.filter_by(hoja_ruta_id=h.id).order_by(EstacionTrabajo.orden.asc()).all()
         pendientes_data.append({
             'id': h.id,
             'serie': h.nombre,
@@ -734,6 +735,15 @@ def hojas_ruta_list():
             'cantidad_piezas': h.cantidad_piezas,
             'tiempo_total': h.total_tiempo,
             'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None,
+            'estaciones': [
+                {
+                    'id': e.id,
+                    'orden': e.orden,
+                    'operacion': e.operacion,
+                    'estado': e.estado,
+                }
+                for e in estaciones_h
+            ],
         })
 
     return render_template('hojas_ruta_list.html', maquinas=maquinas_data, hojas_pendientes=pendientes_data)
@@ -1179,6 +1189,15 @@ def api_asignar_hoja_maquina(maquina_id):
         hoja.estado = 'activa'
 
         estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
+        # Si no hay proceso en curso, arrancar el siguiente pendiente al asignar.
+        en_curso = next((e for e in estaciones if (e.estado or '').lower() == 'en_curso'), None)
+        if not en_curso:
+            siguiente = next((e for e in estaciones if (e.estado or 'pendiente').lower() != 'completada'), None)
+            if siguiente:
+                siguiente.estado = 'en_curso'
+                if not siguiente.fecha_inicio:
+                    siguiente.fecha_inicio = datetime.utcnow()
+
         _apply_hoja_time_plan(
             hoja,
             estaciones,
@@ -1225,6 +1244,86 @@ def api_retirar_hoja_maquina(maquina_id):
         db.session.rollback()
         logger.error(f"Error retirando hoja de maquina: {e}", exc_info=True)
         return jsonify({'error': 'No se pudo retirar la hoja de la máquina'}), 500
+
+
+@app.route('/api/estaciones/<int:estacion_id>/check_proceso', methods=['POST'])
+@login_required
+def api_check_proceso_estacion(estacion_id):
+    """Marcar/desmarcar proceso de estación y avanzar automáticamente al siguiente pendiente."""
+    estacion = EstacionTrabajo.query.get_or_404(estacion_id)
+    hoja = HojaRuta.query.get_or_404(estacion.hoja_ruta_id)
+    data = request.get_json() or {}
+    completada = bool(data.get('completada', False))
+
+    try:
+        ahora = datetime.utcnow()
+
+        if completada:
+            if not estacion.fecha_inicio:
+                estacion.fecha_inicio = ahora
+            estacion.estado = 'completada'
+            estacion.fecha_finalizacion = ahora
+
+            # Limpiar cualquier en_curso previo para mantener un solo proceso activo.
+            otras_en_curso = EstacionTrabajo.query.filter(
+                EstacionTrabajo.hoja_ruta_id == hoja.id,
+                EstacionTrabajo.id != estacion.id,
+                EstacionTrabajo.estado == 'en_curso'
+            ).all()
+            for e in otras_en_curso:
+                e.estado = 'pendiente'
+
+            siguiente = EstacionTrabajo.query.filter(
+                EstacionTrabajo.hoja_ruta_id == hoja.id,
+                EstacionTrabajo.estado == 'pendiente'
+            ).order_by(EstacionTrabajo.orden.asc()).first()
+            if siguiente:
+                siguiente.estado = 'en_curso'
+                if not siguiente.fecha_inicio:
+                    siguiente.fecha_inicio = ahora
+            else:
+                # Si ya no quedan pendientes, la hoja queda lista/completada.
+                hoja.estado = 'completada'
+                hoja.fecha_termino = ahora
+
+        else:
+            estacion.estado = 'pendiente'
+            estacion.fecha_finalizacion = None
+
+            # Si se reabre un proceso, la hoja vuelve a activa.
+            hoja.estado = 'activa'
+            hoja.fecha_termino = None
+
+            en_curso = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id, estado='en_curso').first()
+            if not en_curso:
+                proximo = EstacionTrabajo.query.filter(
+                    EstacionTrabajo.hoja_ruta_id == hoja.id,
+                    EstacionTrabajo.estado == 'pendiente'
+                ).order_by(EstacionTrabajo.orden.asc()).first()
+                if proximo:
+                    proximo.estado = 'en_curso'
+                    if not proximo.fecha_inicio:
+                        proximo.fecha_inicio = ahora
+
+        if not hoja.fecha_salida:
+            hoja.fecha_salida = ahora
+
+        db.session.commit()
+
+        pendientes = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id, estado='pendiente').count()
+        completadas = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id, estado='completada').count()
+        total = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).count()
+
+        return jsonify({
+            'success': True,
+            'estacion': estacion.to_dict(),
+            'hoja': {'id': hoja.id, 'estado': hoja.estado, 'fecha_termino': hoja.fecha_termino.isoformat() if hoja.fecha_termino else None},
+            'resumen': {'total': total, 'completadas': completadas, 'pendientes': pendientes}
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error marcando proceso estacion={estacion_id}: {e}", exc_info=True)
+        return jsonify({'error': 'No se pudo actualizar el proceso'}), 500
 
 
 @app.route('/api/produccion/ingresar_piezas', methods=['POST'])
