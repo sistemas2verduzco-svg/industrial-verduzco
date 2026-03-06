@@ -695,7 +695,12 @@ def hojas_ruta_list():
 
     maquinas = sorted(maquinas, key=maquina_sort_key)
     
-    hojas_pendientes = HojaRuta.query.filter_by(maquina_id=None, estado='activa').order_by(HojaRuta.fecha_creacion.asc()).all()
+    # Mostrar cualquier hoja sin maquina asignada para evitar que se "pierdan"
+    # por cambios de estado heredados (ej. completada por flujo anterior).
+    hojas_pendientes = HojaRuta.query.filter(
+        HojaRuta.maquina_id.is_(None),
+        HojaRuta.estado.in_(['activa', 'pausada', 'completada'])
+    ).order_by(HojaRuta.fecha_creacion.asc()).all()
 
     # Obtener hoja activa para cada máquina
     maquinas_data = []
@@ -732,6 +737,7 @@ def hojas_ruta_list():
             'id': h.id,
             'serie': h.nombre,
             'clave': h.pn,
+            'estado': h.estado,
             'cantidad_piezas': h.cantidad_piezas,
             'tiempo_total': h.total_tiempo,
             'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None,
@@ -1282,9 +1288,9 @@ def api_check_proceso_estacion(estacion_id):
                 if not siguiente.fecha_inicio:
                     siguiente.fecha_inicio = ahora
             else:
-                # Si ya no quedan pendientes, la hoja queda lista/completada.
-                hoja.estado = 'completada'
-                hoja.fecha_termino = ahora
+                # No auto-cerrar hoja: puede requerir pasar por otras maquinas/procesos.
+                hoja.estado = 'activa'
+                hoja.fecha_termino = None
 
         else:
             estacion.estado = 'pendiente'
@@ -1324,6 +1330,26 @@ def api_check_proceso_estacion(estacion_id):
         db.session.rollback()
         logger.error(f"Error marcando proceso estacion={estacion_id}: {e}", exc_info=True)
         return jsonify({'error': 'No se pudo actualizar el proceso'}), 500
+
+
+@app.route('/api/hojas_ruta/<int:hoja_id>', methods=['DELETE'])
+@login_required
+def api_eliminar_hoja_ruta(hoja_id):
+    """Eliminar una hoja de ruta. Solo permite borrar hojas no asignadas a maquina."""
+    hoja = HojaRuta.query.get_or_404(hoja_id)
+
+    if hoja.maquina_id is not None:
+        return jsonify({'error': 'No puedes eliminar una hoja asignada a una maquina. Primero desasignala.'}), 409
+
+    try:
+        db.session.delete(hoja)
+        db.session.commit()
+        logger.info(f"[HOJAS_RUTA] Hoja eliminada: {hoja_id}")
+        return jsonify({'success': True, 'id': hoja_id}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error eliminando hoja {hoja_id}: {e}", exc_info=True)
+        return jsonify({'error': 'No se pudo eliminar la hoja de ruta'}), 500
 
 
 @app.route('/api/produccion/ingresar_piezas', methods=['POST'])

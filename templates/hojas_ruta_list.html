@@ -600,6 +600,7 @@
                             <div class="pending-title">{{ h.serie or ('HOJA #' ~ h.id) }}</div>
                             <div class="pending-meta">
                                 Clave: <strong>{{ h.clave or '' }}</strong><br>
+                                Estado: <strong>{{ h.estado or '' }}</strong><br>
                                 Piezas: <strong>{{ h.cantidad_piezas or '' }}</strong><br>
                                 Tiempo: <strong>{{ h.tiempo_total or 'N/A' }}</strong>
                             </div>
@@ -619,6 +620,7 @@
                             </div>
                             <div class="pending-actions">
                                 <button class="btn-small" onclick="abrirModalAsignar(null, null, {{ h.id }})">Asignar</button>
+                                <button class="btn-small" style="background:#dc2626; color:#fff; border-color:#dc2626;" onclick="eliminarHojaRuta({{ h.id }}, '{{ (h.serie or ('HOJA ' ~ h.id))|e }}')">Eliminar</button>
                             </div>
                         </div>
                         {% endfor %}
@@ -770,6 +772,27 @@
         } catch (err) {
             alert('Error: ' + err.message);
             window.location.reload();
+        }
+    }
+
+    async function eliminarHojaRuta(hojaId, serie) {
+        if (!confirm('¿Eliminar definitivamente la hoja ' + (serie || ('#' + hojaId)) + '?')) {
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/hojas_ruta/' + hojaId, {
+                method: 'DELETE',
+                credentials: 'same-origin'
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.error || 'No se pudo eliminar la hoja');
+            }
+            alert('Hoja eliminada correctamente.');
+            window.location.reload();
+        } catch (err) {
+            alert('Error: ' + err.message);
         }
     }
 
