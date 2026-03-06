@@ -259,12 +259,14 @@
 
     @page {
       size: A4 portrait;
-      margin: 10mm;
+      margin: 6mm;
     }
 
     @media print {
       body {
         background: #fff;
+        font-size: 10px;
+        line-height: 1.15;
       }
       .app-sidebar,
       .toolbar,
@@ -274,6 +276,7 @@
       }
       body > .container {
         margin-left: 0 !important;
+        padding: 0 !important;
       }
       .sheet-shell {
         max-width: none;
@@ -284,9 +287,107 @@
         border-radius: 0;
         padding: 0;
       }
+
+      .doc-header {
+        grid-template-columns: 82px 1fr 200px;
+        gap: 8px;
+        padding: 7px;
+        margin-bottom: 8px;
+      }
+
+      .logo-box {
+        width: 72px;
+        height: 72px;
+      }
+
+      .logo-box img {
+        width: 62px;
+        height: 62px;
+      }
+
+      .doc-title {
+        font-size: 16px;
+        letter-spacing: 0.2px;
+      }
+
+      .doc-subtitle,
+      .doc-badge,
+      .k,
+      .footer-note {
+        font-size: 9px;
+      }
+
+      .status {
+        font-size: 10px;
+        padding: 2px 8px;
+        margin-top: 4px;
+      }
+
+      .qr-box {
+        margin-top: 4px;
+        padding: 3px;
+      }
+
+      #hojaQrCode canvas,
+      #hojaQrCode img {
+        width: 66px !important;
+        height: 66px !important;
+      }
+
+      .qr-note {
+        font-size: 8px;
+        max-width: 90px;
+      }
+
+      .head-grid {
+        gap: 6px;
+        padding: 6px;
+        margin-bottom: 8px;
+      }
+
+      .field {
+        min-height: 44px;
+        padding: 5px;
+      }
+
+      .v {
+        font-size: 11px;
+      }
+
       .table-wrap {
         overflow: visible;
       }
+
+      th,
+      td {
+        padding: 4px;
+        font-size: 9px;
+      }
+
+      th {
+        font-size: 8px;
+      }
+
+      .sign-row {
+        gap: 6px;
+        margin-top: 8px;
+      }
+
+      .sign-box {
+        min-height: 56px;
+        padding: 5px;
+      }
+
+      .sign-line {
+        margin-top: 16px;
+        font-size: 9px;
+        padding-top: 3px;
+      }
+
+      .footer-note {
+        margin-top: 6px;
+      }
+
       tr, td, th {
         page-break-inside: avoid;
       }
