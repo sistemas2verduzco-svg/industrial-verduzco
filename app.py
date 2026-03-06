@@ -204,6 +204,29 @@ def _apply_hoja_time_plan(hoja, estaciones, maquina_tipo=None, fallback_total_ti
     inicio = hoja.fecha_salida or datetime.utcnow()
     hoja.fecha_termino = _add_work_seconds(inicio, total_seconds)
 
+
+def _sync_hoja_estado_with_checks(hoja, estaciones=None, now_dt=None):
+    """Sincroniza el estado de hoja contra sus checks de procesos.
+    Regla: completada solo si todas las estaciones estan completadas.
+    """
+    if estaciones is None:
+        estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).all()
+
+    total = len(estaciones)
+    completadas = sum(1 for e in estaciones if (e.estado or '').lower() == 'completada')
+
+    if total > 0 and completadas == total:
+        new_estado = 'completada'
+        new_fecha_termino = hoja.fecha_termino or (now_dt or datetime.utcnow())
+    else:
+        new_estado = 'activa'
+        new_fecha_termino = None
+
+    changed = (hoja.estado != new_estado) or (hoja.fecha_termino != new_fecha_termino)
+    hoja.estado = new_estado
+    hoja.fecha_termino = new_fecha_termino
+    return changed
+
 # Simple in-memory login rate limiter
 # Keys: by IP address. Tracks [attempt_count, first_attempt_ts, locked_until_ts]
 FAILED_LOGINS = {}
@@ -217,6 +240,11 @@ SYNC_API_KEY = os.getenv('SYNC_API_KEY', '').strip()
 load_dotenv()
 
 app = Flask(__name__)
+
+# Permite reflejar cambios de templates sin reinicio manual (util para despliegues por git pull).
+templates_auto_reload = os.getenv('TEMPLATES_AUTO_RELOAD', '0').strip().lower() in ('1', 'true', 'yes', 'on')
+app.config['TEMPLATES_AUTO_RELOAD'] = templates_auto_reload
+app.jinja_env.auto_reload = templates_auto_reload
 
 # Configuración para carga de archivos
 UPLOAD_FOLDER = 'uploads/productos'
@@ -731,8 +759,11 @@ def hojas_ruta_list():
         })
 
     pendientes_data = []
+    pending_state_changed = False
     for h in hojas_pendientes:
         estaciones_h = EstacionTrabajo.query.filter_by(hoja_ruta_id=h.id).order_by(EstacionTrabajo.orden.asc()).all()
+        if _sync_hoja_estado_with_checks(h, estaciones=estaciones_h):
+            pending_state_changed = True
         pendientes_data.append({
             'id': h.id,
             'serie': h.nombre,
@@ -751,6 +782,12 @@ def hojas_ruta_list():
                 for e in estaciones_h
             ],
         })
+
+    if pending_state_changed:
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
     return render_template('hojas_ruta_list.html', maquinas=maquinas_data, hojas_pendientes=pendientes_data)
 
@@ -820,6 +857,7 @@ def hojas_ruta_form():
     for h in hojas:
         hojas_data.append({
             'id': h.id,
+            'maquina_id': h.maquina_id,
             'serie': h.nombre,
             'clave': h.pn,
             'calidad': h.calidad,
@@ -1314,19 +1352,8 @@ def api_check_proceso_estacion(estacion_id):
         if not hoja.fecha_salida:
             hoja.fecha_salida = ahora
 
-        # Regla de validacion: solo marcar hoja como completada cuando
-        # todos los checks/procesos esten en estado completada.
-        total_estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).count()
-        estaciones_completadas = EstacionTrabajo.query.filter_by(
-            hoja_ruta_id=hoja.id,
-            estado='completada'
-        ).count()
-        if total_estaciones > 0 and estaciones_completadas == total_estaciones:
-            hoja.estado = 'completada'
-            hoja.fecha_termino = hoja.fecha_termino or ahora
-        else:
-            hoja.estado = 'activa'
-            hoja.fecha_termino = None
+        # Sincronizar estado final segun checks reales.
+        _sync_hoja_estado_with_checks(hoja, now_dt=ahora)
 
         db.session.commit()
 

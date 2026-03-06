@@ -73,6 +73,20 @@
             cursor: pointer;
             margin-right: 6px;
         }
+        .btn-delete {
+            background: #dc2626;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 5px 8px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-right: 6px;
+        }
+        .btn-delete[disabled] {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
         .btn-secondary {
             background: #edf2f7;
             color: #111827;
@@ -260,6 +274,7 @@
                         <td>{{ h.estado or '' }}</td>
                         <td>
                             <button
+                                type="button"
                                 class="btn-edit"
                                 data-hoja-id="{{ h.id }}"
                                 data-calidad="{{ (h.calidad or '')|e }}"
@@ -272,6 +287,13 @@
                                 data-firma-rodrigo="{{ (h.firma_ing_rodrigo or '')|e }}"
                                 onclick="abrirModalEdicion(this)">
                                 Editar
+                            </button>
+                            <button
+                                type="button"
+                                class="btn-delete"
+                                {% if h.maquina_id %}disabled title="Desasigna la hoja de la maquina antes de eliminar"{% endif %}
+                                onclick="eliminarHojaDesdeFormulario({{ h.id }}, '{{ (h.serie or ('HOJA ' ~ h.id))|e }}')">
+                                Eliminar
                             </button>
                             <a href="/hoja/{{ h.id }}">Ver</a>
                         </td>
@@ -524,6 +546,29 @@
                 }
 
                 alert('Hoja actualizada correctamente');
+                window.location.reload();
+            } catch (err) {
+                console.error(err);
+                alert('Error: ' + err.message);
+            }
+        }
+
+        async function eliminarHojaDesdeFormulario(hojaId, serie) {
+            if (!confirm('¿Eliminar definitivamente la hoja ' + (serie || ('#' + hojaId)) + '?')) {
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/hojas_ruta/' + hojaId, {
+                    method: 'DELETE',
+                    credentials: 'same-origin'
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.error || 'No se pudo eliminar la hoja');
+                }
+
+                alert('Hoja eliminada correctamente');
                 window.location.reload();
             } catch (err) {
                 console.error(err);
