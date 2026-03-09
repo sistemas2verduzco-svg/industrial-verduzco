@@ -1317,7 +1317,9 @@ def api_mapa_maquinas():
             'estacion_actual_id': estacion_actual.id if estacion_actual else None,
         })
 
-    machine_count = len(maquinas)
+    # Eficiencia de planta: capacidad base sobre TODAS las maquinas registradas,
+    # no solo las activas, para evitar 100% engañoso cuando trabaja una sola.
+    machine_count = max(1, len(todas_maquinas))
     available_hour = machine_count * int((now_dt - window_hour_start).total_seconds())
     available_day = machine_count * int((now_dt - window_day_start).total_seconds())
     available_week = machine_count * int((now_dt - window_week_start).total_seconds())
@@ -1332,16 +1334,19 @@ def api_mapa_maquinas():
             'porcentaje': _pct(productive_hour, available_hour),
             'productivo_hms': _format_seconds_to_hms(productive_hour),
             'disponible_hms': _format_seconds_to_hms(available_hour),
+            'maquinas_base': machine_count,
         },
         'dia': {
             'porcentaje': _pct(productive_day, available_day),
             'productivo_hms': _format_seconds_to_hms(productive_day),
             'disponible_hms': _format_seconds_to_hms(available_day),
+            'maquinas_base': machine_count,
         },
         'semana': {
             'porcentaje': _pct(productive_week, available_week),
             'productivo_hms': _format_seconds_to_hms(productive_week),
             'disponible_hms': _format_seconds_to_hms(available_week),
+            'maquinas_base': machine_count,
         },
     }
 
