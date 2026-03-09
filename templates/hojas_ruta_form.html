@@ -485,7 +485,7 @@
             });
         }
 
-        async function loadClaves() {
+        async function loadClaves(retry = 0) {
             const select = document.getElementById('clave_id');
             try {
                 const res = await fetch('/api/claves_procesos', { credentials: 'same-origin' });
@@ -513,7 +513,20 @@
                 });
             } catch (err) {
                 console.error(err);
-                alert('No se pudieron cargar las claves: ' + (err.message || err));
+                const msg = String(err && err.message ? err.message : err || '');
+                const cancelled = /abort|aborted|cancel|canceled|networkerror|failed to fetch/i.test(msg);
+
+                // 499 (client closed request) / aborts are transient; retry once without noisy alert.
+                if (cancelled && retry < 1) {
+                    setTimeout(() => loadClaves(retry + 1), 700);
+                    return;
+                }
+
+                if (cancelled) {
+                    return;
+                }
+
+                alert('No se pudieron cargar las claves: ' + msg);
             }
         }
 
