@@ -28,9 +28,29 @@
                 <input id="new-correo" placeholder="correo" style="padding:8px;" />
                 <input id="new-password" placeholder="password" type="password" style="padding:8px;" />
                 <select id="new-role" style="padding:8px;"><option value="">-- Role (opcional) --</option></select>
+                <input id="new-custom-role-name" placeholder="Nuevo role (opcional)" style="padding:8px; min-width:200px;" />
                 <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input id="new-es-admin" type="checkbox" /> Es Admin</label>
                 <button id="btn-create-user" class="btn btn-success">➕ Crear</button>
             </div>
+            <div style="margin-top:10px; padding:10px; border:1px dashed #d0dae8; border-radius:6px; background:#fff;">
+                <div style="font-weight:600; margin-bottom:6px;">Perfil personalizado (opcional)</div>
+                <div style="font-size:12px; color:#555; margin-bottom:8px;">Si marcas módulos o permisos aquí, se crea un role nuevo para este usuario.</div>
+                <div id="new-user-modules" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:6px;"></div>
+                <div style="margin-top:8px;">
+                    <button id="toggle-new-user-advanced" type="button" class="btn btn-secondary" style="font-size:12px; padding:6px 10px;">Permisos avanzados</button>
+                </div>
+                <div id="new-user-advanced-permissions" style="display:none; margin-top:8px; max-height:180px; overflow:auto; border:1px solid #eee; padding:8px;"></div>
+            </div>
+        </div>
+
+        <div style="margin-top:12px; padding:12px; background:#fffaf1; border:1px solid #f2deb3; border-radius:6px;">
+            <h3 style="margin:0 0 8px 0; font-size:15px;">Crear Role</h3>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                <input id="role-new-name" placeholder="Nombre del role" style="padding:8px; min-width:180px;" />
+                <input id="role-new-description" placeholder="Descripción" style="padding:8px; min-width:220px;" />
+                <button id="btn-create-role" class="btn btn-primary">➕ Crear role</button>
+            </div>
+            <div style="font-size:12px; color:#666; margin-top:8px;">Los módulos/permisos se configuran en "Gestionar Roles/Permisos".</div>
         </div>
 
         <table id="users-table" style="width:100%; margin-top:20px; border-collapse:collapse;">
@@ -62,6 +82,8 @@
                 <div style="flex:2;">
                     <label><strong>Módulos Accesibles</strong></label>
                     <div id="modules-list" style="max-height:320px; overflow:auto; border:1px solid #eee; padding:8px; margin-top:6px;"></div>
+                    <label style="display:block; margin-top:10px;"><strong>Permisos Avanzados (módulo:acción)</strong></label>
+                    <div id="advanced-permissions-list" style="max-height:180px; overflow:auto; border:1px solid #eee; padding:8px; margin-top:6px;"></div>
                 </div>
             </div>
             <div style="margin-top:14px; text-align:right;">
@@ -152,12 +174,35 @@ document.getElementById('btn-create-user').addEventListener('click', async ()=>{
         const correo = document.getElementById('new-correo').value.trim();
         const password = document.getElementById('new-password').value;
         const role = document.getElementById('new-role').value || null;
+        const custom_role_name = document.getElementById('new-custom-role-name').value.trim();
+        const modules = getCheckedModules('new-user');
+        const permission_ids = getCheckedPermissions('new-user');
         const es_admin = document.getElementById('new-es-admin').checked;
         if(!username || !password){ alert('username y password son requeridos'); return; }
-        const res = await fetch('/api/users', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username, correo, password, role, es_admin})});
+
+        const hasCustomProfile = modules.length > 0 || permission_ids.length > 0 || !!custom_role_name;
+        if(role && hasCustomProfile){
+            alert('Selecciona role existente O perfil personalizado, no ambos.');
+            return;
+        }
+
+        const payload = {username, correo, password, role, es_admin};
+        if(hasCustomProfile){
+            payload.custom_role_name = custom_role_name;
+            payload.custom_role_description = `Perfil de ${username}`;
+            payload.modules = modules;
+            payload.permission_ids = permission_ids;
+        }
+
+        const res = await fetch('/api/users', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
         if(!res.ok) throw new Error(await res.text());
-        document.getElementById('new-username').value=''; document.getElementById('new-correo').value=''; document.getElementById('new-password').value='';
+        document.getElementById('new-username').value='';
+        document.getElementById('new-correo').value='';
+        document.getElementById('new-password').value='';
+        document.getElementById('new-custom-role-name').value='';
+        Array.from(document.querySelectorAll('input[data-scope="new-user"]')).forEach(i=>{ i.checked = false; });
         await loadUsers();
+        await loadRolesIntoCreate();
         alert('Usuario creado');
     }catch(e){ alert('Error: '+e.message); }
 });
@@ -235,6 +280,93 @@ const MODULES = [
     {id: 'soporte_edit', label: 'TICKETS (EDICIÓN / EXPORTAR)', icon: '🛠️'}
 ];
 
+let ALL_PERMISSIONS = [];
+
+function makeModuleCheckboxes(containerId, inputScope){
+    const node = document.getElementById(containerId);
+    if(!node) return;
+    node.innerHTML = '';
+    MODULES.forEach(m=>{
+        const rid = `${inputScope}_${m.id}`;
+        const wrap = document.createElement('label');
+        wrap.style.display = 'flex';
+        wrap.style.alignItems = 'center';
+        wrap.style.gap = '6px';
+        wrap.style.cursor = 'pointer';
+        wrap.innerHTML = `<input type="checkbox" id="${rid}" data-mod-id="${m.id}" data-scope="${inputScope}" /> <span>${m.icon} ${m.label}</span>`;
+        node.appendChild(wrap);
+    });
+}
+
+function makeAdvancedPermissionCheckboxes(containerId, inputScope){
+    const node = document.getElementById(containerId);
+    if(!node) return;
+    node.innerHTML = '';
+    if(!ALL_PERMISSIONS.length){
+        node.innerHTML = '<div style="color:#666; font-size:12px;">Sin permisos definidos.</div>';
+        return;
+    }
+    ALL_PERMISSIONS.forEach(p=>{
+        const rid = `${inputScope}_perm_${p.id}`;
+        const wrap = document.createElement('label');
+        wrap.style.display = 'inline-flex';
+        wrap.style.alignItems = 'center';
+        wrap.style.gap = '6px';
+        wrap.style.cursor = 'pointer';
+        wrap.style.marginRight = '10px';
+        wrap.style.marginBottom = '6px';
+        wrap.innerHTML = `<input type="checkbox" id="${rid}" data-perm-id="${p.id}" data-scope="${inputScope}" /> <code>${p.module}:${p.action}</code>`;
+        node.appendChild(wrap);
+    });
+}
+
+function getCheckedModules(scope){
+    return Array.from(document.querySelectorAll(`input[data-scope="${scope}"][data-mod-id]:checked`)).map(i=>i.dataset.modId);
+}
+
+function getCheckedPermissions(scope){
+    return Array.from(document.querySelectorAll(`input[data-scope="${scope}"][data-perm-id]:checked`)).map(i=>parseInt(i.dataset.permId, 10));
+}
+
+async function loadPermissions(){
+    try{
+        const data = await fetchJson('/api/permissions');
+        ALL_PERMISSIONS = data.permissions || [];
+        makeAdvancedPermissionCheckboxes('advanced-permissions-list', 'role-modal');
+        makeAdvancedPermissionCheckboxes('new-user-advanced-permissions', 'new-user');
+    }catch(e){
+        console.error('No se pudieron cargar permisos', e);
+    }
+}
+
+makeModuleCheckboxes('new-user-modules', 'new-user');
+
+document.getElementById('toggle-new-user-advanced').addEventListener('click', ()=>{
+    const box = document.getElementById('new-user-advanced-permissions');
+    box.style.display = box.style.display === 'none' ? 'block' : 'none';
+});
+
+document.getElementById('btn-create-role').addEventListener('click', async ()=>{
+    try{
+        const name = document.getElementById('role-new-name').value.trim();
+        const description = document.getElementById('role-new-description').value.trim();
+        if(!name){
+            alert('Nombre del role requerido');
+            return;
+        }
+        const res = await fetch('/api/roles', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({name, description})
+        });
+        if(!res.ok) throw new Error(await res.text());
+        document.getElementById('role-new-name').value = '';
+        document.getElementById('role-new-description').value = '';
+        await loadRolesIntoCreate();
+        alert('Role creado');
+    }catch(e){ alert('Error creando role: '+e.message); }
+});
+
 document.getElementById('btn-manage-roles').addEventListener('click', async ()=>{
     try{
         await openRolesModal();
@@ -248,6 +380,9 @@ async function openRolesModal(){
     modal.style.display = 'block';
     const rolesResp = await fetchJson('/api/roles');
     ALL_ROLES = rolesResp.roles || rolesResp;
+    if(!ALL_PERMISSIONS.length){
+        await loadPermissions();
+    }
 
     const select = document.getElementById('roles-select');
     select.innerHTML = '';
@@ -262,7 +397,7 @@ async function openRolesModal(){
         const id = 'mod_'+m.id;
         const row = document.createElement('div');
         row.style.marginBottom='8px; padding: 8px; background: #f5f5f5; border-radius: 4px;';
-        row.innerHTML = `<label style="display:flex; align-items:center; gap:8px; cursor:pointer;"><input type="checkbox" id="${id}" data-mod-id="${m.id}" /> <span style="font-weight:600;">${m.icon} ${m.label}</span></label>`;
+        row.innerHTML = `<label style="display:flex; align-items:center; gap:8px; cursor:pointer;"><input type="checkbox" id="${id}" data-mod-id="${m.id}" data-scope="role-modal" /> <span style="font-weight:600;">${m.icon} ${m.label}</span></label>`;
         mlist.appendChild(row);
     });
 
@@ -275,16 +410,19 @@ async function openRolesModal(){
     document.getElementById('roles-save').onclick = async ()=>{
         try{
             const rid = parseInt(select.value,10);
-            const checked = Array.from(document.querySelectorAll('#modules-list input[type=checkbox]:checked')).map(i=>i.dataset.modId);
+            const checked = getCheckedModules('role-modal');
+            const permission_ids = getCheckedPermissions('role-modal');
             const rolesData = {
                 modules: checked,
-                description: ALL_ROLES.find(r=>r.id===rid)?.description || ''
+                permission_ids: permission_ids,
+                description: ALL_ROLES.find(r=>r.id===rid)?.description || ALL_ROLES.find(r=>r.id===rid)?.descripcion || ''
             };
             const res = await fetch(`/api/roles/${rid}/modules`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(rolesData)});
             if(!res.ok) throw new Error(await res.text());
             alert('Módulos guardados');
             const newRoles = await fetchJson('/api/roles');
             ALL_ROLES = newRoles.roles || newRoles;
+            await loadRolesIntoCreate();
             renderRoleModules(rid);
         }catch(e){ alert('Error guardando módulos: '+e.message); }
     };
@@ -296,15 +434,22 @@ function closeRolesModal(){
 }
 
 function renderRoleModules(roleId){
-    const role = ALL_ROLES.find(r=>r.id===roleId) || {modules:[]};
+    const role = ALL_ROLES.find(r=>r.id===roleId) || {modules:[], permissions:[]};
     const mods = (role.modules||[]);
     MODULES.forEach(m=>{
         const cb = document.getElementById('mod_'+m.id);
         if(cb) cb.checked = mods.indexOf(m.id) !== -1;
     });
+
+    const selectedPermissionIds = new Set((role.permissions || []).map(p=>p.id));
+    Array.from(document.querySelectorAll('input[data-scope="role-modal"][data-perm-id]')).forEach(cb=>{
+        const pid = parseInt(cb.dataset.permId, 10);
+        cb.checked = selectedPermissionIds.has(pid);
+    });
 }
 
 // Inicial
+loadPermissions();
 loadUsers();
 </script>
 </body>

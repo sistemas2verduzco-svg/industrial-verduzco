@@ -672,6 +672,41 @@ def _apply_role_modules(role, modules):
 
     role.permissions = filtered
 
+
+def _get_or_create_permission(module, action):
+    perm = Permission.query.filter_by(module=module, action=action).first()
+    if perm:
+        return perm
+    perm = Permission(module=module, action=action, descripcion=f'{module}:{action}')
+    db.session.add(perm)
+    db.session.flush()
+    return perm
+
+
+def _permissions_from_modules_and_ids(modules, permission_ids):
+    """Resolve final permission set from module bundles and explicit permission IDs."""
+    final_pairs = set()
+
+    for module_id in (modules or []):
+        for module, action in ROLE_MODULE_BUNDLES.get(module_id, []):
+            final_pairs.add((module, action))
+
+    if permission_ids:
+        explicit_perms = Permission.query.filter(Permission.id.in_(permission_ids)).all()
+        for p in explicit_perms:
+            final_pairs.add((p.module, p.action))
+
+    resolved = []
+    seen = set()
+    for module, action in sorted(final_pairs):
+        perm = _get_or_create_permission(module, action)
+        pair = (perm.module, perm.action)
+        if pair in seen:
+            continue
+        seen.add(pair)
+        resolved.append(perm)
+    return resolved
+
 # ==================== DASHBOARD / HOME CENTRAL ====================
 
 @app.route('/dashboard')
@@ -2218,9 +2253,40 @@ def api_list_roles():
     data = []
     for r in roles:
         item = r.to_dict()
+        item['description'] = item.get('descripcion')
         item['modules'] = _role_modules_from_permissions(r)
         data.append(item)
     return jsonify({'roles': data})
+
+
+@app.route('/api/roles', methods=['POST'])
+@login_required
+def api_create_role():
+    if not is_admin_user():
+        return jsonify({'error': 'Permiso denegado'}), 403
+
+    payload = request.get_json() or {}
+    name = (payload.get('name') or '').strip()
+    description = (payload.get('description') or payload.get('descripcion') or '').strip() or None
+    modules = payload.get('modules', []) or []
+    permission_ids = payload.get('permission_ids', []) or []
+
+    if not name:
+        return jsonify({'error': 'name requerido'}), 400
+
+    existing = Role.query.filter_by(name=name).first()
+    if existing:
+        return jsonify({'error': 'Ya existe un role con ese nombre'}), 409
+
+    role = Role(name=name, descripcion=description)
+    role.permissions = _permissions_from_modules_and_ids(modules, permission_ids)
+    db.session.add(role)
+    db.session.commit()
+
+    role_data = role.to_dict()
+    role_data['description'] = role_data.get('descripcion')
+    role_data['modules'] = _role_modules_from_permissions(role)
+    return jsonify({'ok': True, 'role': role_data}), 201
 
 
 @app.route('/api/roles/<int:role_id>/permissions', methods=['PUT'])
@@ -2246,11 +2312,19 @@ def api_set_role_modules(role_id):
         return jsonify({'error': 'Permiso denegado'}), 403
     payload = request.get_json() or {}
     modules = payload.get('modules', [])
+    permission_ids = payload.get('permission_ids')
     role = Role.query.get_or_404(role_id)
-    _apply_role_modules(role, modules)
+
+    # If explicit permission IDs are provided, fully synchronize role permissions.
+    if permission_ids is not None:
+        role.permissions = _permissions_from_modules_and_ids(modules, permission_ids)
+    else:
+        _apply_role_modules(role, modules)
+
     db.session.add(role)
     db.session.commit()
     role_data = role.to_dict()
+    role_data['description'] = role_data.get('descripcion')
     role_data['modules'] = _role_modules_from_permissions(role)
     return jsonify({'ok': True, 'role': role_data})
 
@@ -2265,6 +2339,10 @@ def api_create_user():
     correo = data.get('correo')
     password = data.get('password')
     role_name = data.get('role')
+    custom_role_name = (data.get('custom_role_name') or '').strip()
+    custom_role_description = (data.get('custom_role_description') or '').strip() or None
+    modules = data.get('modules', []) or []
+    permission_ids = data.get('permission_ids', []) or []
     es_admin = bool(data.get('es_admin', False))
     if not username or not password:
         return jsonify({'error': 'username y password requeridos'}), 400
@@ -2272,13 +2350,30 @@ def api_create_user():
         return jsonify({'error': 'username ya existe'}), 409
     u = Usuario(username=username, correo=correo, es_admin=es_admin, activo=True)
     u.set_password(password)
-    if role_name:
+
+    wants_custom_profile = bool(modules or permission_ids or custom_role_name)
+    if role_name and wants_custom_profile:
+        return jsonify({'error': 'Usa role existente o perfil personalizado, no ambos al mismo tiempo'}), 400
+
+    if wants_custom_profile:
+        role_target_name = custom_role_name or f'perfil_{username}'
+        if Role.query.filter_by(name=role_target_name).first():
+            return jsonify({'error': f'Ya existe un role con nombre {role_target_name}'}), 409
+        role = Role(name=role_target_name, descripcion=custom_role_description or f'Perfil personalizado de {username}')
+        role.permissions = _permissions_from_modules_and_ids(modules, permission_ids)
+        db.session.add(role)
+        db.session.flush()
+        u.role = role
+    elif role_name:
         role = Role.query.filter_by(name=role_name).first()
         if role:
             u.role = role
+
     db.session.add(u)
     db.session.commit()
-    return jsonify({'ok': True, 'user': u.to_dict()}), 201
+    user_data = u.to_dict()
+    user_data['role'] = u.role.name if u.role else None
+    return jsonify({'ok': True, 'user': user_data}), 201
 
 
 @app.route('/api/users/<int:user_id>/toggle_active', methods=['PUT'])
