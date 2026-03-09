@@ -593,10 +593,39 @@ def requires_permission(module, action):
     return decorator
 
 
+def requires_any_permission(permission_pairs):
+    """Allow access if user has at least one permission pair from the list."""
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            user = get_current_user()
+            if not user:
+                if request.path.startswith('/api/'):
+                    return jsonify({'error': 'Autenticación requerida'}), 401
+                return redirect(url_for('login'))
+
+            if not any(user.has_permission(module, action) for module, action in (permission_pairs or [])):
+                if request.path.startswith('/api/'):
+                    return jsonify({'error': 'Permiso denegado'}), 403
+                return render_template('403.html'), 403
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
+
+
 # Module bundles for admin role-management UI.
 ROLE_MODULE_BUNDLES = {
     'catalog': [('catalog', 'view')],
     'admin_catalog': [('catalog', 'view'), ('catalog', 'edit')],
+    'hojas_generacion': [('catalog', 'view'), ('hojas', 'view'), ('hojas', 'create')],
+    'hojas_edicion': [('catalog', 'view'), ('hojas', 'view'), ('hojas', 'edit')],
+    'estaciones_view': [('catalog', 'view'), ('estaciones', 'view')],
+    'estaciones_operate': [('catalog', 'view'), ('estaciones', 'view'), ('estaciones', 'operate')],
+    'mapa_view': [('catalog', 'view'), ('mapa', 'view')],
+    'calidad_view': [('catalog', 'view'), ('calidad', 'view')],
+    'procesos_view': [('catalog', 'view'), ('procesos', 'view')],
+    'proveedores_view': [('catalog', 'view'), ('proveedores', 'view')],
+    'proveedores_edit': [('catalog', 'view'), ('proveedores', 'view'), ('proveedores', 'edit')],
     'soporte': [('tickets', 'view')],
     'soporte_edit': [('tickets', 'view'), ('tickets', 'edit'), ('tickets', 'export')],
 }
@@ -700,7 +729,7 @@ def producto_detalle(producto_id):
 
 @app.route('/control_calidad')
 @login_required
-@requires_permission('catalog', 'view')
+@requires_any_permission([('calidad', 'view'), ('catalog', 'view')])
 def control_calidad_list():
     """Lista de hojas de ruta con procesos completados pendientes de validación en calidad."""
 
@@ -753,6 +782,7 @@ def control_calidad_list():
 
 @app.route('/control_calidad/hoja/<int:hoja_id>', methods=['GET', 'POST'])
 @login_required
+@requires_any_permission([('calidad', 'view'), ('catalog', 'view')])
 def control_calidad_hoja(hoja_id):
     """Revisión de calidad por hoja de ruta y por proceso completado."""
     hoja = HojaRuta.query.get_or_404(hoja_id)
@@ -857,6 +887,7 @@ def control_calidad_hoja(hoja_id):
 
 @app.route('/control_calidad/<int:maquina_id>')
 @login_required
+@requires_any_permission([('calidad', 'view'), ('catalog', 'view')])
 def control_calidad_legacy_maquina(maquina_id):
     """Compatibilidad con links antiguos de Control Calidad por maquina."""
     return redirect(url_for('control_calidad_list'))
@@ -876,7 +907,7 @@ def uploaded_file(filename):
 
 @app.route('/hojas_ruta')
 @login_required
-@requires_permission('catalog', 'view')
+@requires_any_permission([('estaciones', 'view'), ('catalog', 'view')])
 def hojas_ruta_list():
     """Lista de máquinas con sus hojas de ruta activas y estado de producción."""
     maquinas = Máquina.query.all()
@@ -997,7 +1028,7 @@ def hojas_ruta_list():
 
 @app.route('/mapa_maquinas')
 @login_required
-@requires_permission('catalog', 'view')
+@requires_any_permission([('mapa', 'view'), ('catalog', 'view')])
 def mapa_maquinas():
     """Vista de mapa de maquinas con estado en tiempo real."""
     return render_template('mapa_maquinas.html')
@@ -1005,6 +1036,7 @@ def mapa_maquinas():
 
 @app.route('/api/mapa_maquinas')
 @login_required
+@requires_any_permission([('mapa', 'view'), ('catalog', 'view')])
 def api_mapa_maquinas():
     """Datos para el mapa de maquinas (estado, hoja activa, pieza, tiempo)."""
     todas_maquinas = Máquina.query.order_by(Máquina.nombre.asc()).all()
@@ -1158,7 +1190,7 @@ def api_mapa_maquinas():
 
 @app.route('/hojas_ruta_form')
 @login_required
-@requires_permission('catalog', 'view')
+@requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
 def hojas_ruta_form():
     """Formulario simplificado para crear hojas de ruta de produccion."""
     almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria']
@@ -1191,6 +1223,7 @@ def hojas_ruta_form():
 
 @app.route('/hoja/<int:hoja_id>')
 @login_required
+@requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
 def hoja_ruta_ver(hoja_id):
     """Vista independiente para ver una hoja por ID, sin requerir máquina."""
     hoja = HojaRuta.query.get_or_404(hoja_id)
@@ -1205,6 +1238,7 @@ def hoja_ruta_ver(hoja_id):
 
 @app.route('/api/hojas_ruta/resolver_codigo', methods=['POST'])
 @login_required
+@requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
 def api_resolver_codigo_hoja_ruta():
     """Resuelve texto escaneado (QR/codigo) a una hoja de ruta."""
     data = request.get_json() or {}
@@ -1288,6 +1322,7 @@ def qc_estaciones_maquina(maquina_id):
 
 @app.route('/api/hojas_ruta', methods=['POST'])
 @login_required
+@requires_any_permission([('hojas', 'create'), ('catalog', 'edit'), ('catalog', 'view')])
 def api_crear_hoja_ruta():
     """Crear una hoja de ruta con formato simplificado y procesos desde la clave."""
     data = request.get_json() or {}
@@ -1445,6 +1480,7 @@ def api_crear_hoja_ruta():
 
 @app.route('/api/hojas_ruta/<int:hoja_id>', methods=['PUT'])
 @login_required
+@requires_any_permission([('hojas', 'edit'), ('catalog', 'edit')])
 def api_actualizar_hoja_ruta(hoja_id):
     """Actualizar campos editables de una hoja de ruta."""
     hoja = HojaRuta.query.get_or_404(hoja_id)
@@ -1493,6 +1529,7 @@ def api_actualizar_hoja_ruta(hoja_id):
 
 @app.route('/api/claves_procesos', methods=['GET'])
 @login_required
+@requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
 def api_claves_procesos():
     """Obtener todas las claves con sus procesos y tiempo total T/O."""
     try:
@@ -1540,6 +1577,7 @@ def api_claves_procesos():
 
 @app.route('/api/estaciones', methods=['POST'])
 @login_required
+@requires_any_permission([('hojas', 'edit'), ('catalog', 'edit')])
 def api_crear_estacion():
     """Crear una nueva estación de trabajo en una hoja de ruta."""
     data = request.get_json()
@@ -1571,6 +1609,7 @@ def api_crear_estacion():
 # ==== Producción / flujo operativo ==== 
 @app.route('/api/produccion/aprobar_ot', methods=['POST'])
 @login_required
+@requires_any_permission([('estaciones', 'operate'), ('catalog', 'edit')])
 def api_aprobar_ot():
     data = request.get_json() or {}
     maquina_id = data.get('maquina_id')
@@ -1582,6 +1621,7 @@ def api_aprobar_ot():
 
 @app.route('/api/maquinas/<int:maquina_id>/activar', methods=['POST'])
 @login_required
+@requires_any_permission([('estaciones', 'operate'), ('catalog', 'edit')])
 def api_activar_maquina(maquina_id):
     maq = Máquina.query.get_or_404(maquina_id)
     try:
@@ -1597,6 +1637,7 @@ def api_activar_maquina(maquina_id):
 
 @app.route('/api/maquinas/<int:maquina_id>/desactivar', methods=['POST'])
 @login_required
+@requires_any_permission([('estaciones', 'operate'), ('catalog', 'edit')])
 def api_desactivar_maquina(maquina_id):
     maq = Máquina.query.get_or_404(maquina_id)
     try:
@@ -1612,6 +1653,7 @@ def api_desactivar_maquina(maquina_id):
 
 @app.route('/api/maquinas/<int:maquina_id>/paro_mantenimiento', methods=['POST'])
 @login_required
+@requires_any_permission([('estaciones', 'operate'), ('catalog', 'edit')])
 def api_paro_mantenimiento(maquina_id):
     """Poner máquina en paro por mantenimiento (desactivada)."""
     maq = Máquina.query.get_or_404(maquina_id)
@@ -1628,6 +1670,7 @@ def api_paro_mantenimiento(maquina_id):
 
 @app.route('/api/maquinas/<int:maquina_id>/asignar_hoja', methods=['POST'])
 @login_required
+@requires_any_permission([('estaciones', 'operate'), ('catalog', 'edit')])
 def api_asignar_hoja_maquina(maquina_id):
     """Asignar hoja de ruta pendiente (sin máquina) a una máquina."""
     maq = Máquina.query.get_or_404(maquina_id)
@@ -1678,6 +1721,7 @@ def api_asignar_hoja_maquina(maquina_id):
 
 @app.route('/api/maquinas/<int:maquina_id>/retirar_hoja', methods=['POST'])
 @login_required
+@requires_any_permission([('estaciones', 'operate'), ('catalog', 'edit')])
 def api_retirar_hoja_maquina(maquina_id):
     """Retirar/desasignar hoja activa de la máquina y devolverla a pendientes."""
     maq = Máquina.query.get_or_404(maquina_id)
@@ -1710,6 +1754,7 @@ def api_retirar_hoja_maquina(maquina_id):
 
 @app.route('/api/estaciones/<int:estacion_id>/check_proceso', methods=['POST'])
 @login_required
+@requires_any_permission([('estaciones', 'operate'), ('catalog', 'edit')])
 def api_check_proceso_estacion(estacion_id):
     """Marcar/desmarcar proceso de estación y avanzar automáticamente al siguiente pendiente."""
     estacion = EstacionTrabajo.query.get_or_404(estacion_id)
@@ -1793,6 +1838,7 @@ def api_check_proceso_estacion(estacion_id):
 
 @app.route('/api/hojas_ruta/<int:hoja_id>', methods=['DELETE'])
 @login_required
+@requires_any_permission([('hojas', 'edit'), ('catalog', 'edit')])
 def api_eliminar_hoja_ruta(hoja_id):
     """Eliminar una hoja de ruta. Solo permite borrar hojas no asignadas a maquina."""
     hoja = HojaRuta.query.get_or_404(hoja_id)
