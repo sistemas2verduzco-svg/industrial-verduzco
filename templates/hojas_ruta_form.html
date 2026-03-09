@@ -672,6 +672,10 @@
                         );
                         return;
                     }
+                    if ((res.status === 403 || res.status === 409) && data && (data.requires_admin_override || data.firmas_forzadas)) {
+                        alert((data.error || 'No se pudo autorizar firmas en esta hoja.') + '\n\nSolo admin puede forzar autorización sin procesos/QC completos.');
+                        return;
+                    }
                     throw new Error(data.error || 'No se pudo crear la hoja');
                 }
 
@@ -740,6 +744,10 @@
                 });
                 const data = await res.json();
                 if (!res.ok) {
+                    if ((res.status === 403 || res.status === 409) && data && (data.requires_admin_override || data.firmas_forzadas)) {
+                        alert((data.error || 'No se pudo autorizar firmas en esta hoja.') + '\n\nSolo admin puede forzar autorización sin procesos/QC completos.');
+                        return;
+                    }
                     throw new Error(data.error || 'No se pudo actualizar la hoja');
                 }
 

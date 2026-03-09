@@ -790,6 +790,27 @@ def _check_field_level_permissions(user, module, payload, field_actions, broad_a
     return denied
 
 
+def _hoja_ready_for_signatures(hoja):
+    """Validate that hoja is fully completed and quality-approved for non-admin signatures."""
+    estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).all()
+    if not estaciones:
+        return False, 'La hoja no tiene procesos para validar.'
+
+    for est in estaciones:
+        if (est.estado or '').lower() != 'completada':
+            return False, 'Todos los procesos deben estar completados antes de autorizar firmas.'
+
+    for est in estaciones:
+        notas = est.notas or ''
+        m = re.search(r'STATUS=(QC_OK|QC_NOK)', notas)
+        if not m:
+            return False, 'Falta liberar procesos en calidad (QC) antes de autorizar firmas.'
+        if m.group(1) != 'QC_OK':
+            return False, 'Existen procesos con rechazo en calidad. No se puede autorizar la hoja.'
+
+    return True, None
+
+
 def _permissions_from_modules_and_ids(modules, permission_ids):
     """Resolve final permission set from module bundles and explicit permission IDs."""
     final_pairs = set()
@@ -1499,6 +1520,15 @@ def api_crear_hoja_ruta():
     firma_ing_jose = (data.get('firma_ing_jose') or '').strip()
     firma_ing_rodrigo = (data.get('firma_ing_rodrigo') or '').strip()
     cantidad_piezas = data.get('cantidad_piezas')
+    user = get_current_user()
+
+    firma_jose_aut = firma_ing_jose.upper() == 'AUTORIZADO'
+    firma_rodrigo_aut = firma_ing_rodrigo.upper() == 'AUTORIZADO'
+    if (firma_jose_aut or firma_rodrigo_aut) and not (user and user.es_admin):
+        return jsonify({
+            'error': 'Solo admin puede autorizar firmas al crear una hoja nueva.',
+            'firmas_forzadas': True,
+        }), 403
 
     if not clave_id:
         return jsonify({'error': 'clave_id requerido'}), 400
@@ -1668,6 +1698,21 @@ def api_actualizar_hoja_ruta(hoja_id):
             'error': 'No tienes permiso para editar algunos campos',
             'denied_fields': denied_fields,
         }), 403
+
+    firma_jose_in = (data.get('firma_ing_jose') or '').strip() if 'firma_ing_jose' in data else None
+    firma_rodrigo_in = (data.get('firma_ing_rodrigo') or '').strip() if 'firma_ing_rodrigo' in data else None
+    wants_authorize = (
+        (firma_jose_in is not None and firma_jose_in.upper() == 'AUTORIZADO') or
+        (firma_rodrigo_in is not None and firma_rodrigo_in.upper() == 'AUTORIZADO')
+    )
+
+    if wants_authorize and not (user and user.es_admin):
+        ready, reason = _hoja_ready_for_signatures(hoja)
+        if not ready:
+            return jsonify({
+                'error': reason or 'No se puede autorizar la hoja en este momento.',
+                'requires_admin_override': True,
+            }), 409
     
     if 'estado' in data:
         hoja.estado = data['estado']
