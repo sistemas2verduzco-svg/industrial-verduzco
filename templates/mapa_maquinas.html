@@ -438,6 +438,58 @@
             background: linear-gradient(160deg, #0f3f39, #0a2d2a);
         }
 
+        .emergency-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(120, 0, 0, 0.68);
+            z-index: 60;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 14px;
+        }
+
+        .emergency-card {
+            width: min(760px, 96vw);
+            border: 3px solid #ffc2c2;
+            border-radius: 18px;
+            background: linear-gradient(160deg, #7a0000, #b40000 55%, #8f0000);
+            color: #fff4f4;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+            padding: 24px 18px;
+        }
+
+        .emergency-title {
+            font-size: clamp(30px, 5vw, 56px);
+            font-weight: 900;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin: 0;
+        }
+
+        .emergency-sub {
+            margin-top: 10px;
+            font-size: clamp(14px, 2.3vw, 20px);
+            font-weight: 700;
+            color: #ffe0e0;
+        }
+
+        .emergency-count {
+            margin-top: 18px;
+            font-size: clamp(50px, 9vw, 96px);
+            font-weight: 900;
+            line-height: 1;
+            color: #fff;
+            text-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+        }
+
+        .emergency-foot {
+            margin-top: 10px;
+            font-size: clamp(13px, 2vw, 18px);
+            color: #ffd6d6;
+        }
+
         @media (max-width: 1080px) {
             .dashboard {
                 grid-template-columns: 1fr;
@@ -601,9 +653,76 @@
 
     <div class="toast-zone" id="toastZone"></div>
 
+    <div id="emergencyStopOverlay" class="emergency-overlay" aria-live="assertive" aria-modal="true" role="alertdialog">
+        <div class="emergency-card">
+            <h2 class="emergency-title">PARO DE MAQUINAS:</h2>
+            <div class="emergency-sub">Preparar apagado seguro de equipo</div>
+            <div id="emergencyCountdown" class="emergency-count">15</div>
+            <div class="emergency-foot">Cuenta regresiva</div>
+        </div>
+    </div>
+
     <script>
         const MAP_REFRESH_MS = 6000;
         const notifiedDone = new Set();
+        let emergencyShownKey = null;
+
+        function getSecondsUntilTarget(now, hour, minute) {
+            const target = new Date(now);
+            target.setHours(hour, minute, 0, 0);
+            return Math.floor((target.getTime() - now.getTime()) / 1000);
+        }
+
+        function showEmergencyCountdown(initialSeconds, slotKey) {
+            const overlay = document.getElementById('emergencyStopOverlay');
+            const countEl = document.getElementById('emergencyCountdown');
+            if (!overlay || !countEl) return;
+
+            emergencyShownKey = slotKey;
+            overlay.style.display = 'flex';
+
+            let secondsLeft = initialSeconds;
+            countEl.textContent = String(secondsLeft);
+
+            const timer = setInterval(() => {
+                secondsLeft -= 1;
+                if (secondsLeft <= 0) {
+                    countEl.textContent = '0';
+                    clearInterval(timer);
+                    setTimeout(() => {
+                        overlay.style.display = 'none';
+                    }, 2000);
+                    return;
+                }
+                countEl.textContent = String(secondsLeft);
+            }, 1000);
+        }
+
+        function checkEmergencyStopWindow() {
+            const now = new Date();
+
+            // Monday-Friday only.
+            const weekday = now.getDay();
+            if (weekday === 0 || weekday === 6) {
+                return;
+            }
+
+            // 15 seconds before 12:00 and 16:00.
+            const slots = [
+                { hour: 12, minute: 0, key: `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}-12` },
+                { hour: 16, minute: 0, key: `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}-16` }
+            ];
+
+            for (const slot of slots) {
+                const sec = getSecondsUntilTarget(now, slot.hour, slot.minute);
+                if (sec <= 15 && sec >= 1) {
+                    if (emergencyShownKey !== slot.key) {
+                        showEmergencyCountdown(sec, slot.key);
+                    }
+                    return;
+                }
+            }
+        }
 
         function safeText(value, fallback) {
             if (value === null || value === undefined || value === '') {
@@ -770,6 +889,8 @@
 
         loadMapa();
         setInterval(loadMapa, MAP_REFRESH_MS);
+        checkEmergencyStopWindow();
+        setInterval(checkEmergencyStopWindow, 1000);
     </script>
 </body>
 </html>

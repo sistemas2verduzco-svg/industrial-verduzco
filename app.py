@@ -1200,11 +1200,12 @@ def api_crear_hoja_ruta():
     try:
         fecha_actual = datetime.utcnow()
         maquina = Máquina.query.get(int(data.get('maquina_id'))) if data.get('maquina_id') else None
+        descripcion_hoja = (comentarios or '').strip() or None
 
         hoja = HojaRuta(
             maquina_id=maquina_id,
             nombre='PENDIENTE_SERIE',
-            descripcion=comentarios or None,
+            descripcion=descripcion_hoja,
             estado='activa',
             producto=clave.nombre,
             calidad=calidad,
@@ -1350,8 +1351,15 @@ def api_claves_procesos():
                 'id': clave.id,
                 'clave': clave.clave,
                 'nombre': clave.nombre or clave.clave,
+                'notas': clave.notas or '',
                 'tiempo_to': tiempo_to,
-                'procesos': [p.to_dict() for p in procesos]
+                'procesos': [
+                    {
+                        **p.to_dict(),
+                        'proceso_descripcion': (p.proceso.descripcion if getattr(p, 'proceso', None) else '') or ''
+                    }
+                    for p in procesos
+                ]
             })
         return jsonify(result), 200
     except Exception as e:
