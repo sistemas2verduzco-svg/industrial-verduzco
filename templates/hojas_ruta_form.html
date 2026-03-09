@@ -146,6 +146,30 @@
             margin-bottom: 10px;
         }
 
+        .report-filters {
+            display: grid;
+            grid-template-columns: 1.4fr repeat(4, minmax(140px, 1fr));
+            gap: 8px;
+            margin-bottom: 10px;
+            align-items: end;
+        }
+
+        .report-filters label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.2px;
+            color: #475569;
+            margin-bottom: 4px;
+        }
+
+        .report-filters input,
+        .report-filters select {
+            padding: 7px 8px;
+            font-size: 13px;
+            border-radius: 6px;
+        }
+
         .report-columns {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -234,6 +258,10 @@
 
             .modal-actions .btn {
                 width: 100%;
+            }
+
+            .report-filters {
+                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -493,6 +521,38 @@
                     <button class="btn btn-secondary" type="button" onclick="seleccionarTodasColumnasReporte()">Todas</button>
                     <button class="btn btn-secondary" type="button" onclick="limpiarColumnasReporte()">Ninguna</button>
                     <button class="btn btn-primary" type="button" onclick="exportarReporteCsv()">Exportar CSV</button>
+                </div>
+            </div>
+
+            <div class="report-filters">
+                <div>
+                    <label for="reportFilterSearch">Buscar</label>
+                    <input id="reportFilterSearch" type="text" placeholder="Serie, clave, comentarios..." oninput="renderReportTable()">
+                </div>
+                <div>
+                    <label for="reportFilterEstado">Estado</label>
+                    <select id="reportFilterEstado" onchange="renderReportTable()">
+                        <option value="">Todos</option>
+                        <option value="activa">Activa</option>
+                        <option value="pausada">Pausada</option>
+                        <option value="completada">Completada</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="reportFilterCalidad">Calidad</label>
+                    <select id="reportFilterCalidad" onchange="renderReportTable()">
+                        <option value="">Todas</option>
+                        <option value="Evelyn">Evelyn</option>
+                        <option value="Moises">Moises</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="reportFilterDesde">Fecha desde</label>
+                    <input id="reportFilterDesde" type="date" onchange="renderReportTable()">
+                </div>
+                <div>
+                    <label for="reportFilterHasta">Fecha hasta</label>
+                    <input id="reportFilterHasta" type="date" onchange="renderReportTable()">
                 </div>
             </div>
 
@@ -791,10 +851,58 @@
         function formatReportCellValue(key, row) {
             const v = row[key];
             if (v === null || v === undefined) return '';
+            if (key === 'firma_ing_jose' || key === 'firma_ing_rodrigo') {
+                const raw = String(v || '').trim().toUpperCase();
+                return raw === 'AUTORIZADO' ? 'AUTORIZADO' : 'PENDIENTE';
+            }
             if (key === 'fecha_salida' || key === 'fecha_creacion') {
                 return String(v).replace('T', ' ').slice(0, 19);
             }
             return String(v);
+        }
+
+        function toDateOnlySafe(value) {
+            if (!value) return null;
+            const d = new Date(value);
+            if (Number.isNaN(d.getTime())) return null;
+            return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        }
+
+        function filteredReportRows() {
+            const search = (document.getElementById('reportFilterSearch')?.value || '').trim().toLowerCase();
+            const estado = (document.getElementById('reportFilterEstado')?.value || '').trim().toLowerCase();
+            const calidad = (document.getElementById('reportFilterCalidad')?.value || '').trim().toLowerCase();
+            const desdeVal = document.getElementById('reportFilterDesde')?.value || '';
+            const hastaVal = document.getElementById('reportFilterHasta')?.value || '';
+            const desde = desdeVal ? toDateOnlySafe(desdeVal) : null;
+            const hasta = hastaVal ? toDateOnlySafe(hastaVal) : null;
+
+            return reportDataDraft
+                .map((row, idx) => ({ row, idx }))
+                .filter(item => {
+                    const r = item.row || {};
+                    if (estado && String(r.estado || '').toLowerCase() !== estado) return false;
+                    if (calidad && String(r.calidad || '').toLowerCase() !== calidad) return false;
+
+                    const fechaRow = toDateOnlySafe(r.fecha_salida || r.fecha_creacion);
+                    if (desde && (!fechaRow || fechaRow < desde)) return false;
+                    if (hasta && (!fechaRow || fechaRow > hasta)) return false;
+
+                    if (search) {
+                        const hay = [
+                            r.serie,
+                            r.clave,
+                            r.descripcion_clave,
+                            r.orden_trabajo,
+                            r.comentarios,
+                            r.estado,
+                            r.calidad,
+                        ].some(x => String(x || '').toLowerCase().includes(search));
+                        if (!hay) return false;
+                    }
+
+                    return true;
+                });
         }
 
         function getSelectedReportColumns() {
@@ -829,7 +937,15 @@
             thead.innerHTML = '<tr>' + columns.map(c => `<th>${c.label}</th>`).join('') + '</tr>';
             tbody.innerHTML = '';
 
-            reportDataDraft.forEach((row, idx) => {
+            const rows = filteredReportRows();
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td style="padding:10px; color:#6b7280;" colspan="99">Sin datos para los filtros seleccionados.</td></tr>';
+                return;
+            }
+
+            rows.forEach((item) => {
+                const row = item.row;
+                const idx = item.idx;
                 const tr = document.createElement('tr');
                 tr.innerHTML = columns.map(c => {
                     const readonly = c.key === 'id' ? 'false' : 'true';
@@ -875,7 +991,8 @@
             }
 
             const rows = [columns.map(c => c.label)];
-            reportDataDraft.forEach(row => {
+            filteredReportRows().forEach(item => {
+                const row = item.row;
                 rows.push(columns.map(c => formatReportCellValue(c.key, row)));
             });
 
