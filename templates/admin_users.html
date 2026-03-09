@@ -267,7 +267,12 @@ document.getElementById('btn-delete-nonadmin').addEventListener('click', async (
 const MODULES = [
     {id: 'catalog', label: 'CATÁLOGO (SOLO VISTA)', icon: '📊'},
     {id: 'admin_catalog', label: 'CATÁLOGO (EDICIÓN)', icon: '⚙️'},
+    {id: 'hojas_readonly', label: 'HOJAS DE RUTA (SOLO LECTURA)', icon: '📘'},
     {id: 'hojas_generacion', label: 'HOJAS DE RUTA (GENERACIÓN)', icon: '📄'},
+    {id: 'hojas_edicion_basica', label: 'HOJAS (EDITAR BÁSICO)', icon: '📝'},
+    {id: 'hojas_edicion_firmas', label: 'HOJAS (EDITAR FIRMAS)', icon: '✍️'},
+    {id: 'hojas_edicion_planeacion', label: 'HOJAS (EDITAR PLANEACIÓN)', icon: '📐'},
+    {id: 'hojas_edicion_estado', label: 'HOJAS (EDITAR ESTADO)', icon: '🔁'},
     {id: 'hojas_edicion', label: 'HOJAS DE RUTA (EDICIÓN)', icon: '📝'},
     {id: 'estaciones_view', label: 'ESTACIONES T (SOLO VISTA)', icon: '🏭'},
     {id: 'estaciones_operate', label: 'ESTACIONES T (OPERAR MÁQUINAS)', icon: '🎛️'},
@@ -306,17 +311,40 @@ function makeAdvancedPermissionCheckboxes(containerId, inputScope){
         node.innerHTML = '<div style="color:#666; font-size:12px;">Sin permisos definidos.</div>';
         return;
     }
+    const grouped = {};
     ALL_PERMISSIONS.forEach(p=>{
-        const rid = `${inputScope}_perm_${p.id}`;
-        const wrap = document.createElement('label');
-        wrap.style.display = 'inline-flex';
-        wrap.style.alignItems = 'center';
-        wrap.style.gap = '6px';
-        wrap.style.cursor = 'pointer';
-        wrap.style.marginRight = '10px';
-        wrap.style.marginBottom = '6px';
-        wrap.innerHTML = `<input type="checkbox" id="${rid}" data-perm-id="${p.id}" data-scope="${inputScope}" /> <code>${p.module}:${p.action}</code>`;
-        node.appendChild(wrap);
+        if(!grouped[p.module]) grouped[p.module] = [];
+        grouped[p.module].push(p);
+    });
+
+    Object.keys(grouped).sort().forEach(moduleName=>{
+        const section = document.createElement('div');
+        section.style.marginBottom = '8px';
+        section.style.paddingBottom = '6px';
+        section.style.borderBottom = '1px dashed #eee';
+
+        const title = document.createElement('div');
+        title.style.fontWeight = '600';
+        title.style.fontSize = '12px';
+        title.style.color = '#333';
+        title.style.marginBottom = '6px';
+        title.textContent = moduleName.toUpperCase();
+        section.appendChild(title);
+
+        grouped[moduleName].forEach(p=>{
+            const rid = `${inputScope}_perm_${p.id}`;
+            const wrap = document.createElement('label');
+            wrap.style.display = 'inline-flex';
+            wrap.style.alignItems = 'center';
+            wrap.style.gap = '6px';
+            wrap.style.cursor = 'pointer';
+            wrap.style.marginRight = '10px';
+            wrap.style.marginBottom = '6px';
+            wrap.innerHTML = `<input type="checkbox" id="${rid}" data-perm-id="${p.id}" data-scope="${inputScope}" /> <code>${p.action}</code>`;
+            section.appendChild(wrap);
+        });
+
+        node.appendChild(section);
     });
 }
 

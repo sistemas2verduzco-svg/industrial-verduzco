@@ -617,7 +617,12 @@ def requires_any_permission(permission_pairs):
 ROLE_MODULE_BUNDLES = {
     'catalog': [('catalog', 'view')],
     'admin_catalog': [('catalog', 'view'), ('catalog', 'edit')],
+    'hojas_readonly': [('catalog', 'view'), ('hojas', 'view')],
     'hojas_generacion': [('catalog', 'view'), ('hojas', 'view'), ('hojas', 'create')],
+    'hojas_edicion_basica': [('catalog', 'view'), ('hojas', 'view'), ('hojas', 'edit_basico')],
+    'hojas_edicion_firmas': [('catalog', 'view'), ('hojas', 'view'), ('hojas', 'edit_firmas')],
+    'hojas_edicion_planeacion': [('catalog', 'view'), ('hojas', 'view'), ('hojas', 'edit_planeacion')],
+    'hojas_edicion_estado': [('catalog', 'view'), ('hojas', 'view'), ('hojas', 'edit_estado')],
     'hojas_edicion': [('catalog', 'view'), ('hojas', 'view'), ('hojas', 'edit')],
     'estaciones_view': [('catalog', 'view'), ('estaciones', 'view')],
     'estaciones_operate': [('catalog', 'view'), ('estaciones', 'view'), ('estaciones', 'operate')],
@@ -628,6 +633,43 @@ ROLE_MODULE_BUNDLES = {
     'proveedores_edit': [('catalog', 'view'), ('proveedores', 'view'), ('proveedores', 'edit')],
     'soporte': [('tickets', 'view')],
     'soporte_edit': [('tickets', 'view'), ('tickets', 'edit'), ('tickets', 'export')],
+}
+
+
+DEFAULT_PERMISSION_CATALOG = [
+    ('catalog', 'view', 'Ver catalogo'),
+    ('catalog', 'edit', 'Editar catalogo'),
+    ('hojas', 'view', 'Ver hojas de ruta'),
+    ('hojas', 'create', 'Crear hojas de ruta'),
+    ('hojas', 'edit', 'Editar hojas de ruta (total)'),
+    ('hojas', 'edit_basico', 'Editar hoja: serie/comentarios'),
+    ('hojas', 'edit_firmas', 'Editar hoja: firmas'),
+    ('hojas', 'edit_planeacion', 'Editar hoja: planeacion'),
+    ('hojas', 'edit_estado', 'Editar hoja: estado'),
+    ('estaciones', 'view', 'Ver estaciones T'),
+    ('estaciones', 'operate', 'Operar estaciones/maquinas'),
+    ('mapa', 'view', 'Ver mapa de maquinas'),
+    ('calidad', 'view', 'Ver control de calidad'),
+    ('procesos', 'view', 'Ver procesos y claves'),
+    ('proveedores', 'view', 'Ver proveedores'),
+    ('proveedores', 'edit', 'Editar proveedores'),
+    ('tickets', 'view', 'Ver tickets'),
+    ('tickets', 'edit', 'Editar tickets'),
+    ('tickets', 'export', 'Exportar tickets'),
+]
+
+
+HOJA_FIELD_ACTIONS = {
+    'estado': 'edit_estado',
+    'nombre': 'edit_basico',
+    'descripcion': 'edit_basico',
+    'comentarios': 'edit_basico',
+    'firma_ing_jose': 'edit_firmas',
+    'firma_ing_rodrigo': 'edit_firmas',
+    'calidad': 'edit_planeacion',
+    'almacen': 'edit_planeacion',
+    'orden_trabajo': 'edit_planeacion',
+    'cantidad_piezas': 'edit_planeacion',
 }
 
 
@@ -681,6 +723,33 @@ def _get_or_create_permission(module, action):
     db.session.add(perm)
     db.session.flush()
     return perm
+
+
+def _ensure_default_permissions():
+    """Create baseline permissions so admin UI can assign fine-grained access."""
+    created_any = False
+    for module, action, descripcion in DEFAULT_PERMISSION_CATALOG:
+        perm = Permission.query.filter_by(module=module, action=action).first()
+        if perm:
+            continue
+        db.session.add(Permission(module=module, action=action, descripcion=descripcion))
+        created_any = True
+    if created_any:
+        db.session.commit()
+
+
+def _check_field_level_permissions(user, module, payload, field_actions, broad_action='edit'):
+    """Return denied fields list for payload updates in a module."""
+    denied = []
+    for field, required_action in (field_actions or {}).items():
+        if field not in (payload or {}):
+            continue
+        if user.has_permission(module, broad_action):
+            continue
+        if user.has_permission(module, required_action):
+            continue
+        denied.append(field)
+    return denied
 
 
 def _permissions_from_modules_and_ids(modules, permission_ids):
@@ -1357,7 +1426,7 @@ def qc_estaciones_maquina(maquina_id):
 
 @app.route('/api/hojas_ruta', methods=['POST'])
 @login_required
-@requires_any_permission([('hojas', 'create'), ('catalog', 'edit'), ('catalog', 'view')])
+@requires_any_permission([('hojas', 'create'), ('catalog', 'edit')])
 def api_crear_hoja_ruta():
     """Crear una hoja de ruta con formato simplificado y procesos desde la clave."""
     data = request.get_json() or {}
@@ -1520,6 +1589,20 @@ def api_actualizar_hoja_ruta(hoja_id):
     """Actualizar campos editables de una hoja de ruta."""
     hoja = HojaRuta.query.get_or_404(hoja_id)
     data = request.get_json() or {}
+
+    user = get_current_user()
+    denied_fields = _check_field_level_permissions(
+        user=user,
+        module='hojas',
+        payload=data,
+        field_actions=HOJA_FIELD_ACTIONS,
+        broad_action='edit',
+    )
+    if denied_fields and not user.has_permission('catalog', 'edit'):
+        return jsonify({
+            'error': 'No tienes permiso para editar algunos campos',
+            'denied_fields': denied_fields,
+        }), 403
     
     if 'estado' in data:
         hoja.estado = data['estado']
@@ -2240,6 +2323,7 @@ def api_list_users():
 def api_list_permissions():
     if not is_admin_user():
         return jsonify({'error': 'Permiso denegado'}), 403
+    _ensure_default_permissions()
     perms = Permission.query.order_by(Permission.module, Permission.action).all()
     return jsonify({'permissions': [p.to_dict() for p in perms]})
 
@@ -2249,6 +2333,7 @@ def api_list_permissions():
 def api_list_roles():
     if not is_admin_user():
         return jsonify({'error': 'Permiso denegado'}), 403
+    _ensure_default_permissions()
     roles = Role.query.order_by(Role.name).all()
     data = []
     for r in roles:
@@ -2264,6 +2349,8 @@ def api_list_roles():
 def api_create_role():
     if not is_admin_user():
         return jsonify({'error': 'Permiso denegado'}), 403
+
+    _ensure_default_permissions()
 
     payload = request.get_json() or {}
     name = (payload.get('name') or '').strip()
@@ -2310,6 +2397,7 @@ def api_set_role_permissions(role_id):
 def api_set_role_modules(role_id):
     if not is_admin_user():
         return jsonify({'error': 'Permiso denegado'}), 403
+    _ensure_default_permissions()
     payload = request.get_json() or {}
     modules = payload.get('modules', [])
     permission_ids = payload.get('permission_ids')
