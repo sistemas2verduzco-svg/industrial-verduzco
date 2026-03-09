@@ -1036,15 +1036,23 @@ def hojas_ruta_form():
     almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria']
     # Listado reciente (máximo 50) para consulta rápida
     hojas = HojaRuta.query.order_by(HojaRuta.fecha_creacion.desc()).limit(50).all()
+    claves_en_hojas = sorted({(h.pn or '').strip() for h in hojas if (h.pn or '').strip()})
+    clave_desc_map = {}
+    if claves_en_hojas:
+        claves = ClaveProducto.query.filter(ClaveProducto.clave.in_(claves_en_hojas)).all()
+        clave_desc_map = {(c.clave or '').strip(): (c.notas or '') for c in claves}
+
     hojas_data = []
     for h in hojas:
         qr_payload = f"HRID:{h.id};SERIE:{h.nombre or ''}"
+        descripcion_clave = clave_desc_map.get((h.pn or '').strip(), '')
         hojas_data.append({
             'id': h.id,
             'maquina_id': h.maquina_id,
             'serie': h.nombre,
             'qr_payload': qr_payload,
             'clave': h.pn,
+            'descripcion_clave': descripcion_clave,
             'calidad': h.calidad,
             'almacen': h.almacen,
             'orden_trabajo': h.orden_trabajo_hr,
@@ -1065,6 +1073,10 @@ def hoja_ruta_ver(hoja_id):
     """Vista independiente para ver una hoja por ID, sin requerir máquina."""
     hoja = HojaRuta.query.get_or_404(hoja_id)
     h = hoja.to_dict()
+    clave = None
+    if (hoja.pn or '').strip():
+        clave = ClaveProducto.query.filter_by(clave=(hoja.pn or '').strip()).first()
+    h['descripcion_clave'] = (clave.notas if clave else '') or ''
     h['qr_payload'] = f"HRID:{hoja.id};SERIE:{hoja.nombre or ''}"
     h['qr_deeplink'] = request.url_root.rstrip('/') + f"/hoja/{hoja.id}"
     estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
