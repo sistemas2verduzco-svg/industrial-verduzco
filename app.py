@@ -233,8 +233,8 @@ def _apply_hoja_time_plan(hoja, estaciones, maquina_tipo=None, fallback_total_ti
 
 
 def _resolve_clave_descripcion_by_pn(pn_value):
-    """Return clave description (notas) for a PN, tolerant to spacing/case differences.
-    Falls back to first non-empty process description when notas is empty.
+    """Resolve a human-readable description for a PN.
+    Priority: clave.notas -> clave.nombre -> process description/notes/operation -> key code.
     """
     pn = (pn_value or '').strip()
     if not pn:
@@ -250,12 +250,23 @@ def _resolve_clave_descripcion_by_pn(pn_value):
     if notas:
         return notas
 
+    nombre_clave = (getattr(clave, 'nombre', None) or '').strip()
+    if nombre_clave:
+        return nombre_clave
+
     procesos = ClaveProceso.query.filter_by(clave_id=clave.id).order_by(ClaveProceso.orden.asc()).all()
     for cp in procesos:
-        desc = (cp.proceso.descripcion if getattr(cp, 'proceso', None) else '') or ''
-        desc = desc.strip()
-        if desc:
-            return desc
+        candidates = [
+            (cp.proceso.descripcion if getattr(cp, 'proceso', None) else '') or '',
+            getattr(cp, 'notas', None) or '',
+            getattr(cp, 'operacion', None) or '',
+            (cp.proceso.operacion if getattr(cp, 'proceso', None) else '') or '',
+            (cp.proceso.nombre if getattr(cp, 'proceso', None) else '') or '',
+        ]
+        for c in candidates:
+            text = str(c).strip()
+            if text:
+                return text
 
     # Final fallback for legacy data without notes/description.
     return (getattr(clave, 'clave', None) or pn)
