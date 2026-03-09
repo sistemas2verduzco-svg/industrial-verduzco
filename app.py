@@ -34,6 +34,12 @@ WORKDAY_BLOCKS = ((6, 30, 12, 0), (12, 30, 16, 0))
 WORKDAY_SECONDS = (5 * 3600 + 30 * 60) + (3 * 3600 + 30 * 60)  # 9h
 
 
+def _is_workday(dt_or_date):
+    if hasattr(dt_or_date, 'weekday'):
+        return dt_or_date.weekday() < 5  # Monday=0 ... Sunday=6
+    return False
+
+
 def _norm_text(value):
     text = str(value or '').upper().strip()
     return (text.replace('Á', 'A')
@@ -101,6 +107,11 @@ def _stations_for_machine_type(estaciones, maquina_tipo):
 
 def _align_to_work_slot(dt):
     base = dt if isinstance(dt, datetime) else datetime.utcnow()
+
+    # Skip weekends: always move to next Monday start block.
+    while not _is_workday(base):
+        base = (base + timedelta(days=1)).replace(hour=WORKDAY_BLOCKS[0][0], minute=WORKDAY_BLOCKS[0][1], second=0, microsecond=0)
+
     b1s = base.replace(hour=WORKDAY_BLOCKS[0][0], minute=WORKDAY_BLOCKS[0][1], second=0, microsecond=0)
     b1e = base.replace(hour=WORKDAY_BLOCKS[0][2], minute=WORKDAY_BLOCKS[0][3], second=0, microsecond=0)
     b2s = base.replace(hour=WORKDAY_BLOCKS[1][0], minute=WORKDAY_BLOCKS[1][1], second=0, microsecond=0)
@@ -160,6 +171,10 @@ def _working_seconds_between(start_dt, end_dt):
     end_day = end_dt.date()
 
     while day <= end_day:
+        if not _is_workday(day):
+            day += timedelta(days=1)
+            continue
+
         for h1, m1, h2, m2 in WORKDAY_BLOCKS:
             block_start = datetime.combine(day, datetime.min.time()).replace(hour=h1, minute=m1)
             block_end = datetime.combine(day, datetime.min.time()).replace(hour=h2, minute=m2)
@@ -172,6 +187,18 @@ def _working_seconds_between(start_dt, end_dt):
         day += timedelta(days=1)
 
     return max(0, total)
+
+
+def _bounded_working_seconds(start_dt, end_dt, window_start, window_end):
+    if not all(isinstance(x, datetime) for x in (start_dt, end_dt, window_start, window_end)):
+        return 0
+
+    overlap_start = max(start_dt, window_start)
+    overlap_end = min(end_dt, window_end)
+    if overlap_end <= overlap_start:
+        return 0
+
+    return _working_seconds_between(overlap_start, overlap_end)
 
 
 def _apply_hoja_time_plan(hoja, estaciones, maquina_tipo=None, fallback_total_time=None):
@@ -872,6 +899,15 @@ def api_mapa_maquinas():
     """Datos para el mapa de maquinas (estado, hoja activa, pieza, tiempo)."""
     maquinas = Máquina.query.filter_by(activo=True).order_by(Máquina.nombre.asc()).all()
     data = []
+    now_dt = datetime.utcnow()
+
+    window_hour_start = now_dt - timedelta(hours=1)
+    window_day_start = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    window_week_start = (window_day_start - timedelta(days=window_day_start.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    productive_hour = 0
+    productive_day = 0
+    productive_week = 0
     for idx, maq in enumerate(maquinas):
         hoja_activa = HojaRuta.query.filter_by(maquina_id=maq.id, estado='activa').first()
         estacion_actual = None
@@ -904,6 +940,27 @@ def api_mapa_maquinas():
                     tiempo_restante = _format_seconds_to_hms(restante_sec)
                     proceso_culminado = restante_sec <= 0
                     progreso_pct = min(100, int((transcurrido_sec * 100) / objetivo_sec))
+
+            # Eficiencia planta: sumar tiempo productivo real por estaciones de la hoja activa.
+            estaciones_hoja = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja_activa.id).all()
+            for est in estaciones_hoja:
+                if not est.fecha_inicio:
+                    continue
+
+                estado_est = (est.estado or '').lower()
+                if estado_est == 'en_curso':
+                    interval_end = now_dt
+                elif estado_est == 'completada' and est.fecha_finalizacion:
+                    interval_end = est.fecha_finalizacion
+                else:
+                    continue
+
+                if interval_end <= est.fecha_inicio:
+                    continue
+
+                productive_hour += _bounded_working_seconds(est.fecha_inicio, interval_end, window_hour_start, now_dt)
+                productive_day += _bounded_working_seconds(est.fecha_inicio, interval_end, window_day_start, now_dt)
+                productive_week += _bounded_working_seconds(est.fecha_inicio, interval_end, window_week_start, now_dt)
 
         if hoja_activa:
             if estacion_actual:
@@ -941,7 +998,35 @@ def api_mapa_maquinas():
             'estacion_actual_id': estacion_actual.id if estacion_actual else None,
         })
 
-    return jsonify({'maquinas': data})
+    machine_count = len(maquinas)
+    available_hour = machine_count * _working_seconds_between(window_hour_start, now_dt)
+    available_day = machine_count * _working_seconds_between(window_day_start, now_dt)
+    available_week = machine_count * _working_seconds_between(window_week_start, now_dt)
+
+    def _pct(prod, avail):
+        if avail <= 0:
+            return 0
+        return round((prod * 100.0) / avail, 1)
+
+    eficiencia_planta = {
+        'hora': {
+            'porcentaje': _pct(productive_hour, available_hour),
+            'productivo_hms': _format_seconds_to_hms(productive_hour),
+            'disponible_hms': _format_seconds_to_hms(available_hour),
+        },
+        'dia': {
+            'porcentaje': _pct(productive_day, available_day),
+            'productivo_hms': _format_seconds_to_hms(productive_day),
+            'disponible_hms': _format_seconds_to_hms(available_day),
+        },
+        'semana': {
+            'porcentaje': _pct(productive_week, available_week),
+            'productivo_hms': _format_seconds_to_hms(productive_week),
+            'disponible_hms': _format_seconds_to_hms(available_week),
+        },
+    }
+
+    return jsonify({'maquinas': data, 'eficiencia_planta': eficiencia_planta})
 
 
 @app.route('/hojas_ruta_form')

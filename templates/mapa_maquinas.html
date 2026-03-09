@@ -360,6 +360,45 @@
             gap: 8px;
         }
 
+        .eff-grid {
+            margin-top: 10px;
+            display: grid;
+            gap: 8px;
+        }
+
+        .eff-row {
+            border: 1px solid rgba(50, 107, 155, 0.5);
+            border-radius: 8px;
+            padding: 8px;
+            background: rgba(6, 24, 44, 0.55);
+        }
+
+        .eff-head {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .eff-label {
+            color: #93cfff;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.2px;
+        }
+
+        .eff-value {
+            color: #d9edff;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .eff-meta {
+            margin-top: 4px;
+            color: var(--muted);
+            font-size: 11px;
+        }
+
         .dot {
             width: 9px;
             height: 9px;
@@ -530,6 +569,33 @@
                     <div class="legend-item"><span class="dot" style="background:var(--idle);"></span> Sin hoja activa</div>
                 </div>
             </section>
+
+            <section class="panel stat-card">
+                <div class="stat-title">Eficiencia Planta</div>
+                <div class="eff-grid">
+                    <div class="eff-row">
+                        <div class="eff-head">
+                            <span class="eff-label">Por hora</span>
+                            <span class="eff-value" id="effHourPct">0%</span>
+                        </div>
+                        <div class="eff-meta" id="effHourMeta">Prod 00:00:00 / Disp 00:00:00</div>
+                    </div>
+                    <div class="eff-row">
+                        <div class="eff-head">
+                            <span class="eff-label">Por dia</span>
+                            <span class="eff-value" id="effDayPct">0%</span>
+                        </div>
+                        <div class="eff-meta" id="effDayMeta">Prod 00:00:00 / Disp 00:00:00</div>
+                    </div>
+                    <div class="eff-row">
+                        <div class="eff-head">
+                            <span class="eff-label">Por semana</span>
+                            <span class="eff-value" id="effWeekPct">0%</span>
+                        </div>
+                        <div class="eff-meta" id="effWeekMeta">Prod 00:00:00 / Disp 00:00:00</div>
+                    </div>
+                </div>
+            </section>
         </aside>
     </main>
 
@@ -667,6 +733,20 @@
             document.getElementById('prodText').textContent = pct + '% en curso';
         }
 
+        function renderEfficiency(eff) {
+            const hora = eff && eff.hora ? eff.hora : { porcentaje: 0, productivo_hms: '00:00:00', disponible_hms: '00:00:00' };
+            const dia = eff && eff.dia ? eff.dia : { porcentaje: 0, productivo_hms: '00:00:00', disponible_hms: '00:00:00' };
+            const semana = eff && eff.semana ? eff.semana : { porcentaje: 0, productivo_hms: '00:00:00', disponible_hms: '00:00:00' };
+
+            document.getElementById('effHourPct').textContent = `${hora.porcentaje}%`;
+            document.getElementById('effDayPct').textContent = `${dia.porcentaje}%`;
+            document.getElementById('effWeekPct').textContent = `${semana.porcentaje}%`;
+
+            document.getElementById('effHourMeta').textContent = `Prod ${hora.productivo_hms} / Disp ${hora.disponible_hms}`;
+            document.getElementById('effDayMeta').textContent = `Prod ${dia.productivo_hms} / Disp ${dia.disponible_hms}`;
+            document.getElementById('effWeekMeta').textContent = `Prod ${semana.productivo_hms} / Disp ${semana.disponible_hms}`;
+        }
+
         async function loadMapa() {
             const info = document.getElementById('refreshInfo');
             try {
@@ -679,6 +759,7 @@
                 const maquinas = Array.isArray(data.maquinas) ? data.maquinas.filter(m => m.activo) : [];
                 renderMachineGroups(maquinas);
                 renderStats(maquinas);
+                renderEfficiency(data.eficiencia_planta || null);
                 processCompletionNotifications(maquinas);
                 info.textContent = 'Actualizado ' + new Date().toLocaleTimeString();
             } catch (error) {
