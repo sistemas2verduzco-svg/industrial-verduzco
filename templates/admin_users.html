@@ -274,15 +274,18 @@ const MODULES = [
     {id: 'hojas_edicion_planeacion', label: 'HOJAS (EDITAR PLANEACIÓN)', icon: '📐'},
     {id: 'hojas_edicion_estado', label: 'HOJAS (EDITAR ESTADO)', icon: '🔁'},
     {id: 'hojas_edicion', label: 'HOJAS DE RUTA (EDICIÓN)', icon: '📝'},
+    {id: 'hojas_eliminar', label: 'HOJAS (ELIMINAR)', icon: '🗑️'},
     {id: 'estaciones_view', label: 'ESTACIONES T (SOLO VISTA)', icon: '🏭'},
     {id: 'estaciones_operate', label: 'ESTACIONES T (OPERAR MÁQUINAS)', icon: '🎛️'},
     {id: 'mapa_view', label: 'MAPA DE MÁQUINAS (SOLO VISTA)', icon: '🗺️'},
     {id: 'calidad_view', label: 'CONTROL CALIDAD (SOLO VISTA)', icon: '🔍'},
+    {id: 'calidad_edit', label: 'CONTROL CALIDAD (EDITAR)', icon: '✅'},
     {id: 'procesos_view', label: 'PROCESOS Y CLAVES (SOLO VISTA)', icon: '🧩'},
     {id: 'proveedores_view', label: 'PROVEEDORES (SOLO VISTA)', icon: '🏢'},
     {id: 'proveedores_edit', label: 'PROVEEDORES (EDICIÓN)', icon: '🏬'},
     {id: 'soporte', label: 'TICKETS (SOLO VISTA)', icon: '🔧'},
-    {id: 'soporte_edit', label: 'TICKETS (EDICIÓN / EXPORTAR)', icon: '🛠️'}
+    {id: 'soporte_edit', label: 'TICKETS (EDICIÓN / EXPORTAR)', icon: '🛠️'},
+    {id: 'supervisor_produccion', label: 'ROL PRESET: SUPERVISOR PRODUCCIÓN', icon: '👷'}
 ];
 
 let ALL_PERMISSIONS = [];
@@ -340,7 +343,8 @@ function makeAdvancedPermissionCheckboxes(containerId, inputScope){
             wrap.style.cursor = 'pointer';
             wrap.style.marginRight = '10px';
             wrap.style.marginBottom = '6px';
-            wrap.innerHTML = `<input type="checkbox" id="${rid}" data-perm-id="${p.id}" data-scope="${inputScope}" /> <code>${p.action}</code>`;
+            const labelText = p.descripcion ? `${p.action} - ${p.descripcion}` : p.action;
+            wrap.innerHTML = `<input type="checkbox" id="${rid}" data-perm-id="${p.id}" data-scope="${inputScope}" /> <code>${labelText}</code>`;
             section.appendChild(wrap);
         });
 

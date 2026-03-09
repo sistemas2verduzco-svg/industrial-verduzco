@@ -624,15 +624,26 @@ ROLE_MODULE_BUNDLES = {
     'hojas_edicion_planeacion': [('catalog', 'view'), ('hojas', 'view'), ('hojas', 'edit_planeacion')],
     'hojas_edicion_estado': [('catalog', 'view'), ('hojas', 'view'), ('hojas', 'edit_estado')],
     'hojas_edicion': [('catalog', 'view'), ('hojas', 'view'), ('hojas', 'edit')],
+    'hojas_eliminar': [('catalog', 'view'), ('hojas', 'view'), ('hojas', 'delete')],
     'estaciones_view': [('catalog', 'view'), ('estaciones', 'view')],
     'estaciones_operate': [('catalog', 'view'), ('estaciones', 'view'), ('estaciones', 'operate')],
     'mapa_view': [('catalog', 'view'), ('mapa', 'view')],
     'calidad_view': [('catalog', 'view'), ('calidad', 'view')],
+    'calidad_edit': [('catalog', 'view'), ('calidad', 'view'), ('calidad', 'edit')],
     'procesos_view': [('catalog', 'view'), ('procesos', 'view')],
     'proveedores_view': [('catalog', 'view'), ('proveedores', 'view')],
     'proveedores_edit': [('catalog', 'view'), ('proveedores', 'view'), ('proveedores', 'edit')],
     'soporte': [('tickets', 'view')],
     'soporte_edit': [('tickets', 'view'), ('tickets', 'edit'), ('tickets', 'export')],
+    # Perfil sugerido: puede operar calidad/estaciones y solo leer hojas de ruta.
+    'supervisor_produccion': [
+        ('catalog', 'view'),
+        ('hojas', 'view'),
+        ('estaciones', 'view'),
+        ('estaciones', 'operate'),
+        ('calidad', 'view'),
+        ('calidad', 'edit'),
+    ],
 }
 
 
@@ -642,14 +653,26 @@ DEFAULT_PERMISSION_CATALOG = [
     ('hojas', 'view', 'Ver hojas de ruta'),
     ('hojas', 'create', 'Crear hojas de ruta'),
     ('hojas', 'edit', 'Editar hojas de ruta (total)'),
+    ('hojas', 'delete', 'Eliminar hojas de ruta'),
     ('hojas', 'edit_basico', 'Editar hoja: serie/comentarios'),
     ('hojas', 'edit_firmas', 'Editar hoja: firmas'),
     ('hojas', 'edit_planeacion', 'Editar hoja: planeacion'),
     ('hojas', 'edit_estado', 'Editar hoja: estado'),
+    ('hojas', 'edit_field_nombre', 'Editar campo hoja: nombre'),
+    ('hojas', 'edit_field_descripcion', 'Editar campo hoja: descripcion'),
+    ('hojas', 'edit_field_comentarios', 'Editar campo hoja: comentarios'),
+    ('hojas', 'edit_field_firma_ing_jose', 'Editar campo hoja: firma ing jose'),
+    ('hojas', 'edit_field_firma_ing_rodrigo', 'Editar campo hoja: firma ing rodrigo'),
+    ('hojas', 'edit_field_calidad', 'Editar campo hoja: calidad'),
+    ('hojas', 'edit_field_almacen', 'Editar campo hoja: almacen'),
+    ('hojas', 'edit_field_orden_trabajo', 'Editar campo hoja: orden de trabajo'),
+    ('hojas', 'edit_field_cantidad_piezas', 'Editar campo hoja: cantidad de piezas'),
+    ('hojas', 'edit_field_estado', 'Editar campo hoja: estado'),
     ('estaciones', 'view', 'Ver estaciones T'),
     ('estaciones', 'operate', 'Operar estaciones/maquinas'),
     ('mapa', 'view', 'Ver mapa de maquinas'),
     ('calidad', 'view', 'Ver control de calidad'),
+    ('calidad', 'edit', 'Registrar/editar revision de calidad'),
     ('procesos', 'view', 'Ver procesos y claves'),
     ('proveedores', 'view', 'Ver proveedores'),
     ('proveedores', 'edit', 'Editar proveedores'),
@@ -659,7 +682,7 @@ DEFAULT_PERMISSION_CATALOG = [
 ]
 
 
-HOJA_FIELD_ACTIONS = {
+HOJA_FIELD_GROUP_ACTIONS = {
     'estado': 'edit_estado',
     'nombre': 'edit_basico',
     'descripcion': 'edit_basico',
@@ -670,6 +693,20 @@ HOJA_FIELD_ACTIONS = {
     'almacen': 'edit_planeacion',
     'orden_trabajo': 'edit_planeacion',
     'cantidad_piezas': 'edit_planeacion',
+}
+
+
+HOJA_FIELD_SPECIFIC_ACTIONS = {
+    'estado': 'edit_field_estado',
+    'nombre': 'edit_field_nombre',
+    'descripcion': 'edit_field_descripcion',
+    'comentarios': 'edit_field_comentarios',
+    'firma_ing_jose': 'edit_field_firma_ing_jose',
+    'firma_ing_rodrigo': 'edit_field_firma_ing_rodrigo',
+    'calidad': 'edit_field_calidad',
+    'almacen': 'edit_field_almacen',
+    'orden_trabajo': 'edit_field_orden_trabajo',
+    'cantidad_piezas': 'edit_field_cantidad_piezas',
 }
 
 
@@ -741,12 +778,13 @@ def _ensure_default_permissions():
 def _check_field_level_permissions(user, module, payload, field_actions, broad_action='edit'):
     """Return denied fields list for payload updates in a module."""
     denied = []
-    for field, required_action in (field_actions or {}).items():
+    for field, required_actions in (field_actions or {}).items():
         if field not in (payload or {}):
             continue
         if user.has_permission(module, broad_action):
             continue
-        if user.has_permission(module, required_action):
+        actions_list = required_actions if isinstance(required_actions, (list, tuple, set)) else [required_actions]
+        if any(user.has_permission(module, action) for action in actions_list):
             continue
         denied.append(field)
     return denied
@@ -890,6 +928,7 @@ def control_calidad_list():
 def control_calidad_hoja(hoja_id):
     """Revisión de calidad por hoja de ruta y por proceso completado."""
     hoja = HojaRuta.query.get_or_404(hoja_id)
+    user = get_current_user()
 
     def qc_status(estacion):
         notas = estacion.notas or ''
@@ -904,6 +943,9 @@ def control_calidad_hoja(hoja_id):
     informe_guardado = False
 
     if request.method == 'POST':
+        if not (user and (user.has_permission('calidad', 'edit') or user.has_permission('catalog', 'edit'))):
+            return jsonify({'error': 'Permiso denegado para editar control de calidad'}), 403
+
         estacion_id = request.form.get('estacion_id', type=int)
         resultado = (request.form.get('resultado') or '').strip().lower()
         observaciones = (request.form.get('observaciones') or '').strip()
@@ -1591,11 +1633,15 @@ def api_actualizar_hoja_ruta(hoja_id):
     data = request.get_json() or {}
 
     user = get_current_user()
+    hoja_field_permissions = {
+        field: [HOJA_FIELD_SPECIFIC_ACTIONS[field], HOJA_FIELD_GROUP_ACTIONS[field]]
+        for field in HOJA_FIELD_GROUP_ACTIONS
+    }
     denied_fields = _check_field_level_permissions(
         user=user,
         module='hojas',
         payload=data,
-        field_actions=HOJA_FIELD_ACTIONS,
+        field_actions=hoja_field_permissions,
         broad_action='edit',
     )
     if denied_fields and not user.has_permission('catalog', 'edit'):
@@ -1956,7 +2002,7 @@ def api_check_proceso_estacion(estacion_id):
 
 @app.route('/api/hojas_ruta/<int:hoja_id>', methods=['DELETE'])
 @login_required
-@requires_any_permission([('hojas', 'edit'), ('catalog', 'edit')])
+@requires_any_permission([('hojas', 'delete'), ('catalog', 'edit')])
 def api_eliminar_hoja_ruta(hoja_id):
     """Eliminar una hoja de ruta. Solo permite borrar hojas no asignadas a maquina."""
     hoja = HojaRuta.query.get_or_404(hoja_id)
