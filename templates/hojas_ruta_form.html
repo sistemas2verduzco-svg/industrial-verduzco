@@ -137,6 +137,49 @@
             margin-top: 12px;
         }
 
+        .report-toolbar {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .report-columns {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 6px;
+            max-height: 160px;
+            overflow: auto;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 8px;
+            background: #f9fafb;
+        }
+
+        .report-columns label {
+            margin: 0;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .report-table-wrap {
+            overflow: auto;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            max-height: 420px;
+            background: #fff;
+        }
+
+        .report-table td[contenteditable="true"] {
+            background: #fffdf2;
+            outline: none;
+        }
+
         .table-scroll {
             overflow: auto;
             -webkit-overflow-scrolling: touch;
@@ -298,7 +341,10 @@
             </table>
         </div>
 
-        <div class="section-title">Hojas recientes</div>
+        <div class="section-title" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+            <span>Hojas recientes</span>
+            <button type="button" class="btn btn-secondary" style="padding:8px 10px;" onclick="abrirReportesModal()">Reportes</button>
+        </div>
         <div class="card table-scroll" style="overflow:auto;">
             {% if hojas %}
             <table>
@@ -437,8 +483,53 @@
         </div>
     </div>
 
+    <div id="reportesModal" class="modal-backdrop">
+        <div class="modal-card" style="width:min(1150px, 96vw);">
+            <h3 style="margin:0 0 10px 0;">Reportes de Hojas de Ruta</h3>
+
+            <div class="report-toolbar">
+                <div style="font-size:12px; color:#64748b;">Selecciona columnas y edita celdas para preparar el reporte.</div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button class="btn btn-secondary" type="button" onclick="seleccionarTodasColumnasReporte()">Todas</button>
+                    <button class="btn btn-secondary" type="button" onclick="limpiarColumnasReporte()">Ninguna</button>
+                    <button class="btn btn-primary" type="button" onclick="exportarReporteCsv()">Exportar CSV</button>
+                </div>
+            </div>
+
+            <div id="reportColumns" class="report-columns"></div>
+
+            <div class="report-table-wrap" style="margin-top:10px;">
+                <table id="reportTable" class="report-table">
+                    <thead id="reportThead"></thead>
+                    <tbody id="reportTbody"></tbody>
+                </table>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-secondary" type="button" onclick="cerrarReportesModal()">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let clavesData = [];
+        const hojasReporteData = {{ hojas|tojson }};
+        const REPORT_COLUMNS = [
+            { key: 'id', label: 'ID' },
+            { key: 'serie', label: 'Serie' },
+            { key: 'clave', label: 'Clave' },
+            { key: 'descripcion_clave', label: 'Descripcion clave' },
+            { key: 'calidad', label: 'Calidad' },
+            { key: 'fecha_salida', label: 'Fecha' },
+            { key: 'cantidad_piezas', label: 'Piezas' },
+            { key: 'almacen', label: 'Almacen' },
+            { key: 'orden_trabajo', label: 'Orden trabajo' },
+            { key: 'comentarios', label: 'Comentarios' },
+            { key: 'firma_ing_jose', label: 'Firma Jose' },
+            { key: 'firma_ing_rodrigo', label: 'Firma Rodrigo' },
+            { key: 'estado', label: 'Estado' }
+        ];
+        let reportDataDraft = [];
 
         function renderNow() {
             const now = new Date();
@@ -686,6 +777,124 @@
         document.getElementById('editModal').addEventListener('click', (e) => {
             if (e.target.id === 'editModal') {
                 cerrarModalEdicion();
+            }
+        });
+
+        function formatReportCellValue(key, row) {
+            const v = row[key];
+            if (v === null || v === undefined) return '';
+            if (key === 'fecha_salida' || key === 'fecha_creacion') {
+                return String(v).replace('T', ' ').slice(0, 19);
+            }
+            return String(v);
+        }
+
+        function getSelectedReportColumns() {
+            return REPORT_COLUMNS.filter(c => {
+                const cb = document.getElementById('report_col_' + c.key);
+                return cb && cb.checked;
+            });
+        }
+
+        function renderReportColumnsSelector() {
+            const wrap = document.getElementById('reportColumns');
+            wrap.innerHTML = '';
+            REPORT_COLUMNS.forEach((col) => {
+                const label = document.createElement('label');
+                const checkedByDefault = !['comentarios'].includes(col.key);
+                label.innerHTML = `<input type="checkbox" id="report_col_${col.key}" ${checkedByDefault ? 'checked' : ''} onchange="renderReportTable()"> ${col.label}`;
+                wrap.appendChild(label);
+            });
+        }
+
+        function renderReportTable() {
+            const columns = getSelectedReportColumns();
+            const thead = document.getElementById('reportThead');
+            const tbody = document.getElementById('reportTbody');
+
+            if (!columns.length) {
+                thead.innerHTML = '';
+                tbody.innerHTML = '<tr><td style="padding:10px; color:#6b7280;">Selecciona al menos una columna.</td></tr>';
+                return;
+            }
+
+            thead.innerHTML = '<tr>' + columns.map(c => `<th>${c.label}</th>`).join('') + '</tr>';
+            tbody.innerHTML = '';
+
+            reportDataDraft.forEach((row, idx) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = columns.map(c => {
+                    const readonly = c.key === 'id' ? 'false' : 'true';
+                    const text = formatReportCellValue(c.key, row).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    return `<td contenteditable="${readonly}" data-row="${idx}" data-key="${c.key}">${text}</td>`;
+                }).join('');
+                tbody.appendChild(tr);
+            });
+        }
+
+        function abrirReportesModal() {
+            reportDataDraft = JSON.parse(JSON.stringify(hojasReporteData || []));
+            renderReportColumnsSelector();
+            renderReportTable();
+            document.getElementById('reportesModal').style.display = 'flex';
+        }
+
+        function cerrarReportesModal() {
+            document.getElementById('reportesModal').style.display = 'none';
+        }
+
+        function seleccionarTodasColumnasReporte() {
+            REPORT_COLUMNS.forEach(c => {
+                const cb = document.getElementById('report_col_' + c.key);
+                if (cb) cb.checked = true;
+            });
+            renderReportTable();
+        }
+
+        function limpiarColumnasReporte() {
+            REPORT_COLUMNS.forEach(c => {
+                const cb = document.getElementById('report_col_' + c.key);
+                if (cb) cb.checked = false;
+            });
+            renderReportTable();
+        }
+
+        function exportarReporteCsv() {
+            const columns = getSelectedReportColumns();
+            if (!columns.length) {
+                alert('Selecciona columnas para exportar.');
+                return;
+            }
+
+            const rows = [columns.map(c => c.label)];
+            reportDataDraft.forEach(row => {
+                rows.push(columns.map(c => formatReportCellValue(c.key, row)));
+            });
+
+            const csv = rows.map(r => r.map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(',')).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'reporte_hojas_ruta.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        document.getElementById('reportTbody').addEventListener('input', (e) => {
+            const cell = e.target.closest('td[data-row][data-key]');
+            if (!cell) return;
+            const rowIdx = parseInt(cell.getAttribute('data-row'), 10);
+            const key = cell.getAttribute('data-key');
+            if (Number.isNaN(rowIdx) || !reportDataDraft[rowIdx] || !key) return;
+            reportDataDraft[rowIdx][key] = cell.textContent.trim();
+        });
+
+        document.getElementById('reportesModal').addEventListener('click', (e) => {
+            if (e.target.id === 'reportesModal') {
+                cerrarReportesModal();
             }
         });
     </script>

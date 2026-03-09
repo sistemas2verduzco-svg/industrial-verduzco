@@ -260,18 +260,6 @@
             padding: 4px 8px;
         }
 
-        .time-remaining {
-            margin-top: 6px;
-            font-size: 12px;
-            color: #7a2f11;
-            font-weight: 700;
-            background: #fff3ec;
-            border: 1px solid #f1cdbb;
-            border-radius: 8px;
-            display: inline-block;
-            padding: 4px 8px;
-        }
-
         .process-box {
             margin-top: 8px;
             border: 1px solid #c7d9ec;
@@ -802,14 +790,8 @@
                                     </div>
                                      <div class="time-real js-tiempo-reloj"
                                          data-elapsed-base="{{ maq.tiempo_real or '00:00:00' }}"
-                                         data-total="{{ maq.hoja_activa.total_tiempo or '' }}"
-                                         data-start="{{ maq.hoja_activa.fecha_salida or '' }}">
-                                         Tiempo real: <span class="js-tiempo-transcurrido">{{ maq.tiempo_real or '00:00:00' }}</span>
-                                     </div>
-                                     <div class="time-remaining js-tiempo-restante-wrap"
-                                         data-total="{{ maq.hoja_activa.total_tiempo or '' }}"
-                                         style="display:none;">
-                                         Tiempo restante: <span class="js-tiempo-restante">00:00:00</span>
+                                         data-total="{{ maq.hoja_activa.total_tiempo or '' }}">
+                                         Tiempo proceso: <span class="js-tiempo-restante">00:00:00</span>
                                      </div>
                                     <div class="process-box">
                                         <div class="process-title">Validación de procesos</div>
@@ -986,24 +968,21 @@
         const state = clocks.map(el => {
             const elapsedBase = parseHmsToSeconds(el.dataset.elapsedBase || '00:00:00');
             const totalSeconds = parseHmsToSeconds(el.dataset.total || '');
-            const remainingWrap = el.parentElement.querySelector('.js-tiempo-restante-wrap');
-            const remainingSpan = remainingWrap ? remainingWrap.querySelector('.js-tiempo-restante') : null;
-            if (remainingWrap && totalSeconds > 0) {
-                remainingWrap.style.display = 'inline-block';
-            }
+            const remainingSpan = el.querySelector('.js-tiempo-restante');
             return { el, elapsedBase, totalSeconds, remainingSpan };
         });
 
         let tick = 0;
         const render = () => {
             state.forEach(item => {
-                const elapsedNow = item.elapsedBase + tick;
-                const elapsedLabel = item.el.querySelector('.js-tiempo-transcurrido');
-                if (elapsedLabel) elapsedLabel.textContent = formatSecondsToHms(elapsedNow);
+                if (!item.remainingSpan) return;
 
-                if (item.remainingSpan && item.totalSeconds > 0) {
+                if (item.totalSeconds > 0) {
+                    const elapsedNow = item.elapsedBase + tick;
                     const remaining = Math.max(0, item.totalSeconds - elapsedNow);
                     item.remainingSpan.textContent = formatSecondsToHms(remaining);
+                } else {
+                    item.remainingSpan.textContent = '00:00:00';
                 }
             });
         };
