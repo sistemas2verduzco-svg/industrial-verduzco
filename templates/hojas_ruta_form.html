@@ -489,9 +489,20 @@
             const select = document.getElementById('clave_id');
             try {
                 const res = await fetch('/api/claves_procesos', { credentials: 'same-origin' });
-                if (!res.ok) throw new Error('HTTP ' + res.status);
+                let payload = null;
+                const contentType = (res.headers.get('content-type') || '').toLowerCase();
+                if (contentType.includes('application/json')) {
+                    payload = await res.json();
+                } else {
+                    const raw = await res.text();
+                    throw new Error('Respuesta no JSON. Posible sesion expirada o error de servidor.');
+                }
 
-                clavesData = await res.json();
+                if (!res.ok) {
+                    throw new Error((payload && payload.error) ? payload.error : ('HTTP ' + res.status));
+                }
+
+                clavesData = Array.isArray(payload) ? payload : [];
                 select.innerHTML = '<option value="">Selecciona clave</option>';
                 clavesData.forEach(c => {
                     const opt = document.createElement('option');
@@ -502,7 +513,7 @@
                 });
             } catch (err) {
                 console.error(err);
-                alert('No se pudieron cargar las claves');
+                alert('No se pudieron cargar las claves: ' + (err.message || err));
             }
         }
 

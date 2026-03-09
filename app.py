@@ -5,7 +5,7 @@ from email_manager import EmailManager
 import os
 import json
 from dotenv import load_dotenv
-from sqlalchemy import text
+from sqlalchemy import text, func
 from functools import wraps
 import secrets
 from werkzeug.utils import secure_filename
@@ -230,6 +230,33 @@ def _apply_hoja_time_plan(hoja, estaciones, maquina_tipo=None, fallback_total_ti
 
     inicio = hoja.fecha_salida or datetime.utcnow()
     hoja.fecha_termino = _add_work_seconds(inicio, total_seconds)
+
+
+def _resolve_clave_descripcion_by_pn(pn_value):
+    """Return clave description (notas) for a PN, tolerant to spacing/case differences.
+    Falls back to first non-empty process description when notas is empty.
+    """
+    pn = (pn_value or '').strip()
+    if not pn:
+        return ''
+
+    normalized = pn.upper()
+    clave = ClaveProducto.query.filter(func.upper(func.trim(ClaveProducto.clave)) == normalized).first()
+    if not clave:
+        return ''
+
+    notas = (getattr(clave, 'notas', None) or '').strip()
+    if notas:
+        return notas
+
+    procesos = ClaveProceso.query.filter_by(clave_id=clave.id).order_by(ClaveProceso.orden.asc()).all()
+    for cp in procesos:
+        desc = (cp.proceso.descripcion if getattr(cp, 'proceso', None) else '') or ''
+        desc = desc.strip()
+        if desc:
+            return desc
+
+    return ''
 
 
 def _sync_hoja_estado_with_checks(hoja, estaciones=None, now_dt=None):
@@ -1036,16 +1063,10 @@ def hojas_ruta_form():
     almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria']
     # Listado reciente (máximo 50) para consulta rápida
     hojas = HojaRuta.query.order_by(HojaRuta.fecha_creacion.desc()).limit(50).all()
-    claves_en_hojas = sorted({(h.pn or '').strip() for h in hojas if (h.pn or '').strip()})
-    clave_desc_map = {}
-    if claves_en_hojas:
-        claves = ClaveProducto.query.filter(ClaveProducto.clave.in_(claves_en_hojas)).all()
-        clave_desc_map = {(c.clave or '').strip(): (c.notas or '') for c in claves}
-
     hojas_data = []
     for h in hojas:
         qr_payload = f"HRID:{h.id};SERIE:{h.nombre or ''}"
-        descripcion_clave = clave_desc_map.get((h.pn or '').strip(), '')
+        descripcion_clave = _resolve_clave_descripcion_by_pn(h.pn)
         hojas_data.append({
             'id': h.id,
             'maquina_id': h.maquina_id,
@@ -1073,10 +1094,7 @@ def hoja_ruta_ver(hoja_id):
     """Vista independiente para ver una hoja por ID, sin requerir máquina."""
     hoja = HojaRuta.query.get_or_404(hoja_id)
     h = hoja.to_dict()
-    clave = None
-    if (hoja.pn or '').strip():
-        clave = ClaveProducto.query.filter_by(clave=(hoja.pn or '').strip()).first()
-    h['descripcion_clave'] = (clave.notas if clave else '') or ''
+    h['descripcion_clave'] = _resolve_clave_descripcion_by_pn(hoja.pn)
     h['qr_payload'] = f"HRID:{hoja.id};SERIE:{hoja.nombre or ''}"
     h['qr_deeplink'] = request.url_root.rstrip('/') + f"/hoja/{hoja.id}"
     estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
@@ -1347,32 +1365,39 @@ def api_claves_procesos():
         claves = ClaveProducto.query.filter_by(activo=True).order_by(ClaveProducto.clave.asc()).all()
         result = []
         for clave in claves:
-            # Obtener todos los procesos de la clave ordenados
-            procesos = ClaveProceso.query.filter_by(clave_id=clave.id).order_by(ClaveProceso.orden).all()
-            
-            # El T/O es el del último proceso (suma acumulada)
-            tiempo_to = "00:00:00"
-            if procesos:
-                # Buscar el último proceso que tenga T/O
-                for cp in reversed(procesos):
-                    if cp.t_to:
-                        tiempo_to = cp.t_to
-                        break
-            
-            result.append({
-                'id': clave.id,
-                'clave': clave.clave,
-                'nombre': clave.nombre or clave.clave,
-                'notas': clave.notas or '',
-                'tiempo_to': tiempo_to,
-                'procesos': [
-                    {
-                        **p.to_dict(),
-                        'proceso_descripcion': (p.proceso.descripcion if getattr(p, 'proceso', None) else '') or ''
-                    }
-                    for p in procesos
-                ]
-            })
+            try:
+                # Obtener todos los procesos de la clave ordenados
+                procesos = ClaveProceso.query.filter_by(clave_id=clave.id).order_by(ClaveProceso.orden).all()
+
+                # El T/O es el del último proceso (suma acumulada)
+                tiempo_to = "00:00:00"
+                if procesos:
+                    # Buscar el último proceso que tenga T/O
+                    for cp in reversed(procesos):
+                        if cp.t_to:
+                            tiempo_to = cp.t_to
+                            break
+
+                procesos_payload = []
+                for p in procesos:
+                    try:
+                        base = p.to_dict()
+                        base['proceso_descripcion'] = (p.proceso.descripcion if getattr(p, 'proceso', None) else '') or ''
+                        procesos_payload.append(base)
+                    except Exception as p_err:
+                        logger.warning(f"Proceso invalido en clave_id={clave.id}, proceso_id={getattr(p, 'id', '?')}: {p_err}")
+
+                result.append({
+                    'id': clave.id,
+                    'clave': clave.clave,
+                    'nombre': clave.nombre or clave.clave,
+                    'notas': getattr(clave, 'notas', None) or '',
+                    'tiempo_to': tiempo_to,
+                    'procesos': procesos_payload,
+                })
+            except Exception as clave_err:
+                logger.warning(f"Clave invalida omitida clave_id={getattr(clave, 'id', '?')}: {clave_err}")
+                continue
         return jsonify(result), 200
     except Exception as e:
         logger.error(f"Error obteniendo claves/procesos: {e}")
