@@ -570,6 +570,17 @@
                 const data = await res.json();
 
                 if (!res.ok) {
+                    if (res.status === 409 && data && data.code === 'duplicate_clave' && data.existing_hoja) {
+                        const ex = data.existing_hoja;
+                        const fecha = ex.fecha ? new Date(ex.fecha).toLocaleString() : 'N/A';
+                        alert(
+                            'YA EXISTE UNA HOJA DE RUTA CON ESTA CLAVE.\n\n' +
+                            'Folio: ' + (ex.folio || ('HOJA #' + ex.id)) + '\n' +
+                            'Fecha: ' + fecha + '\n' +
+                            'Estado: ' + (ex.estado || 'N/A')
+                        );
+                        return;
+                    }
                     throw new Error(data.error || 'No se pudo crear la hoja');
                 }
 

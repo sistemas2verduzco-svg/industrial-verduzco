@@ -1226,6 +1226,39 @@ def api_crear_hoja_ruta():
     if not clave:
         return jsonify({'error': 'Clave no encontrada'}), 404
 
+    # Politica de duplicados por clave (configurable)
+    # active: bloquea si existe hoja activa/pausada con la misma clave.
+    # day: bloquea si ya existe hoja de esa clave creada hoy.
+    # week: bloquea si ya existe hoja de esa clave creada en la semana actual.
+    duplicate_scope = (os.getenv('HOJA_RUTA_DUPLICATE_SCOPE', 'active') or 'active').strip().lower()
+    existing_q = HojaRuta.query.filter(HojaRuta.pn == clave.clave)
+    if duplicate_scope == 'day':
+        now_dt = datetime.utcnow()
+        day_start = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        existing_q = existing_q.filter(HojaRuta.fecha_creacion >= day_start)
+    elif duplicate_scope == 'week':
+        now_dt = datetime.utcnow()
+        day_start = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_start = day_start - timedelta(days=day_start.weekday())
+        existing_q = existing_q.filter(HojaRuta.fecha_creacion >= week_start)
+    else:
+        duplicate_scope = 'active'
+        existing_q = existing_q.filter(HojaRuta.estado.in_(['activa', 'pausada']))
+
+    hoja_existente = existing_q.order_by(HojaRuta.fecha_creacion.desc()).first()
+    if hoja_existente:
+        return jsonify({
+            'error': 'Ya existe una hoja de ruta con esta clave.',
+            'code': 'duplicate_clave',
+            'scope': duplicate_scope,
+            'existing_hoja': {
+                'id': hoja_existente.id,
+                'folio': hoja_existente.nombre,
+                'fecha': hoja_existente.fecha_creacion.isoformat() if hoja_existente.fecha_creacion else None,
+                'estado': hoja_existente.estado,
+            }
+        }), 409
+
     maquina_id = int(data.get('maquina_id')) if data.get('maquina_id') else None
     if maquina_id:
         hoja_activa_misma_clave = HojaRuta.query.filter_by(maquina_id=maquina_id, pn=clave.clave, estado='activa').first()
