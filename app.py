@@ -1213,6 +1213,16 @@ def api_mapa_maquinas():
     productive_hour = 0
     productive_day = 0
     productive_week = 0
+
+    def _bounded_seconds(start_dt, end_dt, window_start, window_end):
+        if not start_dt or not end_dt:
+            return 0
+        bounded_start = max(start_dt, window_start)
+        bounded_end = min(end_dt, window_end)
+        if bounded_end <= bounded_start:
+            return 0
+        return int((bounded_end - bounded_start).total_seconds())
+
     for idx, maq in enumerate(maquinas):
         hoja_activa = hoja_activa_por_maquina.get(maq.id)
         estacion_actual = None
@@ -1249,7 +1259,10 @@ def api_mapa_maquinas():
             # Eficiencia planta: sumar tiempo productivo real por estaciones de la hoja activa.
             estaciones_hoja = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja_activa.id).all()
             for est in estaciones_hoja:
-                if not est.fecha_inicio:
+                start_ref = est.fecha_inicio
+                if not start_ref and (est.estado or '').lower() == 'en_curso':
+                    start_ref = hoja_activa.fecha_salida
+                if not start_ref:
                     continue
 
                 estado_est = (est.estado or '').lower()
@@ -1260,12 +1273,13 @@ def api_mapa_maquinas():
                 else:
                     continue
 
-                if interval_end <= est.fecha_inicio:
+                if interval_end <= start_ref:
                     continue
 
-                productive_hour += _bounded_working_seconds(est.fecha_inicio, interval_end, window_hour_start, now_dt)
-                productive_day += _bounded_working_seconds(est.fecha_inicio, interval_end, window_day_start, now_dt)
-                productive_week += _bounded_working_seconds(est.fecha_inicio, interval_end, window_week_start, now_dt)
+                # KPI de eficiencia en tiempo real: usar ventana continua para evitar 0 artificial por cortes de horario.
+                productive_hour += _bounded_seconds(start_ref, interval_end, window_hour_start, now_dt)
+                productive_day += _bounded_seconds(start_ref, interval_end, window_day_start, now_dt)
+                productive_week += _bounded_seconds(start_ref, interval_end, window_week_start, now_dt)
 
         if hoja_activa:
             if estacion_actual:
@@ -1304,9 +1318,9 @@ def api_mapa_maquinas():
         })
 
     machine_count = len(maquinas)
-    available_hour = machine_count * _working_seconds_between(window_hour_start, now_dt)
-    available_day = machine_count * _working_seconds_between(window_day_start, now_dt)
-    available_week = machine_count * _working_seconds_between(window_week_start, now_dt)
+    available_hour = machine_count * int((now_dt - window_hour_start).total_seconds())
+    available_day = machine_count * int((now_dt - window_day_start).total_seconds())
+    available_week = machine_count * int((now_dt - window_week_start).total_seconds())
 
     def _pct(prod, avail):
         if avail <= 0:
