@@ -260,6 +260,18 @@
             padding: 4px 8px;
         }
 
+        .time-remaining {
+            margin-top: 6px;
+            font-size: 12px;
+            color: #7a2f11;
+            font-weight: 700;
+            background: #fff3ec;
+            border: 1px solid #f1cdbb;
+            border-radius: 8px;
+            display: inline-block;
+            padding: 4px 8px;
+        }
+
         .process-box {
             margin-top: 8px;
             border: 1px solid #c7d9ec;
@@ -369,6 +381,12 @@
             padding: 8px;
             border: 1px solid #c9d8e8;
             border-radius: 8px;
+        }
+
+        .modal-hint {
+            margin-top: 6px;
+            font-size: 12px;
+            color: #5f7184;
         }
 
         .modal-actions {
@@ -782,7 +800,17 @@
                                         Hoja: <strong>{{ maq.hoja_activa.nombre }}</strong><br>
                                         Estación actual: <strong>{{ maq.estacion_actual }}</strong>
                                     </div>
-                                    <div class="time-real">Tiempo real: {{ maq.tiempo_real or '00:00:00' }}</div>
+                                     <div class="time-real js-tiempo-reloj"
+                                         data-elapsed-base="{{ maq.tiempo_real or '00:00:00' }}"
+                                         data-total="{{ maq.hoja_activa.total_tiempo or '' }}"
+                                         data-start="{{ maq.hoja_activa.fecha_salida or '' }}">
+                                         Tiempo real: <span class="js-tiempo-transcurrido">{{ maq.tiempo_real or '00:00:00' }}</span>
+                                     </div>
+                                     <div class="time-remaining js-tiempo-restante-wrap"
+                                         data-total="{{ maq.hoja_activa.total_tiempo or '' }}"
+                                         style="display:none;">
+                                         Tiempo restante: <span class="js-tiempo-restante">00:00:00</span>
+                                     </div>
                                     <div class="process-box">
                                         <div class="process-title">Validación de procesos</div>
                                         {% if maq.hoja_activa.estaciones %}
@@ -885,8 +913,12 @@
             <h3 style="margin:0 0 12px 0;">Asignar hoja de ruta</h3>
             <div style="font-size:13px; color:#5f7184; margin-bottom:8px;">Máquina: <strong id="asignarMaquinaNombre">Selecciona máquina</strong></div>
             <input type="hidden" id="asignarMaquinaId">
+            <label style="display:block; font-weight:700; font-size:12px; margin-bottom:6px; color:#48627d;">Máquina destino</label>
+            <select id="asignarMaquinaSelect"></select>
+            <div id="asignarMaquinaHint" class="modal-hint"></div>
             <label style="display:block; font-weight:700; font-size:12px; margin-bottom:6px; color:#48627d;">Hoja pendiente</label>
             <select id="asignarHojaId"></select>
+            <div id="asignarHojaResumen" class="modal-hint"></div>
             <div class="modal-actions">
                 <button class="btn-light" onclick="cerrarModalAsignar()">Cancelar</button>
                 <button class="btn-small btn-primary-small" onclick="guardarAsignacion()">Asignar</button>
@@ -923,8 +955,65 @@
 
     <script>
     const hojasPendientes = {{ hojas_pendientes|tojson }};
+    const maquinasCatalogo = {{ maquinas|tojson }};
     let qrScannerAsignacion = null;
     let emergencyShownKey = null;
+
+    function parseHmsToSeconds(hms) {
+        if (!hms || typeof hms !== 'string') return 0;
+        const parts = hms.split(':').map(n => parseInt(n, 10));
+        if (parts.length !== 3 || parts.some(Number.isNaN)) return 0;
+        return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+    }
+
+    function formatSecondsToHms(total) {
+        const s = Math.max(0, Math.floor(total || 0));
+        const hh = String(Math.floor(s / 3600)).padStart(2, '0');
+        const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+        const ss = String(s % 60).padStart(2, '0');
+        return `${hh}:${mm}:${ss}`;
+    }
+
+    function getMachineNameById(id) {
+        const m = maquinasCatalogo.find(x => Number(x.id) === Number(id));
+        return m ? m.nombre : `ID ${id}`;
+    }
+
+    function initRealtimeClocks() {
+        const clocks = Array.from(document.querySelectorAll('.js-tiempo-reloj'));
+        if (!clocks.length) return;
+
+        const state = clocks.map(el => {
+            const elapsedBase = parseHmsToSeconds(el.dataset.elapsedBase || '00:00:00');
+            const totalSeconds = parseHmsToSeconds(el.dataset.total || '');
+            const remainingWrap = el.parentElement.querySelector('.js-tiempo-restante-wrap');
+            const remainingSpan = remainingWrap ? remainingWrap.querySelector('.js-tiempo-restante') : null;
+            if (remainingWrap && totalSeconds > 0) {
+                remainingWrap.style.display = 'inline-block';
+            }
+            return { el, elapsedBase, totalSeconds, remainingSpan };
+        });
+
+        let tick = 0;
+        const render = () => {
+            state.forEach(item => {
+                const elapsedNow = item.elapsedBase + tick;
+                const elapsedLabel = item.el.querySelector('.js-tiempo-transcurrido');
+                if (elapsedLabel) elapsedLabel.textContent = formatSecondsToHms(elapsedNow);
+
+                if (item.remainingSpan && item.totalSeconds > 0) {
+                    const remaining = Math.max(0, item.totalSeconds - elapsedNow);
+                    item.remainingSpan.textContent = formatSecondsToHms(remaining);
+                }
+            });
+        };
+
+        render();
+        setInterval(() => {
+            tick += 1;
+            render();
+        }, 1000);
+    }
 
     function getSecondsUntilTarget(now, hour, minute) {
         const target = new Date(now);
@@ -983,13 +1072,40 @@
         }
     }
 
-    function abrirModalAsignar(maquinaId, maquinaNombre, preselectHojaId) {
+    function abrirModalAsignar(maquinaId, maquinaNombre, preselectHojaId, hojaEscaneada) {
         const maquinaInput = document.getElementById('asignarMaquinaId');
         const maquinaLabel = document.getElementById('asignarMaquinaNombre');
+        const maquinaSelect = document.getElementById('asignarMaquinaSelect');
+        const maquinaHint = document.getElementById('asignarMaquinaHint');
         const select = document.getElementById('asignarHojaId');
+        const hojaResumen = document.getElementById('asignarHojaResumen');
 
         maquinaInput.value = maquinaId || '';
         maquinaLabel.textContent = maquinaNombre || 'Selecciona máquina';
+        maquinaHint.textContent = '';
+
+        maquinaSelect.innerHTML = '';
+        const defaultMOpt = document.createElement('option');
+        defaultMOpt.value = '';
+        defaultMOpt.textContent = '-- Selecciona máquina --';
+        maquinaSelect.appendChild(defaultMOpt);
+
+        maquinasCatalogo.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            const ocupada = !!(m.hoja_activa && m.hoja_activa.id);
+            opt.textContent = ocupada ? `${m.nombre} (ocupada)` : m.nombre;
+            // Si la máquina está ocupada no se permite nueva asignación directa.
+            if (ocupada && Number(m.id) !== Number(maquinaId || 0)) {
+                opt.disabled = true;
+            }
+            maquinaSelect.appendChild(opt);
+        });
+
+        if (maquinaId) {
+            maquinaSelect.value = String(maquinaId);
+            maquinaHint.textContent = 'Máquina preseleccionada desde la tarjeta.';
+        }
 
         select.innerHTML = '';
         if (!hojasPendientes.length) {
@@ -1008,6 +1124,18 @@
                 select.appendChild(opt);
             });
         }
+
+        if (hojaEscaneada) {
+            hojaResumen.textContent = `Escaneada: ${hojaEscaneada.serie || ('HOJA ' + hojaEscaneada.id)} | Clave: ${hojaEscaneada.clave || '-'} | Estado: ${hojaEscaneada.estado || '-'}`;
+        } else {
+            const selectedOption = select.options[select.selectedIndex];
+            hojaResumen.textContent = selectedOption ? selectedOption.textContent : '';
+        }
+
+        select.onchange = () => {
+            const opt = select.options[select.selectedIndex];
+            hojaResumen.textContent = opt ? `Seleccionada: ${opt.textContent}` : '';
+        };
 
         document.getElementById('modalAsignar').style.display = 'flex';
     }
@@ -1057,9 +1185,15 @@
                 { fps: 10, qrbox: { width: 220, height: 220 }, formatsToSupport: formatos },
                 async (decodedText) => {
                     try {
-                        await cerrarScannerAsignacion();
                         const hoja = await resolverHojaPorCodigo(decodedText);
-                        abrirModalAsignar(null, null, hoja.id);
+                        await cerrarScannerAsignacion();
+
+                        if (hoja.maquina_id) {
+                            alert('La hoja ya esta asignada a la maquina: ' + getMachineNameById(hoja.maquina_id) + '.');
+                            return;
+                        }
+
+                        abrirModalAsignar(null, null, hoja.id, hoja);
                     } catch (err) {
                         alert('Error al procesar codigo: ' + err.message);
                     }
@@ -1098,7 +1232,13 @@
             try { await scanner.clear(); } catch (_) {}
             const hoja = await resolverHojaPorCodigo(decoded);
             await cerrarScannerAsignacion();
-            abrirModalAsignar(null, null, hoja.id);
+
+            if (hoja.maquina_id) {
+                alert('La hoja ya esta asignada a la maquina: ' + getMachineNameById(hoja.maquina_id) + '.');
+                return;
+            }
+
+            abrirModalAsignar(null, null, hoja.id, hoja);
         } catch (err) {
             alert('No se pudo leer el codigo desde imagen: ' + (err.message || err));
         } finally {
@@ -1123,7 +1263,9 @@
     }
 
     async function guardarAsignacion() {
-        const maquinaId = parseInt(document.getElementById('asignarMaquinaId').value, 10);
+        const maquinaFromHidden = parseInt(document.getElementById('asignarMaquinaId').value, 10);
+        const maquinaFromSelect = parseInt(document.getElementById('asignarMaquinaSelect').value, 10);
+        const maquinaId = maquinaFromHidden || maquinaFromSelect;
         const hojaId = parseInt(document.getElementById('asignarHojaId').value, 10);
         if (!maquinaId) {
             alert('Selecciona una máquina para asignar la hoja.');
@@ -1343,6 +1485,8 @@
 
     applyResponsivePendingBehavior();
     window.addEventListener('resize', applyResponsivePendingBehavior);
+
+    initRealtimeClocks();
 
     checkEmergencyStopWindow();
     setInterval(checkEmergencyStopWindow, 1000);
