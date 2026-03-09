@@ -592,6 +592,57 @@ def requires_permission(module, action):
         return decorated
     return decorator
 
+
+# Module bundles for admin role-management UI.
+ROLE_MODULE_BUNDLES = {
+    'catalog': [('catalog', 'view')],
+    'admin_catalog': [('catalog', 'view'), ('catalog', 'edit')],
+    'soporte': [('tickets', 'view')],
+    'soporte_edit': [('tickets', 'view'), ('tickets', 'edit'), ('tickets', 'export')],
+}
+
+
+def _role_modules_from_permissions(role):
+    perm_set = {(p.module, p.action) for p in (role.permissions or [])}
+    modules = []
+    for module_id, required_perms in ROLE_MODULE_BUNDLES.items():
+        if all(rp in perm_set for rp in required_perms):
+            modules.append(module_id)
+    return modules
+
+
+def _apply_role_modules(role, modules):
+    selected = set(modules or [])
+    required = set()
+    for module_id in selected:
+        for perm_pair in ROLE_MODULE_BUNDLES.get(module_id, []):
+            required.add(perm_pair)
+
+    # Preserve unrelated permissions and ensure required ones are present.
+    existing = {(p.module, p.action): p for p in (role.permissions or [])}
+    current_perms = list(role.permissions or [])
+
+    for module, action in required:
+        if (module, action) in existing:
+            continue
+        perm = Permission.query.filter_by(module=module, action=action).first()
+        if not perm:
+            perm = Permission(module=module, action=action, descripcion=f'{module}:{action}')
+            db.session.add(perm)
+            db.session.flush()
+        current_perms.append(perm)
+
+    # Remove permissions managed by bundles if not currently selected.
+    bundle_pairs = {pair for pairs in ROLE_MODULE_BUNDLES.values() for pair in pairs}
+    filtered = []
+    for p in current_perms:
+        pair = (p.module, p.action)
+        if pair in bundle_pairs and pair not in required:
+            continue
+        filtered.append(p)
+
+    role.permissions = filtered
+
 # ==================== DASHBOARD / HOME CENTRAL ====================
 
 @app.route('/dashboard')
@@ -616,6 +667,7 @@ def dashboard():
 
 @app.route('/')
 @login_required
+@requires_permission('catalog', 'view')
 def index():
     """Página principal - Catálogo (privado)"""
     return render_template('index.html')
@@ -648,6 +700,7 @@ def producto_detalle(producto_id):
 
 @app.route('/control_calidad')
 @login_required
+@requires_permission('catalog', 'view')
 def control_calidad_list():
     """Lista de hojas de ruta con procesos completados pendientes de validación en calidad."""
 
@@ -823,9 +876,25 @@ def uploaded_file(filename):
 
 @app.route('/hojas_ruta')
 @login_required
+@requires_permission('catalog', 'view')
 def hojas_ruta_list():
     """Lista de máquinas con sus hojas de ruta activas y estado de producción."""
     maquinas = Máquina.query.all()
+    hojas_activas = HojaRuta.query.filter(HojaRuta.maquina_id.isnot(None), HojaRuta.estado == 'activa').all()
+    hoja_activa_por_maquina = {h.maquina_id: h for h in hojas_activas if h.maquina_id is not None}
+
+    # Regla operativa: sin hoja activa asignada => maquina desactivada por default.
+    estado_maquina_changed = False
+    for maq in maquinas:
+        if maq.id not in hoja_activa_por_maquina and bool(getattr(maq, 'activo', False)):
+            maq.activo = False
+            estado_maquina_changed = True
+
+    if estado_maquina_changed:
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
     # Orden operativo por tipo y consecutivo (#01, #02, ...)
     tipo_priority = {
@@ -862,7 +931,7 @@ def hojas_ruta_list():
     # Obtener hoja activa para cada máquina
     maquinas_data = []
     for maq in maquinas:
-        hoja_activa = HojaRuta.query.filter_by(maquina_id=maq.id, estado='activa').first()
+        hoja_activa = hoja_activa_por_maquina.get(maq.id)
         estacion_actual = None
         tiempo_real = None
         if hoja_activa:
@@ -928,6 +997,7 @@ def hojas_ruta_list():
 
 @app.route('/mapa_maquinas')
 @login_required
+@requires_permission('catalog', 'view')
 def mapa_maquinas():
     """Vista de mapa de maquinas con estado en tiempo real."""
     return render_template('mapa_maquinas.html')
@@ -937,7 +1007,24 @@ def mapa_maquinas():
 @login_required
 def api_mapa_maquinas():
     """Datos para el mapa de maquinas (estado, hoja activa, pieza, tiempo)."""
-    maquinas = Máquina.query.filter_by(activo=True).order_by(Máquina.nombre.asc()).all()
+    todas_maquinas = Máquina.query.order_by(Máquina.nombre.asc()).all()
+    hojas_activas = HojaRuta.query.filter(HojaRuta.maquina_id.isnot(None), HojaRuta.estado == 'activa').all()
+    hoja_activa_por_maquina = {h.maquina_id: h for h in hojas_activas if h.maquina_id is not None}
+
+    # Regla operativa: sin hoja activa asignada => maquina desactivada por default.
+    estado_maquina_changed = False
+    for maq in todas_maquinas:
+        if maq.id not in hoja_activa_por_maquina and bool(getattr(maq, 'activo', False)):
+            maq.activo = False
+            estado_maquina_changed = True
+
+    if estado_maquina_changed:
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    maquinas = [m for m in todas_maquinas if bool(getattr(m, 'activo', False))]
     data = []
     now_dt = datetime.utcnow()
 
@@ -949,7 +1036,7 @@ def api_mapa_maquinas():
     productive_day = 0
     productive_week = 0
     for idx, maq in enumerate(maquinas):
-        hoja_activa = HojaRuta.query.filter_by(maquina_id=maq.id, estado='activa').first()
+        hoja_activa = hoja_activa_por_maquina.get(maq.id)
         estacion_actual = None
         tiempo_objetivo = None
         tiempo_transcurrido = None
@@ -1071,6 +1158,7 @@ def api_mapa_maquinas():
 
 @app.route('/hojas_ruta_form')
 @login_required
+@requires_permission('catalog', 'view')
 def hojas_ruta_form():
     """Formulario simplificado para crear hojas de ruta de produccion."""
     almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria']
@@ -2081,7 +2169,12 @@ def api_list_roles():
     if not is_admin_user():
         return jsonify({'error': 'Permiso denegado'}), 403
     roles = Role.query.order_by(Role.name).all()
-    return jsonify({'roles': [r.to_dict() for r in roles]})
+    data = []
+    for r in roles:
+        item = r.to_dict()
+        item['modules'] = _role_modules_from_permissions(r)
+        data.append(item)
+    return jsonify({'roles': data})
 
 
 @app.route('/api/roles/<int:role_id>/permissions', methods=['PUT'])
@@ -2108,10 +2201,12 @@ def api_set_role_modules(role_id):
     payload = request.get_json() or {}
     modules = payload.get('modules', [])
     role = Role.query.get_or_404(role_id)
-    role.set_modules(modules)
+    _apply_role_modules(role, modules)
     db.session.add(role)
     db.session.commit()
-    return jsonify({'ok': True, 'role': role.to_dict()})
+    role_data = role.to_dict()
+    role_data['modules'] = _role_modules_from_permissions(role)
+    return jsonify({'ok': True, 'role': role_data})
 
 
 @app.route('/api/users', methods=['POST'])
@@ -2258,6 +2353,7 @@ def delete_nonadmin_users():
 
 @app.route('/proveedores')
 @login_required
+@requires_permission('catalog', 'view')
 def proveedores():
     """Página de gestión de proveedores"""
     return render_template('proveedores.html')
@@ -2268,6 +2364,7 @@ def reportar_incidencia():
 
 @app.route('/soporte')
 @login_required
+@requires_permission('tickets', 'view')
 def soporte_tecnico():
     """Panel de ingenieros para gestionar tickets de soporte"""
     return render_template('soporte_tecnico.html')
@@ -2276,6 +2373,7 @@ def soporte_tecnico():
 # ========== Paneles de Tickets (rutas asignadas) ===========
 @app.route('/tickets')
 @login_required
+@requires_permission('tickets', 'view')
 def tickets_panel():
     """Panel de tickets para usuarios (mis tickets)."""
     return render_template('tickets.html')

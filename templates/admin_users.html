@@ -220,10 +220,10 @@ document.getElementById('btn-delete-nonadmin').addEventListener('click', async (
 
 // Roles / Módulos modal wiring
 const MODULES = [
-    {id: 'catalog', label: 'CATÁLOGO', icon: '📊'},
-    {id: 'soporte', label: 'SOPORTE', icon: '🔧'},
-    {id: 'admin_catalog', label: 'ADMINISTRACIÓN CATÁLOGO', icon: '⚙️'},
-    {id: 'configuracion', label: 'CONFIGURACIÓN', icon: '🔑'}
+    {id: 'catalog', label: 'CATÁLOGO (SOLO VISTA)', icon: '📊'},
+    {id: 'admin_catalog', label: 'CATÁLOGO (EDICIÓN)', icon: '⚙️'},
+    {id: 'soporte', label: 'TICKETS (SOLO VISTA)', icon: '🔧'},
+    {id: 'soporte_edit', label: 'TICKETS (EDICIÓN / EXPORTAR)', icon: '🛠️'}
 ];
 
 document.getElementById('btn-manage-roles').addEventListener('click', async ()=>{
