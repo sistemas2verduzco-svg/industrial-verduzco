@@ -326,7 +326,7 @@
                         <td>{{ h.id }}</td>
                         <td>{{ h.serie or '' }}</td>
                         <td>{{ h.clave or '' }}</td>
-                        <td>{{ (h.descripcion_clave or '')[:70] }}{% if h.descripcion_clave and h.descripcion_clave|length > 70 %}...{% endif %}</td>
+                        <td>{{ (h.descripcion_clave or h.clave or '')[:70] }}{% if (h.descripcion_clave or h.clave) and (h.descripcion_clave or h.clave)|length > 70 %}...{% endif %}</td>
                         <td>{{ h.calidad or '' }}</td>
                         <td>{{ h.fecha_salida[:16] if h.fecha_salida else '' }}</td>
                         <td>{{ h.cantidad_piezas or '' }}</td>

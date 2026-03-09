@@ -243,7 +243,8 @@ def _resolve_clave_descripcion_by_pn(pn_value):
     normalized = pn.upper()
     clave = ClaveProducto.query.filter(func.upper(func.trim(ClaveProducto.clave)) == normalized).first()
     if not clave:
-        return ''
+        # Fallback: at least show the key code for legacy hojas.
+        return pn
 
     notas = (getattr(clave, 'notas', None) or '').strip()
     if notas:
@@ -256,7 +257,8 @@ def _resolve_clave_descripcion_by_pn(pn_value):
         if desc:
             return desc
 
-    return ''
+    # Final fallback for legacy data without notes/description.
+    return (getattr(clave, 'clave', None) or pn)
 
 
 def _sync_hoja_estado_with_checks(hoja, estaciones=None, now_dt=None):
