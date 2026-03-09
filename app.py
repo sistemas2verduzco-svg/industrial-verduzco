@@ -870,7 +870,7 @@ def mapa_maquinas():
 @login_required
 def api_mapa_maquinas():
     """Datos para el mapa de maquinas (estado, hoja activa, pieza, tiempo)."""
-    maquinas = Máquina.query.order_by(Máquina.nombre.asc()).all()
+    maquinas = Máquina.query.filter_by(activo=True).order_by(Máquina.nombre.asc()).all()
     data = []
     for idx, maq in enumerate(maquinas):
         hoja_activa = HojaRuta.query.filter_by(maquina_id=maq.id, estado='activa').first()
