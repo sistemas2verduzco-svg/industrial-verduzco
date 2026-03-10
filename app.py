@@ -511,17 +511,13 @@ def login():
             session['user'] = username
             logger.info(f"[LOGIN] ✓ Sesión iniciada para {username}")
             
-            # Redirigir automáticamente según rol
-            if usuario.es_admin:
-                logger.info(f"[LOGIN] Redirigiendo admin '{username}' a /admin")
-                return redirect(url_for('admin'))
-            elif usuario.role and usuario.role.name == 'support':
-                logger.info(f"[LOGIN] Redirigiendo ingeniero '{username}' a /soporte")
-                return redirect(url_for('soporte_tecnico'))
-            else:
-                # Usuario sin rol asignado
-                logger.warning(f"[LOGIN] Usuario '{username}' sin rol asignado; redirigiendo a /dashboard")
-                return redirect(url_for('dashboard'))
+            endpoint = _resolve_post_login_endpoint(usuario)
+            if endpoint:
+                logger.info(f"[LOGIN] Redirigiendo usuario '{username}' a /{endpoint}")
+                return redirect(url_for(endpoint))
+
+            logger.warning(f"[LOGIN] Usuario '{username}' autenticado sin módulos asignados; redirigiendo a /dashboard")
+            return redirect(url_for('dashboard'))
         else:
             # Gestionar intentos fallidos
             if not app.config.get('TESTING', False):
@@ -558,6 +554,31 @@ def get_current_user():
         return Usuario.query.filter_by(username=username, activo=True).first()
     except Exception:
         return None
+
+
+def _resolve_post_login_endpoint(user):
+    """Choose landing page based on effective module permissions."""
+    if not user:
+        return None
+    if user.es_admin:
+        return 'admin'
+
+    if user.has_permission('catalog', 'view'):
+        return 'index'
+    if user.has_permission('estaciones', 'view'):
+        return 'hojas_ruta_list'
+    if user.has_permission('mapa', 'view'):
+        return 'mapa_maquinas'
+    if user.has_permission('hojas', 'view'):
+        return 'hojas_ruta_form'
+    if user.has_permission('calidad', 'view'):
+        return 'control_calidad_list'
+    if user.has_permission('tickets', 'view'):
+        return 'soporte_tecnico'
+    if user.has_permission('proveedores', 'view') or user.has_permission('proveedores', 'edit'):
+        return 'proveedores'
+
+    return None
 
 
 @app.context_processor
@@ -844,16 +865,13 @@ def dashboard():
     user = get_current_user()
     if not user:
         return redirect(url_for('login'))
-    
-    # Admin → ir a admin
-    if user.es_admin:
-        return redirect(url_for('admin'))
-    # Ingeniero de soporte → ir a soporte
-    elif user.role and user.role.name == 'support':
-        return redirect(url_for('soporte_tecnico'))
-    # Otro rol → mostrar página genérica de bienvenida
-    else:
-        return render_template('dashboard.html', user=user)
+
+    endpoint = _resolve_post_login_endpoint(user)
+    if endpoint and endpoint != 'dashboard':
+        return redirect(url_for(endpoint))
+
+    has_any_module = bool(user and user.role and user.role.permissions)
+    return render_template('dashboard.html', user=user, has_any_module=has_any_module)
 
 # ==================== RUTAS FRONTEND ====================
 

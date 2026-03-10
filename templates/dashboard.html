@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - ERP Catálogo</title>
+    <title>Dashboard - Sistema de Control de Producción</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <style>
         body {
@@ -124,8 +124,8 @@
 <body>
     {% include '_sidebar.html' %}
     <div class="dashboard-container">
-        <h1>🎉 Bienvenido al ERP</h1>
-        <p>Catálogo Web Integrado</p>
+        <h1>Bienvenido al Sistema</h1>
+        <p>Sistema de Control de Producción</p>
 
         <div class="user-info">
             <div><strong>Usuario:</strong> {{ user.username }}</div>
@@ -136,9 +136,11 @@
             {% endif %}
         </div>
 
+        {% if not has_any_module %}
         <div class="message">
-            ℹ️ Tu cuenta no tiene un rol específico asignado. Contacta al administrador para solicitar acceso a módulos específicos.
+            ℹ️ Tu cuenta está activa pero aún no tiene módulos asignados. Contacta al administrador para habilitar acceso.
         </div>
+        {% endif %}
 
         <div class="btn-container">
             <a href="{{ url_for('reportar_incidencia') }}" class="btn btn-primary">📋 Reportar Incidencia</a>
@@ -148,7 +150,7 @@
         <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
         
         <p style="color: #999; font-size: 12px; margin: 0;">
-            Sistema ERP v1.0 | Todos los derechos reservados © 2025
+            Sistema de Control de Producción | Uso interno de la empresa
         </p>
     </div>
 </body>
