@@ -901,6 +901,9 @@
             <label style="display:block; font-weight:700; font-size:12px; margin-bottom:6px; color:#48627d;">Hoja pendiente</label>
             <select id="asignarHojaId"></select>
             <div id="asignarHojaResumen" class="modal-hint"></div>
+            <label style="display:block; font-weight:700; font-size:12px; margin:10px 0 6px; color:#48627d;">Iniciar desde proceso (temporal)</label>
+            <select id="asignarProcesoInicio"></select>
+            <div id="asignarProcesoHint" class="modal-hint">Si seleccionas un proceso avanzado, los anteriores se marcaran como completados de forma temporal.</div>
             <div class="modal-actions">
                 <button class="btn-light" onclick="cerrarModalAsignar()">Cancelar</button>
                 <button class="btn-small btn-primary-small" onclick="guardarAsignacion()">Asignar</button>
@@ -959,6 +962,38 @@
     function getMachineNameById(id) {
         const m = maquinasCatalogo.find(x => Number(x.id) === Number(id));
         return m ? m.nombre : `ID ${id}`;
+    }
+
+    function getHojaPendienteById(hojaId) {
+        return hojasPendientes.find(h => Number(h.id) === Number(hojaId));
+    }
+
+    function renderProcesoInicioOptions(hojaId) {
+        const sel = document.getElementById('asignarProcesoInicio');
+        if (!sel) return;
+        sel.innerHTML = '';
+
+        const defaultOpt = document.createElement('option');
+        defaultOpt.value = '';
+        defaultOpt.textContent = 'Automatico (siguiente pendiente)';
+        sel.appendChild(defaultOpt);
+
+        const hoja = getHojaPendienteById(hojaId);
+        if (!hoja || !Array.isArray(hoja.estaciones) || !hoja.estaciones.length) {
+            return;
+        }
+
+        const estaciones = [...hoja.estaciones].sort((a, b) => Number(a.orden || 0) - Number(b.orden || 0));
+        estaciones.forEach(est => {
+            const opt = document.createElement('option');
+            opt.value = est.id;
+            const estado = (est.estado || 'pendiente').toLowerCase();
+            opt.textContent = `#${est.orden || '-'} ${est.operacion || 'Proceso'} (${estado})`;
+            if (estado !== 'completada' && !sel.value) {
+                opt.selected = false;
+            }
+            sel.appendChild(opt);
+        });
     }
 
     function initRealtimeClocks() {
@@ -1058,6 +1093,7 @@
         const maquinaHint = document.getElementById('asignarMaquinaHint');
         const select = document.getElementById('asignarHojaId');
         const hojaResumen = document.getElementById('asignarHojaResumen');
+        const procesoSel = document.getElementById('asignarProcesoInicio');
 
         maquinaInput.value = maquinaId || '';
         maquinaLabel.textContent = maquinaNombre || 'Selecciona máquina';
@@ -1104,6 +1140,9 @@
             });
         }
 
+        renderProcesoInicioOptions(preselectHojaId || select.value);
+        if (procesoSel) procesoSel.value = '';
+
         if (hojaEscaneada) {
             hojaResumen.textContent = `Escaneada: ${hojaEscaneada.serie || ('HOJA ' + hojaEscaneada.id)} | Clave: ${hojaEscaneada.clave || '-'} | Estado: ${hojaEscaneada.estado || '-'}`;
         } else {
@@ -1114,6 +1153,8 @@
         select.onchange = () => {
             const opt = select.options[select.selectedIndex];
             hojaResumen.textContent = opt ? `Seleccionada: ${opt.textContent}` : '';
+            renderProcesoInicioOptions(select.value);
+            if (procesoSel) procesoSel.value = '';
         };
 
         document.getElementById('modalAsignar').style.display = 'flex';
@@ -1246,6 +1287,7 @@
         const maquinaFromSelect = parseInt(document.getElementById('asignarMaquinaSelect').value, 10);
         const maquinaId = maquinaFromHidden || maquinaFromSelect;
         const hojaId = parseInt(document.getElementById('asignarHojaId').value, 10);
+        const procesoInicioId = parseInt(document.getElementById('asignarProcesoInicio').value, 10);
         if (!maquinaId) {
             alert('Selecciona una máquina para asignar la hoja.');
             return;
@@ -1260,7 +1302,10 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'same-origin',
-                body: JSON.stringify({ hoja_id: hojaId })
+                body: JSON.stringify({
+                    hoja_id: hojaId,
+                    start_estacion_id: Number.isNaN(procesoInicioId) ? null : procesoInicioId
+                })
             });
             const data = await res.json();
             if (!res.ok) {

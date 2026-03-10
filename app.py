@@ -1904,6 +1904,7 @@ def api_asignar_hoja_maquina(maquina_id):
     maq = Máquina.query.get_or_404(maquina_id)
     data = request.get_json() or {}
     hoja_id = data.get('hoja_id')
+    start_estacion_id = data.get('start_estacion_id')
     if not hoja_id:
         return jsonify({'error': 'hoja_id requerido'}), 400
 
@@ -1922,14 +1923,45 @@ def api_asignar_hoja_maquina(maquina_id):
         hoja.estado = 'activa'
 
         estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
-        # Si no hay proceso en curso, arrancar el siguiente pendiente al asignar.
-        en_curso = next((e for e in estaciones if (e.estado or '').lower() == 'en_curso'), None)
-        if not en_curso:
-            siguiente = next((e for e in estaciones if (e.estado or 'pendiente').lower() != 'completada'), None)
-            if siguiente:
-                siguiente.estado = 'en_curso'
-                if not siguiente.fecha_inicio:
-                    siguiente.fecha_inicio = datetime.utcnow()
+        now_ref = datetime.utcnow()
+
+        # Modo temporal: permitir iniciar desde un proceso avanzado al asignar.
+        if start_estacion_id:
+            try:
+                start_estacion_id = int(start_estacion_id)
+            except Exception:
+                return jsonify({'error': 'start_estacion_id invalido'}), 400
+
+            objetivo = next((e for e in estaciones if e.id == start_estacion_id), None)
+            if not objetivo:
+                return jsonify({'error': 'El proceso inicial seleccionado no pertenece a la hoja'}), 409
+
+            for e in estaciones:
+                if (e.orden or 0) < (objetivo.orden or 0):
+                    # Adelanto temporal: asumir completados los anteriores.
+                    e.estado = 'completada'
+                    if not e.fecha_inicio:
+                        e.fecha_inicio = now_ref
+                    if not e.fecha_finalizacion:
+                        e.fecha_finalizacion = now_ref
+                elif e.id == objetivo.id:
+                    e.estado = 'en_curso'
+                    if not e.fecha_inicio:
+                        e.fecha_inicio = now_ref
+                    e.fecha_finalizacion = None
+                else:
+                    if (e.estado or '').lower() != 'completada':
+                        e.estado = 'pendiente'
+                        e.fecha_finalizacion = None
+        else:
+            # Si no hay proceso en curso, arrancar el siguiente pendiente al asignar.
+            en_curso = next((e for e in estaciones if (e.estado or '').lower() == 'en_curso'), None)
+            if not en_curso:
+                siguiente = next((e for e in estaciones if (e.estado or 'pendiente').lower() != 'completada'), None)
+                if siguiente:
+                    siguiente.estado = 'en_curso'
+                    if not siguiente.fecha_inicio:
+                        siguiente.fecha_inicio = now_ref
 
         _apply_hoja_time_plan(
             hoja,
