@@ -1944,6 +1944,20 @@ def api_asignar_hoja_maquina(maquina_id):
                         e.fecha_inicio = now_ref
                     if not e.fecha_finalizacion:
                         e.fecha_finalizacion = now_ref
+
+                    # Enviar automaticamente a calidad como pendiente de revision.
+                    notas_src = e.notas or ''
+                    has_qc_status = re.search(r'STATUS=(QC_OK|QC_NOK)', notas_src or '') is not None
+                    if not has_qc_status:
+                        qc_pending_block = (
+                            "[AUTO_ADVANCE_START]\n"
+                            "STATUS=QC_PENDING\n"
+                            "ORIGEN=Adelanto_Proceso_Asignacion\n"
+                            f"FECHA={now_ref.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                            "NOTA=Proceso marcado como completado por adelanto temporal; requiere revision de Calidad.\n"
+                            "[AUTO_ADVANCE_END]"
+                        )
+                        e.notas = (notas_src.strip() + "\n" + qc_pending_block).strip() if notas_src else qc_pending_block
                 elif e.id == objetivo.id:
                     e.estado = 'en_curso'
                     if not e.fecha_inicio:
@@ -1953,6 +1967,10 @@ def api_asignar_hoja_maquina(maquina_id):
                     if (e.estado or '').lower() != 'completada':
                         e.estado = 'pendiente'
                         e.fecha_finalizacion = None
+
+            # Mantener hoja en espera de liberacion QC (no auto-liberar por adelanto).
+            hoja.aprobada = False
+            hoja.rechazada = False
         else:
             # Si no hay proceso en curso, arrancar el siguiente pendiente al asignar.
             en_curso = next((e for e in estaciones if (e.estado or '').lower() == 'en_curso'), None)
