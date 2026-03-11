@@ -30,6 +30,12 @@
       <!-- Catálogo de procesos -->
       <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
         <h3 style="margin:0 0 12px; font-size:16px; color:#2d3748; font-weight:600;">Catálogo de Procesos</h3>
+        <div style="background:#f7fafc; border:1px dashed #cbd5e0; border-radius:8px; padding:10px; margin-bottom:12px;">
+          <div style="font-size:13px; color:#4a5568; margin-bottom:8px;">Importar procesos y claves desde archivo</div>
+          <input type="file" id="archivo-importar-procesos" accept=".xlsx,.xls,.csv" style="display:none;">
+          <button type="button" id="btnImportarProcesos" class="btn" style="padding:8px 12px; border:none; background:#2f855a; color:#fff; border-radius:6px; cursor:pointer; font-size:13px; font-weight:500;">📤 Seleccionar archivo</button>
+          <small id="archivo-procesos-nombre" style="display:block; margin-top:6px; color:#666;"></small>
+        </div>
         <form id="formProceso" action="{{ url_for('procesos_base_save') }}" method="POST" style="display:grid; gap:10px; margin-bottom:12px;">
           <input type="hidden" name="id" id="proc_id">
           <div>
@@ -488,5 +494,47 @@
   // Initial calculation if rows exist
   if (document.querySelectorAll('#tbodySecuencia tr').length > 0) {
     calcularTiempos();
+  }
+
+  // Importador de procesos/claves en este módulo
+  const btnImportarProcesos = document.getElementById('btnImportarProcesos');
+  const inputImportarProcesos = document.getElementById('archivo-importar-procesos');
+  const statusImportProcesos = document.getElementById('archivo-procesos-nombre');
+
+  if (btnImportarProcesos && inputImportarProcesos) {
+    btnImportarProcesos.addEventListener('click', () => inputImportarProcesos.click());
+    inputImportarProcesos.addEventListener('change', async (e) => {
+      const archivo = e.target.files && e.target.files[0];
+      if (!archivo) return;
+
+      if (statusImportProcesos) statusImportProcesos.textContent = `Cargando: ${archivo.name}...`;
+
+      const formData = new FormData();
+      formData.append('file', archivo);
+
+      try {
+        const response = await fetch('/api/procesos/importar-excel', {
+          method: 'POST',
+          body: formData,
+          credentials: 'same-origin'
+        });
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+          const msg = (data && data.error) ? data.error : 'Error al importar procesos';
+          alert(`Error: ${msg}`);
+          if (data && data.output) console.error('Salida import procesos:', data.output);
+        } else {
+          alert('Importación de procesos completada. Se recargará la vista.');
+          window.location.reload();
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error de red al importar procesos.');
+      } finally {
+        if (statusImportProcesos) statusImportProcesos.textContent = '';
+        inputImportarProcesos.value = '';
+      }
+    });
   }
 </script>
