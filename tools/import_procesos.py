@@ -212,18 +212,59 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     
     # Renombrar columnas
     df = df.rename(columns=col_map)
-    df.columns = [c.strip().lower() for c in df.columns]
+    df.columns = [str(c).strip().lower() for c in df.columns]
     
     print(f"Columnas mapeadas a: {list(df.columns)}")
+    return df
+
+
+def parse_excel_tabular(path: str, sheet: Optional[str], header_row: int = 0) -> pd.DataFrame:
+    """Parse alternativo para archivos en formato tabular con encabezados."""
+    ext = os.path.splitext(path)[1].lower()
+    if ext in (".xlsx", ".xls"):
+        sheet_name = sheet if sheet else 0
+        df = pd.read_excel(path, sheet_name=sheet_name, header=header_row)
+    else:
+        df = pd.read_csv(path, header=header_row)
+
+    # Limpiar filas/columnas totalmente vacías
+    df = df.dropna(axis=0, how='all').dropna(axis=1, how='all')
+    if len(df) == 0:
+        return df
+
+    df = normalize_columns(df)
+
+    # Normalizar valores mínimos
+    for col in ('clave', 'centro_trabajo', 'operacion'):
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.strip()
+
+    # Filtrar filas sin datos básicos
+    required_base = {'clave', 'centro_trabajo', 'operacion'}
+    if required_base.issubset(set(df.columns)):
+        df = df[(df['clave'] != '') & (df['centro_trabajo'] != '') & (df['operacion'] != '')].copy()
+
+    # Si no existe orden, generarlo por clave
+    if 'orden' not in df.columns and 'clave' in df.columns:
+        df['orden'] = df.groupby('clave', sort=False).cumcount() + 1
+
+    print(f"\nRegistros parseados (tabular): {len(df)}")
+    if 'clave' in df.columns and len(df) > 0:
+        print(f"Claves únicas (tabular): {df['clave'].nunique()}")
     return df
 
 
 # --- Import logic ---------------------------------------------------------
 
 def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: int = 0) -> None:
-    # Parsear el Excel con formato de bloques
+    # Parsear el Excel con formato de bloques; si no detecta filas, intentar formato tabular.
     df = parse_excel_blocks(path, sheet)
-    
+    source_mode = 'blocks'
+    if len(df) == 0:
+        print("\n⚠ No se detectó formato por bloques; intentando parse tabular...")
+        df = parse_excel_tabular(path, sheet, header_row=header_row)
+        source_mode = 'tabular'
+
     if len(df) == 0:
         raise ValueError("No se encontraron datos válidos en el archivo")
 
@@ -233,7 +274,7 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
         raise ValueError(f"Faltan columnas requeridas: {missing}\nColumnas disponibles: {list(df.columns)}")
 
     # Detectar claves duplicadas (múltiples bloques)
-    if 'block_id' in df.columns:
+    if source_mode == 'blocks' and 'block_id' in df.columns:
         max_block_per_clave = df.groupby('clave')['block_id'].max()
         claves_duplicadas = max_block_per_clave[max_block_per_clave > 0]
         if len(claves_duplicadas) > 0:
