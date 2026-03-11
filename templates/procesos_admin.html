@@ -32,6 +32,11 @@
         <h3 style="margin:0 0 12px; font-size:16px; color:#2d3748; font-weight:600;">Catálogo de Procesos</h3>
         <div style="background:#f7fafc; border:1px dashed #cbd5e0; border-radius:8px; padding:10px; margin-bottom:12px;">
           <div style="font-size:13px; color:#4a5568; margin-bottom:8px;">Importar procesos y claves desde archivo</div>
+          <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
+            <label for="import-procesos-sheet" style="font-size:12px; color:#4a5568;">Hoja:</label>
+            <input id="import-procesos-sheet" type="text" value="TIEMPOS" placeholder="Ej. TIEMPOS" style="padding:6px 8px; border:1px solid #cbd5e0; border-radius:6px; font-size:12px; min-width:140px;">
+            <span style="font-size:11px; color:#718096;">Usa la hoja que ya te funciona por comando en servidor.</span>
+          </div>
           <input type="file" id="archivo-importar-procesos" accept=".xlsx,.xls,.csv" style="display:none;">
           <button type="button" id="btnImportarProcesos" class="btn" style="padding:8px 12px; border:none; background:#2f855a; color:#fff; border-radius:6px; cursor:pointer; font-size:13px; font-weight:500;">📤 Seleccionar archivo</button>
           <small id="archivo-procesos-nombre" style="display:block; margin-top:6px; color:#666;"></small>
@@ -500,6 +505,7 @@
   const btnImportarProcesos = document.getElementById('btnImportarProcesos');
   const inputImportarProcesos = document.getElementById('archivo-importar-procesos');
   const statusImportProcesos = document.getElementById('archivo-procesos-nombre');
+  const inputImportSheet = document.getElementById('import-procesos-sheet');
 
   if (btnImportarProcesos && inputImportarProcesos) {
     btnImportarProcesos.addEventListener('click', () => inputImportarProcesos.click());
@@ -511,6 +517,10 @@
 
       const formData = new FormData();
       formData.append('file', archivo);
+      const sheetName = (inputImportSheet?.value || '').trim();
+      if (sheetName) {
+        formData.append('sheet', sheetName);
+      }
 
       try {
         const response = await fetch('/api/procesos/importar-excel', {

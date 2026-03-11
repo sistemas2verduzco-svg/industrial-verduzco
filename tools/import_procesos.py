@@ -195,8 +195,8 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
         'clave': ['clave', 'CLAVE', 'Clave', 'PROC.', 'proc'],
         'nombre_clave': ['nombre_clave', 'nombre clave', 'NOMBRE', 'nombre', 'Nombre'],
         'orden': ['orden', 'ORDEN', 'Orden', 'Nº', 'nº', 'no', 'NO'],
-        'centro_trabajo': ['centro_trabajo', 'centro trabajo', 'CT', 'c.t.', 'C.T.', 'CENTRO_TRABAJO'],
-        'operacion': ['operacion', 'OPERACIÓN', 'operación', 'OPERACION', 'operación', 'Operación'],
+        'centro_trabajo': ['centro_trabajo', 'centro trabajo', 'CT', 'c.t.', 'C.T.', 'CENTRO_TRABAJO', 'h. ruta', 'h.ruta', 'hoja ruta', 'ruta'],
+        'operacion': ['operacion', 'OPERACIÓN', 'operación', 'OPERACION', 'operación', 'Operación', 'concepto'],
         'tiempo_estimado': ['tiempo_estimado', 'tiempo estimado', 't/e', 'T/E', 'T/E (HH:MM:SS)', 'TIEMPO_ESTIMADO'],
         'notas_paso': ['notas_paso', 'notas paso', 'notas', 'NOTAS', 'Notas', 'observaciones'],
         'notas_clave': ['notas_clave', 'notas clave', 'notas'],
@@ -233,6 +233,18 @@ def parse_excel_tabular(path: str, sheet: Optional[str], header_row: int = 0) ->
         return df
 
     df = normalize_columns(df)
+
+    # Fallbacks para formatos operativos (ej: OT_JOSE_ACTUALIZACION2.xlsx)
+    if 'operacion' not in df.columns and 'concepto' in df.columns:
+        df['operacion'] = df['concepto']
+    if 'centro_trabajo' not in df.columns and 'h. ruta' in df.columns:
+        df['centro_trabajo'] = df['h. ruta']
+    if 'centro_trabajo' not in df.columns and 'h.ruta' in df.columns:
+        df['centro_trabajo'] = df['h.ruta']
+
+    # Si aún falta centro de trabajo, usar valor por defecto para no bloquear importación
+    if 'centro_trabajo' not in df.columns:
+        df['centro_trabajo'] = 'GENERAL'
 
     # Normalizar valores mínimos
     for col in ('clave', 'centro_trabajo', 'operacion'):
