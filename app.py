@@ -1511,6 +1511,11 @@ def hojas_ruta_form():
         qr_payload = f"HRID:{h.id};SERIE:{h.nombre or ''}"
         descripcion_clave = _resolve_clave_descripcion_by_pn(h.pn)
         clave_obj = claves_idx.get(str(h.pn or '').strip().upper())
+        comentarios_val = _clean_nullable_text(h.materia_prima)
+        if not comentarios_val:
+            legacy_desc = _clean_nullable_text(h.descripcion)
+            if legacy_desc and legacy_desc != _clean_nullable_text(descripcion_clave):
+                comentarios_val = legacy_desc
         hojas_data.append({
             'id': h.id,
             'maquina_id': h.maquina_id,
@@ -1522,7 +1527,7 @@ def hojas_ruta_form():
             'calidad': h.calidad,
             'almacen': h.almacen,
             'orden_trabajo': h.orden_trabajo_hr,
-            'comentarios': h.materia_prima,
+            'comentarios': comentarios_val,
             'firma_ing_jose': h.supervisor,
             'firma_ing_rodrigo': h.operador,
             'estado': h.estado,
@@ -1882,6 +1887,10 @@ def api_actualizar_hoja_ruta(hoja_id):
         if cantidad <= 0:
             return jsonify({'error': 'cantidad_piezas debe ser mayor a 0'}), 400
         hoja.cantidad_piezas = cantidad
+
+    # Regla de negocio: descripcion de hoja siempre proviene de la clave actual.
+    if hoja.pn:
+        hoja.descripcion = _resolve_clave_descripcion_by_pn(hoja.pn)
 
     estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
     maquina = Máquina.query.get(hoja.maquina_id) if hoja.maquina_id else None
