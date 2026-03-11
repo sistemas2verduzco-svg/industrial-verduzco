@@ -1499,16 +1499,25 @@ def hojas_ruta_form():
     almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria']
     # Listado reciente (máximo 50) para consulta rápida
     hojas = HojaRuta.query.order_by(HojaRuta.fecha_creacion.desc()).limit(50).all()
+    claves_all = ClaveProducto.query.all()
+    claves_idx = {
+        (str(c.clave or '').strip().upper()): c
+        for c in claves_all
+        if str(c.clave or '').strip()
+    }
+
     hojas_data = []
     for h in hojas:
         qr_payload = f"HRID:{h.id};SERIE:{h.nombre or ''}"
         descripcion_clave = _resolve_clave_descripcion_by_pn(h.pn)
+        clave_obj = claves_idx.get(str(h.pn or '').strip().upper())
         hojas_data.append({
             'id': h.id,
             'maquina_id': h.maquina_id,
             'serie': h.nombre,
             'qr_payload': qr_payload,
             'clave': h.pn,
+            'clave_id': clave_obj.id if clave_obj else None,
             'descripcion_clave': descripcion_clave,
             'calidad': h.calidad,
             'almacen': h.almacen,
@@ -1833,6 +1842,22 @@ def api_actualizar_hoja_ruta(hoja_id):
     
     if 'estado' in data:
         hoja.estado = data['estado']
+    if 'clave_id' in data and data.get('clave_id') is not None:
+        try:
+            clave_id = int(data.get('clave_id'))
+        except Exception:
+            return jsonify({'error': 'clave_id inválido'}), 400
+
+        if clave_id <= 0:
+            return jsonify({'error': 'clave_id inválido'}), 400
+
+        clave_obj = ClaveProducto.query.get(clave_id)
+        if not clave_obj:
+            return jsonify({'error': 'Clave no encontrada'}), 404
+
+        hoja.pn = clave_obj.clave
+        hoja.producto = _clean_nullable_text(clave_obj.nombre) or clave_obj.clave
+        hoja.descripcion = _resolve_clave_descripcion_by_pn(clave_obj.clave)
     if 'nombre' in data:
         hoja.nombre = data['nombre']
     if 'descripcion' in data:

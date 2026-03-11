@@ -415,6 +415,8 @@
                                 type="button"
                                 class="btn-edit"
                                 data-hoja-id="{{ h.id }}"
+                                data-clave-id="{{ h.clave_id or '' }}"
+                                data-clave="{{ (h.clave or '')|e }}"
                                 data-calidad="{{ (h.calidad or '')|e }}"
                                 data-cantidad="{{ h.cantidad_piezas or '' }}"
                                 data-almacen="{{ (h.almacen or '')|e }}"
@@ -451,6 +453,12 @@
             <input type="hidden" id="edit_hoja_id">
 
             <div class="grid">
+                <div>
+                    <label>Clave</label>
+                    <select id="edit_clave_id">
+                        <option value="">Selecciona clave</option>
+                    </select>
+                </div>
                 <div>
                     <label>Calidad</label>
                     <select id="edit_calidad">
@@ -646,6 +654,7 @@
 
         async function loadClaves(retry = 0) {
             const select = document.getElementById('clave_id');
+            const editSelect = document.getElementById('edit_clave_id');
             try {
                 const res = await fetch('/api/claves_procesos', { credentials: 'same-origin' });
                 let payload = null;
@@ -663,12 +672,23 @@
 
                 clavesData = Array.isArray(payload) ? payload : [];
                 select.innerHTML = '<option value="">Selecciona clave</option>';
+                if (editSelect) {
+                    editSelect.innerHTML = '<option value="">Selecciona clave</option>';
+                }
                 clavesData.forEach(c => {
                     const opt = document.createElement('option');
                     opt.value = c.id;
                     opt.dataset.clave = c.clave || '';
                     opt.textContent = (c.clave || '') + ' - ' + (c.nombre || c.clave || 'Sin nombre');
                     select.appendChild(opt);
+
+                    if (editSelect) {
+                        const eOpt = document.createElement('option');
+                        eOpt.value = c.id;
+                        eOpt.dataset.clave = c.clave || '';
+                        eOpt.textContent = (c.clave || '') + ' - ' + (c.nombre || c.clave || 'Sin nombre');
+                        editSelect.appendChild(eOpt);
+                    }
                 });
             } catch (err) {
                 console.error(err);
@@ -767,6 +787,17 @@
 
         function abrirModalEdicion(btn) {
             document.getElementById('edit_hoja_id').value = btn.dataset.hojaId || '';
+            const editClave = document.getElementById('edit_clave_id');
+            if (editClave) {
+                const claveId = btn.dataset.claveId || '';
+                if (claveId) {
+                    editClave.value = claveId;
+                } else {
+                    const claveTxt = String(btn.dataset.clave || '').trim().toUpperCase();
+                    const match = Array.from(editClave.options).find(o => String(o.dataset.clave || '').trim().toUpperCase() === claveTxt);
+                    editClave.value = match ? match.value : '';
+                }
+            }
             document.getElementById('edit_calidad').value = btn.dataset.calidad || '';
             document.getElementById('edit_cantidad').value = btn.dataset.cantidad || '';
             document.getElementById('edit_almacen').value = btn.dataset.almacen || '';
@@ -789,7 +820,9 @@
 
         async function guardarEdicionHoja() {
             const hojaId = parseInt(document.getElementById('edit_hoja_id').value, 10);
+            const claveEditVal = parseInt(document.getElementById('edit_clave_id').value, 10);
             const payload = {
+                clave_id: Number.isFinite(claveEditVal) ? claveEditVal : null,
                 calidad: document.getElementById('edit_calidad').value,
                 cantidad_piezas: parseInt(document.getElementById('edit_cantidad').value, 10),
                 almacen: document.getElementById('edit_almacen').value,
@@ -800,8 +833,8 @@
                 estado: document.getElementById('edit_estado').value
             };
 
-            if (!hojaId || !payload.calidad || !payload.cantidad_piezas || !payload.almacen) {
-                alert('Completa calidad, cantidad y almacen para guardar');
+            if (!hojaId || !payload.clave_id || !payload.calidad || !payload.cantidad_piezas || !payload.almacen) {
+                alert('Completa clave, calidad, cantidad y almacen para guardar');
                 return;
             }
 
