@@ -510,6 +510,18 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    const inputArchivoProcesos = document.getElementById('archivo-importar-procesos');
+    if (inputArchivoProcesos) {
+        inputArchivoProcesos.addEventListener('change', function(e) {
+            const archivo = e.target.files[0];
+            if (archivo) {
+                const statusEl = document.getElementById('archivo-procesos-nombre');
+                if (statusEl) statusEl.textContent = `Cargando: ${archivo.name}...`;
+                importarProcesosExcel(archivo);
+            }
+        });
+    }
 });
 
 function importarExcel(archivo) {
@@ -536,6 +548,37 @@ function importarExcel(archivo) {
         console.error('Error:', error);
         mostrarMensaje('✗ Error al importar Excel', 'error');
         document.getElementById('archivo-nombre').textContent = '';
+    });
+}
+
+function importarProcesosExcel(archivo) {
+    const formData = new FormData();
+    formData.append('file', archivo);
+
+    fetch('/api/procesos/importar-excel', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json().then(data => ({ ok: response.ok, data })))
+    .then(({ ok, data }) => {
+        if (!ok || data.error) {
+            const msg = data && data.error ? data.error : 'Error al importar procesos';
+            mostrarMensaje(`✗ ${msg}`, 'error');
+            if (data && data.output) console.error('Salida import procesos:', data.output);
+        } else {
+            mostrarMensaje('✓ Importación de procesos completada', 'success');
+            if (data.output) console.log('Salida import procesos:', data.output);
+            alert('✅ Importación de procesos completada.\n\nRevisa /procesos para validar claves y secuencias.');
+        }
+
+        const statusEl = document.getElementById('archivo-procesos-nombre');
+        if (statusEl) statusEl.textContent = '';
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        mostrarMensaje('✗ Error al importar procesos', 'error');
+        const statusEl = document.getElementById('archivo-procesos-nombre');
+        if (statusEl) statusEl.textContent = '';
     });
 }
 

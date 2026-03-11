@@ -17,6 +17,8 @@ from io import BytesIO
 import uuid
 import math
 import re
+import subprocess
+import sys
 
 # Configurar logging
 logging.basicConfig(
@@ -3266,6 +3268,78 @@ def importar_excel():
     
     except Exception as e:
         return jsonify({'error': f'Error procesando Excel: {str(e)}'}), 500
+
+
+@app.route('/api/procesos/importar-excel', methods=['POST'])
+@login_required
+def importar_procesos_excel():
+    """Importar claves/procesos desde archivo Excel/CSV usando tools/import_procesos.py."""
+    if not is_admin_user():
+        return jsonify({'error': 'Solo admins pueden importar procesos'}), 403
+
+    if 'file' not in request.files:
+        return jsonify({'error': 'No se encontró archivo'}), 400
+
+    file = request.files['file']
+    if not file or file.filename == '':
+        return jsonify({'error': 'Archivo vacío'}), 400
+
+    filename = secure_filename(file.filename)
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in ('.xlsx', '.xls', '.csv'):
+        return jsonify({'error': 'Formato no soportado. Usa .xlsx, .xls o .csv'}), 400
+
+    sheet = (request.form.get('sheet') or '').strip()
+    imports_dir = os.path.join('uploads', 'imports')
+    os.makedirs(imports_dir, exist_ok=True)
+
+    tmp_name = f"procesos_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}{ext}"
+    saved_path = os.path.join(imports_dir, tmp_name)
+    abs_saved_path = os.path.abspath(saved_path)
+
+    try:
+        file.save(abs_saved_path)
+
+        cmd = [sys.executable, 'tools/import_procesos.py', '--file', abs_saved_path, '--overwrite']
+        if sheet:
+            cmd.extend(['--sheet', sheet])
+
+        result = subprocess.run(
+            cmd,
+            cwd=os.getcwd(),
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+
+        combined = '\n'.join([x for x in [result.stdout, result.stderr] if x]).strip()
+
+        if result.returncode != 0:
+            logger.error(f"[IMPORT_PROCESOS] Error importando {filename}: {combined}")
+            return jsonify({
+                'error': 'Falló la importación de procesos',
+                'output': combined[-6000:] if combined else ''
+            }), 500
+
+        logger.info(f"[IMPORT_PROCESOS] Importación OK para archivo {filename}")
+        return jsonify({
+            'ok': True,
+            'mensaje': 'Importación de procesos completada',
+            'output': combined[-6000:] if combined else 'Importación ejecutada sin salida.'
+        }), 200
+
+    except subprocess.TimeoutExpired:
+        logger.error(f"[IMPORT_PROCESOS] Timeout importando {filename}")
+        return jsonify({'error': 'La importación excedió el tiempo límite (300s)'}), 504
+    except Exception as e:
+        logger.error(f"[IMPORT_PROCESOS] Excepción importando {filename}: {e}")
+        return jsonify({'error': f'Error procesando importación: {str(e)}'}), 500
+    finally:
+        try:
+            if os.path.exists(abs_saved_path):
+                os.remove(abs_saved_path)
+        except Exception:
+            pass
 
 
 @app.route('/api/productos/bajo-stock', methods=['GET'])
