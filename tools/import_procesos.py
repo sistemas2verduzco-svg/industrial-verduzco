@@ -59,7 +59,14 @@ def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
     ext = os.path.splitext(path)[1].lower()
     if ext in (".xlsx", ".xls"):
         sheet_name = sheet if sheet else 0
-        df_raw = pd.read_excel(path, sheet_name=sheet_name, header=None)
+        try:
+            df_raw = pd.read_excel(path, sheet_name=sheet_name, header=None)
+        except ValueError as e:
+            if sheet and "Worksheet named" in str(e):
+                print(f"⚠ Hoja '{sheet}' no encontrada; usando la primera hoja del archivo.")
+                df_raw = pd.read_excel(path, sheet_name=0, header=None)
+            else:
+                raise
     else:
         df_raw = pd.read_csv(path, header=None)
     
@@ -223,7 +230,14 @@ def parse_excel_tabular(path: str, sheet: Optional[str], header_row: int = 0) ->
     ext = os.path.splitext(path)[1].lower()
     if ext in (".xlsx", ".xls"):
         sheet_name = sheet if sheet else 0
-        df = pd.read_excel(path, sheet_name=sheet_name, header=header_row)
+        try:
+            df = pd.read_excel(path, sheet_name=sheet_name, header=header_row)
+        except ValueError as e:
+            if sheet and "Worksheet named" in str(e):
+                print(f"⚠ Hoja '{sheet}' no encontrada; usando la primera hoja del archivo.")
+                df = pd.read_excel(path, sheet_name=0, header=header_row)
+            else:
+                raise
     else:
         df = pd.read_csv(path, header=header_row)
 
