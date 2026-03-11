@@ -539,8 +539,46 @@
           alert(`Error: ${msg}`);
           console.error('Detalle import procesos:', detalle);
         } else {
-          alert('Importación de procesos completada. Se recargará la vista.');
-          window.location.reload();
+          const jobId = data && data.job_id;
+          if (!jobId) {
+            alert('Importación iniciada, pero no se recibió ID de seguimiento.');
+            return;
+          }
+
+          if (statusImportProcesos) {
+            statusImportProcesos.textContent = 'Importación en proceso...';
+          }
+
+          const maxChecks = 240; // hasta ~8 min con intervalo de 2s
+          for (let i = 0; i < maxChecks; i++) {
+            await new Promise(r => setTimeout(r, 2000));
+            const stResp = await fetch(`/api/procesos/importar-excel/status/${jobId}`, {
+              credentials: 'same-origin'
+            });
+            const stData = await stResp.json();
+
+            if (!stResp.ok) {
+              alert(`Error consultando importación: ${stData.error || stResp.status}`);
+              console.error('Detalle status import:', stData);
+              break;
+            }
+
+            if (stData.status === 'success') {
+              alert('Importación de procesos completada. Se recargará la vista.');
+              window.location.reload();
+              break;
+            }
+
+            if (stData.status === 'error') {
+              alert(`Error en importación: ${stData.error || 'fallo desconocido'}`);
+              if (stData.output) console.error('Salida import procesos:', stData.output);
+              break;
+            }
+
+            if (statusImportProcesos) {
+              statusImportProcesos.textContent = `Importación en proceso... (${i + 1})`;
+            }
+          }
         }
       } catch (err) {
         console.error(err);

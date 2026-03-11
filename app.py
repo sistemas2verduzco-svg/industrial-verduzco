@@ -19,6 +19,7 @@ import math
 import re
 import subprocess
 import sys
+import threading
 
 # Configurar logging
 logging.basicConfig(
@@ -30,6 +31,75 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Jobs en memoria para importación asíncrona de procesos/claves.
+PROCESOS_IMPORT_JOBS = {}
+PROCESOS_IMPORT_LOCK = threading.Lock()
+
+
+def _set_procesos_import_job(job_id, **fields):
+    with PROCESOS_IMPORT_LOCK:
+        job = PROCESOS_IMPORT_JOBS.get(job_id, {})
+        job.update(fields)
+        PROCESOS_IMPORT_JOBS[job_id] = job
+
+
+def _run_procesos_import_job(job_id, filename, abs_saved_path, sheet):
+    _set_procesos_import_job(job_id, status='running', started_at=datetime.utcnow().isoformat())
+    try:
+        cmd = [sys.executable, 'tools/import_procesos.py', '--file', abs_saved_path, '--overwrite']
+        if sheet:
+            cmd.extend(['--sheet', sheet])
+
+        result = subprocess.run(
+            cmd,
+            cwd=os.getcwd(),
+            capture_output=True,
+            text=True,
+            timeout=900,
+        )
+        combined = '\n'.join([x for x in [result.stdout, result.stderr] if x]).strip()
+
+        if result.returncode != 0:
+            logger.error(f"[IMPORT_PROCESOS] Error importando {filename}: {combined}")
+            _set_procesos_import_job(
+                job_id,
+                status='error',
+                error='Falló la importación de procesos',
+                output=combined[-6000:] if combined else '',
+                finished_at=datetime.utcnow().isoformat(),
+            )
+            return
+
+        logger.info(f"[IMPORT_PROCESOS] Importación OK para archivo {filename}")
+        _set_procesos_import_job(
+            job_id,
+            status='success',
+            output=combined[-6000:] if combined else 'Importación ejecutada sin salida.',
+            finished_at=datetime.utcnow().isoformat(),
+        )
+    except subprocess.TimeoutExpired:
+        logger.error(f"[IMPORT_PROCESOS] Timeout importando {filename}")
+        _set_procesos_import_job(
+            job_id,
+            status='error',
+            error='La importación excedió el tiempo límite (900s)',
+            finished_at=datetime.utcnow().isoformat(),
+        )
+    except Exception as e:
+        logger.error(f"[IMPORT_PROCESOS] Excepción importando {filename}: {e}")
+        _set_procesos_import_job(
+            job_id,
+            status='error',
+            error=f'Error procesando importación: {str(e)}',
+            finished_at=datetime.utcnow().isoformat(),
+        )
+    finally:
+        try:
+            if os.path.exists(abs_saved_path):
+                os.remove(abs_saved_path)
+        except Exception:
+            pass
 
 # Jornada laboral para planeacion de hojas de ruta
 WORKDAY_BLOCKS = ((6, 30, 12, 0), (12, 30, 16, 0))
@@ -3273,7 +3343,7 @@ def importar_excel():
 @app.route('/api/procesos/importar-excel', methods=['POST'])
 @login_required
 def importar_procesos_excel():
-    """Importar claves/procesos desde archivo Excel/CSV usando tools/import_procesos.py."""
+    """Inicia importación asíncrona de claves/procesos desde Excel/CSV."""
     if not is_admin_user():
         return jsonify({'error': 'Solo admins pueden importar procesos'}), 403
 
@@ -3296,50 +3366,54 @@ def importar_procesos_excel():
     tmp_name = f"procesos_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}{ext}"
     saved_path = os.path.join(imports_dir, tmp_name)
     abs_saved_path = os.path.abspath(saved_path)
+    job_id = uuid.uuid4().hex
 
     try:
         file.save(abs_saved_path)
 
-        cmd = [sys.executable, 'tools/import_procesos.py', '--file', abs_saved_path, '--overwrite']
-        if sheet:
-            cmd.extend(['--sheet', sheet])
-
-        result = subprocess.run(
-            cmd,
-            cwd=os.getcwd(),
-            capture_output=True,
-            text=True,
-            timeout=300,
+        _set_procesos_import_job(
+            job_id,
+            status='queued',
+            filename=filename,
+            created_at=datetime.utcnow().isoformat(),
+            output='',
         )
 
-        combined = '\n'.join([x for x in [result.stdout, result.stderr] if x]).strip()
+        worker = threading.Thread(
+            target=_run_procesos_import_job,
+            args=(job_id, filename, abs_saved_path, sheet),
+            daemon=True,
+        )
+        worker.start()
 
-        if result.returncode != 0:
-            logger.error(f"[IMPORT_PROCESOS] Error importando {filename}: {combined}")
-            return jsonify({
-                'error': 'Falló la importación de procesos',
-                'output': combined[-6000:] if combined else ''
-            }), 500
-
-        logger.info(f"[IMPORT_PROCESOS] Importación OK para archivo {filename}")
         return jsonify({
             'ok': True,
-            'mensaje': 'Importación de procesos completada',
-            'output': combined[-6000:] if combined else 'Importación ejecutada sin salida.'
-        }), 200
-
-    except subprocess.TimeoutExpired:
-        logger.error(f"[IMPORT_PROCESOS] Timeout importando {filename}")
-        return jsonify({'error': 'La importación excedió el tiempo límite (300s)'}), 504
+            'job_id': job_id,
+            'mensaje': 'Importación iniciada'
+        }), 202
     except Exception as e:
-        logger.error(f"[IMPORT_PROCESOS] Excepción importando {filename}: {e}")
-        return jsonify({'error': f'Error procesando importación: {str(e)}'}), 500
-    finally:
         try:
             if os.path.exists(abs_saved_path):
                 os.remove(abs_saved_path)
         except Exception:
             pass
+        logger.error(f"[IMPORT_PROCESOS] Excepción importando {filename}: {e}")
+        return jsonify({'error': f'Error procesando importación: {str(e)}'}), 500
+
+
+@app.route('/api/procesos/importar-excel/status/<job_id>', methods=['GET'])
+@login_required
+def importar_procesos_excel_status(job_id):
+    if not is_admin_user():
+        return jsonify({'error': 'Solo admins pueden consultar importaciones'}), 403
+
+    with PROCESOS_IMPORT_LOCK:
+        job = PROCESOS_IMPORT_JOBS.get(job_id)
+
+    if not job:
+        return jsonify({'error': 'Job no encontrado'}), 404
+
+    return jsonify(job), 200
 
 
 @app.route('/api/productos/bajo-stock', methods=['GET'])
