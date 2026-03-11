@@ -518,19 +518,33 @@
           body: formData,
           credentials: 'same-origin'
         });
-        const data = await response.json();
+        const contentType = response.headers.get('content-type') || '';
+        let data = null;
+        let rawText = '';
 
-        if (!response.ok || data.error) {
-          const msg = (data && data.error) ? data.error : 'Error al importar procesos';
+        if (contentType.includes('application/json')) {
+          data = await response.json();
+        } else {
+          rawText = await response.text();
+        }
+
+        if (!response.ok || (data && data.error)) {
+          const msg = data && data.error
+            ? data.error
+            : `Error HTTP ${response.status} al importar procesos`;
+          const detalle = (data && data.output)
+            ? data.output
+            : (rawText ? rawText.slice(0, 600) : 'Sin detalle del servidor');
+
           alert(`Error: ${msg}`);
-          if (data && data.output) console.error('Salida import procesos:', data.output);
+          console.error('Detalle import procesos:', detalle);
         } else {
           alert('Importación de procesos completada. Se recargará la vista.');
           window.location.reload();
         }
       } catch (err) {
         console.error(err);
-        alert('Error de red al importar procesos.');
+        alert('Error de red al importar procesos. Revisa logs de app/nginx y vuelve a intentar.');
       } finally {
         if (statusImportProcesos) statusImportProcesos.textContent = '';
         inputImportarProcesos.value = '';
