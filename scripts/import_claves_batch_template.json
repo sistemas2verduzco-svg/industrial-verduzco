@@ -1,0 +1,62 @@
+{
+  "groups": [
+    {
+      "keys": [
+        {
+          "clave": "CLAVE-001",
+          "nombre": "Pieza 1",
+          "notas": ""
+        },
+        {
+          "clave": "CLAVE-002",
+          "nombre": "Pieza 2",
+          "notas": ""
+        },
+        {
+          "clave": "CLAVE-003",
+          "nombre": "Pieza 3",
+          "notas": ""
+        }
+      ],
+      "processes": [
+        {
+          "orden": 1,
+          "centro_trabajo": "TORNO",
+          "operacion": "PROCESO 1",
+          "t_e": "00:03:20",
+          "t_tct": "",
+          "t_tco": "",
+          "t_to": "",
+          "tiempo_estimado": "00:03:20",
+          "notas": ""
+        },
+        {
+          "orden": 2,
+          "centro_trabajo": "FRESADORA",
+          "operacion": "PROCESO 2",
+          "t_e": "00:02:10",
+          "t_tct": "",
+          "t_tco": "",
+          "t_to": "",
+          "tiempo_estimado": "00:02:10",
+          "notas": ""
+        }
+      ]
+    },
+    {
+      "keys": [
+        {
+          "clave": "CLAVE-004",
+          "nombre": "Pieza 4",
+          "notas": ""
+        },
+        {
+          "clave": "CLAVE-005",
+          "nombre": "Pieza 5",
+          "notas": ""
+        }
+      ],
+      "copy_processes_from_key": "CLAVE-001"
+    }
+  ]
+}
