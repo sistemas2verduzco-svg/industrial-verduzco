@@ -686,7 +686,9 @@
             renderProcesos(e.target.value);
 
             const clave = clavesData.find(c => String(c.id) === String(e.target.value));
-            const descripcion = (clave && clave.notas) ? String(clave.notas) : '';
+            const descripcion = (clave && (clave.notas || clave.nombre || clave.clave))
+                ? String(clave.notas || clave.nombre || clave.clave)
+                : '';
             const descripcionEl = document.getElementById('descripcion_clave');
             if (descripcionEl) {
                 descripcionEl.value = descripcion;
