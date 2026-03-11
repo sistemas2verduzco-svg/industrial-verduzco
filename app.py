@@ -32,16 +32,36 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Jobs en memoria para importación asíncrona de procesos/claves.
-PROCESOS_IMPORT_JOBS = {}
+# Jobs para importación asíncrona de procesos/claves.
+# Persistimos estado en disco para evitar problemas con múltiples workers de gunicorn.
 PROCESOS_IMPORT_LOCK = threading.Lock()
+PROCESOS_IMPORT_DIR = os.path.join('uploads', 'imports_jobs')
+os.makedirs(PROCESOS_IMPORT_DIR, exist_ok=True)
+
+
+def _procesos_import_job_path(job_id):
+    safe = re.sub(r'[^a-zA-Z0-9_-]', '', str(job_id or ''))
+    return os.path.join(PROCESOS_IMPORT_DIR, f'{safe}.json')
+
+
+def _get_procesos_import_job(job_id):
+    path = _procesos_import_job_path(job_id)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return None
 
 
 def _set_procesos_import_job(job_id, **fields):
     with PROCESOS_IMPORT_LOCK:
-        job = PROCESOS_IMPORT_JOBS.get(job_id, {})
+        job = _get_procesos_import_job(job_id) or {}
         job.update(fields)
-        PROCESOS_IMPORT_JOBS[job_id] = job
+        path = _procesos_import_job_path(job_id)
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(job, f, ensure_ascii=False)
 
 
 def _run_procesos_import_job(job_id, filename, abs_saved_path, sheet):
@@ -3407,8 +3427,7 @@ def importar_procesos_excel_status(job_id):
     if not is_admin_user():
         return jsonify({'error': 'Solo admins pueden consultar importaciones'}), 403
 
-    with PROCESOS_IMPORT_LOCK:
-        job = PROCESOS_IMPORT_JOBS.get(job_id)
+    job = _get_procesos_import_job(job_id)
 
     if not job:
         return jsonify({'error': 'Job no encontrado'}), 404
