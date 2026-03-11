@@ -596,6 +596,14 @@
             document.getElementById('fecha_auto').value = now.toLocaleString();
         }
 
+        function cleanText(v) {
+            const t = String(v || '').trim();
+            if (!t) return '';
+            const low = t.toLowerCase();
+            if (low === 'none' || low === 'null' || low === 'nan' || low === 'nat' || low === '-') return '';
+            return t;
+        }
+
         function updateSeriePreview() {
             const sel = document.getElementById('clave_id');
             const opt = sel.options[sel.selectedIndex];
@@ -686,8 +694,8 @@
             renderProcesos(e.target.value);
 
             const clave = clavesData.find(c => String(c.id) === String(e.target.value));
-            const descripcion = (clave && (clave.notas || clave.nombre || clave.clave))
-                ? String(clave.notas || clave.nombre || clave.clave)
+            const descripcion = clave
+                ? (cleanText(clave.notas) || cleanText(clave.nombre) || cleanText(clave.clave))
                 : '';
             const descripcionEl = document.getElementById('descripcion_clave');
             if (descripcionEl) {

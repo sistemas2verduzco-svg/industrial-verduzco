@@ -141,6 +141,13 @@ def _norm_text(value):
                 .replace('Ú', 'U'))
 
 
+def _clean_nullable_text(value):
+    text = str(value or '').strip()
+    if text.lower() in ('none', 'null', 'nan', 'nat', '-'):
+        return ''
+    return text
+
+
 def _parse_time_to_seconds(value):
     if value is None:
         return 0
@@ -338,11 +345,11 @@ def _resolve_clave_descripcion_by_pn(pn_value):
         # Fallback: at least show the key code for legacy hojas.
         return pn
 
-    notas = (getattr(clave, 'notas', None) or '').strip()
+    notas = _clean_nullable_text(getattr(clave, 'notas', None))
     if notas:
         return notas
 
-    nombre_clave = (getattr(clave, 'nombre', None) or '').strip()
+    nombre_clave = _clean_nullable_text(getattr(clave, 'nombre', None))
     if nombre_clave:
         return nombre_clave
 
@@ -356,12 +363,12 @@ def _resolve_clave_descripcion_by_pn(pn_value):
             (cp.proceso.nombre if getattr(cp, 'proceso', None) else '') or '',
         ]
         for c in candidates:
-            text = str(c).strip()
+            text = _clean_nullable_text(c)
             if text:
                 return text
 
     # Final fallback for legacy data without notes/description.
-    return (getattr(clave, 'clave', None) or pn)
+    return _clean_nullable_text(getattr(clave, 'clave', None)) or pn
 
 
 def _sync_hoja_estado_with_checks(hoja, estaciones=None, now_dt=None):
@@ -1506,7 +1513,7 @@ def hojas_ruta_form():
             'calidad': h.calidad,
             'almacen': h.almacen,
             'orden_trabajo': h.orden_trabajo_hr,
-            'comentarios': h.descripcion,
+            'comentarios': h.materia_prima,
             'firma_ing_jose': h.supervisor,
             'firma_ing_rodrigo': h.operador,
             'estado': h.estado,
@@ -1704,7 +1711,7 @@ def api_crear_hoja_ruta():
     try:
         fecha_actual = datetime.utcnow()
         maquina = Máquina.query.get(int(data.get('maquina_id'))) if data.get('maquina_id') else None
-        descripcion_hoja = (comentarios or '').strip() or None
+        descripcion_hoja = _resolve_clave_descripcion_by_pn(clave.clave)
 
         hoja = HojaRuta(
             maquina_id=maquina_id,
@@ -1721,7 +1728,7 @@ def api_crear_hoja_ruta():
             orden_trabajo_pt=None,
             almacen=almacen,
             no_sin_orden=None,
-            materia_prima=None,
+            materia_prima=(comentarios or '').strip() or None,
             total_tiempo=None,
             dias_a_laborar=None,
             fecha_termino=None,
@@ -1831,7 +1838,7 @@ def api_actualizar_hoja_ruta(hoja_id):
     if 'descripcion' in data:
         hoja.descripcion = data['descripcion']
     if 'comentarios' in data:
-        hoja.descripcion = (data.get('comentarios') or '').strip() or None
+        hoja.materia_prima = (data.get('comentarios') or '').strip() or None
     if 'firma_ing_jose' in data:
         hoja.supervisor = (data.get('firma_ing_jose') or '').strip() or None
     if 'firma_ing_rodrigo' in data:
@@ -1899,8 +1906,8 @@ def api_claves_procesos():
                 result.append({
                     'id': clave.id,
                     'clave': clave.clave,
-                    'nombre': clave.nombre or clave.clave,
-                    'notas': getattr(clave, 'notas', None) or '',
+                    'nombre': _clean_nullable_text(clave.nombre) or clave.clave,
+                    'notas': _clean_nullable_text(getattr(clave, 'notas', None)),
                     'tiempo_to': tiempo_to,
                     'procesos': procesos_payload,
                 })
@@ -4573,9 +4580,9 @@ def procesos_clave_save():
     """Crear o actualizar una clave producto."""
     try:
         clave_id = request.form.get('id', type=int)
-        clave = request.form.get('clave', '').strip()
-        nombre = request.form.get('nombre', '').strip()
-        notas = request.form.get('notas', '').strip()
+        clave = _clean_nullable_text(request.form.get('clave', ''))
+        nombre = _clean_nullable_text(request.form.get('nombre', ''))
+        notas = _clean_nullable_text(request.form.get('notas', ''))
         activo = request.form.get('activo') == 'on'
 
         if not clave:
