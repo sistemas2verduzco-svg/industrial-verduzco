@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Certificado de Calidad - {{ hoja.nombre or ('HOJA #' ~ hoja.id) }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        :root {
+            --ink: #111827;
+            --line: #9ca3af;
+            --line-soft: #d1d5db;
+            --bg: #f3f4f6;
+            --paper: #ffffff;
+            --head: #f3f4f6;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .shell {
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 16px;
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .btn {
+            border: 1px solid #cbd5e1;
+            background: #fff;
+            color: #0f172a;
+            border-radius: 8px;
+            padding: 8px 12px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background: #0b74de;
+            border-color: #0b74de;
+            color: #fff;
+        }
+
+        .paper {
+            background: var(--paper);
+            border: 1px solid var(--line);
+            padding: 14px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .top th,
+        .top td,
+        .box th,
+        .box td,
+        .defects th,
+        .defects td {
+            border: 1px solid var(--line);
+            padding: 6px;
+            font-size: 12px;
+            vertical-align: top;
+        }
+
+        .top .logo-cell {
+            width: 150px;
+            text-align: center;
+            background: #fff;
+        }
+
+        .logo-cell img {
+            width: 122px;
+            height: 66px;
+            object-fit: contain;
+        }
+
+        .title-main {
+            text-align: center;
+            font-size: 22px;
+            font-weight: 800;
+            letter-spacing: 0.4px;
+        }
+
+        .title-sub {
+            text-align: center;
+            font-size: 14px;
+            font-weight: 700;
+            margin-top: 2px;
+        }
+
+        .meta {
+            font-size: 12px;
+            background: var(--head);
+        }
+
+        .section-title {
+            margin: 14px 0 8px;
+            text-align: center;
+            font-size: 16px;
+            font-weight: 800;
+        }
+
+        .grid2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .box th {
+            background: var(--head);
+            font-weight: 800;
+        }
+
+        .defects th {
+            background: var(--head);
+            font-weight: 800;
+            text-transform: uppercase;
+            font-size: 11px;
+        }
+
+        .observaciones {
+            border: 1px solid var(--line);
+            min-height: 76px;
+            padding: 8px;
+            white-space: pre-line;
+            font-size: 12px;
+        }
+
+        .firmas {
+            margin-top: 14px;
+        }
+
+        .firma-line {
+            height: 40px;
+            border-bottom: 1px solid #6b7280;
+        }
+
+        .text-small {
+            font-size: 11px;
+            color: #374151;
+        }
+
+        @media (max-width: 920px) {
+            .shell {
+                padding: 10px;
+            }
+
+            .grid2 {
+                grid-template-columns: 1fr;
+            }
+
+            .title-main {
+                font-size: 18px;
+            }
+        }
+
+        @media print {
+            body {
+                background: #fff;
+            }
+
+            .no-print {
+                display: none !important;
+            }
+
+            .shell {
+                max-width: none;
+                margin: 0;
+                padding: 0;
+            }
+
+            .paper {
+                border: 0;
+                padding: 8mm;
+            }
+
+            @page {
+                size: A4 portrait;
+                margin: 8mm;
+            }
+        }
+    </style>
+</head>
+<body>
+    {% include '_sidebar.html' %}
+
+    <div class="shell">
+        <div class="toolbar no-print">
+            <a href="/control_calidad/hoja/{{ hoja.id }}" class="btn">← Volver a QC</a>
+            <button type="button" class="btn btn-primary" onclick="window.print()">Imprimir certificado</button>
+        </div>
+
+        <div class="paper">
+            <table class="top">
+                <tr>
+                    <td class="logo-cell" rowspan="2">
+                        <img src="{{ url_for('static', filename='img/logo_ttm.jpg') }}" alt="Logo empresa TTM">
+                    </td>
+                    <td colspan="4">
+                        <div class="title-main">FORMATO CERTIFICADO DE CALIDAD</div>
+                        <div class="title-sub">MANUFACTURAS CAD S.A.S.</div>
+                    </td>
+                </tr>
+                <tr class="meta">
+                    <td><strong>Codigo:</strong> GC-FR-02</td>
+                    <td><strong>Fecha Aprobacion:</strong> 26/01/2015</td>
+                    <td><strong>Version:</strong> 1</td>
+                    <td><strong>Pag:</strong> 1 de 1</td>
+                </tr>
+            </table>
+
+            <div class="section-title">RESULTADOS DE INSPECCION Y ENSAYO DE LA MUESTRA</div>
+
+            <table class="box">
+                <tr>
+                    <th style="width: 16%;">Fecha emision</th>
+                    <td style="width: 34%;">{{ fecha_emision }}</td>
+                    <th style="width: 16%;">Cliente</th>
+                    <td style="width: 34%;">{{ hoja.producto or '-' }}</td>
+                </tr>
+                <tr>
+                    <th>Referencia</th>
+                    <td>{{ hoja.pn or '-' }}</td>
+                    <th>OC</th>
+                    <td>{{ hoja.orden_trabajo_hr or '-' }}</td>
+                </tr>
+                <tr>
+                    <th>Tamano del lote</th>
+                    <td>{{ scrap_qc.lote_inicial if scrap_qc else (hoja.cantidad_piezas or 0) }}</td>
+                    <th>Tamano final</th>
+                    <td>{{ scrap_qc.lote_final if scrap_qc else (hoja.cantidad_piezas or 0) }}</td>
+                </tr>
+                <tr>
+                    <th>Calidad</th>
+                    <td>{{ hoja.calidad or '-' }}</td>
+                    <th>Inspector QC</th>
+                    <td>{{ qc_user or (hoja.supervisor or hoja.operador or '-') }}</td>
+                </tr>
+            </table>
+
+            <div class="grid2" style="margin-top:10px;">
+                <table class="box">
+                    <tr><th colspan="2">INSPECCION DE ATRIBUTOS</th></tr>
+                    <tr><td>Dimensional</td><td>{{ 'OK' if checklist_global.dimensional else 'NO' }}</td></tr>
+                    <tr><td>Acabado visual</td><td>{{ 'OK' if checklist_global.visual else 'NO' }}</td></tr>
+                    <tr><td>Rebabas/aristas</td><td>{{ 'OK' if checklist_global.rebaba else 'NO' }}</td></tr>
+                    <tr><td>Material/dureza</td><td>{{ 'OK' if checklist_global.material else 'NO' }}</td></tr>
+                    <tr><td>Rosca/ajuste</td><td>{{ 'OK' if checklist_global.ajuste else 'NO' }}</td></tr>
+                    <tr><td>Limpieza</td><td>{{ 'OK' if checklist_global.limpieza else 'NO' }}</td></tr>
+                </table>
+
+                <table class="box">
+                    <tr><th colspan="2">RESUMEN SCRAP QC</th></tr>
+                    <tr><td>Lote inicial</td><td>{{ scrap_qc.lote_inicial if scrap_qc else 0 }}</td></tr>
+                    <tr><td>Total scrap</td><td>{{ scrap_qc.total_scrap if scrap_qc else 0 }}</td></tr>
+                    <tr><td>Lote final</td><td>{{ scrap_qc.lote_final if scrap_qc else (hoja.cantidad_piezas or 0) }}</td></tr>
+                    <tr><td>Fecha cierre QC</td><td>{{ fecha_qc or '-' }}</td></tr>
+                    <tr><td>Estado</td><td>{{ 'APROBADO' if qc_aprobada else 'RECHAZADO' }}</td></tr>
+                </table>
+            </div>
+
+            <div style="margin-top:10px;">
+                <table class="defects">
+                    <thead>
+                        <tr>
+                            <th style="width:30%;">Descripcion de hallazgos</th>
+                            <th style="width:18%;">Resultado</th>
+                            <th>Detalle</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if defectos %}
+                            {% for d in defectos %}
+                            <tr>
+                                <td>{{ d.proceso }}</td>
+                                <td>{{ d.resultado }}</td>
+                                <td>{{ d.detalle }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="3">Sin defectos reportados. Lote conforme en control de calidad.</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="margin-top:10px;">
+                <div style="font-size:12px; font-weight:700; margin-bottom:4px;">OBSERVACIONES:</div>
+                <div class="observaciones">{{ comentarios_usuario or 'Sin observaciones adicionales.' }}
+{% if scrap_qc and scrap_qc.detalle %}
+
+Detalle scrap por proceso: {{ scrap_qc.detalle }}
+{% endif %}</div>
+            </div>
+
+            <table class="box firmas">
+                <tr>
+                    <th style="width:38%;">APROBADO ASESOR DE PRODUCCION Y CONTROL DE CALIDAD</th>
+                    <th style="width:12%;">Nombre:</th>
+                    <td>{{ qc_user or (hoja.supervisor or hoja.operador or '-') }}</td>
+                </tr>
+                <tr>
+                    <th></th>
+                    <th>Firma:</th>
+                    <td>
+                        <div class="firma-line"></div>
+                        <div class="text-small">Documento emitido desde modulo de control calidad</div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
