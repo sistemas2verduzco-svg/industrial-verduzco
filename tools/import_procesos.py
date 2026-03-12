@@ -55,8 +55,12 @@ def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
     current_block_id = {}  # Contador de bloques por clave
     orden = 0
     
-    # Patrón para detectar claves válidas: letras seguidas de números (AS01, BY01/BY02, etc.)
-    clave_pattern = re.compile(r'^[A-Z]{1,4}\d{1,3}(/[A-Z]{1,4}\d{1,3})?$', re.IGNORECASE)
+    # Patrón para detectar claves válidas: AS01, BY01/BY02, SF12 / SF13, etc.
+    # Acepta múltiples segmentos separados por '/' y espacios alrededor.
+    clave_pattern = re.compile(
+        r'^[A-Z]{1,6}\d{1,4}(?:\s*/\s*[A-Z]{1,6}\d{1,4})*$',
+        re.IGNORECASE,
+    )
     
     for idx, row in df_raw.iterrows():
         # Columna B (índice 1) tiene claves como AS01, AS02, etc.
@@ -65,7 +69,7 @@ def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
         # Detectar fila de clave (debe coincidir con el patrón AS01, BY01, etc.)
         if col_b and clave_pattern.match(col_b):
             # Es una clave nueva (o repetida)
-            current_clave = col_b.upper()
+            current_clave = re.sub(r'\s*/\s*', '/', col_b.upper())
             # Incrementar el ID de bloque para esta clave
             current_block_id[current_clave] = current_block_id.get(current_clave, -1) + 1
             # El nombre está en columnas posteriores (C, D, E, F aprox.)
@@ -157,7 +161,7 @@ def expand_compound_claves(df: pd.DataFrame) -> pd.DataFrame:
         if not raw_clave:
             continue
 
-        parts = [part.strip().upper() for part in raw_clave.split('/') if part and part.strip()]
+        parts = [part.strip().upper() for part in re.split(r'\s*/\s*', raw_clave) if part and part.strip()]
         if len(parts) <= 1:
             row_copy = row.copy()
             row_copy['clave'] = raw_clave
@@ -223,6 +227,13 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
         df = df[~df['_es_duplicado']].copy()
     df = df.drop(columns=['_dedup_key', '_grupo_clave', '_es_duplicado'])
 
+    # Guardar claves compuestas originales para limpiar secuencias viejas si overwrite=True
+    compound_originals = sorted({
+        str(k).strip().upper()
+        for k in df['clave'].dropna().tolist()
+        if '/' in str(k)
+    })
+
     # Separar claves compuestas (ej. SF12/SF13 -> SF12 y SF13 con mismos procesos)
     df = expand_compound_claves(df)
     df = df.sort_values(["clave", "orden"], kind="stable")
@@ -234,6 +245,18 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
     grouped = df.groupby("clave", sort=False)
 
     with app.app_context():
+        if overwrite and compound_originals:
+            for compound_clave in compound_originals:
+                compound_obj = ClaveProducto.query.filter_by(clave=compound_clave).first()
+                if not compound_obj:
+                    continue
+                removed = ClaveProceso.query.filter_by(clave_id=compound_obj.id).delete()
+                if removed > 0:
+                    print(f"  Limpiadas {removed} filas previas de clave compuesta {compound_clave}")
+                # Desactivar la clave compuesta para evitar que siga apareciendo como principal.
+                compound_obj.activo = False
+            db.session.commit()
+
         for clave_code, gdf in grouped:
             clave_code = str(clave_code).strip()
             if not clave_code:
