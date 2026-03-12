@@ -196,6 +196,39 @@ def _qc_extract_scrap_block(text):
     return m.group(0).strip() if m else ''
 
 
+def _qc_parse_review_block(notas_text):
+    notas = str(notas_text or '')
+    status_match = re.search(r'STATUS=(QC_OK|QC_NOK)', notas)
+    status = status_match.group(1) if status_match else None
+
+    block_match = re.search(r'\[QC_REVIEW_START\](.*?)\[QC_REVIEW_END\]', notas, flags=re.S)
+    block = block_match.group(1) if block_match else ''
+
+    def _extract(field, default=''):
+        m = re.search(rf'^{field}=(.*)$', block, flags=re.M)
+        return m.group(1).strip() if m else default
+
+    def _extract_int(field, default=0):
+        try:
+            return max(0, int(_extract(field, str(default))))
+        except Exception:
+            return default
+
+    return {
+        'status': status,
+        'usuario': _extract('USUARIO', ''),
+        'fecha': _extract('FECHA', ''),
+        'dimensional': _extract('DIMENSIONAL', 'NO') == 'OK',
+        'visual': _extract('VISUAL', 'NO') == 'OK',
+        'rebaba': _extract('REBABA', 'NO') == 'OK',
+        'material': _extract('MATERIAL', 'NO') == 'OK',
+        'ajuste': _extract('AJUSTE', 'NO') == 'OK',
+        'limpieza': _extract('LIMPIEZA', 'NO') == 'OK',
+        'scrap_piezas': _extract_int('SCRAP_PIEZAS', 0),
+        'observaciones': _extract('OBSERVACIONES', ''),
+    }
+
+
 def _parse_time_to_seconds(value):
     if value is None:
         return 0
@@ -1084,6 +1117,8 @@ def control_calidad_list():
                 rechazadas += 1
 
         pendientes = max(0, len(completadas) - reviewed)
+        finalizada_qc = len(completadas) > 0 and pendientes == 0
+        certificado_disponible = finalizada_qc
         hojas_qc.append({
             'id': hoja.id,
             'serie': hoja.nombre,
@@ -1095,6 +1130,8 @@ def control_calidad_list():
             'procesos_revisados': reviewed,
             'procesos_pendientes_qc': pendientes,
             'procesos_rechazados_qc': rechazadas,
+            'finalizada_qc': finalizada_qc,
+            'certificado_disponible': certificado_disponible,
             'fecha': hoja.fecha_creacion,
         })
 
@@ -1321,6 +1358,8 @@ def control_calidad_hoja(hoja_id):
         })
 
     pendientes_qc = sum(1 for p in procesos_completados if p['status_qc'] not in ('QC_OK', 'QC_NOK'))
+    qc_finalizada = len(procesos_completados) > 0 and pendientes_qc == 0
+    certificado_disponible = qc_finalizada
 
     return render_template(
         'control_calidad_detalle.html',
@@ -1328,8 +1367,78 @@ def control_calidad_hoja(hoja_id):
         procesos=procesos_completados,
         lote_referencia=lote_referencia,
         pendientes_qc=pendientes_qc,
+        qc_finalizada=qc_finalizada,
+        certificado_disponible=certificado_disponible,
         informe_guardado=informe_guardado,
         error_guardado=error_guardado,
+    )
+
+
+@app.route('/control_calidad/hoja/<int:hoja_id>/certificado')
+@login_required
+@requires_any_permission([('calidad', 'view'), ('catalog', 'view')])
+def control_calidad_certificado(hoja_id):
+    """Certificado imprimible de control de calidad por hoja de ruta."""
+    hoja = HojaRuta.query.get_or_404(hoja_id)
+    estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden.asc()).all()
+    completadas = [e for e in estaciones if (e.estado or '').lower() == 'completada']
+    reviews = [_qc_parse_review_block(e.notas) for e in completadas]
+
+    qc_finalizada = bool(completadas) and all(r.get('status') in ('QC_OK', 'QC_NOK') for r in reviews)
+    if not qc_finalizada:
+        return redirect(url_for('control_calidad_hoja', hoja_id=hoja.id))
+
+    checklist_fields = ('dimensional', 'visual', 'rebaba', 'material', 'ajuste', 'limpieza')
+    checklist_global = {
+        f: bool(reviews) and all(bool(r.get(f)) for r in reviews)
+        for f in checklist_fields
+    }
+
+    defectos = []
+    for est, rev in zip(completadas, reviews):
+        status = rev.get('status')
+        scrap_piezas = int(rev.get('scrap_piezas') or 0)
+        observaciones = (rev.get('observaciones') or '').strip()
+
+        detalle_partes = []
+        if observaciones:
+            detalle_partes.append(observaciones)
+        if scrap_piezas > 0:
+            detalle_partes.append(f"Scrap en proceso: {scrap_piezas}")
+
+        if status == 'QC_NOK' or scrap_piezas > 0 or observaciones:
+            defecto_detalle = ' | '.join(detalle_partes) if detalle_partes else 'No conforme detectado en inspeccion.'
+            etiqueta_proceso = (est.centro_trabajo or est.operacion or f'Proceso {est.orden}').strip()
+            defectos.append({
+                'proceso': f"P{est.orden} - {etiqueta_proceso}",
+                'resultado': 'RECHAZADO' if status == 'QC_NOK' else 'APROBADO',
+                'detalle': defecto_detalle,
+            })
+
+    comentarios_usuario = _qc_strip_scrap_summary(hoja.materia_prima)
+    scrap_qc = _qc_parse_scrap_summary(hoja.materia_prima)
+
+    fecha_qc = ''
+    qc_user = ''
+    if reviews:
+        ult = reviews[-1]
+        fecha_qc = ult.get('fecha') or ''
+        qc_user = ult.get('usuario') or ''
+
+    fecha_emision = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    qc_aprobada = all(r.get('status') == 'QC_OK' for r in reviews)
+
+    return render_template(
+        'control_calidad_certificado.html',
+        hoja=hoja,
+        fecha_emision=fecha_emision,
+        fecha_qc=fecha_qc,
+        qc_user=qc_user,
+        checklist_global=checklist_global,
+        defectos=defectos,
+        comentarios_usuario=comentarios_usuario,
+        scrap_qc=scrap_qc,
+        qc_aprobada=qc_aprobada,
     )
 
 
