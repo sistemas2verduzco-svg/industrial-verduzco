@@ -246,6 +246,25 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
     grouped = df.groupby("clave", sort=False)
 
     with app.app_context():
+        if overwrite:
+            # Limpieza global de claves compuestas históricas (ej. SF12/SF13).
+            # Evita que sigan activas después de separar en claves individuales.
+            historical_compounds = (
+                ClaveProducto.query
+                .filter(ClaveProducto.clave.like('%/%'))
+                .all()
+            )
+            if historical_compounds:
+                removed_total = 0
+                for compound_obj in historical_compounds:
+                    removed_total += ClaveProceso.query.filter_by(clave_id=compound_obj.id).delete()
+                    compound_obj.activo = False
+                db.session.commit()
+                print(
+                    f"\nℹ Limpieza global de claves compuestas: "
+                    f"{len(historical_compounds)} claves, {removed_total} pasos eliminados"
+                )
+
         if overwrite and compound_originals:
             for compound_clave in compound_originals:
                 compound_obj = ClaveProducto.query.filter_by(clave=compound_clave).first()
