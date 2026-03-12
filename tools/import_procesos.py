@@ -39,6 +39,18 @@ def hhmmss(val: Optional[str]) -> Optional[str]:
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 
+def clean_nullable_text(val: Optional[str]) -> Optional[str]:
+    """Convierte texto nulo semántico (None/null/nan/...) a None."""
+    if val is None:
+        return None
+    text = str(val).strip()
+    if not text:
+        return None
+    if text.lower() in {"none", "null", "nan", "nat", "-", "n/a"}:
+        return None
+    return text
+
+
 def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
     """Parse el Excel con formato de bloques repetidos por clave."""
     import re
@@ -80,7 +92,13 @@ def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
                 if i < len(row) and pd.notna(row.iloc[i]):
                     val = str(row.iloc[i]).strip()
                     # Descartar valores que sean códigos, encabezados comunes, o unnamed
-                    if val and val.upper() != current_clave and not val.startswith("Unnamed") and val.upper() not in ["PROC.", "C.T.", "OPERACIÓN", "T/E", "T/CT", "T/O", "T/TCT", "KG.BRUTO", "$ -"]:
+                    if (
+                        val
+                        and clean_nullable_text(val)
+                        and val.upper() != current_clave
+                        and not val.startswith("Unnamed")
+                        and val.upper() not in ["PROC.", "C.T.", "OPERACIÓN", "T/E", "T/CT", "T/O", "T/TCT", "KG.BRUTO", "$ -"]
+                    ):
                         nombre_parts.append(val)
             current_nombre = " ".join(nombre_parts).strip() if nombre_parts else None
             orden = 0
@@ -240,6 +258,21 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
 
     with app.app_context():
         if overwrite:
+            # Limpieza de nombres/notas ya guardados como texto nulo semántico.
+            cleaned_text_fields = 0
+            for key_obj in ClaveProducto.query.all():
+                clean_nombre = clean_nullable_text(key_obj.nombre)
+                clean_notas = clean_nullable_text(key_obj.notas)
+                if (key_obj.nombre or None) != clean_nombre:
+                    key_obj.nombre = clean_nombre
+                    cleaned_text_fields += 1
+                if (key_obj.notas or None) != clean_notas:
+                    key_obj.notas = clean_notas
+                    cleaned_text_fields += 1
+            if cleaned_text_fields:
+                db.session.commit()
+                print(f"\nℹ Limpieza de textos nulos: {cleaned_text_fields} campos corregidos")
+
             # Limpieza global de claves compuestas históricas (ej. SF12/SF13).
             # Intenta eliminarlas completamente; si hay referencias externas,
             # deja la clave inactiva y sin secuencia.
@@ -285,12 +318,10 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
                 db.session.flush()
 
             # Actualizar nombre/notas si vienen
-            nombre_clave = str(gdf.get("nombre_clave", pd.Series([None])).iloc[0] or "").strip()
-            notas_clave = str(gdf.get("notas_clave", pd.Series([None])).iloc[0] or "").strip()
-            if nombre_clave:
-                clave_obj.nombre = nombre_clave
-            if notas_clave:
-                clave_obj.notas = notas_clave
+            nombre_clave = clean_nullable_text(gdf.get("nombre_clave", pd.Series([None])).iloc[0])
+            notas_clave = clean_nullable_text(gdf.get("notas_clave", pd.Series([None])).iloc[0])
+            clave_obj.nombre = nombre_clave
+            clave_obj.notas = notas_clave
 
             # Si overwrite, limpiar secuencia previa de esta clave
             if overwrite:
