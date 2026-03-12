@@ -237,17 +237,19 @@
 
         .hojas-recientes-table {
             width: 100%;
-            table-layout: auto;
+            table-layout: fixed;
             border-collapse: collapse;
             font-size: 12px;
         }
 
         .hojas-recientes-table th,
         .hojas-recientes-table td {
-            padding: 6px 5px;
+            padding: 6px 4px;
             text-align: left;
             vertical-align: middle;
             border-bottom: 1px solid #e5e7eb;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .hojas-recientes-table th {
@@ -259,8 +261,6 @@
 
         .hojas-recientes-table td {
             white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
         }
 
         /* Columnas que permiten wrap */
@@ -268,51 +268,50 @@
         .hojas-recientes-table td:nth-child(10) {
             white-space: normal;
             word-wrap: break-word;
-            max-width: 150px;
         }
 
-        /* Anchos optimizados para que quepan */
+        /* Anchos con porcentajes - suman 100% */
         .hojas-recientes-table th:nth-child(1),
-        .hojas-recientes-table td:nth-child(1) { width: 35px; min-width: 35px; }
+        .hojas-recientes-table td:nth-child(1) { width: 3.1%; }
         
         .hojas-recientes-table th:nth-child(2),
-        .hojas-recientes-table td:nth-child(2) { width: 90px; min-width: 90px; }
+        .hojas-recientes-table td:nth-child(2) { width: 8.5%; }
         
         .hojas-recientes-table th:nth-child(3),
-        .hojas-recientes-table td:nth-child(3) { width: 45px; min-width: 45px; }
+        .hojas-recientes-table td:nth-child(3) { width: 4.2%; }
         
         .hojas-recientes-table th:nth-child(4),
-        .hojas-recientes-table td:nth-child(4) { width: 100px; min-width: 100px; }
+        .hojas-recientes-table td:nth-child(4) { width: 9.5%; }
         
         .hojas-recientes-table th:nth-child(5),
-        .hojas-recientes-table td:nth-child(5) { width: 45px; min-width: 45px; }
+        .hojas-recientes-table td:nth-child(5) { width: 4.0%; }
         
         .hojas-recientes-table th:nth-child(6),
-        .hojas-recientes-table td:nth-child(6) { width: 75px; min-width: 75px; }
+        .hojas-recientes-table td:nth-child(6) { width: 7.0%; }
         
         .hojas-recientes-table th:nth-child(7),
-        .hojas-recientes-table td:nth-child(7) { width: 40px; min-width: 40px; }
+        .hojas-recientes-table td:nth-child(7) { width: 3.7%; }
         
         .hojas-recientes-table th:nth-child(8),
-        .hojas-recientes-table td:nth-child(8) { width: 65px; min-width: 65px; }
+        .hojas-recientes-table td:nth-child(8) { width: 6.0%; }
         
         .hojas-recientes-table th:nth-child(9),
-        .hojas-recientes-table td:nth-child(9) { width: 80px; min-width: 80px; }
+        .hojas-recientes-table td:nth-child(9) { width: 7.3%; }
         
         .hojas-recientes-table th:nth-child(10),
-        .hojas-recientes-table td:nth-child(10) { width: 90px; min-width: 90px; }
+        .hojas-recientes-table td:nth-child(10) { width: 8.3%; }
         
         .hojas-recientes-table th:nth-child(11),
-        .hojas-recientes-table td:nth-child(11) { width: 55px; min-width: 55px; }
+        .hojas-recientes-table td:nth-child(11) { width: 5.0%; }
         
         .hojas-recientes-table th:nth-child(12),
-        .hojas-recientes-table td:nth-child(12) { width: 55px; min-width: 55px; }
+        .hojas-recientes-table td:nth-child(12) { width: 5.0%; }
         
         .hojas-recientes-table th:nth-child(13),
-        .hojas-recientes-table td:nth-child(13) { width: 50px; min-width: 50px; }
+        .hojas-recientes-table td:nth-child(13) { width: 4.6%; }
         
         .hojas-recientes-table th:nth-child(14),
-        .hojas-recientes-table td:nth-child(14) { width: 95px; min-width: 95px; white-space: normal; }
+        .hojas-recientes-table td:nth-child(14) { width: 8.7%; }
 
         .hojas-recientes-table .btn-edit,
         .hojas-recientes-table .btn-delete {
