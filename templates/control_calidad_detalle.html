@@ -68,6 +68,9 @@
             </div>
             <div>
                 <a href="/control_calidad" class="btn-back">Volver</a>
+                {% if certificado_disponible %}
+                <a href="/control_calidad/hoja/{{ hoja.id }}/certificado" class="btn-primary" style="text-decoration:none; margin-left:8px; display:inline-block;">Emitir certificado</a>
+                {% endif %}
             </div>
         </div>
 
@@ -88,7 +91,16 @@
             <div style="font-size:13px; color:#5f7184; margin-top:6px;">
                 Procesos completados: {{ procesos|length }}
                 | Pendientes de QC: <span class="badge b-pending">{{ pendientes_qc }}</span>
+                | Estado QC final: 
+                {% if qc_finalizada %}
+                    <span class="badge b-ok">Finalizada</span>
+                {% else %}
+                    <span class="badge b-pending">En revisión</span>
+                {% endif %}
             </div>
+            {% if qc_finalizada and not certificado_disponible %}
+            <div style="margin-top:8px; font-size:12px; color:#9a2525;">La hoja finalizó QC pero no está aprobada; no se emite certificado.</div>
+            {% endif %}
         </div>
 
         {% if procesos %}

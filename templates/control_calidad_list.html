@@ -73,6 +73,7 @@
                         <th>Pendientes QC</th>
                         <th>Rechazados</th>
                         <th>Accion</th>
+                        <th>Certificado</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -100,6 +101,15 @@
                         </td>
                         <td>
                             <a class="btn-go" href="/control_calidad/hoja/{{ h.id }}">Revisar</a>
+                        </td>
+                        <td>
+                            {% if h.certificado_disponible %}
+                            <a class="btn-go" href="/control_calidad/hoja/{{ h.id }}/certificado">Emitir</a>
+                            {% elif h.finalizada_qc %}
+                            <span class="badge b-bad">Sin certificado</span>
+                            {% else %}
+                            <span class="badge b-warn">Pendiente</span>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
