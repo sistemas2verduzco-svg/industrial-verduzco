@@ -433,7 +433,7 @@
   <div class="container">
     <div class="sheet-shell">
       <div class="toolbar no-print">
-        <a href="{{ back_url or '/hojas_ruta_form' }}" class="btn">← Volver a formulario</a>
+        <a href="/hojas_ruta_form" class="btn">← Volver a formulario</a>
         <button class="btn btn-primary" onclick="window.print()">Imprimir hoja</button>
       </div>
 
@@ -443,8 +443,8 @@
             <img src="{{ url_for('static', filename='img/logo_ttm.jpg') }}" alt="Logo empresa TTM">
           </div>
           <div>
-            <div class="doc-title">{{ doc_title or 'Hoja De Ruta De Producto Terminado' }}</div>
-            <div class="doc-subtitle">{{ doc_subtitle or 'Control operacional para producto terminado y trazabilidad documental' }}</div>
+            <div class="doc-title">Hoja De Ruta De Produccion</div>
+            <div class="doc-subtitle">Control operacional para ciclo de produccion y seguimiento de procesos por clave</div>
           </div>
           <div class="doc-badge">
             <div><strong>Serie:</strong> {{ hoja.nombre or '' }}</div>
