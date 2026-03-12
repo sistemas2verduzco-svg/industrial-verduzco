@@ -228,13 +228,6 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
         df = df[~df['_es_duplicado']].copy()
     df = df.drop(columns=['_dedup_key', '_grupo_clave', '_es_duplicado'])
 
-    # Guardar claves compuestas originales para limpiar secuencias viejas si overwrite=True
-    compound_originals = sorted({
-        str(k).strip().upper()
-        for k in df['clave'].dropna().tolist()
-        if '/' in str(k)
-    })
-
     # Separar claves compuestas (ej. SF12/SF13 -> SF12 y SF13 con mismos procesos)
     df = expand_compound_claves(df)
     df = df.sort_values(["clave", "orden"], kind="stable")
@@ -248,34 +241,36 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
     with app.app_context():
         if overwrite:
             # Limpieza global de claves compuestas históricas (ej. SF12/SF13).
-            # Evita que sigan activas después de separar en claves individuales.
-            historical_compounds = (
-                ClaveProducto.query
-                .filter(ClaveProducto.clave.like('%/%'))
-                .all()
-            )
+            # Intenta eliminarlas completamente; si hay referencias externas,
+            # deja la clave inactiva y sin secuencia.
+            historical_compounds = [
+                item for item in ClaveProducto.query.all()
+                if '/' in str(item.clave or '')
+            ]
             if historical_compounds:
                 removed_total = 0
+                deleted_keys = 0
+                deactivated_keys = 0
                 for compound_obj in historical_compounds:
                     removed_total += ClaveProceso.query.filter_by(clave_id=compound_obj.id).delete()
-                    compound_obj.activo = False
+                    try:
+                        db.session.delete(compound_obj)
+                        db.session.flush()
+                        deleted_keys += 1
+                    except Exception:
+                        db.session.rollback()
+                        # Reintento seguro para esta clave: limpiar secuencia y desactivar.
+                        compound_obj_fallback = ClaveProducto.query.filter_by(id=compound_obj.id).first()
+                        if compound_obj_fallback:
+                            removed_total += ClaveProceso.query.filter_by(clave_id=compound_obj_fallback.id).delete()
+                            compound_obj_fallback.activo = False
+                            deactivated_keys += 1
                 db.session.commit()
                 print(
                     f"\nℹ Limpieza global de claves compuestas: "
-                    f"{len(historical_compounds)} claves, {removed_total} pasos eliminados"
+                    f"{len(historical_compounds)} claves, {removed_total} pasos eliminados, "
+                    f"{deleted_keys} claves borradas, {deactivated_keys} desactivadas"
                 )
-
-        if overwrite and compound_originals:
-            for compound_clave in compound_originals:
-                compound_obj = ClaveProducto.query.filter_by(clave=compound_clave).first()
-                if not compound_obj:
-                    continue
-                removed = ClaveProceso.query.filter_by(clave_id=compound_obj.id).delete()
-                if removed > 0:
-                    print(f"  Limpiadas {removed} filas previas de clave compuesta {compound_clave}")
-                # Desactivar la clave compuesta para evitar que siga apareciendo como principal.
-                compound_obj.activo = False
-            db.session.commit()
 
         for clave_code, gdf in grouped:
             clave_code = str(clave_code).strip()
