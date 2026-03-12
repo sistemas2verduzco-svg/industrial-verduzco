@@ -1079,68 +1079,82 @@ def control_calidad_hoja(hoja_id):
         return re.sub(r'\n?\[QC_REVIEW_START\].*?\[QC_REVIEW_END\]\n?', '\n', src, flags=re.S).strip()
 
     informe_guardado = False
+    error_guardado = None
+
+    def _is_checked(field_name):
+        value = request.form.get(field_name)
+        if value is None:
+            return False
+        return str(value).strip().lower() in ('1', 'true', 'on', 'yes', 'si', 'ok')
 
     if request.method == 'POST':
         if not (user and (user.has_permission('calidad', 'edit') or user.has_permission('catalog', 'edit'))):
-            return jsonify({'error': 'Permiso denegado para editar control de calidad'}), 403
-
-        estacion_id = request.form.get('estacion_id', type=int)
-        resultado = (request.form.get('resultado') or '').strip().lower()
-        observaciones = (request.form.get('observaciones') or '').strip()
-
-        estacion = EstacionTrabajo.query.filter_by(id=estacion_id, hoja_ruta_id=hoja.id).first()
-        if not estacion:
-            return jsonify({'error': 'Proceso no encontrado para esta hoja'}), 404
-        if (estacion.estado or '').lower() != 'completada':
-            return jsonify({'error': 'Solo se pueden validar procesos completados'}), 409
-
-        # Checklist estándar para refacciones (sinfines, engranes, etc.)
-        check_dimensional = bool(request.form.get('chk_dimensional'))
-        check_visual = bool(request.form.get('chk_visual'))
-        check_rebaba = bool(request.form.get('chk_rebaba'))
-        check_material = bool(request.form.get('chk_material'))
-        check_ajuste = bool(request.form.get('chk_ajuste'))
-        check_limpieza = bool(request.form.get('chk_limpieza'))
-
-        status_tag = 'QC_OK' if resultado == 'aprobado' else 'QC_NOK'
-        usuario_qc = session.get('user') or 'sistema'
-        ahora = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
-
-        bloque = (
-            "[QC_REVIEW_START]\n"
-            f"STATUS={status_tag}\n"
-            f"USUARIO={usuario_qc}\n"
-            f"FECHA={ahora}\n"
-            f"DIMENSIONAL={'OK' if check_dimensional else 'NO'}\n"
-            f"VISUAL={'OK' if check_visual else 'NO'}\n"
-            f"REBABA={'OK' if check_rebaba else 'NO'}\n"
-            f"MATERIAL={'OK' if check_material else 'NO'}\n"
-            f"AJUSTE={'OK' if check_ajuste else 'NO'}\n"
-            f"LIMPIEZA={'OK' if check_limpieza else 'NO'}\n"
-            f"OBSERVACIONES={observaciones}\n"
-            "[QC_REVIEW_END]"
-        )
-
-        base_notas = qc_clean_block(estacion.notas)
-        estacion.notas = (base_notas + "\n" + bloque).strip() if base_notas else bloque
-        estacion.firma_supervisor = status_tag
-        estacion.operador = usuario_qc
-
-        # Estado de hoja por consolidación QC de procesos completados
-        completadas = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id, estado='completada').all()
-        statuses = [qc_status(e) for e in completadas]
-        pendientes = any(s not in ('QC_OK', 'QC_NOK') for s in statuses)
-        hay_rechazo = any(s == 'QC_NOK' for s in statuses)
-
-        if pendientes:
-            hoja.aprobada = False
-            hoja.rechazada = False
+            error_guardado = 'Permiso denegado para editar control de calidad'
         else:
-            hoja.aprobada = not hay_rechazo
-            hoja.rechazada = hay_rechazo
+            estacion_id = request.form.get('estacion_id', type=int)
+            resultado = (request.form.get('resultado') or '').strip().lower()
+            observaciones = (request.form.get('observaciones') or '').strip()
 
-        db.session.commit()
-        informe_guardado = True
+            estacion = EstacionTrabajo.query.filter_by(id=estacion_id, hoja_ruta_id=hoja.id).first()
+            if not estacion:
+                error_guardado = 'Proceso no encontrado para esta hoja'
+            elif (estacion.estado or '').lower() != 'completada':
+                error_guardado = 'Solo se pueden validar procesos completados'
+            elif resultado not in ('aprobado', 'rechazado'):
+                error_guardado = 'Selecciona un resultado válido (Aprobado/Rechazado)'
+            else:
+                # Checklist estándar para refacciones (sinfines, engranes, etc.)
+                check_dimensional = _is_checked('chk_dimensional')
+                check_visual = _is_checked('chk_visual')
+                check_rebaba = _is_checked('chk_rebaba')
+                check_material = _is_checked('chk_material')
+                check_ajuste = _is_checked('chk_ajuste')
+                check_limpieza = _is_checked('chk_limpieza')
+
+                status_tag = 'QC_OK' if resultado == 'aprobado' else 'QC_NOK'
+                usuario_qc = session.get('user') or 'sistema'
+                ahora = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+
+                bloque = (
+                    "[QC_REVIEW_START]\n"
+                    f"STATUS={status_tag}\n"
+                    f"USUARIO={usuario_qc}\n"
+                    f"FECHA={ahora}\n"
+                    f"DIMENSIONAL={'OK' if check_dimensional else 'NO'}\n"
+                    f"VISUAL={'OK' if check_visual else 'NO'}\n"
+                    f"REBABA={'OK' if check_rebaba else 'NO'}\n"
+                    f"MATERIAL={'OK' if check_material else 'NO'}\n"
+                    f"AJUSTE={'OK' if check_ajuste else 'NO'}\n"
+                    f"LIMPIEZA={'OK' if check_limpieza else 'NO'}\n"
+                    f"OBSERVACIONES={observaciones}\n"
+                    "[QC_REVIEW_END]"
+                )
+
+                base_notas = qc_clean_block(estacion.notas)
+                estacion.notas = (base_notas + "\n" + bloque).strip() if base_notas else bloque
+                estacion.firma_supervisor = status_tag
+                estacion.operador = usuario_qc
+
+                # Estado de hoja por consolidación QC de procesos completados
+                completadas = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id, estado='completada').all()
+                statuses = [qc_status(e) for e in completadas]
+                pendientes = any(s not in ('QC_OK', 'QC_NOK') for s in statuses)
+                hay_rechazo = any(s == 'QC_NOK' for s in statuses)
+
+                if pendientes:
+                    hoja.aprobada = False
+                    hoja.rechazada = False
+                else:
+                    hoja.aprobada = not hay_rechazo
+                    hoja.rechazada = hay_rechazo
+
+                try:
+                    db.session.commit()
+                    informe_guardado = True
+                except Exception:
+                    db.session.rollback()
+                    logger.exception('[QC] Error guardando revision de calidad')
+                    error_guardado = 'Ocurrio un error al guardar la revision. Intenta de nuevo.'
 
     estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden.asc()).all()
     procesos_completados = []
@@ -1166,6 +1180,7 @@ def control_calidad_hoja(hoja_id):
         procesos=procesos_completados,
         pendientes_qc=pendientes_qc,
         informe_guardado=informe_guardado,
+        error_guardado=error_guardado,
     )
 
 

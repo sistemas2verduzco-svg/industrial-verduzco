@@ -76,6 +76,12 @@
         </div>
         {% endif %}
 
+        {% if error_guardado %}
+        <div class="card" style="margin-top:10px; background:#ffebee; border-color:#ffcdd2; color:#9a2525;">
+            {{ error_guardado }}
+        </div>
+        {% endif %}
+
         <div class="card" style="margin-top:12px;">
             <strong>Resumen</strong>
             <div style="font-size:13px; color:#5f7184; margin-top:6px;">
