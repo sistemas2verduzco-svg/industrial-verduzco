@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nueva Hoja de Ruta</title>
+    <title>{{ module_title or 'Nueva Hoja de Ruta' }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <style>
         .card {
@@ -270,7 +270,7 @@
     {% include '_sidebar.html' %}
 
     <div class="container">
-        <h2 style="margin: 0 0 14px 0;">Nueva Hoja de Ruta</h2>
+        <h2 style="margin: 0 0 14px 0;">{{ module_title or 'Nueva Hoja de Ruta' }}</h2>
 
         <div class="card">
             <form id="hojaForm">
@@ -338,7 +338,7 @@
                     </div>
                 </div>
 
-                <div class="hint">Los procesos se cargan automaticamente desde el modulo de Procesos y Claves segun la clave seleccionada.</div>
+                <div class="hint">Los procesos se cargan automaticamente desde el modulo de Procesos y Claves segun la clave seleccionada ({{ module_label or 'general' }}).</div>
 
                 <div class="actions">
                     <button type="button" class="btn btn-secondary" onclick="history.back()">Cancelar</button>
@@ -370,7 +370,7 @@
         </div>
 
         <div class="section-title" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-            <span>Hojas recientes</span>
+            <span>Hojas recientes ({{ module_label or 'general' }})</span>
             <button type="button" class="btn btn-secondary" style="padding:8px 10px;" onclick="abrirReportesModal()">Reportes</button>
         </div>
         <div class="card table-scroll" style="overflow:auto;">
@@ -435,7 +435,7 @@
                                 onclick="eliminarHojaDesdeFormulario({{ h.id }}, '{{ (h.serie or ('HOJA ' ~ h.id))|e }}')">
                                 Eliminar
                             </button>
-                            <a href="/hoja/{{ h.id }}">Ver / QR</a>
+                            <a href="{{ (view_base or '/hoja/') ~ h.id }}">Ver / QR</a>
                         </td>
                     </tr>
                     {% endfor %}
@@ -598,6 +598,8 @@
             { key: 'estado', label: 'Estado' }
         ];
         let reportDataDraft = [];
+        const API_BASE = '{{ api_base or "/api/hojas_ruta" }}';
+        const TIPO_HOJA = '{{ tipo_hoja or "PT" }}';
 
         function renderNow() {
             const now = new Date();
@@ -733,7 +735,8 @@
                 orden_trabajo: document.getElementById('orden_trabajo').value.trim(),
                 comentarios: document.getElementById('comentarios').value.trim(),
                 firma_ing_jose: document.getElementById('firma_ing_jose').value,
-                firma_ing_rodrigo: document.getElementById('firma_ing_rodrigo').value
+                firma_ing_rodrigo: document.getElementById('firma_ing_rodrigo').value,
+                tipo_hoja: TIPO_HOJA
             };
 
             if (!payload.clave_id || !payload.calidad || !payload.cantidad_piezas || !payload.almacen) {
@@ -742,7 +745,7 @@
             }
 
             try {
-                const res = await fetch('/api/hojas_ruta', {
+                const res = await fetch(API_BASE, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'same-origin',
@@ -843,7 +846,7 @@
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'same-origin',
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({ ...payload, tipo_hoja: TIPO_HOJA })
                 });
                 const data = await res.json();
                 if (!res.ok) {
@@ -868,7 +871,7 @@
             }
 
             try {
-                const res = await fetch('/api/hojas_ruta/' + hojaId, {
+                const res = await fetch('/api/hojas_ruta/' + hojaId + '?tipo_hoja=' + encodeURIComponent(TIPO_HOJA), {
                     method: 'DELETE',
                     credentials: 'same-origin'
                 });

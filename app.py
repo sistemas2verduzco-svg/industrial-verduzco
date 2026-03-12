@@ -32,6 +32,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+TIPO_HOJA_PRODUCTO_TERMINADO = 'PT'
+TIPO_HOJA_PRODUCCION = 'PROD'
+
 # Jobs para importación asíncrona de procesos/claves.
 # Persistimos estado en disco para evitar problemas con múltiples workers de gunicorn.
 PROCESOS_IMPORT_LOCK = threading.Lock()
@@ -670,6 +673,8 @@ def _resolve_post_login_endpoint(user):
         return 'mapa_maquinas'
     if user.has_permission('hojas', 'view'):
         return 'hojas_ruta_form'
+    if user.has_permission('hojas_produccion', 'view'):
+        return 'hojas_ruta_produccion_form'
     if user.has_permission('calidad', 'view'):
         return 'control_calidad_list'
     if user.has_permission('tickets', 'view'):
@@ -739,6 +744,7 @@ ROLE_MODULE_BUNDLES = {
     'admin_catalog': [('catalog', 'view'), ('catalog', 'edit')],
     'hojas_readonly': [('catalog', 'view'), ('hojas', 'view')],
     'hojas_generacion': [('catalog', 'view'), ('hojas', 'view'), ('hojas', 'create')],
+    'hojas_produccion': [('catalog', 'view'), ('hojas_produccion', 'view')],
     'hojas_edicion_basica': [('catalog', 'view'), ('hojas', 'view'), ('hojas', 'edit_basico')],
     'hojas_edicion_firmas': [('catalog', 'view'), ('hojas', 'view'), ('hojas', 'edit_firmas')],
     'hojas_edicion_planeacion': [('catalog', 'view'), ('hojas', 'view'), ('hojas', 'edit_planeacion')],
@@ -788,6 +794,7 @@ DEFAULT_PERMISSION_CATALOG = [
     ('hojas', 'edit_field_orden_trabajo', 'Editar campo hoja: orden de trabajo'),
     ('hojas', 'edit_field_cantidad_piezas', 'Editar campo hoja: cantidad de piezas'),
     ('hojas', 'edit_field_estado', 'Editar campo hoja: estado'),
+    ('hojas_produccion', 'view', 'Ver hojas de ruta de produccion'),
     ('estaciones', 'view', 'Ver estaciones T'),
     ('estaciones', 'operate', 'Operar estaciones/maquinas'),
     ('mapa', 'view', 'Ver mapa de maquinas'),
@@ -931,6 +938,25 @@ def _hoja_ready_for_signatures(hoja):
     return True, None
 
 
+def _hoja_tipo(hoja):
+    marker = (getattr(hoja, 'revision', None) or '').strip().upper()
+    if marker == TIPO_HOJA_PRODUCTO_TERMINADO:
+        return TIPO_HOJA_PRODUCTO_TERMINADO
+    return TIPO_HOJA_PRODUCCION
+
+
+def _query_hojas_producto_terminado():
+    return HojaRuta.query.filter(HojaRuta.revision == TIPO_HOJA_PRODUCTO_TERMINADO)
+
+
+def _query_hojas_produccion(include_legacy=True):
+    if include_legacy:
+        return HojaRuta.query.filter(
+            (HojaRuta.revision == TIPO_HOJA_PRODUCCION) | (HojaRuta.revision.is_(None))
+        )
+    return HojaRuta.query.filter(HojaRuta.revision == TIPO_HOJA_PRODUCCION)
+
+
 def _permissions_from_modules_and_ids(modules, permission_ids):
     """Resolve final permission set from module bundles and explicit permission IDs."""
     final_pairs = set()
@@ -1018,7 +1044,7 @@ def control_calidad_list():
         m = re.search(r'STATUS=(QC_OK|QC_NOK)', notas)
         return m.group(1) if m else None
 
-    hojas = HojaRuta.query.order_by(HojaRuta.fecha_creacion.desc()).all()
+    hojas = _query_hojas_produccion().order_by(HojaRuta.fecha_creacion.desc()).all()
     hojas_qc = []
     for hoja in hojas:
         estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden.asc()).all()
@@ -1066,6 +1092,8 @@ def control_calidad_list():
 def control_calidad_hoja(hoja_id):
     """Revisión de calidad por hoja de ruta y por proceso completado."""
     hoja = HojaRuta.query.get_or_404(hoja_id)
+    if _hoja_tipo(hoja) != TIPO_HOJA_PRODUCCION:
+        return render_template('403.html'), 403
     user = get_current_user()
 
     def qc_status(estacion):
@@ -1320,7 +1348,7 @@ def uploaded_file(filename):
 def hojas_ruta_list():
     """Lista de máquinas con sus hojas de ruta activas y estado de producción."""
     maquinas = Máquina.query.all()
-    hojas_activas = HojaRuta.query.filter(HojaRuta.maquina_id.isnot(None), HojaRuta.estado == 'activa').all()
+    hojas_activas = _query_hojas_produccion().filter(HojaRuta.maquina_id.isnot(None), HojaRuta.estado == 'activa').all()
     hoja_activa_por_maquina = {h.maquina_id: h for h in hojas_activas if h.maquina_id is not None}
 
     # Regla operativa: sin hoja activa asignada => maquina desactivada por default.
@@ -1363,7 +1391,7 @@ def hojas_ruta_list():
     
     # Mostrar cualquier hoja sin maquina asignada para evitar que se "pierdan"
     # por cambios de estado heredados (ej. completada por flujo anterior).
-    hojas_pendientes = HojaRuta.query.filter(
+    hojas_pendientes = _query_hojas_produccion().filter(
         HojaRuta.maquina_id.is_(None),
         HojaRuta.estado.in_(['activa', 'pausada', 'completada'])
     ).order_by(HojaRuta.fecha_creacion.asc()).all()
@@ -1449,7 +1477,7 @@ def mapa_maquinas():
 def api_mapa_maquinas():
     """Datos para el mapa de maquinas (estado, hoja activa, pieza, tiempo)."""
     todas_maquinas = Máquina.query.order_by(Máquina.nombre.asc()).all()
-    hojas_activas = HojaRuta.query.filter(HojaRuta.maquina_id.isnot(None), HojaRuta.estado == 'activa').all()
+    hojas_activas = _query_hojas_produccion().filter(HojaRuta.maquina_id.isnot(None), HojaRuta.estado == 'activa').all()
     hoja_activa_por_maquina = {h.maquina_id: h for h in hojas_activas if h.maquina_id is not None}
 
     # Regla operativa: sin hoja activa asignada => maquina desactivada por default.
@@ -1620,10 +1648,10 @@ def api_mapa_maquinas():
 @login_required
 @requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
 def hojas_ruta_form():
-    """Formulario simplificado para crear hojas de ruta de produccion."""
+    """Formulario de hojas de ruta de PRODUCTO TERMINADO."""
     almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria']
     # Listado reciente (máximo 50) para consulta rápida
-    hojas = HojaRuta.query.order_by(HojaRuta.fecha_creacion.desc()).limit(50).all()
+    hojas = _query_hojas_producto_terminado().order_by(HojaRuta.fecha_creacion.desc()).limit(50).all()
     claves_all = ClaveProducto.query.all()
     claves_idx = {
         (str(c.clave or '').strip().upper()): c
@@ -1660,22 +1688,120 @@ def hojas_ruta_form():
             'fecha_salida': h.fecha_salida.isoformat() if h.fecha_salida else None,
             'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None,
         })
-    return render_template('hojas_ruta_form.html', hojas=hojas_data, almacenes=almacenes)
+    return render_template(
+        'hojas_ruta_form.html',
+        hojas=hojas_data,
+        almacenes=almacenes,
+        module_title='Nueva Hoja de Ruta de Producto Terminado',
+        module_kind='producto_terminado',
+        module_label='Producto Terminado',
+        api_base='/api/hojas_ruta',
+        view_base='/hoja/',
+        tipo_hoja=TIPO_HOJA_PRODUCTO_TERMINADO,
+    )
+
+
+@app.route('/hojas_ruta_produccion_form')
+@login_required
+@requires_any_permission([('hojas_produccion', 'view'), ('catalog', 'view')])
+def hojas_ruta_produccion_form():
+    """Formulario de hojas de ruta de PRODUCCION (separado del módulo PT)."""
+    almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria']
+    hojas = _query_hojas_produccion().order_by(HojaRuta.fecha_creacion.desc()).limit(50).all()
+    claves_all = ClaveProducto.query.all()
+    claves_idx = {
+        (str(c.clave or '').strip().upper()): c
+        for c in claves_all
+        if str(c.clave or '').strip()
+    }
+
+    hojas_data = []
+    for h in hojas:
+        qr_payload = f"HRID:{h.id};SERIE:{h.nombre or ''}"
+        descripcion_clave = _resolve_clave_descripcion_by_pn(h.pn)
+        clave_obj = claves_idx.get(str(h.pn or '').strip().upper())
+        comentarios_val = _clean_nullable_text(h.materia_prima)
+        if not comentarios_val:
+            legacy_desc = _clean_nullable_text(h.descripcion)
+            if legacy_desc and legacy_desc != _clean_nullable_text(descripcion_clave):
+                comentarios_val = legacy_desc
+        hojas_data.append({
+            'id': h.id,
+            'maquina_id': h.maquina_id,
+            'serie': h.nombre,
+            'qr_payload': qr_payload,
+            'clave': h.pn,
+            'clave_id': clave_obj.id if clave_obj else None,
+            'descripcion_clave': descripcion_clave,
+            'calidad': h.calidad,
+            'almacen': h.almacen,
+            'orden_trabajo': h.orden_trabajo_hr,
+            'comentarios': comentarios_val,
+            'firma_ing_jose': h.supervisor,
+            'firma_ing_rodrigo': h.operador,
+            'estado': h.estado,
+            'cantidad_piezas': h.cantidad_piezas,
+            'fecha_salida': h.fecha_salida.isoformat() if h.fecha_salida else None,
+            'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None,
+        })
+
+    return render_template(
+        'hojas_ruta_form.html',
+        hojas=hojas_data,
+        almacenes=almacenes,
+        module_title='Nueva Hoja de Ruta de Producción',
+        module_kind='produccion',
+        module_label='Producción',
+        api_base='/api/hojas_ruta',
+        view_base='/hoja_produccion/',
+        tipo_hoja=TIPO_HOJA_PRODUCCION,
+    )
 
 
 @app.route('/hoja/<int:hoja_id>')
 @login_required
 @requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
 def hoja_ruta_ver(hoja_id):
-    """Vista independiente para ver una hoja por ID, sin requerir máquina."""
+    """Vista de hoja de ruta de PRODUCTO TERMINADO."""
     hoja = HojaRuta.query.get_or_404(hoja_id)
+    if _hoja_tipo(hoja) != TIPO_HOJA_PRODUCTO_TERMINADO:
+        return render_template('403.html'), 403
     h = hoja.to_dict()
     h['descripcion_clave'] = _resolve_clave_descripcion_by_pn(hoja.pn)
     h['qr_payload'] = f"HRID:{hoja.id};SERIE:{hoja.nombre or ''}"
     h['qr_deeplink'] = request.url_root.rstrip('/') + f"/hoja/{hoja.id}"
     estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
     h['estaciones'] = [e.to_dict() for e in estaciones]
-    return render_template('hoja_ruta_ver.html', hoja=h)
+    return render_template(
+        'hoja_ruta_ver.html',
+        hoja=h,
+        doc_title='Hoja De Ruta De Producto Terminado',
+        doc_subtitle='Control operacional para producto terminado y trazabilidad documental',
+        back_url='/hojas_ruta_form',
+    )
+
+
+@app.route('/hoja_produccion/<int:hoja_id>')
+@login_required
+@requires_any_permission([('hojas_produccion', 'view'), ('catalog', 'view')])
+def hoja_ruta_produccion_ver(hoja_id):
+    """Vista de hoja de ruta de PRODUCCION."""
+    hoja = HojaRuta.query.get_or_404(hoja_id)
+    if _hoja_tipo(hoja) != TIPO_HOJA_PRODUCCION:
+        return render_template('403.html'), 403
+    h = hoja.to_dict()
+    h['descripcion_clave'] = _resolve_clave_descripcion_by_pn(hoja.pn)
+    h['qr_payload'] = f"HRID:{hoja.id};SERIE:{hoja.nombre or ''}"
+    h['qr_deeplink'] = request.url_root.rstrip('/') + f"/hoja_produccion/{hoja.id}"
+    estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
+    h['estaciones'] = [e.to_dict() for e in estaciones]
+    return render_template(
+        'hoja_ruta_ver.html',
+        hoja=h,
+        doc_title='Hoja De Ruta De Produccion',
+        doc_subtitle='Control operacional para ciclo de produccion y seguimiento de procesos por clave',
+        back_url='/hojas_ruta_produccion_form',
+    )
 
 
 @app.route('/api/hojas_ruta/resolver_codigo', methods=['POST'])
@@ -1710,11 +1836,11 @@ def api_resolver_codigo_hoja_ruta():
 
     hoja = None
     if hoja_id is not None:
-        hoja = HojaRuta.query.get(hoja_id)
+        hoja = _query_hojas_produccion().filter(HojaRuta.id == hoja_id).first()
 
     # 4) Fallback por serie exacta
     if hoja is None:
-        hoja = HojaRuta.query.filter_by(nombre=value).first()
+        hoja = _query_hojas_produccion().filter_by(nombre=value).first()
 
     if hoja is None:
         return jsonify({'error': 'No se encontro hoja para el codigo escaneado'}), 404
@@ -1736,7 +1862,7 @@ def api_resolver_codigo_hoja_ruta():
 def hojas_ruta_detalle(maquina_id):
     """Detalle de hojas de ruta para una máquina específica."""
     maquina = Máquina.query.get_or_404(maquina_id)
-    hojas = HojaRuta.query.filter_by(maquina_id=maquina_id).order_by(HojaRuta.fecha_creacion.desc()).all()
+    hojas = _query_hojas_produccion().filter_by(maquina_id=maquina_id).order_by(HojaRuta.fecha_creacion.desc()).all()
     
     hojas_data = []
     for hoja in hojas:
@@ -1755,7 +1881,7 @@ def hojas_ruta_detalle(maquina_id):
 def qc_estaciones_maquina(maquina_id):
     """Vista independiente de control de calidad para producción por máquina."""
     maquina = Máquina.query.get_or_404(maquina_id)
-    hoja_activa = HojaRuta.query.filter_by(maquina_id=maquina_id, estado='activa').first()
+    hoja_activa = _query_hojas_produccion().filter_by(maquina_id=maquina_id, estado='activa').first()
     registros = QCProduccionRegistro.query.filter_by(maquina_id=maquina_id).order_by(QCProduccionRegistro.creado_en.desc()).limit(50).all()
     return render_template('qc_estaciones.html', maquina=maquina, hoja_activa=hoja_activa, registros=registros)
 
@@ -1776,6 +1902,9 @@ def api_crear_hoja_ruta():
     firma_ing_jose = (data.get('firma_ing_jose') or '').strip()
     firma_ing_rodrigo = (data.get('firma_ing_rodrigo') or '').strip()
     cantidad_piezas = data.get('cantidad_piezas')
+    tipo_hoja = (data.get('tipo_hoja') or TIPO_HOJA_PRODUCTO_TERMINADO).strip().upper()
+    if tipo_hoja not in (TIPO_HOJA_PRODUCTO_TERMINADO, TIPO_HOJA_PRODUCCION):
+        tipo_hoja = TIPO_HOJA_PRODUCTO_TERMINADO
     user = get_current_user()
 
     firma_jose_aut = firma_ing_jose.upper() == 'AUTORIZADO'
@@ -1805,7 +1934,7 @@ def api_crear_hoja_ruta():
     # day: bloquea si ya existe hoja de esa clave creada hoy.
     # week: bloquea si ya existe hoja de esa clave creada en la semana actual.
     duplicate_scope = (os.getenv('HOJA_RUTA_DUPLICATE_SCOPE', 'active') or 'active').strip().lower()
-    existing_q = HojaRuta.query.filter(HojaRuta.pn == clave.clave)
+    existing_q = HojaRuta.query.filter(HojaRuta.pn == clave.clave, HojaRuta.revision == tipo_hoja)
     if duplicate_scope == 'day':
         now_dt = datetime.utcnow()
         day_start = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -1835,13 +1964,18 @@ def api_crear_hoja_ruta():
 
     maquina_id = int(data.get('maquina_id')) if data.get('maquina_id') else None
     if maquina_id:
-        hoja_activa_misma_clave = HojaRuta.query.filter_by(maquina_id=maquina_id, pn=clave.clave, estado='activa').first()
+        hoja_activa_misma_clave = HojaRuta.query.filter_by(
+            maquina_id=maquina_id,
+            pn=clave.clave,
+            estado='activa',
+            revision=tipo_hoja,
+        ).first()
         if hoja_activa_misma_clave:
             return jsonify({'error': 'La clave ya tiene una hoja activa en esta máquina'}), 409
 
     veces_previas_maquina = 0
     if maquina_id:
-        veces_previas_maquina = HojaRuta.query.filter_by(maquina_id=maquina_id, pn=clave.clave).count()
+        veces_previas_maquina = HojaRuta.query.filter_by(maquina_id=maquina_id, pn=clave.clave, revision=tipo_hoja).count()
 
     procesos = ClaveProceso.query.filter_by(clave_id=clave_id).order_by(ClaveProceso.orden).all()
     if not procesos:
@@ -1860,7 +1994,7 @@ def api_crear_hoja_ruta():
             producto=clave.nombre,
             calidad=calidad,
             pn=clave.clave,
-            revision=None,
+            revision=tipo_hoja,
             fecha_salida=fecha_actual,
             cantidad_piezas=int(cantidad_piezas),
             orden_trabajo_hr=orden_trabajo or None,
@@ -1936,6 +2070,10 @@ def api_actualizar_hoja_ruta(hoja_id):
     """Actualizar campos editables de una hoja de ruta."""
     hoja = HojaRuta.query.get_or_404(hoja_id)
     data = request.get_json() or {}
+    tipo_hoja_req = (data.get('tipo_hoja') or '').strip().upper()
+    if tipo_hoja_req in (TIPO_HOJA_PRODUCTO_TERMINADO, TIPO_HOJA_PRODUCCION):
+        if _hoja_tipo(hoja) != tipo_hoja_req:
+            return jsonify({'error': 'La hoja pertenece a otro modulo'}), 409
 
     user = get_current_user()
     hoja_field_permissions = {
@@ -2033,7 +2171,7 @@ def api_actualizar_hoja_ruta(hoja_id):
 
 @app.route('/api/claves_procesos', methods=['GET'])
 @login_required
-@requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
+@requires_any_permission([('hojas', 'view'), ('hojas_produccion', 'view'), ('catalog', 'view')])
 def api_claves_procesos():
     """Obtener todas las claves con sus procesos y tiempo total T/O."""
     try:
@@ -2185,10 +2323,12 @@ def api_asignar_hoja_maquina(maquina_id):
         return jsonify({'error': 'hoja_id requerido'}), 400
 
     hoja = HojaRuta.query.get_or_404(int(hoja_id))
+    if _hoja_tipo(hoja) != TIPO_HOJA_PRODUCCION:
+        return jsonify({'error': 'Solo se pueden asignar hojas del modulo Produccion'}), 409
     if hoja.maquina_id and hoja.maquina_id != maq.id:
         return jsonify({'error': 'La hoja ya está asignada a otra máquina'}), 409
 
-    activa_actual = HojaRuta.query.filter_by(maquina_id=maq.id, estado='activa').first()
+    activa_actual = _query_hojas_produccion().filter_by(maquina_id=maq.id, estado='activa').first()
     if activa_actual and activa_actual.id != hoja.id:
         return jsonify({'error': 'La máquina ya tiene una hoja activa asignada'}), 409
 
@@ -2287,7 +2427,7 @@ def api_retirar_hoja_maquina(maquina_id):
         if hoja.maquina_id != maq.id:
             return jsonify({'error': 'La hoja no pertenece a esta máquina'}), 409
     else:
-        hoja = HojaRuta.query.filter_by(maquina_id=maq.id, estado='activa').order_by(HojaRuta.fecha_creacion.desc()).first()
+        hoja = _query_hojas_produccion().filter_by(maquina_id=maq.id, estado='activa').order_by(HojaRuta.fecha_creacion.desc()).first()
         if not hoja:
             return jsonify({'error': 'No hay hoja activa asignada a esta máquina'}), 404
 
@@ -2396,6 +2536,10 @@ def api_check_proceso_estacion(estacion_id):
 def api_eliminar_hoja_ruta(hoja_id):
     """Eliminar una hoja de ruta. Solo permite borrar hojas no asignadas a maquina."""
     hoja = HojaRuta.query.get_or_404(hoja_id)
+    tipo_hoja_req = (request.args.get('tipo_hoja') or '').strip().upper()
+    if tipo_hoja_req in (TIPO_HOJA_PRODUCTO_TERMINADO, TIPO_HOJA_PRODUCCION):
+        if _hoja_tipo(hoja) != tipo_hoja_req:
+            return jsonify({'error': 'La hoja pertenece a otro modulo'}), 409
 
     if hoja.maquina_id is not None:
         return jsonify({'error': 'No puedes eliminar una hoja asignada a una maquina. Primero desasignala.'}), 409
@@ -2432,11 +2576,11 @@ def api_ingresar_piezas():
     except Exception:
         return jsonify({'error': 'maquina_id inválido'}), 400
 
-    hoja_activa_misma_clave = HojaRuta.query.filter_by(maquina_id=maquina_id_int, pn=clave, estado='activa').first()
+    hoja_activa_misma_clave = _query_hojas_produccion().filter_by(maquina_id=maquina_id_int, pn=clave, estado='activa').first()
     if hoja_activa_misma_clave:
         return jsonify({'error': 'Esta pieza/clave ya tiene hoja activa en esta máquina'}), 409
 
-    veces_previas_maquina = HojaRuta.query.filter_by(maquina_id=maquina_id_int, pn=clave).count()
+    veces_previas_maquina = _query_hojas_produccion().filter_by(maquina_id=maquina_id_int, pn=clave).count()
 
     try:
         nombre = f"Producción {clave}"
@@ -2446,6 +2590,7 @@ def api_ingresar_piezas():
             nombre=nombre,
             producto=producto or clave,
             pn=clave,
+            revision=TIPO_HOJA_PRODUCCION,
             cantidad_piezas=int(cantidad),
             total_tiempo=tiempo_total,
             fecha_salida=datetime.utcnow(),
