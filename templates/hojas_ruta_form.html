@@ -226,6 +226,7 @@
             overflow-y: hidden;
             -webkit-overflow-scrolling: touch;
             scrollbar-width: none;
+            width: 100%;
         }
 
         .hojas-recientes-wrap::-webkit-scrollbar {
@@ -237,73 +238,91 @@
         .hojas-recientes-table {
             width: 100%;
             table-layout: auto;
+            border-collapse: collapse;
         }
 
         .hojas-recientes-table th,
         .hojas-recientes-table td {
-            white-space: nowrap;
-            word-break: normal;
-            overflow-wrap: normal;
+            padding: 8px;
+            text-align: left;
             vertical-align: top;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            border-bottom: 1px solid #f0f0f0;
         }
 
-        /* Columnas con texto largo: permitir salto natural de palabra (sin ellipsis) */
-        .hojas-recientes-table th:nth-child(2),
-        .hojas-recientes-table td:nth-child(2),
-        .hojas-recientes-table th:nth-child(4),
-        .hojas-recientes-table td:nth-child(4),
-        .hojas-recientes-table th:nth-child(9),
-        .hojas-recientes-table td:nth-child(9),
-        .hojas-recientes-table th:nth-child(10),
-        .hojas-recientes-table td:nth-child(10) {
-            white-space: normal;
-            overflow: visible;
-            overflow-wrap: break-word;
-            word-break: normal;
-            text-overflow: clip;
-            line-height: 1.4;
+        .hojas-recientes-table th {
+            background: #f7f9fb;
+            font-weight: 700;
+            font-size: 13px;
         }
 
+        .hojas-recientes-table td {
+            font-size: 13px;
+        }
+
+        /* Columnas compactas */
         .hojas-recientes-table th:nth-child(1),
-        .hojas-recientes-table td:nth-child(1) { width: 45px; }
+        .hojas-recientes-table td:nth-child(1) { width: 50px; min-width: 50px; }
+        
         .hojas-recientes-table th:nth-child(2),
-        .hojas-recientes-table td:nth-child(2) { width: 120px; }
-        .hojas-recientes-table th:nth-child(3),
-        .hojas-recientes-table td:nth-child(3) { width: 60px; }
-        .hojas-recientes-table th:nth-child(4),
-        .hojas-recientes-table td:nth-child(4) { width: 180px; }
-        .hojas-recientes-table th:nth-child(5),
-        .hojas-recientes-table td:nth-child(5) { width: 70px; }
-        .hojas-recientes-table th:nth-child(6),
-        .hojas-recientes-table td:nth-child(6) { width: 100px; }
-        .hojas-recientes-table th:nth-child(7),
-        .hojas-recientes-table td:nth-child(7) { width: 60px; }
-        .hojas-recientes-table th:nth-child(8),
-        .hojas-recientes-table td:nth-child(8) { width: 80px; }
-        .hojas-recientes-table th:nth-child(9),
-        .hojas-recientes-table td:nth-child(9) { width: 110px; }
-        .hojas-recientes-table th:nth-child(10),
-        .hojas-recientes-table td:nth-child(10) { width: 180px; }
-        .hojas-recientes-table th:nth-child(11),
-        .hojas-recientes-table td:nth-child(11) { width: 75px; }
-        .hojas-recientes-table th:nth-child(12),
-        .hojas-recientes-table td:nth-child(12) { width: 75px; }
-        .hojas-recientes-table th:nth-child(13),
-        .hojas-recientes-table td:nth-child(13) { width: 70px; }
-        .hojas-recientes-table th:nth-child(14),
-        .hojas-recientes-table td:nth-child(14) { width: 130px; }
-
-        .hojas-recientes-table td:last-child {
+        .hojas-recientes-table td:nth-child(2) { 
+            width: 140px; 
+            min-width: 140px;
             white-space: nowrap;
         }
-
-        .hojas-recientes-table .btn-edit,
-        .hojas-recientes-table .btn-delete {
-            display: inline-block;
-            margin-bottom: 4px;
+        
+        .hojas-recientes-table th:nth-child(3),
+        .hojas-recientes-table td:nth-child(3) { 
+            width: 65px; 
+            min-width: 65px;
+            white-space: nowrap;
         }
+        
+        /* Descripción - puede crecer */
+        .hojas-recientes-table th:nth-child(4),
+        .hojas-recientes-table td:nth-child(4) { 
+            min-width: 200px;
+            white-space: normal;
+            word-wrap: break-word;
+        }
+        
+        .hojas-recientes-table th:nth-child(5),
+        .hojas-recientes-table td:nth-child(5) { width: 75px; min-width: 75px; }
+        
+        .hojas-recientes-table th:nth-child(6),
+        .hojas-recientes-table td:nth-child(6) { width: 110px; min-width: 110px; }
+        
+        .hojas-recientes-table th:nth-child(7),
+        .hojas-recientes-table td:nth-child(7) { width: 65px; min-width: 65px; }
+        
+        .hojas-recientes-table th:nth-child(8),
+        .hojas-recientes-table td:nth-child(8) { width: 85px; min-width: 85px; }
+        
+        .hojas-recientes-table th:nth-child(9),
+        .hojas-recientes-table td:nth-child(9) { 
+            width: 120px; 
+            min-width: 120px;
+            white-space: normal;
+        }
+        
+        /* Comentarios - puede crecer */
+        .hojas-recientes-table th:nth-child(10),
+        .hojas-recientes-table td:nth-child(10) { 
+            min-width: 200px;
+            white-space: normal;
+            word-wrap: break-word;
+        }
+        
+        .hojas-recientes-table th:nth-child(11),
+        .hojas-recientes-table td:nth-child(11) { width: 85px; min-width: 85px; }
+        
+        .hojas-recientes-table th:nth-child(12),
+        .hojas-recientes-table td:nth-child(12) { width: 85px; min-width: 85px; }
+        
+        .hojas-recientes-table th:nth-child(13),
+        .hojas-recientes-table td:nth-child(13) { width: 75px; min-width: 75px; }
+        
+        .hojas-recientes-table th:nth-child(14),
+        .hojas-recientes-table td:nth-child(14) { width: 140px; min-width: 140px; }
 
         @media (max-width: 900px) {
             .container {
@@ -492,13 +511,13 @@
                         <td>{{ h.id }}</td>
                         <td>{{ h.serie or '' }}</td>
                         <td>{{ h.clave or '' }}</td>
-                        <td>{{ (h.descripcion_clave or h.clave or '')[:70] }}{% if (h.descripcion_clave or h.clave) and (h.descripcion_clave or h.clave)|length > 70 %}...{% endif %}</td>
+                        <td>{{ h.descripcion_clave or h.clave or '' }}</td>
                         <td>{{ h.calidad or '' }}</td>
                         <td>{{ h.fecha_salida[:16] if h.fecha_salida else '' }}</td>
                         <td>{{ h.cantidad_piezas or '' }}</td>
                         <td>{{ h.almacen or '' }}</td>
                         <td>{{ h.orden_trabajo or '' }}</td>
-                        <td>{{ (h.comentarios or '')[:70] }}{% if h.comentarios and h.comentarios|length > 70 %}...{% endif %}</td>
+                        <td>{{ h.comentarios or '' }}</td>
                         <td>{{ h.firma_ing_jose or 'Pendiente' }}</td>
                         <td>{{ h.firma_ing_rodrigo or 'Pendiente' }}</td>
                         <td>{{ h.estado or '' }}</td>
