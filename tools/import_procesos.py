@@ -144,6 +144,39 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def expand_compound_claves(df: pd.DataFrame) -> pd.DataFrame:
+    """Expande claves compuestas (ej. SF12/SF13) en registros por clave individual."""
+    if df.empty or 'clave' not in df.columns:
+        return df
+
+    expanded_rows = []
+    expanded_count = 0
+
+    for _, row in df.iterrows():
+        raw_clave = str(row.get('clave') or '').strip().upper()
+        if not raw_clave:
+            continue
+
+        parts = [part.strip().upper() for part in raw_clave.split('/') if part and part.strip()]
+        if len(parts) <= 1:
+            row_copy = row.copy()
+            row_copy['clave'] = raw_clave
+            expanded_rows.append(row_copy)
+            continue
+
+        expanded_count += len(parts) - 1
+        for part in parts:
+            row_copy = row.copy()
+            row_copy['clave'] = part
+            expanded_rows.append(row_copy)
+
+    expanded_df = pd.DataFrame(expanded_rows)
+    if expanded_count > 0:
+        print(f"\nℹ Claves compuestas expandidas: +{expanded_count} registros (separadas por '/')")
+
+    return expanded_df
+
+
 # --- Import logic ---------------------------------------------------------
 
 def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: int = 0) -> None:
@@ -189,6 +222,10 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
         print(f"\n⚠ Eliminados {duplicados_eliminados} procesos duplicados dentro de claves")
         df = df[~df['_es_duplicado']].copy()
     df = df.drop(columns=['_dedup_key', '_grupo_clave', '_es_duplicado'])
+
+    # Separar claves compuestas (ej. SF12/SF13 -> SF12 y SF13 con mismos procesos)
+    df = expand_compound_claves(df)
+    df = df.sort_values(["clave", "orden"], kind="stable")
     
     # Reordenar orden después de deduplicar
     df['orden'] = df.groupby('clave', sort=False).cumcount() + 1
