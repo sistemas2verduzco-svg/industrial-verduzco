@@ -1320,8 +1320,18 @@ def uploaded_file(filename):
 def hojas_ruta_list():
     """Lista de máquinas con sus hojas de ruta activas y estado de producción."""
     maquinas = Máquina.query.all()
-    hojas_activas = HojaRuta.query.filter(HojaRuta.maquina_id.isnot(None), HojaRuta.estado == 'activa').all()
-    hoja_activa_por_maquina = {h.maquina_id: h for h in hojas_activas if h.maquina_id is not None}
+    hojas_activas = HojaRuta.query.filter(
+        HojaRuta.maquina_id.isnot(None),
+        HojaRuta.estado.in_(['activa', 'pausada'])
+    ).order_by(HojaRuta.fecha_creacion.desc()).all()
+    # Preferir 'activa' sobre 'pausada'; en caso de duplicados por maquina, quedarse con la primera encontrada.
+    hoja_activa_por_maquina: dict = {}
+    for h in hojas_activas:
+        existing = hoja_activa_por_maquina.get(h.maquina_id)
+        if existing is None:
+            hoja_activa_por_maquina[h.maquina_id] = h
+        elif existing.estado != 'activa' and h.estado == 'activa':
+            hoja_activa_por_maquina[h.maquina_id] = h
 
     # Regla operativa: sin hoja activa asignada => maquina desactivada por default.
     estado_maquina_changed = False
@@ -1449,8 +1459,17 @@ def mapa_maquinas():
 def api_mapa_maquinas():
     """Datos para el mapa de maquinas (estado, hoja activa, pieza, tiempo)."""
     todas_maquinas = Máquina.query.order_by(Máquina.nombre.asc()).all()
-    hojas_activas = HojaRuta.query.filter(HojaRuta.maquina_id.isnot(None), HojaRuta.estado == 'activa').all()
-    hoja_activa_por_maquina = {h.maquina_id: h for h in hojas_activas if h.maquina_id is not None}
+    hojas_activas = HojaRuta.query.filter(
+        HojaRuta.maquina_id.isnot(None),
+        HojaRuta.estado.in_(['activa', 'pausada'])
+    ).order_by(HojaRuta.fecha_creacion.desc()).all()
+    hoja_activa_por_maquina: dict = {}
+    for h in hojas_activas:
+        existing = hoja_activa_por_maquina.get(h.maquina_id)
+        if existing is None:
+            hoja_activa_por_maquina[h.maquina_id] = h
+        elif existing.estado != 'activa' and h.estado == 'activa':
+            hoja_activa_por_maquina[h.maquina_id] = h
 
     # Regla operativa: sin hoja activa asignada => maquina desactivada por default.
     estado_maquina_changed = False
@@ -1835,9 +1854,20 @@ def api_crear_hoja_ruta():
 
     maquina_id = int(data.get('maquina_id')) if data.get('maquina_id') else None
     if maquina_id:
-        hoja_activa_misma_clave = HojaRuta.query.filter_by(maquina_id=maquina_id, pn=clave.clave, estado='activa').first()
-        if hoja_activa_misma_clave:
-            return jsonify({'error': 'La clave ya tiene una hoja activa en esta máquina'}), 409
+        hoja_ocupada = HojaRuta.query.filter(
+            HojaRuta.maquina_id == maquina_id,
+            HojaRuta.estado.in_(['activa', 'pausada'])
+        ).first()
+        if hoja_ocupada:
+            return jsonify({
+                'error': 'La máquina ya tiene una hoja activa o pausada. Retira la hoja actual antes de crear una nueva.',
+                'code': 'machine_busy',
+                'existing_hoja': {
+                    'id': hoja_ocupada.id,
+                    'folio': hoja_ocupada.nombre,
+                    'estado': hoja_ocupada.estado,
+                }
+            }), 409
 
     veces_previas_maquina = 0
     if maquina_id:
@@ -2432,9 +2462,12 @@ def api_ingresar_piezas():
     except Exception:
         return jsonify({'error': 'maquina_id inválido'}), 400
 
-    hoja_activa_misma_clave = HojaRuta.query.filter_by(maquina_id=maquina_id_int, pn=clave, estado='activa').first()
-    if hoja_activa_misma_clave:
-        return jsonify({'error': 'Esta pieza/clave ya tiene hoja activa en esta máquina'}), 409
+    hoja_ocupada = HojaRuta.query.filter(
+        HojaRuta.maquina_id == maquina_id_int,
+        HojaRuta.estado.in_(['activa', 'pausada'])
+    ).first()
+    if hoja_ocupada:
+        return jsonify({'error': 'La máquina ya tiene una hoja activa o pausada. Retira la hoja actual antes de agregar otra.'}), 409
 
     veces_previas_maquina = HojaRuta.query.filter_by(maquina_id=maquina_id_int, pn=clave).count()
 

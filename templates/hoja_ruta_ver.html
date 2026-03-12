@@ -189,11 +189,14 @@
     .table-wrap {
       border: 1px solid var(--line-strong);
       border-radius: 10px;
-      overflow: hidden;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
     }
 
     table {
       width: 100%;
+      min-width: 820px;
       border-collapse: collapse;
     }
 
@@ -271,6 +274,9 @@
       }
       .sign-row {
         grid-template-columns: 1fr;
+      }
+      table {
+        min-width: 760px;
       }
     }
 
