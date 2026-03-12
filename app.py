@@ -1078,6 +1078,49 @@ def control_calidad_hoja(hoja_id):
         # Reemplaza bloque QC previo para evitar crecimiento infinito de notas.
         return re.sub(r'\n?\[QC_REVIEW_START\].*?\[QC_REVIEW_END\]\n?', '\n', src, flags=re.S).strip()
 
+    def qc_parse_review(estacion):
+        notas_text = estacion.notas or ''
+        status = qc_status(estacion)
+        block_match = re.search(r'\[QC_REVIEW_START\](.*?)\[QC_REVIEW_END\]', notas_text, flags=re.S)
+        block = block_match.group(1) if block_match else ''
+
+        def _extract(field, default=''):
+            m = re.search(rf'^{field}=(.*)$', block, flags=re.M)
+            return m.group(1).strip() if m else default
+
+        scrap_raw = _extract('SCRAP_PIEZAS', '0')
+        try:
+            scrap_piezas = int(scrap_raw)
+        except Exception:
+            scrap_piezas = 0
+        if scrap_piezas < 0:
+            scrap_piezas = 0
+
+        return {
+            'status': status,
+            'scrap_piezas': scrap_piezas,
+            'observaciones': _extract('OBSERVACIONES', ''),
+        }
+
+    def qc_strip_scrap_summary(comentarios_text):
+        src = comentarios_text or ''
+        return re.sub(
+            r'\n?\[QC_SCRAP_SUMMARY_START\].*?\[QC_SCRAP_SUMMARY_END\]\n?',
+            '\n',
+            src,
+            flags=re.S,
+        ).strip()
+
+    def qc_extract_lote_inicial(comentarios_text):
+        src = comentarios_text or ''
+        m = re.search(r'^LOTE_INICIAL=(\d+)$', src, flags=re.M)
+        if not m:
+            return None
+        try:
+            return max(0, int(m.group(1)))
+        except Exception:
+            return None
+
     informe_guardado = False
     error_guardado = None
 
@@ -1094,6 +1137,9 @@ def control_calidad_hoja(hoja_id):
             estacion_id = request.form.get('estacion_id', type=int)
             resultado = (request.form.get('resultado') or '').strip().lower()
             observaciones = (request.form.get('observaciones') or '').strip()
+            scrap_piezas = request.form.get('scrap_piezas', type=int)
+            if scrap_piezas is None:
+                scrap_piezas = 0
 
             estacion = EstacionTrabajo.query.filter_by(id=estacion_id, hoja_ruta_id=hoja.id).first()
             if not estacion:
@@ -1102,6 +1148,8 @@ def control_calidad_hoja(hoja_id):
                 error_guardado = 'Solo se pueden validar procesos completados'
             elif resultado not in ('aprobado', 'rechazado'):
                 error_guardado = 'Selecciona un resultado válido (Aprobado/Rechazado)'
+            elif scrap_piezas < 0:
+                error_guardado = 'Scrap inválido: no puede ser negativo'
             else:
                 # Checklist estándar para refacciones (sinfines, engranes, etc.)
                 check_dimensional = _is_checked('chk_dimensional')
@@ -1126,6 +1174,7 @@ def control_calidad_hoja(hoja_id):
                     f"MATERIAL={'OK' if check_material else 'NO'}\n"
                     f"AJUSTE={'OK' if check_ajuste else 'NO'}\n"
                     f"LIMPIEZA={'OK' if check_limpieza else 'NO'}\n"
+                    f"SCRAP_PIEZAS={scrap_piezas}\n"
                     f"OBSERVACIONES={observaciones}\n"
                     "[QC_REVIEW_END]"
                 )
@@ -1137,9 +1186,18 @@ def control_calidad_hoja(hoja_id):
 
                 # Estado de hoja por consolidación QC de procesos completados
                 completadas = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id, estado='completada').all()
-                statuses = [qc_status(e) for e in completadas]
+                reviews = [qc_parse_review(e) for e in completadas]
+                statuses = [r['status'] for r in reviews]
                 pendientes = any(s not in ('QC_OK', 'QC_NOK') for s in statuses)
                 hay_rechazo = any(s == 'QC_NOK' for s in statuses)
+
+                # Lote base fijo para evitar descuentos acumulados por re-ediciones.
+                lote_inicial = qc_extract_lote_inicial(hoja.materia_prima)
+                if lote_inicial is None:
+                    try:
+                        lote_inicial = max(0, int(hoja.cantidad_piezas or 0))
+                    except Exception:
+                        lote_inicial = 0
 
                 if pendientes:
                     hoja.aprobada = False
@@ -1147,6 +1205,49 @@ def control_calidad_hoja(hoja_id):
                 else:
                     hoja.aprobada = not hay_rechazo
                     hoja.rechazada = hay_rechazo
+
+                if hoja.aprobada and not hoja.rechazada:
+                    total_scrap = sum(max(0, int(r['scrap_piezas'] or 0)) for r in reviews)
+                    if lote_inicial > 0:
+                        total_scrap = min(total_scrap, lote_inicial)
+                    cantidad_final = max(lote_inicial - total_scrap, 0)
+                    hoja.cantidad_piezas = cantidad_final
+                    hoja.scrap = str(total_scrap)
+
+                    detalles = []
+                    for est, rev in zip(completadas, reviews):
+                        scrap_est = max(0, int(rev['scrap_piezas'] or 0))
+                        if scrap_est <= 0:
+                            continue
+                        etiqueta = (est.centro_trabajo or est.operacion or f'Estacion {est.orden}').strip()
+                        detalles.append(f"P{est.orden} - {etiqueta}: {scrap_est}")
+
+                    detalles_txt = '; '.join(detalles) if detalles else 'Sin scrap por proceso.'
+                    fecha_resumen = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+                    bloque_scrap = (
+                        "[QC_SCRAP_SUMMARY_START]\n"
+                        f"LOTE_INICIAL={lote_inicial}\n"
+                        f"TOTAL_SCRAP={total_scrap}\n"
+                        f"LOTE_FINAL={cantidad_final}\n"
+                        f"DETALLE={detalles_txt}\n"
+                        f"ACTUALIZADO_POR={usuario_qc}\n"
+                        f"FECHA={fecha_resumen}\n"
+                        "[QC_SCRAP_SUMMARY_END]"
+                    )
+
+                    base_comentarios = qc_strip_scrap_summary(hoja.materia_prima)
+                    hoja.materia_prima = (
+                        (base_comentarios + "\n\n" + bloque_scrap).strip()
+                        if base_comentarios else bloque_scrap
+                    )
+                else:
+                    # Si aun no queda aprobada, quitar resumen previo para evitar inconsistencias visuales.
+                    base_comentarios = qc_strip_scrap_summary(hoja.materia_prima)
+                    if base_comentarios != (hoja.materia_prima or '').strip():
+                        hoja.materia_prima = base_comentarios or None
+                    if lote_inicial > 0:
+                        hoja.cantidad_piezas = lote_inicial
+                    hoja.scrap = None
 
                 try:
                     db.session.commit()
@@ -1158,16 +1259,24 @@ def control_calidad_hoja(hoja_id):
 
     estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden.asc()).all()
     procesos_completados = []
+    lote_referencia = qc_extract_lote_inicial(hoja.materia_prima)
+    if lote_referencia is None:
+        try:
+            lote_referencia = max(0, int(hoja.cantidad_piezas or 0))
+        except Exception:
+            lote_referencia = 0
+
     for e in estaciones:
         if (e.estado or '').lower() != 'completada':
             continue
-        status = qc_status(e)
+        review = qc_parse_review(e)
         procesos_completados.append({
             'id': e.id,
             'orden': e.orden,
             'centro_trabajo': e.centro_trabajo,
             'operacion': e.operacion,
-            'status_qc': status,
+            'status_qc': review['status'],
+            'scrap_piezas': review['scrap_piezas'],
             'notas': e.notas,
             'fecha_finalizacion': e.fecha_finalizacion,
         })
@@ -1178,6 +1287,7 @@ def control_calidad_hoja(hoja_id):
         'control_calidad_detalle.html',
         hoja=hoja,
         procesos=procesos_completados,
+        lote_referencia=lote_referencia,
         pendientes_qc=pendientes_qc,
         informe_guardado=informe_guardado,
         error_guardado=error_guardado,
