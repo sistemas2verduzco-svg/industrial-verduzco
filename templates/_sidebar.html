@@ -88,6 +88,7 @@
         color: #fff;
         padding: 20px;
         overflow: hidden;
+        overflow-x: hidden;
         box-shadow: 2px 0 10px rgba(0,0,0,0.2);
         z-index: 1000;
         transition: transform 0.25s ease;
@@ -97,7 +98,15 @@
         flex: 1 1 auto;
         min-height: 0;
         overflow-y: auto;
+        overflow-x: hidden;
         padding-right: 4px;
+        scrollbar-width: none;
+    }
+
+    .sb-nav::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+        display: none;
     }
 
     .sb-link {
