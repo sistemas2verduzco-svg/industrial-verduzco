@@ -1697,10 +1697,6 @@ def hojas_ruta_form():
         comentarios_bruto = _clean_nullable_text(h.materia_prima)
         scrap_summary = _qc_parse_scrap_summary(comentarios_bruto)
         comentarios_val = _qc_strip_scrap_summary(comentarios_bruto)
-        if not comentarios_val:
-            legacy_desc = _clean_nullable_text(h.descripcion)
-            if legacy_desc and legacy_desc != _clean_nullable_text(descripcion_clave):
-                comentarios_val = legacy_desc
         hojas_data.append({
             'id': h.id,
             'maquina_id': h.maquina_id,
