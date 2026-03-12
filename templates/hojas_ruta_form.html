@@ -265,53 +265,57 @@
 
         /* Columnas que permiten wrap */
         .hojas-recientes-table td:nth-child(4),
-        .hojas-recientes-table td:nth-child(10) {
+        .hojas-recientes-table td:nth-child(10),
+        .hojas-recientes-table td:nth-child(11) {
             white-space: normal;
             word-wrap: break-word;
         }
 
         /* Anchos con porcentajes - suman 100% */
         .hojas-recientes-table th:nth-child(1),
-        .hojas-recientes-table td:nth-child(1) { width: 3.1%; }
+        .hojas-recientes-table td:nth-child(1) { width: 3%; }
         
         .hojas-recientes-table th:nth-child(2),
-        .hojas-recientes-table td:nth-child(2) { width: 8.5%; }
+        .hojas-recientes-table td:nth-child(2) { width: 8%; }
         
         .hojas-recientes-table th:nth-child(3),
-        .hojas-recientes-table td:nth-child(3) { width: 4.2%; }
+        .hojas-recientes-table td:nth-child(3) { width: 4%; }
         
         .hojas-recientes-table th:nth-child(4),
-        .hojas-recientes-table td:nth-child(4) { width: 9.5%; }
+        .hojas-recientes-table td:nth-child(4) { width: 10%; }
         
         .hojas-recientes-table th:nth-child(5),
-        .hojas-recientes-table td:nth-child(5) { width: 4.0%; }
+        .hojas-recientes-table td:nth-child(5) { width: 4%; }
         
         .hojas-recientes-table th:nth-child(6),
-        .hojas-recientes-table td:nth-child(6) { width: 7.0%; }
+        .hojas-recientes-table td:nth-child(6) { width: 7%; }
         
         .hojas-recientes-table th:nth-child(7),
-        .hojas-recientes-table td:nth-child(7) { width: 3.7%; }
+        .hojas-recientes-table td:nth-child(7) { width: 4%; }
         
         .hojas-recientes-table th:nth-child(8),
-        .hojas-recientes-table td:nth-child(8) { width: 6.0%; }
+        .hojas-recientes-table td:nth-child(8) { width: 6%; }
         
         .hojas-recientes-table th:nth-child(9),
-        .hojas-recientes-table td:nth-child(9) { width: 7.3%; }
+        .hojas-recientes-table td:nth-child(9) { width: 7%; }
         
         .hojas-recientes-table th:nth-child(10),
-        .hojas-recientes-table td:nth-child(10) { width: 8.3%; }
+        .hojas-recientes-table td:nth-child(10) { width: 10%; }
         
         .hojas-recientes-table th:nth-child(11),
-        .hojas-recientes-table td:nth-child(11) { width: 5.0%; }
+        .hojas-recientes-table td:nth-child(11) { width: 11%; }
         
         .hojas-recientes-table th:nth-child(12),
         .hojas-recientes-table td:nth-child(12) { width: 5.0%; }
         
         .hojas-recientes-table th:nth-child(13),
-        .hojas-recientes-table td:nth-child(13) { width: 4.6%; }
+        .hojas-recientes-table td:nth-child(13) { width: 5.0%; }
         
         .hojas-recientes-table th:nth-child(14),
-        .hojas-recientes-table td:nth-child(14) { width: 8.7%; }
+        .hojas-recientes-table td:nth-child(14) { width: 5%; }
+
+        .hojas-recientes-table th:nth-child(15),
+        .hojas-recientes-table td:nth-child(15) { width: 11%; }
 
         .hojas-recientes-table .btn-edit,
         .hojas-recientes-table .btn-delete {
@@ -326,6 +330,46 @@
             display: inline;
             margin: 0 1px;
             font-size: 10px;
+        }
+
+        .hojas-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .hojas-search-wrap {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 260px;
+            flex: 1;
+            justify-content: flex-end;
+        }
+
+        .hojas-search {
+            max-width: 420px;
+            width: 100%;
+            padding: 7px 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 13px;
+            background: #fff;
+        }
+
+        .hojas-counter {
+            font-size: 12px;
+            color: #4b5563;
+            margin-top: 8px;
+        }
+
+        .hojas-no-results {
+            display: none;
+            margin-top: 8px;
+            color: #6b7280;
+            font-size: 13px;
         }
 
         /* Esta vista debe usar todo el ancho restante junto al sidebar */
@@ -358,26 +402,28 @@
             .hojas-recientes-table td:nth-child(1),
             .hojas-recientes-table th:nth-child(3),
             .hojas-recientes-table td:nth-child(3),
+            .hojas-recientes-table th:nth-child(5),
+            .hojas-recientes-table td:nth-child(5),
             .hojas-recientes-table th:nth-child(7),
             .hojas-recientes-table td:nth-child(7),
-            .hojas-recientes-table th:nth-child(11),
-            .hojas-recientes-table td:nth-child(11),
             .hojas-recientes-table th:nth-child(12),
             .hojas-recientes-table td:nth-child(12),
             .hojas-recientes-table th:nth-child(13),
             .hojas-recientes-table td:nth-child(13),
             .hojas-recientes-table th:nth-child(14),
-            .hojas-recientes-table td:nth-child(14) {
+            .hojas-recientes-table td:nth-child(14),
+            .hojas-recientes-table th:nth-child(15),
+            .hojas-recientes-table td:nth-child(15) {
                 white-space: nowrap;
             }
         }
 
         /* RESPONSIVE: ocultar columnas en tablet */
         @media (max-width: 1024px) {
-            .hojas-recientes-table th:nth-child(11),
-            .hojas-recientes-table td:nth-child(11),
             .hojas-recientes-table th:nth-child(12),
-            .hojas-recientes-table td:nth-child(12) {
+            .hojas-recientes-table td:nth-child(12),
+            .hojas-recientes-table th:nth-child(13),
+            .hojas-recientes-table td:nth-child(13) {
                 display: none;
             }
         }
@@ -392,8 +438,8 @@
             .hojas-recientes-table td:nth-child(7),
             .hojas-recientes-table th:nth-child(8),
             .hojas-recientes-table td:nth-child(8),
-            .hojas-recientes-table th:nth-child(11),
-            .hojas-recientes-table td:nth-child(11),
+            .hojas-recientes-table th:nth-child(10),
+            .hojas-recientes-table td:nth-child(10),
             .hojas-recientes-table th:nth-child(12),
             .hojas-recientes-table td:nth-child(12),
             .hojas-recientes-table th:nth-child(13),
@@ -416,11 +462,11 @@
             .hojas-recientes-table th:nth-child(9),
             .hojas-recientes-table td:nth-child(9) { width: 70px; }
             
-            .hojas-recientes-table th:nth-child(10),
-            .hojas-recientes-table td:nth-child(10) { width: 80px; }
-            
-            .hojas-recientes-table th:nth-child(14),
-            .hojas-recientes-table td:nth-child(14) { width: 85px; min-width: 85px; }
+            .hojas-recientes-table th:nth-child(11),
+            .hojas-recientes-table td:nth-child(11) { width: 95px; min-width: 95px; }
+
+            .hojas-recientes-table th:nth-child(15),
+            .hojas-recientes-table td:nth-child(15) { width: 85px; min-width: 85px; }
         }
 
         @media (max-width: 900px) {
@@ -579,9 +625,18 @@
             </table>
         </div>
 
-        <div class="section-title" style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <div class="section-title hojas-toolbar">
             <span>Hojas recientes</span>
-            <button type="button" class="btn btn-secondary" style="padding:8px 10px;" onclick="abrirReportesModal()">Reportes</button>
+            <div class="hojas-search-wrap">
+                <input
+                    type="search"
+                    id="hojasSearch"
+                    class="hojas-search"
+                    placeholder="Buscar por ID, serie, clave, descripcion, comentarios, estado..."
+                    autocomplete="off">
+                <button type="button" id="hojasSearchClear" class="btn btn-secondary" style="padding:7px 10px;">Limpiar</button>
+                <button type="button" class="btn btn-secondary" style="padding:8px 10px;" onclick="abrirReportesModal()">Reportes</button>
+            </div>
         </div>
         <div class="card hojas-recientes-wrap">
             {% if hojas %}
@@ -598,6 +653,7 @@
                         <th>Almacen</th>
                         <th>Orden Trabajo</th>
                         <th>Comentarios</th>
+                        <th>Scrap QC</th>
                         <th>Firma Jose</th>
                         <th>Firma Rodrigo</th>
                         <th>Estado</th>
@@ -617,6 +673,18 @@
                         <td>{{ h.almacen or '' }}</td>
                         <td>{{ h.orden_trabajo or '' }}</td>
                         <td>{{ h.comentarios or '' }}</td>
+                        <td>
+                            {% if h.scrap_qc %}
+                                <div><strong>Inicial:</strong> {{ h.scrap_qc.lote_inicial }}</div>
+                                <div><strong>Scrap:</strong> {{ h.scrap_qc.total_scrap }}</div>
+                                <div><strong>Final:</strong> {{ h.scrap_qc.lote_final }}</div>
+                                {% if h.scrap_qc.detalle %}
+                                <div style="margin-top:3px; color:#4b5563;">{{ h.scrap_qc.detalle }}</div>
+                                {% endif %}
+                            {% else %}
+                                <span style="color:#6b7280;">Sin resumen QC</span>
+                            {% endif %}
+                        </td>
                         <td>{{ h.firma_ing_jose or 'Pendiente' }}</td>
                         <td>{{ h.firma_ing_rodrigo or 'Pendiente' }}</td>
                         <td>{{ h.estado or '' }}</td>
@@ -651,6 +719,8 @@
                     {% endfor %}
                 </tbody>
             </table>
+            <div id="hojasSearchCounter" class="hojas-counter"></div>
+            <div id="hojasNoResults" class="hojas-no-results">No hay coincidencias para la busqueda actual.</div>
             {% else %}
             <div style="color:#6b7280;">Aun no hay hojas registradas.</div>
             {% endif %}
@@ -835,6 +905,60 @@
             document.getElementById('serie_preview').value = `HR-${ymd}-${claveTxt}-XXXX`;
         }
 
+        function initHojasRecientesSearch() {
+            const input = document.getElementById('hojasSearch');
+            const clearBtn = document.getElementById('hojasSearchClear');
+            const table = document.querySelector('.hojas-recientes-table');
+            const counter = document.getElementById('hojasSearchCounter');
+            const noResults = document.getElementById('hojasNoResults');
+
+            if (!input || !table) return;
+
+            const rows = Array.from(table.querySelectorAll('tbody tr'));
+
+            const normalize = (value) => String(value || '')
+                .toLowerCase()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '');
+
+            rows.forEach((row) => {
+                const cells = Array.from(row.querySelectorAll('td'));
+                row.dataset.searchText = cells.map((c) => (c.textContent || '').trim()).join(' | ');
+            });
+
+            const applyFilter = () => {
+                const query = normalize(input.value.trim());
+                let shown = 0;
+
+                rows.forEach((row) => {
+                    const text = normalize(row.dataset.searchText || row.textContent || '');
+                    const match = !query || text.includes(query);
+                    row.style.display = match ? '' : 'none';
+                    if (match) shown += 1;
+                });
+
+                if (counter) {
+                    const total = rows.length;
+                    counter.textContent = query
+                        ? `${shown} resultado(s) de ${total}`
+                        : `${total} registro(s)`;
+                }
+
+                if (noResults) {
+                    noResults.style.display = shown === 0 ? 'block' : 'none';
+                }
+            };
+
+            input.addEventListener('input', applyFilter);
+            clearBtn?.addEventListener('click', () => {
+                input.value = '';
+                input.focus();
+                applyFilter();
+            });
+
+            applyFilter();
+        }
+
         function renderProcesos(claveId) {
             const tbody = document.getElementById('tbodyProcesos');
             const clave = clavesData.find(c => String(c.id) === String(claveId));
@@ -993,6 +1117,7 @@
 
         renderNow();
         setInterval(renderNow, 60000);
+        initHojasRecientesSearch();
         loadClaves();
 
         function abrirModalEdicion(btn) {

@@ -148,6 +148,54 @@ def _clean_nullable_text(value):
     return text
 
 
+def _qc_strip_scrap_summary(text):
+    src = str(text or '')
+    cleaned = re.sub(
+        r'\n?\[QC_SCRAP_SUMMARY_START\].*?\[QC_SCRAP_SUMMARY_END\]\n?',
+        '\n',
+        src,
+        flags=re.S,
+    )
+    return cleaned.strip()
+
+
+def _qc_parse_scrap_summary(text):
+    src = str(text or '')
+    m = re.search(r'\[QC_SCRAP_SUMMARY_START\](.*?)\[QC_SCRAP_SUMMARY_END\]', src, flags=re.S)
+    if not m:
+        return None
+
+    block = m.group(1)
+    values = {}
+    for line in block.splitlines():
+        line = line.strip()
+        if not line or '=' not in line:
+            continue
+        k, v = line.split('=', 1)
+        values[k.strip().upper()] = v.strip()
+
+    def _to_int(key, default=0):
+        try:
+            return max(0, int(values.get(key, default)))
+        except Exception:
+            return default
+
+    return {
+        'lote_inicial': _to_int('LOTE_INICIAL', 0),
+        'total_scrap': _to_int('TOTAL_SCRAP', 0),
+        'lote_final': _to_int('LOTE_FINAL', 0),
+        'detalle': values.get('DETALLE', ''),
+        'actualizado_por': values.get('ACTUALIZADO_POR', ''),
+        'fecha': values.get('FECHA', ''),
+    }
+
+
+def _qc_extract_scrap_block(text):
+    src = str(text or '')
+    m = re.search(r'\[QC_SCRAP_SUMMARY_START\].*?\[QC_SCRAP_SUMMARY_END\]', src, flags=re.S)
+    return m.group(0).strip() if m else ''
+
+
 def _parse_time_to_seconds(value):
     if value is None:
         return 0
@@ -1102,15 +1150,6 @@ def control_calidad_hoja(hoja_id):
             'observaciones': _extract('OBSERVACIONES', ''),
         }
 
-    def qc_strip_scrap_summary(comentarios_text):
-        src = comentarios_text or ''
-        return re.sub(
-            r'\n?\[QC_SCRAP_SUMMARY_START\].*?\[QC_SCRAP_SUMMARY_END\]\n?',
-            '\n',
-            src,
-            flags=re.S,
-        ).strip()
-
     def qc_extract_lote_inicial(comentarios_text):
         src = comentarios_text or ''
         m = re.search(r'^LOTE_INICIAL=(\d+)$', src, flags=re.M)
@@ -1235,14 +1274,14 @@ def control_calidad_hoja(hoja_id):
                         "[QC_SCRAP_SUMMARY_END]"
                     )
 
-                    base_comentarios = qc_strip_scrap_summary(hoja.materia_prima)
+                    base_comentarios = _qc_strip_scrap_summary(hoja.materia_prima)
                     hoja.materia_prima = (
                         (base_comentarios + "\n\n" + bloque_scrap).strip()
                         if base_comentarios else bloque_scrap
                     )
                 else:
                     # Si aun no queda aprobada, quitar resumen previo para evitar inconsistencias visuales.
-                    base_comentarios = qc_strip_scrap_summary(hoja.materia_prima)
+                    base_comentarios = _qc_strip_scrap_summary(hoja.materia_prima)
                     if base_comentarios != (hoja.materia_prima or '').strip():
                         hoja.materia_prima = base_comentarios or None
                     if lote_inicial > 0:
@@ -1655,7 +1694,9 @@ def hojas_ruta_form():
         qr_payload = f"HRID:{h.id};SERIE:{h.nombre or ''}"
         descripcion_clave = _resolve_clave_descripcion_by_pn(h.pn)
         clave_obj = claves_idx.get(str(h.pn or '').strip().upper())
-        comentarios_val = _clean_nullable_text(h.materia_prima)
+        comentarios_bruto = _clean_nullable_text(h.materia_prima)
+        scrap_summary = _qc_parse_scrap_summary(comentarios_bruto)
+        comentarios_val = _qc_strip_scrap_summary(comentarios_bruto)
         if not comentarios_val:
             legacy_desc = _clean_nullable_text(h.descripcion)
             if legacy_desc and legacy_desc != _clean_nullable_text(descripcion_clave):
@@ -1672,6 +1713,7 @@ def hojas_ruta_form():
             'almacen': h.almacen,
             'orden_trabajo': h.orden_trabajo_hr,
             'comentarios': comentarios_val,
+            'scrap_qc': scrap_summary,
             'firma_ing_jose': h.supervisor,
             'firma_ing_rodrigo': h.operador,
             'estado': h.estado,
@@ -1689,6 +1731,9 @@ def hoja_ruta_ver(hoja_id):
     """Vista independiente para ver una hoja por ID, sin requerir máquina."""
     hoja = HojaRuta.query.get_or_404(hoja_id)
     h = hoja.to_dict()
+    comentarios_bruto = _clean_nullable_text(h.get('materia_prima'))
+    h['comentarios_usuario'] = _qc_strip_scrap_summary(comentarios_bruto)
+    h['scrap_qc'] = _qc_parse_scrap_summary(comentarios_bruto)
     h['descripcion_clave'] = _resolve_clave_descripcion_by_pn(hoja.pn)
     h['qr_payload'] = f"HRID:{hoja.id};SERIE:{hoja.nombre or ''}"
     h['qr_deeplink'] = request.url_root.rstrip('/') + f"/hoja/{hoja.id}"
@@ -2023,7 +2068,15 @@ def api_actualizar_hoja_ruta(hoja_id):
     if 'descripcion' in data:
         hoja.descripcion = data['descripcion']
     if 'comentarios' in data:
-        hoja.materia_prima = (data.get('comentarios') or '').strip() or None
+        comentarios_usuario = (data.get('comentarios') or '').strip()
+        scrap_block = _qc_extract_scrap_block(hoja.materia_prima)
+        if scrap_block:
+            hoja.materia_prima = (
+                (comentarios_usuario + "\n\n" + scrap_block).strip()
+                if comentarios_usuario else scrap_block
+            )
+        else:
+            hoja.materia_prima = comentarios_usuario or None
     if 'firma_ing_jose' in data:
         hoja.supervisor = (data.get('firma_ing_jose') or '').strip() or None
     if 'firma_ing_rodrigo' in data:
