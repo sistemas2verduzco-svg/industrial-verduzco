@@ -2,7 +2,6 @@ import argparse
 import os
 import sys
 from typing import Optional
-import re
 
 # Obtener la ruta del directorio raíz (padre de tools/)
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -26,26 +25,13 @@ def hhmmss(val: Optional[str]) -> Optional[str]:
     """Normalize a time-like value to HH:MM:SS; return None if empty/invalid."""
     if val is None:
         return None
-    # Soportar nulos de pandas (NaN/NaT) sin romper la importacion
-    try:
-        if pd.isna(val):
-            return None
-    except Exception:
-        pass
-
     text = str(val).strip()
-    if not text or text.lower() in ('nan', 'nat', 'none', '-'):
+    if not text:
         return None
     try:
         td = pd.to_timedelta(text)
     except Exception:
         return None
-    try:
-        if pd.isna(td):
-            return None
-    except Exception:
-        pass
-
     total_seconds = int(td.total_seconds())
     h, r = divmod(total_seconds, 3600)
     m, s = divmod(r, 60)
@@ -59,14 +45,7 @@ def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
     ext = os.path.splitext(path)[1].lower()
     if ext in (".xlsx", ".xls"):
         sheet_name = sheet if sheet else 0
-        try:
-            df_raw = pd.read_excel(path, sheet_name=sheet_name, header=None)
-        except ValueError as e:
-            if sheet and "Worksheet named" in str(e):
-                print(f"⚠ Hoja '{sheet}' no encontrada; usando la primera hoja del archivo.")
-                df_raw = pd.read_excel(path, sheet_name=0, header=None)
-            else:
-                raise
+        df_raw = pd.read_excel(path, sheet_name=sheet_name, header=None)
     else:
         df_raw = pd.read_csv(path, header=None)
     
@@ -136,74 +115,14 @@ def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
     return df
 
 
-def _split_clave_code(raw_clave: str) -> list[str]:
-    """Expande claves compuestas (ej. SF10/SF11 -> [SF10, SF11])."""
-    text = str(raw_clave or '').strip().upper()
-    if not text:
-        return []
-
-    if '/' not in text:
-        return [text]
-
-    parts = [p.strip().upper() for p in text.split('/') if p and p.strip()]
-    if not parts:
-        return []
-
-    # Si alguna parte viene solo numérica, tomar prefijo alfabético de la primera parte.
-    m = re.match(r'^([A-Z]+)', parts[0])
-    base_prefix = m.group(1) if m else ''
-
-    expanded = []
-    for part in parts:
-        if re.match(r'^[A-Z]+\d+[A-Z0-9-]*$', part):
-            expanded.append(part)
-            continue
-        if re.match(r'^\d+[A-Z0-9-]*$', part) and base_prefix:
-            expanded.append(base_prefix + part)
-            continue
-        expanded.append(part)
-
-    # Evitar repetidos conservando orden
-    seen = set()
-    unique_expanded = []
-    for item in expanded:
-        if item not in seen:
-            seen.add(item)
-            unique_expanded.append(item)
-    return unique_expanded
-
-
-def expand_composite_claves(df: pd.DataFrame) -> pd.DataFrame:
-    """Duplica filas de procesos para cada clave cuando la clave viene compuesta con '/' ."""
-    rows = []
-    expanded_count = 0
-    for _, row in df.iterrows():
-        claves = _split_clave_code(row.get('clave'))
-        if not claves:
-            continue
-        if len(claves) > 1:
-            expanded_count += 1
-
-        for c in claves:
-            new_row = row.copy()
-            new_row['clave'] = c
-            rows.append(new_row)
-
-    out = pd.DataFrame(rows)
-    if expanded_count > 0:
-        print(f"\nℹ Claves compuestas expandidas: {expanded_count} filas origen")
-        print(f"   Total filas despues de expansion: {len(out)}")
-    return out
-
-
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Mapea nombres de columnas flexibles a nombres estándar."""
     mapping = {
         'clave': ['clave', 'CLAVE', 'Clave', 'PROC.', 'proc'],
         'nombre_clave': ['nombre_clave', 'nombre clave', 'NOMBRE', 'nombre', 'Nombre'],
         'orden': ['orden', 'ORDEN', 'Orden', 'Nº', 'nº', 'no', 'NO'],
-        'centro_trabajo': ['centro_trabajo', 'centro trabajo', 'CT', 'c.t.', 'C.T.', 'CENTRO_TRABAJO', 'h. ruta', 'h.ruta', 'hoja ruta', 'ruta'],
-        'operacion': ['operacion', 'OPERACIÓN', 'operación', 'OPERACION', 'operación', 'Operación', 'concepto'],
+        'centro_trabajo': ['centro_trabajo', 'centro trabajo', 'CT', 'c.t.', 'C.T.', 'CENTRO_TRABAJO'],
+        'operacion': ['operacion', 'OPERACIÓN', 'operación', 'OPERACION', 'operación', 'Operación'],
         'tiempo_estimado': ['tiempo_estimado', 'tiempo estimado', 't/e', 'T/E', 'T/E (HH:MM:SS)', 'TIEMPO_ESTIMADO'],
         'notas_paso': ['notas_paso', 'notas paso', 'notas', 'NOTAS', 'Notas', 'observaciones'],
         'notas_clave': ['notas_clave', 'notas clave', 'notas'],
@@ -219,78 +138,18 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     
     # Renombrar columnas
     df = df.rename(columns=col_map)
-    df.columns = [str(c).strip().lower() for c in df.columns]
+    df.columns = [c.strip().lower() for c in df.columns]
     
     print(f"Columnas mapeadas a: {list(df.columns)}")
-    return df
-
-
-def parse_excel_tabular(path: str, sheet: Optional[str], header_row: int = 0) -> pd.DataFrame:
-    """Parse alternativo para archivos en formato tabular con encabezados."""
-    ext = os.path.splitext(path)[1].lower()
-    if ext in (".xlsx", ".xls"):
-        sheet_name = sheet if sheet else 0
-        try:
-            df = pd.read_excel(path, sheet_name=sheet_name, header=header_row)
-        except ValueError as e:
-            if sheet and "Worksheet named" in str(e):
-                print(f"⚠ Hoja '{sheet}' no encontrada; usando la primera hoja del archivo.")
-                df = pd.read_excel(path, sheet_name=0, header=header_row)
-            else:
-                raise
-    else:
-        df = pd.read_csv(path, header=header_row)
-
-    # Limpiar filas/columnas totalmente vacías
-    df = df.dropna(axis=0, how='all').dropna(axis=1, how='all')
-    if len(df) == 0:
-        return df
-
-    df = normalize_columns(df)
-
-    # Fallbacks para formatos operativos (ej: OT_JOSE_ACTUALIZACION2.xlsx)
-    if 'operacion' not in df.columns and 'concepto' in df.columns:
-        df['operacion'] = df['concepto']
-    if 'centro_trabajo' not in df.columns and 'h. ruta' in df.columns:
-        df['centro_trabajo'] = df['h. ruta']
-    if 'centro_trabajo' not in df.columns and 'h.ruta' in df.columns:
-        df['centro_trabajo'] = df['h.ruta']
-
-    # Si aún falta centro de trabajo, usar valor por defecto para no bloquear importación
-    if 'centro_trabajo' not in df.columns:
-        df['centro_trabajo'] = 'GENERAL'
-
-    # Normalizar valores mínimos
-    for col in ('clave', 'centro_trabajo', 'operacion'):
-        if col in df.columns:
-            df[col] = df[col].astype(str).str.strip()
-
-    # Filtrar filas sin datos básicos
-    required_base = {'clave', 'centro_trabajo', 'operacion'}
-    if required_base.issubset(set(df.columns)):
-        df = df[(df['clave'] != '') & (df['centro_trabajo'] != '') & (df['operacion'] != '')].copy()
-
-    # Si no existe orden, generarlo por clave
-    if 'orden' not in df.columns and 'clave' in df.columns:
-        df['orden'] = df.groupby('clave', sort=False).cumcount() + 1
-
-    print(f"\nRegistros parseados (tabular): {len(df)}")
-    if 'clave' in df.columns and len(df) > 0:
-        print(f"Claves únicas (tabular): {df['clave'].nunique()}")
     return df
 
 
 # --- Import logic ---------------------------------------------------------
 
 def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: int = 0) -> None:
-    # Parsear el Excel con formato de bloques; si no detecta filas, intentar formato tabular.
+    # Parsear el Excel con formato de bloques
     df = parse_excel_blocks(path, sheet)
-    source_mode = 'blocks'
-    if len(df) == 0:
-        print("\n⚠ No se detectó formato por bloques; intentando parse tabular...")
-        df = parse_excel_tabular(path, sheet, header_row=header_row)
-        source_mode = 'tabular'
-
+    
     if len(df) == 0:
         raise ValueError("No se encontraron datos válidos en el archivo")
 
@@ -300,7 +159,7 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
         raise ValueError(f"Faltan columnas requeridas: {missing}\nColumnas disponibles: {list(df.columns)}")
 
     # Detectar claves duplicadas (múltiples bloques)
-    if source_mode == 'blocks' and 'block_id' in df.columns:
+    if 'block_id' in df.columns:
         max_block_per_clave = df.groupby('clave')['block_id'].max()
         claves_duplicadas = max_block_per_clave[max_block_per_clave > 0]
         if len(claves_duplicadas) > 0:
@@ -317,9 +176,6 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
         else:
             df = df.drop(columns=['block_id'])
     
-    # Expandir claves compuestas (ej. SF10/SF11) para importar por separado.
-    df = expand_composite_claves(df)
-
     df = df.sort_values(["clave", "orden"])  # asegura orden correcto
     
     # Deduplicar procesos repetidos dentro de cada clave:
@@ -339,24 +195,8 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
 
     # Agrupamos por clave para poder limpiar secuencia por clave si overwrite=True
     grouped = df.groupby("clave", sort=False)
-    claves_detectadas = [str(k).strip() for k in grouped.groups.keys() if str(k).strip()]
-    imported_keys = []
-    total_pasos_importados = 0
 
     with app.app_context():
-        if overwrite:
-            # Evitar ambigüedad en producción: eliminar claves compuestas (ej. SF10/SF11)
-            # porque ahora se importan separadas como SF10 y SF11.
-            compuestas = ClaveProducto.query.filter(ClaveProducto.clave.contains('/')).all()
-            if compuestas:
-                comp_ids = [c.id for c in compuestas]
-                comp_codes = [c.clave for c in compuestas]
-                deleted_steps = ClaveProceso.query.filter(ClaveProceso.clave_id.in_(comp_ids)).delete(synchronize_session=False)
-                deleted_keys = ClaveProducto.query.filter(ClaveProducto.id.in_(comp_ids)).delete(synchronize_session=False)
-                db.session.commit()
-                print(f"\n⚠ Limpieza previa overwrite: eliminadas {deleted_keys} claves compuestas y {deleted_steps} pasos")
-                print(f"   Claves removidas (muestra): {comp_codes[:15]}{' ...' if len(comp_codes) > 15 else ''}")
-
         for clave_code, gdf in grouped:
             clave_code = str(clave_code).strip()
             if not clave_code:
@@ -431,27 +271,7 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
 
             # Commit por clave para evitar transacción gigante
             db.session.commit()
-            imported_keys.append(clave_code)
-            total_pasos_importados += len(gdf)
             print(f"✓ Importada clave {clave_code} con {len(gdf)} pasos")
-
-        # Validación estricta: toda clave detectada por el parser debe quedar importada.
-        set_detectadas = set(claves_detectadas)
-        set_importadas = set(imported_keys)
-        faltantes = sorted(set_detectadas - set_importadas)
-
-        print("\n=== RESUMEN IMPORTACION PROCESOS/CLAVES ===")
-        print(f"Claves detectadas en archivo: {len(set_detectadas)}")
-        print(f"Claves importadas: {len(set_importadas)}")
-        print(f"Total de pasos importados: {total_pasos_importados}")
-
-        if faltantes:
-            print("\nERROR: Faltaron claves por importar:")
-            for c in faltantes:
-                print(f"  - {c}")
-            raise RuntimeError("Importacion incompleta: hay claves detectadas que no se importaron")
-
-        print("Importacion OK: todas las claves detectadas quedaron importadas.")
 
 
 # --- CLI ------------------------------------------------------------------
