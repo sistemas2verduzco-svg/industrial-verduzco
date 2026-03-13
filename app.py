@@ -1689,6 +1689,42 @@ def almacen_recibir_item(item_id):
     return redirect(url_for('almacen_module'))
 
 
+@app.route('/almacen/regresar_entregas/<int:item_id>', methods=['POST'])
+@login_required
+@requires_any_permission([('almacen', 'edit'), ('catalog', 'edit')])
+def almacen_regresar_entregas(item_id):
+    item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
+    if item.estado != 'almacen':
+        return redirect(url_for('almacen_module'))
+
+    motivo = (request.form.get('motivo_regreso') or '').strip()
+    if not motivo:
+        motivo = 'Datos incompletos o recepción no válida en almacén.'
+
+    item.estado = 'entregas'
+    item.actualizado_por = _logistica_username()
+
+    db.session.add(AlmacenRegistro(
+        hoja_ruta_id=item.hoja_ruta_id,
+        flujo_id=item.id,
+        recepcion_id=item.almacen_recepcion_id,
+        captura_path=item.almacen_captura_path,
+        validado=False,
+        usuario=_logistica_username(),
+        notas=f'Devuelta a Entregas: {motivo}',
+    ))
+    db.session.add(EntregaRegistro(
+        hoja_ruta_id=item.hoja_ruta_id,
+        flujo_id=item.id,
+        accion='devuelta_desde_almacen',
+        usuario=_logistica_username(),
+        notas=motivo,
+    ))
+
+    db.session.commit()
+    return redirect(url_for('almacen_module'))
+
+
 @app.route('/facturacion')
 @login_required
 @requires_any_permission([('facturacion', 'view'), ('catalog', 'edit')])
@@ -1746,6 +1782,41 @@ def facturacion_aprobar_item(item_id):
         fecha_aprobacion=item.facturacion_aprobado_en,
         notas='Hoja liberada por facturación.',
     ))
+    db.session.commit()
+    return redirect(url_for('facturacion_module'))
+
+
+@app.route('/facturacion/regresar_entregas/<int:item_id>', methods=['POST'])
+@login_required
+@requires_any_permission([('facturacion', 'edit'), ('catalog', 'edit')])
+def facturacion_regresar_entregas(item_id):
+    item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
+    if item.estado != 'facturacion':
+        return redirect(url_for('facturacion_module'))
+
+    motivo = (request.form.get('motivo_regreso') or '').strip()
+    if not motivo:
+        motivo = 'Documentación o recepción no corresponde para facturación.'
+
+    item.estado = 'entregas'
+    item.actualizado_por = _logistica_username()
+
+    db.session.add(FacturacionRegistro(
+        hoja_ruta_id=item.hoja_ruta_id,
+        flujo_id=item.id,
+        aprobado=False,
+        usuario=_logistica_username(),
+        notas=f'Devuelta a Entregas: {motivo}',
+        fecha_aprobacion=None,
+    ))
+    db.session.add(EntregaRegistro(
+        hoja_ruta_id=item.hoja_ruta_id,
+        flujo_id=item.id,
+        accion='devuelta_desde_facturacion',
+        usuario=_logistica_username(),
+        notas=motivo,
+    ))
+
     db.session.commit()
     return redirect(url_for('facturacion_module'))
 

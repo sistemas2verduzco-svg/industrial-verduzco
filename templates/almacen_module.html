@@ -55,6 +55,18 @@
                             {% endif %}
                         </div>
                     </form>
+
+                    {% if has_permission('almacen', 'edit') or has_permission('catalog', 'edit') %}
+                    <form method="post" action="/almacen/regresar_entregas/{{ item.id }}" style="margin-top:8px; display:grid; gap:6px;">
+                        <label class="field">
+                            <span>Motivo de regreso a Entregas</span>
+                            <input type="text" name="motivo_regreso" placeholder="Ej: recepción no corresponde, datos incompletos" required>
+                        </label>
+                        <div>
+                            <button type="submit" style="border:0; border-radius:6px; padding:8px 10px; background:#dc2626; color:#fff; font-weight:700; cursor:pointer;">Regresar a Entregas</button>
+                        </div>
+                    </form>
+                    {% endif %}
                 </div>
                 {% endfor %}
             {% else %}

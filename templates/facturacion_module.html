@@ -54,6 +54,18 @@
                             <button class="btn-ok" type="submit">Liberar hoja</button>
                             {% endif %}
                         </form>
+
+                        {% if has_permission('facturacion', 'edit') or has_permission('catalog', 'edit') %}
+                        <form method="post" action="/facturacion/regresar_entregas/{{ item.id }}" style="margin-top:8px; display:grid; gap:6px;">
+                            <label style="display:flex; flex-direction:column; gap:4px;">
+                                <span style="font-size:12px; color:#64748b;">Motivo de regreso a Entregas</span>
+                                <input type="text" name="motivo_regreso" required placeholder="Ej: no coincide recepción o falta evidencia" style="border:1px solid #d1d5db; border-radius:6px; padding:7px;">
+                            </label>
+                            <div>
+                                <button type="submit" style="border:0; border-radius:6px; padding:8px 10px; background:#dc2626; color:#fff; font-weight:700; cursor:pointer;">Regresar a Entregas</button>
+                            </div>
+                        </form>
+                        {% endif %}
                     </div>
                     {% endfor %}
                 {% else %}
