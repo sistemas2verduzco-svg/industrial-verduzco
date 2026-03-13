@@ -562,6 +562,52 @@ class HojaRuta(db.Model):
         }
 
 
+class HojaRutaFlujoLogistica(db.Model):
+    """Flujo temporal de entrega/recepción/facturación sin borrar la hoja base."""
+    __tablename__ = 'hojas_ruta_flujo_logistica'
+
+    id = db.Column(db.Integer, primary_key=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False, unique=True)
+
+    # entregas | almacen | facturacion | finalizada
+    estado = db.Column(db.String(30), nullable=False, default='entregas', index=True)
+
+    creado_por = db.Column(db.String(120), nullable=True)
+    actualizado_por = db.Column(db.String(120), nullable=True)
+
+    # Campos de recepción en almacén
+    almacen_validado = db.Column(db.Boolean, nullable=False, default=False)
+    almacen_recepcion_id = db.Column(db.String(120), nullable=True)
+    almacen_captura_path = db.Column(db.String(500), nullable=True)
+
+    # Campos de aprobación en facturación
+    facturacion_aprobado = db.Column(db.Boolean, nullable=False, default=False)
+    facturacion_aprobado_por = db.Column(db.String(120), nullable=True)
+    facturacion_aprobado_en = db.Column(db.DateTime, nullable=True)
+
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    hoja_ruta = db.relationship('HojaRuta', backref=db.backref('flujo_logistica', uselist=False))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'hoja_ruta_id': self.hoja_ruta_id,
+            'estado': self.estado,
+            'creado_por': self.creado_por,
+            'actualizado_por': self.actualizado_por,
+            'almacen_validado': self.almacen_validado,
+            'almacen_recepcion_id': self.almacen_recepcion_id,
+            'almacen_captura_path': self.almacen_captura_path,
+            'facturacion_aprobado': self.facturacion_aprobado,
+            'facturacion_aprobado_por': self.facturacion_aprobado_por,
+            'facturacion_aprobado_en': self.facturacion_aprobado_en.isoformat() if self.facturacion_aprobado_en else None,
+            'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,
+            'fecha_actualizacion': self.fecha_actualizacion.isoformat() if self.fecha_actualizacion else None,
+        }
+
+
 class EstacionTrabajo(db.Model):
     """Estaciones o pasos dentro de una hoja de ruta, con tiempos por columna según plantilla."""
     __tablename__ = 'estaciones_trabajo'

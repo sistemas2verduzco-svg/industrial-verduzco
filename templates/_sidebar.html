@@ -39,6 +39,19 @@
         {% if has_permission('mapa', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
         <a href="/mapa_maquinas" class="sb-link sb-sub" data-base="/mapa_maquinas"><span>🗺️</span> <span>Mapa de Maquinas</span></a>
         {% endif %}
+
+        {% if has_permission('entregas', 'view') or has_permission('almacen', 'view') or has_permission('facturacion', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">LOGISTICA</div>
+        {% if has_permission('entregas', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        <a href="/entregas" class="sb-link" data-base="/entregas"><span>📦</span> <span>Entregas</span></a>
+        {% endif %}
+        {% if has_permission('almacen', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        <a href="/almacen" class="sb-link" data-base="/almacen"><span>🏬</span> <span>Almacen</span></a>
+        {% endif %}
+        {% if has_permission('facturacion', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        <a href="/facturacion" class="sb-link" data-base="/facturacion"><span>🧾</span> <span>Facturacion</span></a>
+        {% endif %}
+        {% endif %}
         {% endif %}
 
         {% if has_permission('tickets', 'view') or current_user and current_user.es_admin %}

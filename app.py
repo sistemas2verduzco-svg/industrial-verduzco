@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRuta, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRuta, HojaRutaFlujoLogistica, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -753,6 +753,12 @@ def _resolve_post_login_endpoint(user):
         return 'hojas_ruta_form'
     if user.has_permission('calidad', 'view'):
         return 'control_calidad_list'
+    if user.has_permission('entregas', 'view'):
+        return 'entregas_module'
+    if user.has_permission('almacen', 'view'):
+        return 'almacen_module'
+    if user.has_permission('facturacion', 'view'):
+        return 'facturacion_module'
     if user.has_permission('tickets', 'view'):
         return 'soporte_tecnico'
     if user.has_permission('proveedores', 'view') or user.has_permission('proveedores', 'edit'):
@@ -831,6 +837,12 @@ ROLE_MODULE_BUNDLES = {
     'mapa_view': [('catalog', 'view'), ('mapa', 'view')],
     'calidad_view': [('catalog', 'view'), ('calidad', 'view')],
     'calidad_edit': [('catalog', 'view'), ('calidad', 'view'), ('calidad', 'edit')],
+    'entregas_view': [('catalog', 'view'), ('entregas', 'view')],
+    'entregas_edit': [('catalog', 'view'), ('entregas', 'view'), ('entregas', 'edit')],
+    'almacen_view': [('catalog', 'view'), ('almacen', 'view')],
+    'almacen_edit': [('catalog', 'view'), ('almacen', 'view'), ('almacen', 'edit')],
+    'facturacion_view': [('catalog', 'view'), ('facturacion', 'view')],
+    'facturacion_edit': [('catalog', 'view'), ('facturacion', 'view'), ('facturacion', 'edit')],
     'procesos_view': [('catalog', 'view'), ('procesos', 'view')],
     'proveedores_view': [('catalog', 'view'), ('proveedores', 'view')],
     'proveedores_edit': [('catalog', 'view'), ('proveedores', 'view'), ('proveedores', 'edit')],
@@ -874,6 +886,12 @@ DEFAULT_PERMISSION_CATALOG = [
     ('mapa', 'view', 'Ver mapa de maquinas'),
     ('calidad', 'view', 'Ver control de calidad'),
     ('calidad', 'edit', 'Registrar/editar revision de calidad'),
+    ('entregas', 'view', 'Ver módulo de entregas'),
+    ('entregas', 'edit', 'Operar módulo de entregas'),
+    ('almacen', 'view', 'Ver módulo de almacén'),
+    ('almacen', 'edit', 'Operar módulo de almacén'),
+    ('facturacion', 'view', 'Ver módulo de facturación'),
+    ('facturacion', 'edit', 'Operar módulo de facturación'),
     ('procesos', 'view', 'Ver procesos y claves'),
     ('proveedores', 'view', 'Ver proveedores'),
     ('proveedores', 'edit', 'Editar proveedores'),
@@ -1448,6 +1466,197 @@ def control_calidad_certificado(hoja_id):
 def control_calidad_legacy_maquina(maquina_id):
     """Compatibilidad con links antiguos de Control Calidad por maquina."""
     return redirect(url_for('control_calidad_list'))
+
+
+# ==================== FLUJO TEMPORAL: ENTREGAS -> ALMACEN -> FACTURACION ====================
+
+LOGISTICA_IMG_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
+
+
+def _logistica_username():
+    return (session.get('user') or 'sistema').strip()
+
+
+def _logistica_allowed_image(filename):
+    if not filename or '.' not in filename:
+        return False
+    ext = filename.rsplit('.', 1)[-1].lower().strip()
+    return ext in LOGISTICA_IMG_EXTENSIONS
+
+
+@app.route('/entregas')
+@login_required
+@requires_any_permission([('entregas', 'view'), ('catalog', 'edit')])
+def entregas_module():
+    hojas = HojaRuta.query.order_by(HojaRuta.fecha_creacion.desc()).all()
+    pendientes_entregas = (
+        HojaRutaFlujoLogistica.query
+        .filter_by(estado='entregas')
+        .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
+        .all()
+    )
+    return render_template(
+        'entregas_module.html',
+        hojas=hojas,
+        pendientes_entregas=pendientes_entregas,
+    )
+
+
+@app.route('/api/logistica/entregas/agregar', methods=['POST'])
+@login_required
+@requires_any_permission([('entregas', 'edit'), ('catalog', 'edit')])
+def api_logistica_entregas_agregar():
+    data = request.get_json() or {}
+    hoja_id = data.get('hoja_id')
+    try:
+        hoja_id = int(hoja_id)
+    except Exception:
+        return jsonify({'error': 'hoja_id inválido'}), 400
+
+    hoja = HojaRuta.query.get(hoja_id)
+    if not hoja:
+        return jsonify({'error': 'Hoja de ruta no encontrada'}), 404
+
+    item = HojaRutaFlujoLogistica.query.filter_by(hoja_ruta_id=hoja_id).first()
+    if item:
+        if item.estado == 'entregas':
+            return jsonify({'ok': True, 'message': 'La hoja ya está en la bandeja de Entregas.'})
+        if item.estado in ('almacen', 'facturacion'):
+            return jsonify({'error': f'La hoja ya fue transferida a {item.estado}.'}), 409
+        if item.estado == 'finalizada':
+            return jsonify({'error': 'La hoja ya fue finalizada en Facturación.'}), 409
+
+    item = HojaRutaFlujoLogistica(
+        hoja_ruta_id=hoja.id,
+        estado='entregas',
+        creado_por=_logistica_username(),
+        actualizado_por=_logistica_username(),
+    )
+    db.session.add(item)
+    db.session.commit()
+    return jsonify({'ok': True, 'item': item.to_dict()})
+
+
+@app.route('/entregas/mover_almacen/<int:item_id>', methods=['POST'])
+@login_required
+@requires_any_permission([('entregas', 'edit'), ('catalog', 'edit')])
+def entregas_mover_almacen(item_id):
+    item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
+    if item.estado != 'entregas':
+        return redirect(url_for('entregas_module'))
+
+    item.estado = 'almacen'
+    item.actualizado_por = _logistica_username()
+    db.session.commit()
+    return redirect(url_for('entregas_module'))
+
+
+@app.route('/entregas/quitar/<int:item_id>', methods=['POST'])
+@login_required
+@requires_any_permission([('entregas', 'edit'), ('catalog', 'edit')])
+def entregas_quitar_item(item_id):
+    item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
+    if item.estado == 'entregas':
+        db.session.delete(item)
+        db.session.commit()
+    return redirect(url_for('entregas_module'))
+
+
+@app.route('/almacen')
+@login_required
+@requires_any_permission([('almacen', 'view'), ('catalog', 'edit')])
+def almacen_module():
+    pendientes_almacen = (
+        HojaRutaFlujoLogistica.query
+        .filter_by(estado='almacen')
+        .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
+        .all()
+    )
+    return render_template('almacen_module.html', pendientes_almacen=pendientes_almacen)
+
+
+@app.route('/almacen/recibir/<int:item_id>', methods=['POST'])
+@login_required
+@requires_any_permission([('almacen', 'edit'), ('catalog', 'edit')])
+def almacen_recibir_item(item_id):
+    item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
+    if item.estado != 'almacen':
+        return redirect(url_for('almacen_module'))
+
+    recepcion_id = (request.form.get('recepcion_id') or '').strip()
+    entregado = request.form.get('entregado') == 'on'
+    captura = request.files.get('captura_recepcion')
+
+    if not entregado or not recepcion_id:
+        return redirect(url_for('almacen_module'))
+
+    if not captura or not captura.filename:
+        return redirect(url_for('almacen_module'))
+
+    if not _logistica_allowed_image(captura.filename):
+        return redirect(url_for('almacen_module'))
+
+    ext = captura.filename.rsplit('.', 1)[-1].lower().strip()
+    nombre = secure_filename(f"recepcion_{item.hoja_ruta_id}_{uuid.uuid4().hex}.{ext}")
+    rel_dir = os.path.join('logistica_recepciones')
+    abs_dir = os.path.join(app.config['UPLOAD_FOLDER'], rel_dir)
+    os.makedirs(abs_dir, exist_ok=True)
+    abs_path = os.path.join(abs_dir, nombre)
+    captura.save(abs_path)
+
+    item.almacen_validado = True
+    item.almacen_recepcion_id = recepcion_id
+    item.almacen_captura_path = f"{rel_dir}/{nombre}".replace('\\', '/')
+    item.estado = 'facturacion'
+    item.actualizado_por = _logistica_username()
+
+    db.session.commit()
+    return redirect(url_for('almacen_module'))
+
+
+@app.route('/facturacion')
+@login_required
+@requires_any_permission([('facturacion', 'view'), ('catalog', 'edit')])
+def facturacion_module():
+    pendientes_facturacion = (
+        HojaRutaFlujoLogistica.query
+        .filter_by(estado='facturacion')
+        .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
+        .all()
+    )
+    finalizadas = (
+        HojaRutaFlujoLogistica.query
+        .filter_by(estado='finalizada')
+        .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
+        .limit(50)
+        .all()
+    )
+    return render_template(
+        'facturacion_module.html',
+        pendientes_facturacion=pendientes_facturacion,
+        finalizadas=finalizadas,
+    )
+
+
+@app.route('/facturacion/aprobar/<int:item_id>', methods=['POST'])
+@login_required
+@requires_any_permission([('facturacion', 'edit'), ('catalog', 'edit')])
+def facturacion_aprobar_item(item_id):
+    item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
+    if item.estado != 'facturacion':
+        return redirect(url_for('facturacion_module'))
+
+    aprobado = request.form.get('aprobado_facturacion') == 'on'
+    if not aprobado:
+        return redirect(url_for('facturacion_module'))
+
+    item.facturacion_aprobado = True
+    item.facturacion_aprobado_por = _logistica_username()
+    item.facturacion_aprobado_en = datetime.utcnow()
+    item.estado = 'finalizada'
+    item.actualizado_por = _logistica_username()
+    db.session.commit()
+    return redirect(url_for('facturacion_module'))
 
 
 @app.route('/uploads/<path:filename>')
