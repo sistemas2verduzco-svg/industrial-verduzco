@@ -131,7 +131,19 @@
       {% else %}
       <form action="{{ url_for('procesos_clave_secuencia_save', clave_id=clave_sel.id) }}" method="POST" id="formSecuencia">
         <div style="display:flex; gap:10px; align-items:center; margin-bottom:16px; flex-wrap:wrap;">
-          <select id="selectProceso" style="flex:1; min-width:200px; padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px;">
+          <div style="flex:1; min-width:260px; position:relative;">
+            <input
+              type="text"
+              id="buscarProcesoSecuencia"
+              placeholder="🔎 Buscar proceso por C.T., operación o nombre..."
+              autocomplete="off"
+              style="width:100%; padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px;"
+            >
+            <input type="hidden" id="procesoSeleccionadoId">
+            <div id="resultadosProcesoSecuencia" style="display:none; position:absolute; left:0; right:0; top:calc(100% + 4px); max-height:240px; overflow-y:auto; background:#fff; border:1px solid #e2e8f0; border-radius:8px; box-shadow:0 8px 18px rgba(0,0,0,0.08); z-index:40;"></div>
+          </div>
+
+          <select id="selectProceso" style="display:none;">
             <option value="">-- Seleccionar proceso --</option>
             {% for p in procesos %}
             <option value="{{ p.id }}" data-codigo="{{ p.codigo or '' }}" data-nombre="{{ p.nombre }}" data-ct="{{ p.centro_trabajo or '' }}" data-oper="{{ p.operacion or '' }}" data-te="{{ p.tiempo_estimado or '' }}">{{ p.centro_trabajo or 'C.T.?'}} - {{ p.operacion or p.nombre }}</option>
@@ -255,7 +267,7 @@
         align-items: stretch !important;
       }
 
-      #selectProceso,
+      #buscarProcesoSecuencia,
       #btnAgregarProceso,
       #btnNuevaClave {
         width: 100% !important;
@@ -294,18 +306,123 @@
     });
   }
 
-  // Secuencia: agregar desde select
+  // Secuencia: agregar desde buscador en tiempo real
+  const selProceso = document.getElementById('selectProceso');
+  const inputProcesoSecuencia = document.getElementById('buscarProcesoSecuencia');
+  const inputProcesoSeleccionado = document.getElementById('procesoSeleccionadoId');
+  const resultadosProcesoSecuencia = document.getElementById('resultadosProcesoSecuencia');
+  const procesosCatalogoSecuencia = [];
+
+  if (selProceso) {
+    Array.from(selProceso.options)
+      .filter(o => o.value)
+      .forEach(o => {
+        const item = {
+          id: o.value,
+          codigo: o.dataset.codigo || '',
+          nombre: o.dataset.nombre || '',
+          ct: o.dataset.ct || '',
+          oper: o.dataset.oper || '',
+          te: o.dataset.te || '',
+          label: o.textContent || ''
+        };
+        procesosCatalogoSecuencia.push(item);
+      });
+  }
+
+  function seleccionarProcesoSecuencia(item) {
+    if (!item) return;
+    if (inputProcesoSeleccionado) inputProcesoSeleccionado.value = item.id;
+    if (inputProcesoSecuencia) inputProcesoSecuencia.value = item.label;
+    if (resultadosProcesoSecuencia) resultadosProcesoSecuencia.style.display = 'none';
+  }
+
+  function renderResultadosProcesoSecuencia(term) {
+    if (!resultadosProcesoSecuencia) return;
+    const q = String(term || '').trim().toLowerCase();
+    if (!q) {
+      resultadosProcesoSecuencia.style.display = 'none';
+      resultadosProcesoSecuencia.innerHTML = '';
+      return;
+    }
+
+    const filtrados = procesosCatalogoSecuencia
+      .filter(p => (`${p.ct} ${p.oper} ${p.nombre} ${p.codigo}`).toLowerCase().includes(q))
+      .slice(0, 20);
+
+    if (!filtrados.length) {
+      resultadosProcesoSecuencia.innerHTML = '<div style="padding:10px 12px; color:#718096; font-size:13px;">Sin coincidencias</div>';
+      resultadosProcesoSecuencia.style.display = 'block';
+      return;
+    }
+
+    resultadosProcesoSecuencia.innerHTML = filtrados.map(p => {
+      const secondary = [p.ct, p.oper || p.nombre].filter(Boolean).join(' - ');
+      return `<button type="button" data-proceso-id="${p.id}" style="display:block; width:100%; text-align:left; border:none; background:#fff; padding:9px 12px; cursor:pointer; border-bottom:1px solid #f1f5f9;">
+        <div style="font-size:13px; color:#1f2937; font-weight:600;">${secondary || p.label}</div>
+        <div style="font-size:11px; color:#64748b;">${p.label}</div>
+      </button>`;
+    }).join('');
+    resultadosProcesoSecuencia.style.display = 'block';
+  }
+
+  if (inputProcesoSecuencia) {
+    inputProcesoSecuencia.addEventListener('input', () => {
+      if (inputProcesoSeleccionado) inputProcesoSeleccionado.value = '';
+      renderResultadosProcesoSecuencia(inputProcesoSecuencia.value);
+    });
+
+    inputProcesoSecuencia.addEventListener('focus', () => {
+      if (inputProcesoSecuencia.value.trim()) {
+        renderResultadosProcesoSecuencia(inputProcesoSecuencia.value);
+      }
+    });
+
+    inputProcesoSecuencia.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('btnAgregarProceso')?.click();
+      }
+    });
+  }
+
+  if (resultadosProcesoSecuencia) {
+    resultadosProcesoSecuencia.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-proceso-id]');
+      if (!btn) return;
+      const item = procesosCatalogoSecuencia.find(p => String(p.id) === String(btn.dataset.procesoId));
+      seleccionarProcesoSecuencia(item);
+    });
+  }
+
+  document.addEventListener('click', (e) => {
+    if (!resultadosProcesoSecuencia || !inputProcesoSecuencia) return;
+    if (!resultadosProcesoSecuencia.contains(e.target) && e.target !== inputProcesoSecuencia) {
+      resultadosProcesoSecuencia.style.display = 'none';
+    }
+  });
+
   const btnAgregarProceso = document.getElementById('btnAgregarProceso');
   if (btnAgregarProceso) {
     btnAgregarProceso.addEventListener('click', () => {
-      const sel = document.getElementById('selectProceso');
-      const val = sel.value;
+      const selectedId = inputProcesoSeleccionado?.value || '';
+      const typed = (inputProcesoSecuencia?.value || '').trim().toLowerCase();
+      const foundByTyped = typed
+        ? procesosCatalogoSecuencia.find(p => p.label.toLowerCase() === typed)
+          || procesosCatalogoSecuencia.find(p => (`${p.ct} ${p.oper} ${p.nombre} ${p.codigo}`).toLowerCase().includes(typed))
+        : null;
+
+      const item = selectedId
+        ? procesosCatalogoSecuencia.find(p => String(p.id) === String(selectedId))
+        : foundByTyped;
+
+      const val = item ? item.id : '';
       if (!val) return;
-      const codigo = sel.options[sel.selectedIndex].dataset.codigo;
-      const nombre = sel.options[sel.selectedIndex].dataset.nombre;
-      const defCt = sel.options[sel.selectedIndex].dataset.ct || '';
-      const defOper = sel.options[sel.selectedIndex].dataset.oper || '';
-      const defTe = sel.options[sel.selectedIndex].dataset.te || '';
+      const codigo = item.codigo;
+      const nombre = item.nombre;
+      const defCt = item.ct || '';
+      const defOper = item.oper || '';
+      const defTe = item.te || '';
       const tbody = document.getElementById('tbodySecuencia');
       const orden = tbody.querySelectorAll('tr').length + 1;
       const tr = document.createElement('tr');
@@ -328,7 +445,9 @@
           <button type=\"button\" class=\"btnRemove\" title=\"Quitar\" style=\"padding:6px 8px; color:#b71c1c;\">✖</button>
         </td>`;
       tbody.appendChild(tr);
-      sel.value = '';
+      if (inputProcesoSecuencia) inputProcesoSecuencia.value = '';
+      if (inputProcesoSeleccionado) inputProcesoSeleccionado.value = '';
+      if (resultadosProcesoSecuencia) resultadosProcesoSecuencia.style.display = 'none';
       bindRowButtons(tr);
       calcularTiempos();
     });
