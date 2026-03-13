@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facturación - Liberación de Hojas</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .panel { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px; }
+        .small { color:#64748b; font-size:12px; }
+        .badge { display:inline-block; border-radius:999px; padding:2px 8px; font-size:11px; }
+        .b-ok { background:#e7f8ee; color:#1f7a4f; }
+        .b-warn { background:#fff6df; color:#8a5b14; }
+        .row { display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; }
+        .btn-ok { border:0; border-radius:6px; padding:8px 10px; background:#0b74de; color:#fff; font-weight:700; cursor:pointer; }
+        .split { display:grid; grid-template-columns:1.4fr 1fr; gap:12px; }
+
+        @media (max-width: 980px) {
+            .split { grid-template-columns:1fr; }
+            .btn-ok { width:100%; }
+        }
+    </style>
+</head>
+<body>
+    {% include '_sidebar.html' %}
+
+    <div class="container" style="padding-top:20px;">
+        <h2 style="margin:0 0 8px 0;">Módulo Facturación</h2>
+        <p class="small" style="margin:0 0 12px 0;">Vista de Almacén + check final de aprobado para liberar hoja.</p>
+
+        <div class="split">
+            <section class="panel">
+                <div class="row" style="margin-bottom:10px;">
+                    <strong>Pendientes por aprobar</strong>
+                    <span class="badge b-warn">{{ pendientes_facturacion|length }}</span>
+                </div>
+                {% if pendientes_facturacion %}
+                    {% for item in pendientes_facturacion %}
+                    <div class="panel" style="margin-bottom:10px; background:#f8fbff;">
+                        <div><strong>{{ item.hoja_ruta.nombre or ('HOJA #' ~ item.hoja_ruta.id) }}</strong></div>
+                        <div class="small">ID hoja: {{ item.hoja_ruta.id }} | Clave: {{ item.hoja_ruta.pn or '-' }}</div>
+                        <div class="small">Recepción: {{ item.almacen_recepcion_id or '-' }}</div>
+                        {% if item.almacen_captura_path %}
+                        <div class="small">Captura: <a href="/uploads/{{ item.almacen_captura_path }}" target="_blank">Ver captura</a></div>
+                        {% endif %}
+
+                        <form method="post" action="/facturacion/aprobar/{{ item.id }}" style="margin-top:10px;">
+                            <label style="display:flex; align-items:center; gap:6px; margin-bottom:8px; font-size:13px;">
+                                <input type="checkbox" name="aprobado_facturacion" required>
+                                Aprobado por facturación
+                            </label>
+                            {% if has_permission('facturacion', 'edit') or has_permission('catalog', 'edit') %}
+                            <button class="btn-ok" type="submit">Liberar hoja</button>
+                            {% endif %}
+                        </form>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="small">No hay hojas pendientes en Facturación.</div>
+                {% endif %}
+            </section>
+
+            <section class="panel">
+                <div class="row" style="margin-bottom:10px;">
+                    <strong>Últimas liberadas</strong>
+                    <span class="badge b-ok">{{ finalizadas|length }}</span>
+                </div>
+                {% if finalizadas %}
+                    {% for item in finalizadas %}
+                    <div style="padding:8px 0; border-bottom:1px solid #eef2f7;">
+                        <div><strong>{{ item.hoja_ruta.nombre or ('HOJA #' ~ item.hoja_ruta.id) }}</strong></div>
+                        <div class="small">Recepción: {{ item.almacen_recepcion_id or '-' }}</div>
+                        <div class="small">Aprobó: {{ item.facturacion_aprobado_por or '-' }}{% if item.facturacion_aprobado_en %} | {{ item.facturacion_aprobado_en.strftime('%Y-%m-%d %H:%M') }}{% endif %}</div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="small">Aún no hay liberaciones registradas.</div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</body>
+</html>
