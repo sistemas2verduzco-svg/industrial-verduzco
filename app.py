@@ -1890,11 +1890,12 @@ def hojas_ruta_list():
 
     maquinas = sorted(maquinas, key=maquina_sort_key)
     
-    # Mostrar cualquier hoja sin maquina asignada para evitar que se "pierdan"
-    # por cambios de estado heredados (ej. completada por flujo anterior).
+    # Hojas pendientes de asignar: solo las que aún tienen trabajo por hacer.
+    # 'completada' se excluye intencionalmente: si todos los procesos terminaron
+    # la hoja no necesita asignarse a ninguna máquina.
     hojas_pendientes = HojaRuta.query.filter(
         HojaRuta.maquina_id.is_(None),
-        HojaRuta.estado.in_(['activa', 'pausada', 'completada'])
+        HojaRuta.estado.in_(['activa', 'pausada'])
     ).order_by(HojaRuta.fecha_creacion.asc()).all()
 
     # Obtener hoja activa para cada máquina
