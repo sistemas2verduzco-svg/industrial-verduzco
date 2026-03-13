@@ -45,6 +45,7 @@
                         <div><strong>{{ h.nombre or ('HOJA #' ~ h.id) }}</strong></div>
                         <div class="small">ID: {{ h.id }} | Clave: {{ h.pn or '-' }}</div>
                         <div class="small">Piezas: {{ h.cantidad_piezas or 0 }} | Estado: {{ h.estado or '-' }}</div>
+                        <div class="small" style="margin-top:4px;"><a href="/hoja/{{ h.id }}" target="_blank">Ver hoja de ruta</a></div>
                         {% if has_permission('entregas', 'edit') or has_permission('catalog', 'edit') %}
                         <div style="margin-top:8px;">
                             <button class="btn-mini btn-add" type="button" data-hoja-id="{{ h.id }}" onclick="agregarAEntregas(this.dataset.hojaId)">Agregar</button>
@@ -66,6 +67,7 @@
                         <div class="panel" style="margin-bottom:8px; background:#fff;">
                             <div><strong>{{ item.hoja_ruta.nombre or ('HOJA #' ~ item.hoja_ruta.id) }}</strong></div>
                             <div class="small">ID hoja: {{ item.hoja_ruta.id }} | Clave: {{ item.hoja_ruta.pn or '-' }}</div>
+                            <div class="small"><a href="/hoja/{{ item.hoja_ruta.id }}" target="_blank">Ver hoja de ruta</a></div>
                             <div class="small">Agregó: {{ item.creado_por or '-' }} | Actualizado: {{ item.fecha_actualizacion.strftime('%Y-%m-%d %H:%M') if item.fecha_actualizacion else '-' }}</div>
                             {% if has_permission('entregas', 'edit') or has_permission('catalog', 'edit') %}
                             <div style="margin-top:8px; display:flex; gap:6px;">
@@ -97,6 +99,7 @@
                 <div class="panel" style="margin-bottom:8px; background:#fff;">
                     <div><strong>{{ item.hoja_ruta.nombre or ('HOJA #' ~ item.hoja_ruta.id) }}</strong></div>
                     <div class="small">ID hoja: {{ item.hoja_ruta.id }} | Clave: {{ item.hoja_ruta.pn or '-' }}</div>
+                    <div class="small"><a href="/hoja/{{ item.hoja_ruta.id }}" target="_blank">Ver hoja de ruta</a></div>
                     <div class="small">Recepción CONTPAQ: {{ item.almacen_recepcion_id or '-' }}</div>
                     {% if item.almacen_captura_path %}
                     <div class="small">Captura: <a href="/uploads/{{ item.almacen_captura_path }}" target="_blank">Ver captura</a></div>
@@ -112,6 +115,23 @@
                 {% endfor %}
             {% else %}
                 <div class="small">Aún no hay hojas regresadas por Almacén.</div>
+            {% endif %}
+        </div>
+
+        <div class="panel" style="margin-top:12px;">
+            <div class="row">
+                <strong>Historial Entregas</strong>
+                <span class="badge">{{ historial_entregas|length }} registros</span>
+            </div>
+            {% if historial_entregas %}
+                {% for r in historial_entregas %}
+                <div style="padding:6px 0; border-bottom:1px solid #eef2f7;">
+                    <div><strong>Hoja #{{ r.hoja_ruta_id }}</strong> - {{ r.accion }}</div>
+                    <div class="small">Usuario: {{ r.usuario or '-' }} | {{ r.fecha_creacion.strftime('%Y-%m-%d %H:%M') if r.fecha_creacion else '-' }}</div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="small">Sin movimientos en entregas.</div>
             {% endif %}
         </div>
     </div>

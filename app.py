@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRuta, HojaRutaFlujoLogistica, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRuta, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -1501,11 +1501,18 @@ def entregas_module():
         .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
         .all()
     )
+    historial_entregas = (
+        EntregaRegistro.query
+        .order_by(EntregaRegistro.fecha_creacion.desc())
+        .limit(80)
+        .all()
+    )
     return render_template(
         'entregas_module.html',
         hojas=hojas,
         pendientes_entregas=pendientes_entregas,
         listas_facturacion=listas_facturacion,
+        historial_entregas=historial_entregas,
     )
 
 
@@ -1540,6 +1547,13 @@ def api_logistica_entregas_agregar():
         actualizado_por=_logistica_username(),
     )
     db.session.add(item)
+    db.session.flush()
+    db.session.add(EntregaRegistro(
+        hoja_ruta_id=hoja.id,
+        flujo_id=item.id,
+        accion='agregada_en_entregas',
+        usuario=_logistica_username(),
+    ))
     db.session.commit()
     return jsonify({'ok': True, 'item': item.to_dict()})
 
@@ -1554,6 +1568,12 @@ def entregas_mover_almacen(item_id):
 
     item.estado = 'almacen'
     item.actualizado_por = _logistica_username()
+    db.session.add(EntregaRegistro(
+        hoja_ruta_id=item.hoja_ruta_id,
+        flujo_id=item.id,
+        accion='enviada_a_almacen',
+        usuario=_logistica_username(),
+    ))
     db.session.commit()
     return redirect(url_for('entregas_module'))
 
@@ -1568,6 +1588,12 @@ def entregas_mover_facturacion(item_id):
 
     item.estado = 'facturacion'
     item.actualizado_por = _logistica_username()
+    db.session.add(EntregaRegistro(
+        hoja_ruta_id=item.hoja_ruta_id,
+        flujo_id=item.id,
+        accion='enviada_a_facturacion',
+        usuario=_logistica_username(),
+    ))
     db.session.commit()
     return redirect(url_for('entregas_module'))
 
@@ -1593,7 +1619,17 @@ def almacen_module():
         .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
         .all()
     )
-    return render_template('almacen_module.html', pendientes_almacen=pendientes_almacen)
+    historial_almacen = (
+        AlmacenRegistro.query
+        .order_by(AlmacenRegistro.fecha_creacion.desc())
+        .limit(80)
+        .all()
+    )
+    return render_template(
+        'almacen_module.html',
+        pendientes_almacen=pendientes_almacen,
+        historial_almacen=historial_almacen,
+    )
 
 
 @app.route('/almacen/recibir/<int:item_id>', methods=['POST'])
@@ -1632,6 +1668,23 @@ def almacen_recibir_item(item_id):
     item.estado = 'entregas_lista_facturacion'
     item.actualizado_por = _logistica_username()
 
+    db.session.add(AlmacenRegistro(
+        hoja_ruta_id=item.hoja_ruta_id,
+        flujo_id=item.id,
+        recepcion_id=recepcion_id,
+        captura_path=item.almacen_captura_path,
+        validado=True,
+        usuario=_logistica_username(),
+        notas='Recepción validada en almacén y liberada para Entregas.',
+    ))
+    db.session.add(EntregaRegistro(
+        hoja_ruta_id=item.hoja_ruta_id,
+        flujo_id=item.id,
+        accion='lista_para_facturacion',
+        usuario=_logistica_username(),
+        notas=f'Recepción {recepcion_id} validada en almacén.',
+    ))
+
     db.session.commit()
     return redirect(url_for('almacen_module'))
 
@@ -1653,10 +1706,17 @@ def facturacion_module():
         .limit(50)
         .all()
     )
+    historial_facturacion = (
+        FacturacionRegistro.query
+        .order_by(FacturacionRegistro.fecha_creacion.desc())
+        .limit(80)
+        .all()
+    )
     return render_template(
         'facturacion_module.html',
         pendientes_facturacion=pendientes_facturacion,
         finalizadas=finalizadas,
+        historial_facturacion=historial_facturacion,
     )
 
 
@@ -1677,6 +1737,15 @@ def facturacion_aprobar_item(item_id):
     item.facturacion_aprobado_en = datetime.utcnow()
     item.estado = 'finalizada'
     item.actualizado_por = _logistica_username()
+
+    db.session.add(FacturacionRegistro(
+        hoja_ruta_id=item.hoja_ruta_id,
+        flujo_id=item.id,
+        aprobado=True,
+        usuario=_logistica_username(),
+        fecha_aprobacion=item.facturacion_aprobado_en,
+        notas='Hoja liberada por facturación.',
+    ))
     db.session.commit()
     return redirect(url_for('facturacion_module'))
 
@@ -2062,7 +2131,7 @@ def hojas_ruta_form():
 
 @app.route('/hoja/<int:hoja_id>')
 @login_required
-@requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
+@requires_any_permission([('hojas', 'view'), ('catalog', 'view'), ('entregas', 'view'), ('almacen', 'view'), ('facturacion', 'view')])
 def hoja_ruta_ver(hoja_id):
     """Vista independiente para ver una hoja por ID, sin requerir máquina."""
     hoja = HojaRuta.query.get_or_404(hoja_id)

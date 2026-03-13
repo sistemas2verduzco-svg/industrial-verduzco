@@ -608,6 +608,57 @@ class HojaRutaFlujoLogistica(db.Model):
         }
 
 
+class EntregaRegistro(db.Model):
+    """Bitácora propia del módulo Entregas."""
+    __tablename__ = 'entregas_registros'
+
+    id = db.Column(db.Integer, primary_key=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False, index=True)
+    flujo_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_flujo_logistica.id'), nullable=True, index=True)
+    accion = db.Column(db.String(80), nullable=False)  # agregada_en_entregas | enviada_a_almacen | lista_para_facturacion | enviada_a_facturacion
+    usuario = db.Column(db.String(120), nullable=True)
+    notas = db.Column(db.Text, nullable=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    hoja_ruta = db.relationship('HojaRuta', backref='entregas_registros')
+    flujo = db.relationship('HojaRutaFlujoLogistica', backref='entregas_registros')
+
+
+class AlmacenRegistro(db.Model):
+    """Bitácora propia del módulo Almacén."""
+    __tablename__ = 'almacen_registros'
+
+    id = db.Column(db.Integer, primary_key=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False, index=True)
+    flujo_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_flujo_logistica.id'), nullable=True, index=True)
+    recepcion_id = db.Column(db.String(120), nullable=True)
+    captura_path = db.Column(db.String(500), nullable=True)
+    validado = db.Column(db.Boolean, nullable=False, default=False)
+    usuario = db.Column(db.String(120), nullable=True)
+    notas = db.Column(db.Text, nullable=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    hoja_ruta = db.relationship('HojaRuta', backref='almacen_registros')
+    flujo = db.relationship('HojaRutaFlujoLogistica', backref='almacen_registros')
+
+
+class FacturacionRegistro(db.Model):
+    """Bitácora propia del módulo Facturación."""
+    __tablename__ = 'facturacion_registros'
+
+    id = db.Column(db.Integer, primary_key=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False, index=True)
+    flujo_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_flujo_logistica.id'), nullable=True, index=True)
+    aprobado = db.Column(db.Boolean, nullable=False, default=False)
+    usuario = db.Column(db.String(120), nullable=True)
+    notas = db.Column(db.Text, nullable=True)
+    fecha_aprobacion = db.Column(db.DateTime, nullable=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    hoja_ruta = db.relationship('HojaRuta', backref='facturacion_registros')
+    flujo = db.relationship('HojaRutaFlujoLogistica', backref='facturacion_registros')
+
+
 class EstacionTrabajo(db.Model):
     """Estaciones o pasos dentro de una hoja de ruta, con tiempos por columna según plantilla."""
     __tablename__ = 'estaciones_trabajo'

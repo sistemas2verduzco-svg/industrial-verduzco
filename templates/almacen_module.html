@@ -31,6 +31,7 @@
                 <div class="panel" style="margin-bottom:10px; background:#f8fbff;">
                     <div><strong>{{ item.hoja_ruta.nombre or ('HOJA #' ~ item.hoja_ruta.id) }}</strong></div>
                     <div class="small">ID hoja: {{ item.hoja_ruta.id }} | Clave: {{ item.hoja_ruta.pn or '-' }} | Piezas: {{ item.hoja_ruta.cantidad_piezas or 0 }}</div>
+                    <div class="small"><a href="/hoja/{{ item.hoja_ruta.id }}" target="_blank">Ver hoja de ruta</a></div>
 
                     <form method="post" action="/almacen/recibir/{{ item.id }}" enctype="multipart/form-data" style="margin-top:10px;">
                         <div class="row-grid">
@@ -58,6 +59,20 @@
                 {% endfor %}
             {% else %}
                 <div class="small">No hay hojas pendientes de recepción en Almacén.</div>
+            {% endif %}
+        </div>
+
+        <div class="panel" style="margin-top:12px;">
+            <h3 style="margin:0 0 8px 0; font-size:16px;">Historial Almacén</h3>
+            {% if historial_almacen %}
+                {% for r in historial_almacen %}
+                <div style="padding:6px 0; border-bottom:1px solid #eef2f7;">
+                    <div><strong>Hoja #{{ r.hoja_ruta_id }}</strong> | Recepción: {{ r.recepcion_id or '-' }}</div>
+                    <div class="small">Usuario: {{ r.usuario or '-' }} | Validado: {{ 'Sí' if r.validado else 'No' }} | {{ r.fecha_creacion.strftime('%Y-%m-%d %H:%M') if r.fecha_creacion else '-' }}</div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="small">Sin registros de almacén.</div>
             {% endif %}
         </div>
     </div>
