@@ -854,8 +854,19 @@
                 <div class="pending-list">
                     {% if hojas_pendientes %}
                         {% for h in hojas_pendientes %}
-                        <div class="pending-item">
+                        <div class="pending-item" style="{% if h.id in facturadas_info %}border-color: #16a34a; box-shadow: 0 0 0 2px rgba(22,163,74,0.15);{% endif %}">
                             <div class="pending-title">{{ h.serie or ('HOJA #' ~ h.id) }}</div>
+                            {% if h.id in facturadas_info %}
+                            <div style="margin-top: 5px; padding: 5px 8px; background: #dcfce7; border: 1px solid #86efac; border-radius: 6px; font-size: 11px; color: #15803d; font-weight: 700;">
+                                ✅ Liberada por Facturación
+                                {% if facturadas_info[h.id].aprobado_por %}
+                                · {{ facturadas_info[h.id].aprobado_por }}
+                                {% endif %}
+                                {% if facturadas_info[h.id].aprobado_en %}
+                                · {{ facturadas_info[h.id].aprobado_en }}
+                                {% endif %}
+                            </div>
+                            {% endif %}
                             <div class="pending-meta">
                                 Clave: <strong>{{ h.clave or '' }}</strong><br>
                                 Estado: <strong>{{ h.estado or '' }}</strong><br>

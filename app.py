@@ -1956,7 +1956,22 @@ def hojas_ruta_list():
         except Exception:
             db.session.rollback()
 
-    resp = make_response(render_template('hojas_ruta_list.html', maquinas=maquinas_data, hojas_pendientes=pendientes_data))
+    # Hojas liberadas por Facturación (estado='finalizada' en flujo logístico)
+    facturadas_flujos = HojaRutaFlujoLogistica.query.filter_by(estado='finalizada').all()
+    facturadas_info = {
+        f.hoja_ruta_id: {
+            'aprobado_por': f.facturacion_aprobado_por or '',
+            'aprobado_en': f.facturacion_aprobado_en.strftime('%d/%m/%Y %H:%M') if f.facturacion_aprobado_en else ''
+        }
+        for f in facturadas_flujos
+    }
+
+    resp = make_response(render_template(
+        'hojas_ruta_list.html',
+        maquinas=maquinas_data,
+        hojas_pendientes=pendientes_data,
+        facturadas_info=facturadas_info
+    ))
     # Evita que navegador/proxy muestren HTML viejo tras deploy.
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     resp.headers['Pragma'] = 'no-cache'
@@ -2286,8 +2301,22 @@ def hojas_ruta_detalle(maquina_id):
         estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
         h['estaciones'] = [e.to_dict() for e in estaciones]
         hojas_data.append(h)
-    
-    return render_template('hojas_ruta_detalle.html', maquina=maquina, hojas=hojas_data)
+
+    # Hojas liberadas por Facturación para esta máquina
+    hoja_ids = [h['id'] for h in hojas_data]
+    facturadas_flujos = HojaRutaFlujoLogistica.query.filter(
+        HojaRutaFlujoLogistica.hoja_ruta_id.in_(hoja_ids),
+        HojaRutaFlujoLogistica.estado == 'finalizada'
+    ).all() if hoja_ids else []
+    facturadas_info = {
+        f.hoja_ruta_id: {
+            'aprobado_por': f.facturacion_aprobado_por or '',
+            'aprobado_en': f.facturacion_aprobado_en.strftime('%d/%m/%Y %H:%M') if f.facturacion_aprobado_en else ''
+        }
+        for f in facturadas_flujos
+    }
+
+    return render_template('hojas_ruta_detalle.html', maquina=maquina, hojas=hojas_data, facturadas_info=facturadas_info)
 
 
 @app.route('/qc_estaciones/<int:maquina_id>')

@@ -42,6 +42,18 @@
         .st-activa { background: #d1fae5; color: #065f46; }
         .st-pausada { background: #fef3c7; color: #92400e; }
         .st-completada { background: #dbeafe; color: #1e3a8a; }
+        .badge-facturada {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: #dcfce7;
+            border: 1px solid #86efac;
+            border-radius: 999px;
+            padding: 4px 12px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #15803d;
+        }
     </style>
 </head>
 <body>
@@ -56,10 +68,23 @@
 
         {% if hojas %}
             {% for hoja in hojas %}
-            <div class="card">
-                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;">
+            <div class="card" style="{% if hoja.id in facturadas_info %}border-color: #16a34a; box-shadow: 0 0 0 3px rgba(22,163,74,0.12);{% endif %}">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
                     <div class="v">{{ hoja.nombre or '' }}</div>
-                    <span class="status st-{{ hoja.estado or 'activa' }}">{{ hoja.estado or 'activa' }}</span>
+                    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                        {% if hoja.id in facturadas_info %}
+                        <span class="badge-facturada">
+                            ✅ Liberada por Facturación
+                            {% if facturadas_info[hoja.id].aprobado_por %}
+                            · {{ facturadas_info[hoja.id].aprobado_por }}
+                            {% endif %}
+                            {% if facturadas_info[hoja.id].aprobado_en %}
+                            · {{ facturadas_info[hoja.id].aprobado_en }}
+                            {% endif %}
+                        </span>
+                        {% endif %}
+                        <span class="status st-{{ hoja.estado or 'activa' }}">{{ hoja.estado or 'activa' }}</span>
+                    </div>
                 </div>
 
                 <div class="row">
