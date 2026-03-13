@@ -31,7 +31,7 @@
 
     <div class="container" style="padding-top:20px;">
         <h2 style="margin:0 0 8px 0;">Módulo Entregas</h2>
-        <p class="small" style="margin:0 0 12px 0;">Arrastra hojas de ruta a la bandeja temporal y luego envíalas a Almacén. Esto no elimina la hoja original.</p>
+        <p class="small" style="margin:0 0 12px 0;">Arrastra hojas de ruta a la bandeja temporal y luego envíalas a Almacén. Cuando Almacén recepciona, la hoja regresa aquí como "lista para facturación".</p>
 
         <div class="layout">
             <section class="panel">
@@ -84,6 +84,35 @@
                     {% endif %}
                 </div>
             </section>
+        </div>
+
+        <div class="panel" style="margin-top:12px;">
+            <div class="row">
+                <strong>Regresadas por Almacén (Listas para Facturación)</strong>
+                <span class="badge">{{ listas_facturacion|length }} listas</span>
+            </div>
+
+            {% if listas_facturacion %}
+                {% for item in listas_facturacion %}
+                <div class="panel" style="margin-bottom:8px; background:#fff;">
+                    <div><strong>{{ item.hoja_ruta.nombre or ('HOJA #' ~ item.hoja_ruta.id) }}</strong></div>
+                    <div class="small">ID hoja: {{ item.hoja_ruta.id }} | Clave: {{ item.hoja_ruta.pn or '-' }}</div>
+                    <div class="small">Recepción CONTPAQ: {{ item.almacen_recepcion_id or '-' }}</div>
+                    {% if item.almacen_captura_path %}
+                    <div class="small">Captura: <a href="/uploads/{{ item.almacen_captura_path }}" target="_blank">Ver captura</a></div>
+                    {% endif %}
+                    {% if has_permission('entregas', 'edit') or has_permission('catalog', 'edit') %}
+                    <div style="margin-top:8px; display:flex; gap:6px;">
+                        <form method="post" action="/entregas/mover_facturacion/{{ item.id }}">
+                            <button class="btn-mini btn-send" type="submit">Enviar a Facturación</button>
+                        </form>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="small">Aún no hay hojas regresadas por Almacén.</div>
+            {% endif %}
         </div>
     </div>
 

@@ -1468,7 +1468,7 @@ def control_calidad_legacy_maquina(maquina_id):
     return redirect(url_for('control_calidad_list'))
 
 
-# ==================== FLUJO TEMPORAL: ENTREGAS -> ALMACEN -> FACTURACION ====================
+# ==================== FLUJO TEMPORAL: ENTREGAS -> ALMACEN -> ENTREGAS(LISTA) -> FACTURACION ====================
 
 LOGISTICA_IMG_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
 
@@ -1495,10 +1495,17 @@ def entregas_module():
         .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
         .all()
     )
+    listas_facturacion = (
+        HojaRutaFlujoLogistica.query
+        .filter_by(estado='entregas_lista_facturacion')
+        .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
+        .all()
+    )
     return render_template(
         'entregas_module.html',
         hojas=hojas,
         pendientes_entregas=pendientes_entregas,
+        listas_facturacion=listas_facturacion,
     )
 
 
@@ -1519,7 +1526,7 @@ def api_logistica_entregas_agregar():
 
     item = HojaRutaFlujoLogistica.query.filter_by(hoja_ruta_id=hoja_id).first()
     if item:
-        if item.estado == 'entregas':
+        if item.estado in ('entregas', 'entregas_lista_facturacion'):
             return jsonify({'ok': True, 'message': 'La hoja ya está en la bandeja de Entregas.'})
         if item.estado in ('almacen', 'facturacion'):
             return jsonify({'error': f'La hoja ya fue transferida a {item.estado}.'}), 409
@@ -1546,6 +1553,20 @@ def entregas_mover_almacen(item_id):
         return redirect(url_for('entregas_module'))
 
     item.estado = 'almacen'
+    item.actualizado_por = _logistica_username()
+    db.session.commit()
+    return redirect(url_for('entregas_module'))
+
+
+@app.route('/entregas/mover_facturacion/<int:item_id>', methods=['POST'])
+@login_required
+@requires_any_permission([('entregas', 'edit'), ('catalog', 'edit')])
+def entregas_mover_facturacion(item_id):
+    item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
+    if item.estado != 'entregas_lista_facturacion':
+        return redirect(url_for('entregas_module'))
+
+    item.estado = 'facturacion'
     item.actualizado_por = _logistica_username()
     db.session.commit()
     return redirect(url_for('entregas_module'))
@@ -1607,7 +1628,8 @@ def almacen_recibir_item(item_id):
     item.almacen_validado = True
     item.almacen_recepcion_id = recepcion_id
     item.almacen_captura_path = f"{rel_dir}/{nombre}".replace('\\', '/')
-    item.estado = 'facturacion'
+    # Almacén solo recepciona/libera y devuelve a Entregas como lista para enviar a Facturación.
+    item.estado = 'entregas_lista_facturacion'
     item.actualizado_por = _logistica_username()
 
     db.session.commit()

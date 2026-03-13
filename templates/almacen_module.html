@@ -23,7 +23,7 @@
 
     <div class="container" style="padding-top:20px;">
         <h2 style="margin:0 0 8px 0;">Módulo Almacén</h2>
-        <p class="small" style="margin:0 0 12px 0;">Valida recepción de hojas enviadas por Entregas. Requiere check, ID de recepción y captura de pantalla.</p>
+        <p class="small" style="margin:0 0 12px 0;">Valida recepción de hojas enviadas por Entregas. Requiere check, ID de recepción y captura; después regresa a Entregas como lista para facturación.</p>
 
         <div class="panel">
             {% if pendientes_almacen %}
@@ -50,7 +50,7 @@
                                 </label>
                             </label>
                             {% if has_permission('almacen', 'edit') or has_permission('catalog', 'edit') %}
-                            <button class="btn-ok" type="submit">Enviar a Facturación</button>
+                            <button class="btn-ok" type="submit">Validar recepción y liberar</button>
                             {% endif %}
                         </div>
                     </form>

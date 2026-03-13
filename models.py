@@ -569,7 +569,7 @@ class HojaRutaFlujoLogistica(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False, unique=True)
 
-    # entregas | almacen | facturacion | finalizada
+    # entregas | almacen | entregas_lista_facturacion | facturacion | finalizada
     estado = db.Column(db.String(30), nullable=False, default='entregas', index=True)
 
     creado_por = db.Column(db.String(120), nullable=True)
