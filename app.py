@@ -2175,8 +2175,27 @@ def api_mapa_maquinas():
 def hojas_ruta_form():
     """Formulario simplificado para crear hojas de ruta de produccion."""
     almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria']
-    # Listado reciente (máximo 50) para consulta rápida
-    hojas = HojaRuta.query.order_by(HojaRuta.fecha_creacion.desc()).limit(50).all()
+    # Listado completo para consulta
+    hojas = HojaRuta.query.order_by(HojaRuta.fecha_creacion.desc()).all()
+
+    hoja_ids = [h.id for h in hojas]
+    flujos_facturacion = HojaRutaFlujoLogistica.query.filter(
+        HojaRutaFlujoLogistica.hoja_ruta_id.in_(hoja_ids),
+        HojaRutaFlujoLogistica.estado == 'finalizada'
+    ).all() if hoja_ids else []
+    facturacion_por_hoja = {f.hoja_ruta_id: f for f in flujos_facturacion}
+
+    registros_facturacion = FacturacionRegistro.query.filter(
+        FacturacionRegistro.hoja_ruta_id.in_(hoja_ids)
+    ).order_by(
+        FacturacionRegistro.fecha_aprobacion.desc().nullslast(),
+        FacturacionRegistro.fecha_creacion.desc()
+    ).all() if hoja_ids else []
+    ultimo_registro_facturacion = {}
+    for registro in registros_facturacion:
+        if registro.hoja_ruta_id not in ultimo_registro_facturacion:
+            ultimo_registro_facturacion[registro.hoja_ruta_id] = registro
+
     claves_all = ClaveProducto.query.all()
     claves_idx = {
         (str(c.clave or '').strip().upper()): c
@@ -2186,6 +2205,8 @@ def hojas_ruta_form():
 
     hojas_data = []
     for h in hojas:
+        flujo_fact = facturacion_por_hoja.get(h.id)
+        registro_fact = ultimo_registro_facturacion.get(h.id)
         qr_payload = f"HRID:{h.id};SERIE:{h.nombre or ''}"
         descripcion_clave = _resolve_clave_descripcion_by_pn(h.pn)
         clave_obj = claves_idx.get(str(h.pn or '').strip().upper())
@@ -2208,6 +2229,19 @@ def hojas_ruta_form():
             'firma_ing_jose': h.supervisor,
             'firma_ing_rodrigo': h.operador,
             'estado': h.estado,
+            'liberada_facturacion': bool(flujo_fact),
+            'facturacion_aprobado_por': (flujo_fact.facturacion_aprobado_por if flujo_fact else None),
+            'facturacion_aprobado_en': (flujo_fact.facturacion_aprobado_en.isoformat() if flujo_fact and flujo_fact.facturacion_aprobado_en else None),
+            'facturacion_registro_estado': (
+                'APROBADA' if registro_fact and registro_fact.aprobado else 'REGRESADA'
+            ) if registro_fact else None,
+            'facturacion_registro_usuario': registro_fact.usuario if registro_fact else None,
+            'facturacion_registro_fecha': (
+                registro_fact.fecha_aprobacion.isoformat()
+                if registro_fact and registro_fact.fecha_aprobacion
+                else (registro_fact.fecha_creacion.isoformat() if registro_fact and registro_fact.fecha_creacion else None)
+            ),
+            'facturacion_registro_notas': registro_fact.notas if registro_fact else None,
             'cantidad_piezas': h.cantidad_piezas,
             'fecha_salida': h.fecha_salida.isoformat() if h.fecha_salida else None,
             'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None,

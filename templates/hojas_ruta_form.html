@@ -626,7 +626,7 @@
         </div>
 
         <div class="section-title hojas-toolbar">
-            <span>Hojas recientes</span>
+            <span>Hojas registradas</span>
             <div class="hojas-search-wrap">
                 <input
                     type="search"
@@ -657,6 +657,8 @@
                         <th>Firma Jose</th>
                         <th>Firma Rodrigo</th>
                         <th>Estado</th>
+                        <th>Confirmación Facturación</th>
+                        <th>Registro Facturación</th>
                         <th>Accion</th>
                     </tr>
                 </thead>
@@ -688,6 +690,37 @@
                         <td>{{ h.firma_ing_jose or 'Pendiente' }}</td>
                         <td>{{ h.firma_ing_rodrigo or 'Pendiente' }}</td>
                         <td>{{ h.estado or '' }}</td>
+                        <td>
+                            {% if h.liberada_facturacion %}
+                                <span style="display:inline-block; padding:2px 8px; border-radius:999px; background:#dcfce7; border:1px solid #86efac; color:#15803d; font-weight:700; font-size:11px;">LIBERADA / APROBADA</span>
+                                {% if h.facturacion_aprobado_por %}
+                                <div style="font-size:11px; color:#166534; margin-top:3px;">{{ h.facturacion_aprobado_por }}</div>
+                                {% endif %}
+                                {% if h.facturacion_aprobado_en %}
+                                <div style="font-size:11px; color:#166534;">{{ h.facturacion_aprobado_en[:16]|replace('T', ' ') }}</div>
+                                {% endif %}
+                            {% else %}
+                                <span style="display:inline-block; padding:2px 8px; border-radius:999px; background:#fee2e2; border:1px solid #fecaca; color:#991b1b; font-weight:700; font-size:11px;">NO</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if h.facturacion_registro_estado %}
+                                <div>
+                                    <span style="display:inline-block; padding:2px 8px; border-radius:999px; {% if h.facturacion_registro_estado == 'APROBADA' %}background:#dcfce7; border:1px solid #86efac; color:#15803d;{% else %}background:#fee2e2; border:1px solid #fecaca; color:#991b1b;{% endif %} font-weight:700; font-size:11px;">{{ h.facturacion_registro_estado }}</span>
+                                </div>
+                                {% if h.facturacion_registro_usuario %}
+                                <div style="font-size:11px; color:#374151; margin-top:3px;">{{ h.facturacion_registro_usuario }}</div>
+                                {% endif %}
+                                {% if h.facturacion_registro_fecha %}
+                                <div style="font-size:11px; color:#6b7280;">{{ h.facturacion_registro_fecha[:16]|replace('T', ' ') }}</div>
+                                {% endif %}
+                                {% if h.facturacion_registro_notas %}
+                                <div style="font-size:11px; color:#4b5563; margin-top:3px;">{{ h.facturacion_registro_notas }}</div>
+                                {% endif %}
+                            {% else %}
+                                <span style="color:#6b7280;">Sin registro</span>
+                            {% endif %}
+                        </td>
                         <td>
                             <button
                                 type="button"
@@ -875,7 +908,14 @@
             { key: 'comentarios', label: 'Comentarios' },
             { key: 'firma_ing_jose', label: 'Firma Jose' },
             { key: 'firma_ing_rodrigo', label: 'Firma Rodrigo' },
-            { key: 'estado', label: 'Estado' }
+            { key: 'estado', label: 'Estado' },
+            { key: 'liberada_facturacion', label: 'Confirmación Facturación' },
+            { key: 'facturacion_aprobado_por', label: 'Aprobado por Facturación' },
+            { key: 'facturacion_aprobado_en', label: 'Fecha Aprobación Facturación' },
+            { key: 'facturacion_registro_estado', label: 'Estado Registro Facturación' },
+            { key: 'facturacion_registro_usuario', label: 'Usuario Registro Facturación' },
+            { key: 'facturacion_registro_fecha', label: 'Fecha Registro Facturación' },
+            { key: 'facturacion_registro_notas', label: 'Notas Registro Facturación' }
         ];
         let reportDataDraft = [];
 
@@ -1233,7 +1273,10 @@
                 const raw = String(v || '').trim().toUpperCase();
                 return raw === 'AUTORIZADO' ? 'AUTORIZADO' : 'PENDIENTE';
             }
-            if (key === 'fecha_salida' || key === 'fecha_creacion') {
+            if (key === 'liberada_facturacion') {
+                return v ? 'LIBERADA / APROBADA' : 'NO';
+            }
+            if (key === 'fecha_salida' || key === 'fecha_creacion' || key === 'facturacion_aprobado_en' || key === 'facturacion_registro_fecha') {
                 return String(v).replace('T', ' ').slice(0, 19);
             }
             return String(v);
@@ -1275,6 +1318,11 @@
                             r.comentarios,
                             r.estado,
                             r.calidad,
+                            r.liberada_facturacion ? 'liberada aprobada facturacion' : 'no liberada',
+                            r.facturacion_aprobado_por,
+                            r.facturacion_registro_estado,
+                            r.facturacion_registro_usuario,
+                            r.facturacion_registro_notas,
                         ].some(x => String(x || '').toLowerCase().includes(search));
                         if (!hay) return false;
                     }
