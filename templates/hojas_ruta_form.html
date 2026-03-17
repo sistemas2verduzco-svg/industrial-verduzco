@@ -291,41 +291,28 @@
         }
 
         .hojas-recientes-wrap {
-            overflow-x: auto;
-            overflow-y: hidden;
-            -webkit-overflow-scrolling: touch;
-            scrollbar-width: thin;
-            scrollbar-color: #94a3b8 #e5e7eb;
+            overflow-x: hidden;
+            overflow-y: visible;
             width: 100%;
         }
 
         .hojas-recientes-wrap::-webkit-scrollbar {
-            height: 10px;
-        }
-
-        .hojas-recientes-wrap::-webkit-scrollbar-track {
-            background: #e5e7eb;
-            border-radius: 999px;
-        }
-
-        .hojas-recientes-wrap::-webkit-scrollbar-thumb {
-            background: #94a3b8;
-            border-radius: 999px;
+            display: none;
         }
 
         .hojas-recientes-table {
-            width: max-content;
-            min-width: 2500px;
-            table-layout: auto;
+            width: 100%;
+            min-width: 0;
+            table-layout: fixed;
             border-collapse: collapse;
-            font-size: 12px;
+            font-size: 11px;
         }
 
         .hojas-recientes-table th,
         .hojas-recientes-table td {
-            padding: 6px 4px;
+            padding: 6px 5px;
             text-align: left;
-            vertical-align: middle;
+            vertical-align: top;
             border-bottom: 1px solid #e5e7eb;
         }
 
@@ -333,20 +320,14 @@
             background: #f3f4f6;
             font-weight: 600;
             font-size: 11px;
-            white-space: nowrap;
+            white-space: normal;
+            word-break: break-word;
         }
 
         .hojas-recientes-table td {
-            white-space: nowrap;
-        }
-
-        /* Columnas que permiten wrap */
-        .hojas-recientes-table td:nth-child(3),
-        .hojas-recientes-table td:nth-child(10),
-        .hojas-recientes-table td:nth-child(11),
-        .hojas-recientes-table td:nth-child(16) {
             white-space: normal;
-            word-wrap: break-word;
+            word-break: break-word;
+            overflow-wrap: anywhere;
         }
 
         .hojas-recientes-table .btn-edit,
@@ -415,7 +396,7 @@
         /* En escritorio, priorizar legibilidad sin recortar texto */
         @media (min-width: 981px) {
             .hojas-recientes-table {
-                table-layout: auto;
+                table-layout: fixed;
             }
 
             .hojas-recientes-table th,
@@ -426,29 +407,8 @@
 
             .hojas-recientes-table td {
                 white-space: normal;
-                word-break: normal;
-                overflow-wrap: break-word;
-            }
-
-            .hojas-recientes-table th:nth-child(1),
-            .hojas-recientes-table td:nth-child(1),
-            .hojas-recientes-table th:nth-child(3),
-            .hojas-recientes-table td:nth-child(3),
-            .hojas-recientes-table th:nth-child(5),
-            .hojas-recientes-table td:nth-child(5),
-            .hojas-recientes-table th:nth-child(7),
-            .hojas-recientes-table td:nth-child(7),
-            .hojas-recientes-table th:nth-child(12),
-            .hojas-recientes-table td:nth-child(12),
-            .hojas-recientes-table th:nth-child(13),
-            .hojas-recientes-table td:nth-child(13),
-            .hojas-recientes-table th:nth-child(14),
-            .hojas-recientes-table td:nth-child(14),
-            .hojas-recientes-table th:nth-child(15),
-            .hojas-recientes-table td:nth-child(15),
-            .hojas-recientes-table th:nth-child(17),
-            .hojas-recientes-table td:nth-child(17) {
-                white-space: nowrap;
+                word-break: break-word;
+                overflow-wrap: anywhere;
             }
         }
 
