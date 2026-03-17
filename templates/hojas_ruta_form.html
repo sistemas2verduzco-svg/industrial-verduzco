@@ -294,19 +294,28 @@
             overflow-x: auto;
             overflow-y: hidden;
             -webkit-overflow-scrolling: touch;
-            scrollbar-width: none;
+            scrollbar-width: thin;
+            scrollbar-color: #94a3b8 #e5e7eb;
             width: 100%;
         }
 
         .hojas-recientes-wrap::-webkit-scrollbar {
-            width: 0;
-            height: 0;
-            display: none;
+            height: 10px;
+        }
+
+        .hojas-recientes-wrap::-webkit-scrollbar-track {
+            background: #e5e7eb;
+            border-radius: 999px;
+        }
+
+        .hojas-recientes-wrap::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 999px;
         }
 
         .hojas-recientes-table {
             width: max-content;
-            min-width: 2100px;
+            min-width: 2500px;
             table-layout: auto;
             border-collapse: collapse;
             font-size: 12px;
@@ -333,9 +342,9 @@
 
         /* Columnas que permiten wrap */
         .hojas-recientes-table td:nth-child(3),
-        .hojas-recientes-table td:nth-child(9),
         .hojas-recientes-table td:nth-child(10),
-        .hojas-recientes-table td:nth-child(15) {
+        .hojas-recientes-table td:nth-child(11),
+        .hojas-recientes-table td:nth-child(16) {
             white-space: normal;
             word-wrap: break-word;
         }
@@ -436,7 +445,9 @@
             .hojas-recientes-table th:nth-child(14),
             .hojas-recientes-table td:nth-child(14),
             .hojas-recientes-table th:nth-child(15),
-            .hojas-recientes-table td:nth-child(15) {
+            .hojas-recientes-table td:nth-child(15),
+            .hojas-recientes-table th:nth-child(17),
+            .hojas-recientes-table td:nth-child(17) {
                 white-space: nowrap;
             }
         }
@@ -490,6 +501,9 @@
 
             .hojas-recientes-table th:nth-child(15),
             .hojas-recientes-table td:nth-child(15) { width: 85px; min-width: 85px; }
+
+            .hojas-recientes-table th:nth-child(17),
+            .hojas-recientes-table td:nth-child(17) { width: 130px; min-width: 130px; }
         }
 
         @media (max-width: 900px) {
@@ -1550,8 +1564,12 @@
                 rows.push(columns.map(c => formatReportCellValue(c.key, row)));
             });
 
-            const csv = rows.map(r => r.map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(',')).join('\n');
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            // UTF-8 BOM + CRLF mejora compatibilidad con Excel (acentos/ñ).
+            const csvBody = rows
+                .map(r => r.map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(','))
+                .join('\r\n');
+            const csv = '\uFEFF' + csvBody;
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
