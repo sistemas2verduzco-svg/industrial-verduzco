@@ -124,7 +124,7 @@
             z-index: 3000;
         }
         .modal-card {
-            width: min(560px, 92vw);
+            width: min(920px, 96vw);
             background: #fff;
             border-radius: 10px;
             border: 1px solid #d1d5db;
@@ -202,6 +202,75 @@
         .report-table td[contenteditable="true"] {
             background: #fffdf2;
             outline: none;
+        }
+
+        .field-note {
+            margin-top: 5px;
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .history-box {
+            border: 1px solid #dbe3ee;
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 10px;
+            max-height: 260px;
+            overflow: auto;
+            display: grid;
+            gap: 8px;
+        }
+
+        .history-item {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            background: #fff;
+            padding: 10px;
+        }
+
+        .history-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 4px;
+        }
+
+        .history-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .history-badge.inicial,
+        .history-badge.incremento {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .history-badge.decremento {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .history-badge.ajuste {
+            background: #e0f2fe;
+            color: #075985;
+        }
+
+        .history-meta {
+            font-size: 12px;
+            color: #475569;
+        }
+
+        .history-empty {
+            font-size: 13px;
+            color: #64748b;
+            text-align: center;
+            padding: 10px;
         }
 
         .table-scroll {
@@ -603,6 +672,7 @@
                         <th>Calidad</th>
                         <th>Fecha</th>
                         <th>Piezas</th>
+                        <th>Historial Piezas</th>
                         <th>Almacen</th>
                         <th>Orden Trabajo</th>
                         <th>Comentarios</th>
@@ -624,6 +694,23 @@
                         <td>{{ h.calidad or '' }}</td>
                         <td>{{ h.fecha_salida[:16] if h.fecha_salida else '' }}</td>
                         <td>{{ h.cantidad_piezas or '' }}</td>
+                        <td>
+                            {% if h.historial_cargas and h.historial_cargas|length > 0 %}
+                                {% set mov = h.historial_cargas[0] %}
+                                <div style="font-size:11px; color:#166534; font-weight:700;">
+                                    {{ '+' if (mov.cantidad_cambio or 0) >= 0 else '' }}{{ mov.cantidad_cambio or 0 }} pieza(s)
+                                </div>
+                                <div style="font-size:11px; color:#6b7280;">
+                                    {{ mov.fecha_creacion[:16]|replace('T', ' ') if mov.fecha_creacion else '' }}
+                                    {% if mov.usuario %} · {{ mov.usuario }}{% endif %}
+                                </div>
+                                <div style="font-size:11px; color:#374151; margin-top:2px;">
+                                    {{ h.historial_cargas|length }} mov.
+                                </div>
+                            {% else %}
+                                <span style="color:#6b7280; font-size:12px;">Sin historial</span>
+                            {% endif %}
+                        </td>
                         <td>{{ h.almacen or '' }}</td>
                         <td>{{ h.orden_trabajo or '' }}</td>
                         <td>{{ h.comentarios or '' }}</td>
@@ -735,6 +822,7 @@
                 <div>
                     <label>Cantidad de piezas</label>
                     <input type="number" id="edit_cantidad" min="1" step="1">
+                    <div class="field-note">Captura el total acumulado. Si hoy eran 50 y mañana quedan 100, se guardará una carga separada de +50.</div>
                 </div>
                 <div>
                     <label>Almacen</label>
@@ -774,6 +862,12 @@
                         <option value="pausada">pausada</option>
                         <option value="completada">completada</option>
                     </select>
+                </div>
+                <div style="grid-column: 1 / -1;">
+                    <label>Historial de cargas de piezas</label>
+                    <div id="edit_historial_cargas" class="history-box">
+                        <div class="history-empty">Sin movimientos registrados.</div>
+                    </div>
                 </div>
             </div>
 
@@ -847,6 +941,7 @@
     <script>
         let clavesData = [];
         const hojasReporteData = {{ hojas|tojson }};
+        const hojasDataById = new Map(hojasReporteData.map((item) => [String(item.id), item]));
         const REPORT_COLUMNS = [
             { key: 'id', label: 'ID' },
             { key: 'serie', label: 'Serie' },
@@ -855,6 +950,7 @@
             { key: 'calidad', label: 'Calidad' },
             { key: 'fecha_salida', label: 'Fecha' },
             { key: 'cantidad_piezas', label: 'Piezas' },
+            { key: 'historial_cargas_resumen', label: 'Historial Cargas Piezas' },
             { key: 'almacen', label: 'Almacen' },
             { key: 'orden_trabajo', label: 'Orden trabajo' },
             { key: 'comentarios', label: 'Comentarios' },
@@ -882,6 +978,67 @@
             const low = t.toLowerCase();
             if (low === 'none' || low === 'null' || low === 'nan' || low === 'nat' || low === '-') return '';
             return t;
+        }
+
+        function formatFechaHistorial(value) {
+            if (!value) return 'Sin fecha';
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return value;
+            return date.toLocaleString();
+        }
+
+        function labelTipoHistorial(tipo, cambio) {
+            if (tipo === 'inicial') return 'Carga inicial';
+            if (tipo === 'incremento') return 'Carga adicional';
+            if (tipo === 'decremento') return 'Ajuste a la baja';
+            return Number(cambio || 0) >= 0 ? 'Ajuste' : 'Ajuste a la baja';
+        }
+
+        function formatHistorialCargasForReport(row) {
+            const historial = Array.isArray(row && row.historial_cargas) ? row.historial_cargas : [];
+            if (!historial.length) {
+                return '';
+            }
+
+            return historial.map((item) => {
+                const cambio = Number(item.cantidad_cambio || 0);
+                const cambioTxt = `${cambio >= 0 ? '+' : ''}${cambio}`;
+                const fechaTxt = formatFechaHistorial(item.fecha_creacion);
+                const usuarioTxt = item.usuario || 'sistema';
+                const anterior = Number(item.cantidad_anterior || 0);
+                const nuevo = Number(item.cantidad_nueva || 0);
+                return `${fechaTxt} | ${usuarioTxt} | ${cambioTxt} (${anterior}->${nuevo})`;
+            }).join(' || ');
+        }
+
+        function renderHistorialCargas(hojaId) {
+            const wrap = document.getElementById('edit_historial_cargas');
+            if (!wrap) return;
+
+            const hoja = hojasDataById.get(String(hojaId));
+            const historial = Array.isArray(hoja && hoja.historial_cargas) ? hoja.historial_cargas : [];
+
+            if (!historial.length) {
+                wrap.innerHTML = '<div class="history-empty">Sin movimientos registrados.</div>';
+                return;
+            }
+
+            wrap.innerHTML = historial.map((item) => {
+                const cambio = Number(item.cantidad_cambio || 0);
+                const cambioTxt = `${cambio >= 0 ? '+' : ''}${cambio}`;
+                const tipo = String(item.tipo_movimiento || 'ajuste').toLowerCase();
+                return `
+                    <div class="history-item">
+                        <div class="history-head">
+                            <span class="history-badge ${tipo}">${labelTipoHistorial(tipo, cambio)}</span>
+                            <span class="history-meta">${formatFechaHistorial(item.fecha_creacion)}</span>
+                        </div>
+                        <div class="history-meta"><strong>Usuario:</strong> ${item.usuario || 'sistema'}</div>
+                        <div class="history-meta"><strong>Movimiento:</strong> ${cambioTxt} pieza(s)</div>
+                        <div class="history-meta"><strong>Total:</strong> ${item.cantidad_anterior || 0} -> ${item.cantidad_nueva || 0}</div>
+                    </div>
+                `;
+            }).join('');
         }
 
         function updateSeriePreview() {
@@ -1138,6 +1295,7 @@
             }
             document.getElementById('edit_firma_ing_jose').value = btn.dataset.firmaJose || '';
             document.getElementById('edit_firma_ing_rodrigo').value = btn.dataset.firmaRodrigo || '';
+            renderHistorialCargas(btn.dataset.hojaId || '');
             document.getElementById('editModal').style.display = 'flex';
         }
 
@@ -1221,6 +1379,9 @@
         function formatReportCellValue(key, row) {
             const v = row[key];
             if (v === null || v === undefined) return '';
+            if (key === 'historial_cargas_resumen') {
+                return formatHistorialCargasForReport(row);
+            }
             if (key === 'firma_ing_jose' || key === 'firma_ing_rodrigo') {
                 const raw = String(v || '').trim().toUpperCase();
                 return raw === 'AUTORIZADO' ? 'AUTORIZADO' : 'PENDIENTE';
@@ -1236,9 +1397,22 @@
 
         function toDateOnlySafe(value) {
             if (!value) return null;
-            const d = new Date(value);
-            if (Number.isNaN(d.getTime())) return null;
-            return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+            const str = String(value).trim();
+            if (!str) return null;
+
+            // Prioriza YYYY-MM-DD para evitar desfases por zona horaria al filtrar.
+            const datePart = str.includes('T') ? str.split('T')[0] : str.split(' ')[0];
+            const match = datePart.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (match) {
+                const y = Number(match[1]);
+                const m = Number(match[2]) - 1;
+                const d = Number(match[3]);
+                return new Date(y, m, d);
+            }
+
+            const parsed = new Date(str);
+            if (Number.isNaN(parsed.getTime())) return null;
+            return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
         }
 
         function filteredReportRows() {
@@ -1257,7 +1431,8 @@
                     if (estado && String(r.estado || '').toLowerCase() !== estado) return false;
                     if (calidad && String(r.calidad || '').toLowerCase() !== calidad) return false;
 
-                    const fechaRow = toDateOnlySafe(r.fecha_salida || r.fecha_creacion);
+                    // Reporte de hojas generadas: filtrar por fecha de creacion.
+                    const fechaRow = toDateOnlySafe(r.fecha_creacion || r.fecha_salida);
                     if (desde && (!fechaRow || fechaRow < desde)) return false;
                     if (hasta && (!fechaRow || fechaRow > hasta)) return false;
 
@@ -1275,6 +1450,7 @@
                             r.facturacion_registro_estado,
                             r.facturacion_registro_usuario,
                             r.facturacion_registro_notas,
+                            formatHistorialCargasForReport(r),
                         ].some(x => String(x || '').toLowerCase().includes(search));
                         if (!hay) return false;
                     }

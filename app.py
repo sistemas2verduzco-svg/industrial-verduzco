@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRuta, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRuta, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -473,6 +473,78 @@ def _sync_hoja_estado_with_checks(hoja, estaciones=None, now_dt=None):
     hoja.estado = new_estado
     hoja.fecha_termino = new_fecha_termino
     return changed
+
+
+_HOJA_CARGAS_TABLE_READY = False
+
+
+def _ensure_hoja_cargas_historial_table():
+    global _HOJA_CARGAS_TABLE_READY
+
+    if _HOJA_CARGAS_TABLE_READY:
+        return True
+
+    try:
+        HojaRutaCargaPiezasHistorial.__table__.create(bind=db.engine, checkfirst=True)
+        _HOJA_CARGAS_TABLE_READY = True
+        return True
+    except Exception as exc:
+        logger.warning(f"No se pudo asegurar la tabla de historial de cargas de hojas: {exc}")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return False
+
+
+def _current_username_for_audit(user=None):
+    username = getattr(user, 'username', None) if user else None
+    if username:
+        return username
+    return (session.get('user') or 'sistema').strip() or 'sistema'
+
+
+def _serialize_hoja_carga_historial(item):
+    return {
+        'id': item.id,
+        'cantidad_anterior': item.cantidad_anterior,
+        'cantidad_cambio': item.cantidad_cambio,
+        'cantidad_nueva': item.cantidad_nueva,
+        'tipo_movimiento': item.tipo_movimiento,
+        'usuario': item.usuario,
+        'fecha_creacion': item.fecha_creacion.isoformat() if item.fecha_creacion else None,
+    }
+
+
+def _registrar_carga_piezas_hoja(hoja, cantidad_anterior, cantidad_nueva, usuario, origen='ajuste'):
+    cantidad_anterior = int(cantidad_anterior or 0)
+    cantidad_nueva = int(cantidad_nueva or 0)
+
+    if cantidad_nueva == cantidad_anterior:
+        return None
+    if not _ensure_hoja_cargas_historial_table():
+        return None
+
+    delta = cantidad_nueva - cantidad_anterior
+    if origen == 'creacion':
+        tipo_movimiento = 'inicial'
+    elif delta > 0:
+        tipo_movimiento = 'incremento'
+    elif delta < 0:
+        tipo_movimiento = 'decremento'
+    else:
+        tipo_movimiento = 'ajuste'
+
+    movimiento = HojaRutaCargaPiezasHistorial(
+        hoja_ruta_id=hoja.id,
+        cantidad_anterior=cantidad_anterior,
+        cantidad_cambio=delta,
+        cantidad_nueva=cantidad_nueva,
+        tipo_movimiento=tipo_movimiento,
+        usuario=usuario,
+    )
+    db.session.add(movimiento)
+    return movimiento
 
 # Simple in-memory login rate limiter
 # Keys: by IP address. Tracks [attempt_count, first_attempt_ts, locked_until_ts]
@@ -1852,10 +1924,15 @@ def hojas_ruta_list():
         elif existing.estado != 'activa' and h.estado == 'activa':
             hoja_activa_por_maquina[h.maquina_id] = h
 
-    # Regla operativa: sin hoja activa asignada => maquina desactivada por default.
+    # Regla operativa: sincronizar activo con la presencia de hoja activa asignada.
     estado_maquina_changed = False
     for maq in maquinas:
-        if maq.id not in hoja_activa_por_maquina and bool(getattr(maq, 'activo', False)):
+        tiene_hoja = maq.id in hoja_activa_por_maquina
+        activo_actual = bool(getattr(maq, 'activo', False))
+        if tiene_hoja and not activo_actual:
+            maq.activo = True
+            estado_maquina_changed = True
+        elif not tiene_hoja and activo_actual:
             maq.activo = False
             estado_maquina_changed = True
 
@@ -2197,6 +2274,17 @@ def hojas_ruta_form():
         if registro.hoja_ruta_id not in ultimo_registro_facturacion:
             ultimo_registro_facturacion[registro.hoja_ruta_id] = registro
 
+    historial_cargas_por_hoja = {}
+    if hoja_ids and _ensure_hoja_cargas_historial_table():
+        historial_cargas = HojaRutaCargaPiezasHistorial.query.filter(
+            HojaRutaCargaPiezasHistorial.hoja_ruta_id.in_(hoja_ids)
+        ).order_by(
+            HojaRutaCargaPiezasHistorial.fecha_creacion.desc(),
+            HojaRutaCargaPiezasHistorial.id.desc()
+        ).all()
+        for item in historial_cargas:
+            historial_cargas_por_hoja.setdefault(item.hoja_ruta_id, []).append(_serialize_hoja_carga_historial(item))
+
     claves_all = ClaveProducto.query.all()
     claves_idx = {
         (str(c.clave or '').strip().upper()): c
@@ -2244,6 +2332,7 @@ def hojas_ruta_form():
             ),
             'facturacion_registro_notas': registro_fact.notas if registro_fact else None,
             'cantidad_piezas': h.cantidad_piezas,
+            'historial_cargas': historial_cargas_por_hoja.get(h.id, []),
             'fecha_salida': h.fecha_salida.isoformat() if h.fecha_salida else None,
             'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None,
         })
@@ -2467,6 +2556,7 @@ def api_crear_hoja_ruta():
         fecha_actual = datetime.utcnow()
         maquina = Máquina.query.get(int(data.get('maquina_id'))) if data.get('maquina_id') else None
         descripcion_hoja = _resolve_clave_descripcion_by_pn(clave.clave)
+        audit_username = _current_username_for_audit(user)
 
         hoja = HojaRuta(
             maquina_id=maquina_id,
@@ -2530,6 +2620,7 @@ def api_crear_hoja_ruta():
             maquina_tipo=maquina.tipo if maquina else None,
             fallback_total_time=hoja.total_tiempo,
         )
+        _registrar_carga_piezas_hoja(hoja, 0, int(cantidad_piezas), audit_username, origen='creacion')
 
         db.session.commit()
         logger.info(
@@ -2635,7 +2726,9 @@ def api_actualizar_hoja_ruta(hoja_id):
             return jsonify({'error': 'cantidad_piezas inválida'}), 400
         if cantidad <= 0:
             return jsonify({'error': 'cantidad_piezas debe ser mayor a 0'}), 400
+        cantidad_anterior = int(hoja.cantidad_piezas or 0)
         hoja.cantidad_piezas = cantidad
+        _registrar_carga_piezas_hoja(hoja, cantidad_anterior, cantidad, _current_username_for_audit(user), origen='edicion')
 
     # Regla de negocio: descripcion de hoja siempre proviene de la clave actual.
     if hoja.pn:
@@ -2821,6 +2914,7 @@ def api_asignar_hoja_maquina(maquina_id):
         if not hoja.fecha_salida:
             hoja.fecha_salida = datetime.utcnow()
         hoja.estado = 'activa'
+        maq.activo = True  # Activar la máquina al recibir una hoja
 
         estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
         now_ref = datetime.utcnow()

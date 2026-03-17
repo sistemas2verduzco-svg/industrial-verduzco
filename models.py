@@ -528,6 +528,13 @@ class HojaRuta(db.Model):
     # Relaciones
     maquina = db.relationship('Máquina', backref='hojas_ruta')
     estaciones = db.relationship('EstacionTrabajo', backref='hoja_ruta', lazy=True, cascade='all, delete-orphan')
+    historial_cargas = db.relationship(
+        'HojaRutaCargaPiezasHistorial',
+        backref='hoja_ruta',
+        lazy=True,
+        cascade='all, delete-orphan',
+        order_by='desc(HojaRutaCargaPiezasHistorial.fecha_creacion)'
+    )
 
     def to_dict(self):
         return {
@@ -559,6 +566,32 @@ class HojaRuta(db.Model):
             'fecha_creacion': self.fecha_creacion.isoformat(),
             'fecha_actualizacion': self.fecha_actualizacion.isoformat(),
             'estaciones': [e.to_dict() for e in self.estaciones]
+        }
+
+
+class HojaRutaCargaPiezasHistorial(db.Model):
+    """Historial de cambios de cantidad de piezas por hoja de ruta."""
+    __tablename__ = 'hojas_ruta_cargas_historial'
+
+    id = db.Column(db.Integer, primary_key=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False, index=True)
+    cantidad_anterior = db.Column(db.Integer, nullable=False, default=0)
+    cantidad_cambio = db.Column(db.Integer, nullable=False, default=0)
+    cantidad_nueva = db.Column(db.Integer, nullable=False, default=0)
+    tipo_movimiento = db.Column(db.String(30), nullable=False, default='ajuste')
+    usuario = db.Column(db.String(120), nullable=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'hoja_ruta_id': self.hoja_ruta_id,
+            'cantidad_anterior': self.cantidad_anterior,
+            'cantidad_cambio': self.cantidad_cambio,
+            'cantidad_nueva': self.cantidad_nueva,
+            'tipo_movimiento': self.tipo_movimiento,
+            'usuario': self.usuario,
+            'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,
         }
 
 
