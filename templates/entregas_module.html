@@ -68,70 +68,16 @@
                         {% set entregado_item = item.cantidad_entregada or 0 %}
                         {% set pendiente_item = item.cantidad_pendiente if item.cantidad_pendiente is not none else (total_piezas_item - entregado_item) %}
                         <div class="panel" style="margin-bottom:8px; background:#fff;">
-                            <div style="display:flex; justify-content:space-between; align-items:start;">
-                                <div style="flex:1;">
-                                    <div><strong>{{ item.hoja_ruta.nombre or ('HOJA #' ~ item.hoja_ruta.id) }}</strong></div>
-                                    <div class="small">ID hoja: {{ item.hoja_ruta.id }} | Clave: {{ item.hoja_ruta.pn or '-' }}</div>
-                                    <div class="small">Total piezas: <strong>{{ total_piezas_item }}</strong></div>
-                                    <div class="small">Entregado: <strong style="color:#0f766e;">{{ entregado_item }}</strong> | Pendiente: <strong style="color:#b91c1c;">{{ pendiente_item }}</strong></div>
-                                </div>
-                                <div style="background:#f0f9ff; border-radius:6px; padding:8px; text-align:center; min-width:140px;">
-                                    <div class="small" style="margin-bottom:4px;">Entregas parciales</div>
-                                    <div style="font-size:18px; font-weight:700; color:#0b74de;">{{ entregado_item }}</div>
-                                    <div class="small">de {{ total_piezas_item }}</div>
-                                    <div class="small" style="margin-top:4px; color:#0f172a;">{{ item.estado_parciales or 'pendientes' }}</div>
-                                    <div style="margin-top:6px; background:#fff; padding:4px; border-radius:4px; font-size:12px;">
-                                        <span style="color:#0f766e; font-weight:700;">{{ (item.porcentaje_entregado or 0)|round(1) }}%</span>
-                                    </div>
-                                </div>
-                            </div>
+                            <div><strong>{{ item.hoja_ruta.nombre or ('HOJA #' ~ item.hoja_ruta.id) }}</strong></div>
+                            <div class="small">ID hoja: {{ item.hoja_ruta.id }} | Clave: {{ item.hoja_ruta.pn or '-' }}</div>
 
-                            {% if item.cantidad_entregada and item.cantidad_entregada > 0 %}
-                            <details style="margin-top:8px; border-top:1px solid #e5e7eb; padding-top:8px;">
-                                <summary style="cursor:pointer; font-size:12px; color:#0b74de; font-weight:700;">📋 Ver entregas registradas ({{ item.entregas_parciales|length }})</summary>
-                                <table style="width:100%; font-size:11px; margin-top:8px; border-collapse:collapse;">
-                                    <thead>
-                                        <tr style="border-bottom:1px solid #e5e7eb;">
-                                            <th style="text-align:left; padding:4px;">Fecha</th>
-                                            <th style="text-align:center; padding:4px;">Cantidad</th>
-                                            <th style="text-align:left; padding:4px;">Usuario</th>
-                                            <th style="text-align:left; padding:4px;">Notas</th>
-                                            <th style="text-align:center; padding:4px;">Acción</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for entrega in item.entregas_parciales %}
-                                        <tr style="border-bottom:1px solid #f0f0f0;">
-                                            <td style="padding:4px;">{{ entrega.fecha_entrega.strftime('%Y-%m-%d %H:%M') if entrega.fecha_entrega else '-' }}</td>
-                                            <td style="text-align:center; padding:4px; font-weight:700; color:#0f766e;">{{ entrega.cantidad_entregada }}</td>
-                                            <td style="padding:4px;">{{ entrega.usuario_entrega or '-' }}</td>
-                                            <td style="padding:4px;">{{ entrega.notas or '-' }}</td>
-                                            <td style="text-align:center; padding:4px;">
-                                                {% if has_permission('entregas', 'edit') or has_permission('catalog', 'edit') %}
-                                                <button type="button" class="btn-mini" style="background:#dc2626; color:#fff; border:0; cursor:pointer; border-radius:4px; padding:4px 6px; font-size:10px;" data-parcial-id="{{ entrega.id }}" onclick="eliminarEntregaParcialDesdeBtn(this)">X</button>
-                                                {% endif %}
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </details>
-                            {% endif %}
-
-                            <div class="small">Agregó: {{ item.creado_por or '-' }} | Actualizado: {{ item.fecha_actualizacion.strftime('%Y-%m-%d %H:%M') if item.fecha_actualizacion else '-' }}</div>
-                            <div class="small"><a href="/hoja/{{ item.hoja_ruta.id }}" target="_blank">Ver hoja de ruta</a></div>
                             {% if has_permission('entregas', 'edit') or has_permission('catalog', 'edit') %}
                             <div style="margin-top:8px; display:flex; gap:6px;">
-                                <button type="button" class="btn-mini btn-add" data-flujo-id="{{ item.id }}" data-total-piezas="{{ total_piezas_item }}" data-entregado="{{ entregado_item }}" onclick="abrirModalEntregaParcialDesdeBtn(this)">Entregar parcial</button>
-                                {% if entregado_item == total_piezas_item %}
-                                <form method="post" action="/entregas/mover_almacen/{{ item.id }}" style="display:inline;">
-                                    <button class="btn-mini btn-send" type="submit">→ Enviar a Almacén</button>
+                                <form method="post" action="/entregas/mover_almacen/{{ item.id }}">
+                                    <button class="btn-mini btn-send">Enviar a Almacén</button>
                                 </form>
-                                {% else %}
-                                <button type="button" class="btn-mini" style="background:#9ca3af; color:#fff; cursor:not-allowed;" disabled title="Completa todas las entregas antes de enviar">→ Enviar a Almacén</button>
-                                {% endif %}
                                 <form method="post" action="/entregas/quitar/{{ item.id }}" onsubmit="return confirm('¿Quitar de bandeja temporal?');" style="display:inline;">
-                                    <button class="btn-mini btn-del" type="submit">Quitar</button>
+                                    <button class="btn-mini btn-del">Quitar</button>
                                 </form>
                             </div>
                             {% endif %}
@@ -192,128 +138,7 @@
         </div>
     </div>
 
-    <!-- Modal para Entregas Parciales -->
-    <div id="modalEntregaParcial" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:1000; justify-content:center; align-items:center;">
-        <div style="background:#fff; border-radius:10px; padding:20px; width:90%; max-width:400px; box-shadow:0 10px 40px rgba(0,0,0,0.2);">
-            <h3 style="margin:0 0 16px 0;">Registrar Entrega Parcial</h3>
-            
-            <div style="margin-bottom:12px;">
-                <div class="small">Total de piezas: <strong id="totalPiezas">0</strong></div>
-                <div class="small">Ya entregadas: <strong id="yaEntregadas" style="color:#0f766e;">0</strong></div>
-                <div class="small">Pendiente: <strong id="pendientes" style="color:#dc2626;">0</strong></div>
-            </div>
-
-            <div style="margin-bottom:16px;">
-                <label style="display:block; margin-bottom:6px; font-weight:600; font-size:14px;">¿Cuántas piezas entregar en este movimiento?</label>
-                <input type="number" id="cantidadEntrega" min="1" max="100" placeholder="Ingresa cantidad" style="width:100%; padding:8px; border:1px solid #e5e7eb; border-radius:6px; font-size:14px;">
-            </div>
-
-            <div style="margin-bottom:16px;">
-                <label style="display:block; margin-bottom:6px; font-weight:600; font-size:14px;">Notas (opcional)</label>
-                <textarea id="notasEntrega" placeholder="Ej: Entregado en almacén PT" style="width:100%; padding:8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px; height:80px;"></textarea>
-            </div>
-
-            <div style="display:flex; gap:8px;">
-                <button type="button" class="btn-mini" style="flex:1; background:#9ca3af; color:#fff; border:0; padding:10px; border-radius:6px; cursor:pointer;" onclick="cerrarModalEntregaParcial()">Cancelar</button>
-                <button type="button" class="btn-mini" style="flex:1; background:#0f766e; color:#fff; border:0; padding:10px; border-radius:6px; cursor:pointer; font-weight:600;" onclick="guardarEntregaParcial()">Registrar entrega</button>
-            </div>
-        </div>
-    </div>
-
     <script>
-        let flujoIdActual = null;
-        let totalPiezasActual = 0;
-        let cantidadEntregadaActual = 0;
-
-        function abrirModalEntregaParcial(flujoId, totalPiezas, cantidadEntregada) {
-            flujoIdActual = flujoId;
-            totalPiezasActual = totalPiezas;
-            cantidadEntregadaActual = cantidadEntregada;
-            
-            document.getElementById('totalPiezas').innerText = totalPiezas;
-            document.getElementById('yaEntregadas').innerText = cantidadEntregada;
-            const pendiente = totalPiezas - cantidadEntregada;
-            document.getElementById('pendientes').innerText = pendiente;
-            document.getElementById('cantidadEntrega').max = pendiente;
-            document.getElementById('cantidadEntrega').value = '';
-            document.getElementById('notasEntrega').value = '';
-            
-            document.getElementById('modalEntregaParcial').style.display = 'flex';
-        }
-
-        function abrirModalEntregaParcialDesdeBtn(btn) {
-            const flujoId = parseInt(btn.dataset.flujoId || '0', 10);
-            const totalPiezas = parseInt(btn.dataset.totalPiezas || '0', 10);
-            const entregado = parseInt(btn.dataset.entregado || '0', 10);
-            abrirModalEntregaParcial(flujoId, totalPiezas, entregado);
-        }
-
-        function cerrarModalEntregaParcial() {
-            document.getElementById('modalEntregaParcial').style.display = 'none';
-            flujoIdActual = null;
-        }
-
-        async function guardarEntregaParcial() {
-            const cantidad = parseInt(document.getElementById('cantidadEntrega').value, 10);
-            const notas = document.getElementById('notasEntrega').value.trim();
-            
-            if (!cantidad || cantidad <= 0) {
-                alert('Por favor ingresa una cantidad válida');
-                return;
-            }
-            
-            const pendienteAhora = totalPiezasActual - cantidadEntregadaActual;
-            if (cantidad > pendienteAhora) {
-                alert(`No puedes entregar ${cantidad}. Pendiente: ${pendienteAhora}`);
-                return;
-            }
-
-            try {
-                const res = await fetch('/api/entregas/parcial', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({
-                        flujo_id: flujoIdActual,
-                        cantidad_entregada: cantidad,
-                        notas: notas
-                    })
-                });
-                const data = await res.json();
-                if (!res.ok) {
-                    throw new Error(data.error || 'No se pudo registrar entrega');
-                }
-                cerrarModalEntregaParcial();
-                window.location.reload();
-            } catch (err) {
-                alert('Error: ' + (err.message || err));
-            }
-        }
-
-        async function eliminarEntregaParcial(parcialId, flujoId) {
-            if (!confirm('¿Deshacer esta entrega parcial?')) return;
-
-            try {
-                const res = await fetch(`/api/entregas/parcial/${parcialId}`, {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'same-origin'
-                });
-                const data = await res.json();
-                if (!res.ok) {
-                    throw new Error(data.error || 'No se pudo eliminar');
-                }
-                window.location.reload();
-            } catch (err) {
-                alert('Error: ' + (err.message || err));
-            }
-        }
-
-        function eliminarEntregaParcialDesdeBtn(btn) {
-            const parcialId = parseInt(btn.dataset.parcialId || '0', 10);
-            eliminarEntregaParcial(parcialId, null);
-        }
-
         async function agregarAEntregas(hojaId) {
             try {
                 const res = await fetch('/api/logistica/entregas/agregar', {
@@ -355,13 +180,6 @@
                 await agregarAEntregas(parseInt(hojaId, 10));
             });
         }
-
-        // Cerrar modal al hacer click fuera
-        document.getElementById('modalEntregaParcial').addEventListener('click', (e) => {
-            if (e.target.id === 'modalEntregaParcial') {
-                cerrarModalEntregaParcial();
-            }
-        });
     </script>
 </body>
 </html>

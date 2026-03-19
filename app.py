@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRuta, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRuta, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -1556,31 +1556,6 @@ def _logistica_allowed_image(filename):
     return ext in LOGISTICA_IMG_EXTENSIONS
 
 
-def _sync_flujo_parciales(flujo: HojaRutaFlujoLogistica, hoja: HojaRuta = None):
-    """Sincroniza totales/pendientes/porcentaje para entregas parciales."""
-    if not flujo:
-        return
-
-    hoja_ref = hoja or flujo.hoja_ruta
-    total = int(flujo.cantidad_total_piezas or 0)
-    if total <= 0 and hoja_ref and hoja_ref.cantidad_piezas:
-        total = int(hoja_ref.cantidad_piezas or 0)
-    if total < 0:
-        total = 0
-
-    entregado = int(flujo.cantidad_entregada or 0)
-    if entregado < 0:
-        entregado = 0
-    if total > 0 and entregado > total:
-        entregado = total
-
-    flujo.cantidad_total_piezas = total
-    flujo.cantidad_entregada = entregado
-    flujo.cantidad_pendiente = max(total - entregado, 0)
-    flujo.porcentaje_entregado = round((entregado / total) * 100, 2) if total > 0 else 0.0
-    flujo.estado_parciales = 'todas' if total > 0 and entregado == total else 'pendientes'
-
-
 @app.route('/entregas')
 @login_required
 @requires_any_permission([('entregas', 'view'), ('catalog', 'edit')])
@@ -1631,8 +1606,6 @@ def api_logistica_entregas_agregar():
     item = HojaRutaFlujoLogistica.query.filter_by(hoja_ruta_id=hoja_id).first()
     if item:
         if item.estado in ('entregas', 'entregas_lista_facturacion'):
-            _sync_flujo_parciales(item, hoja=hoja)
-            db.session.commit()
             return jsonify({'ok': True, 'message': 'La hoja ya está en la bandeja de Entregas.'})
         if item.estado in ('almacen', 'facturacion'):
             return jsonify({'error': f'La hoja ya fue transferida a {item.estado}.'}), 409
@@ -1644,11 +1617,6 @@ def api_logistica_entregas_agregar():
         estado='entregas',
         creado_por=_logistica_username(),
         actualizado_por=_logistica_username(),
-        cantidad_total_piezas=int(hoja.cantidad_piezas or 0),
-        cantidad_entregada=0,
-        cantidad_pendiente=int(hoja.cantidad_piezas or 0),
-        porcentaje_entregado=0.0,
-        estado_parciales='pendientes',
     )
     db.session.add(item)
     db.session.flush()
@@ -1670,27 +1638,13 @@ def entregas_mover_almacen(item_id):
     if item.estado != 'entregas':
         return redirect(url_for('entregas_module'))
 
-    hoja = item.hoja_ruta
-    _sync_flujo_parciales(item, hoja=hoja)
-
-    if (item.cantidad_total_piezas or 0) <= 0:
-        flash('La hoja no tiene cantidad total de piezas válida para envío.', 'error')
-        return redirect(url_for('entregas_module'))
-
-    # Validar que todas las piezas hayan sido entregadas
-    if item.cantidad_entregada != item.cantidad_total_piezas:
-        flash(f'No todas las piezas han sido entregadas. Entregado: {item.cantidad_entregada}/{item.cantidad_total_piezas}', 'error')
-        return redirect(url_for('entregas_module'))
-
     item.estado = 'almacen'
-    item.estado_parciales = 'todas'
     item.actualizado_por = _logistica_username()
     db.session.add(EntregaRegistro(
         hoja_ruta_id=item.hoja_ruta_id,
         flujo_id=item.id,
         accion='enviada_a_almacen',
         usuario=_logistica_username(),
-        notas=f'Entregas parciales completadas: {item.cantidad_entregada} de {item.cantidad_total_piezas} piezas (100%)',
     ))
     db.session.commit()
     return redirect(url_for('entregas_module'))
@@ -1702,10 +1656,6 @@ def entregas_mover_almacen(item_id):
 def entregas_mover_facturacion(item_id):
     item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
     if item.estado != 'entregas_lista_facturacion':
-        return redirect(url_for('entregas_module'))
-
-    _sync_flujo_parciales(item, hoja=item.hoja_ruta)
-    if item.cantidad_entregada != item.cantidad_total_piezas:
         return redirect(url_for('entregas_module'))
 
     item.estado = 'facturacion'
@@ -1729,185 +1679,6 @@ def entregas_quitar_item(item_id):
         db.session.delete(item)
         db.session.commit()
     return redirect(url_for('entregas_module'))
-
-
-# ===== ENTREGAS PARCIALES =====
-
-@app.route('/api/entregas/parcial', methods=['POST'])
-@login_required
-@requires_any_permission([('entregas', 'edit'), ('catalog', 'edit')])
-def api_registrar_entrega_parcial():
-    """Registra una entrega parcial de una hoja de ruta."""
-    data = request.get_json() or {}
-    flujo_id = data.get('flujo_id')
-    cantidad_entregada = data.get('cantidad_entregada')
-    notas = (data.get('notas') or '').strip()
-    
-    try:
-        flujo_id = int(flujo_id)
-        cantidad_entregada = int(cantidad_entregada)
-    except Exception:
-        return jsonify({'error': 'Datos inválidos: flujo_id y cantidad_entregada deben ser números'}), 400
-    
-    if cantidad_entregada <= 0:
-        return jsonify({'error': 'La cantidad entregada debe ser mayor a 0'}), 400
-    
-    flujo = HojaRutaFlujoLogistica.query.get(flujo_id)
-    if not flujo:
-        return jsonify({'error': 'Flujo de logística no encontrado'}), 404
-    
-    if flujo.estado != 'entregas':
-        return jsonify({'error': 'La hoja debe estar en estado "entregas" para registrar entrega parcial'}), 409
-    
-    hoja = flujo.hoja_ruta
-    if not hoja:
-        return jsonify({'error': 'Hoja de ruta no encontrada'}), 404
-
-    _sync_flujo_parciales(flujo, hoja=hoja)
-    if (flujo.cantidad_total_piezas or 0) <= 0:
-        return jsonify({'error': 'La hoja no tiene cantidad total de piezas válida'}), 409
-    
-    # Validar que no se entregue más de lo pendiente
-    cantidad_pendiente = int(flujo.cantidad_pendiente or 0)
-    if cantidad_entregada > cantidad_pendiente:
-        return jsonify({
-            'error': f'No puedes entregar {cantidad_entregada} piezas. Pendiente: {cantidad_pendiente}',
-            'cantidad_pendiente': cantidad_pendiente,
-        }), 400
-    
-    # Registrar entrega parcial
-    entrega = EntregaParcial(
-        flujo_id=flujo.id,
-        hoja_ruta_id=hoja.id,
-        cantidad_entregada=cantidad_entregada,
-        usuario_entrega=_logistica_username(),
-        notas=notas,
-    )
-    db.session.add(entrega)
-    
-    # Actualizar contadores en flujo
-    flujo.cantidad_entregada += cantidad_entregada
-    _sync_flujo_parciales(flujo, hoja=hoja)
-    
-    flujo.actualizado_por = _logistica_username()
-    
-    # Registrar en auditoría
-    db.session.add(EntregaRegistro(
-        hoja_ruta_id=hoja.id,
-        flujo_id=flujo.id,
-        accion='entrega_parcial_registrada',
-        usuario=_logistica_username(),
-        notas=f'Entregadas {cantidad_entregada} piezas. Pendiente: {flujo.cantidad_pendiente} ({flujo.porcentaje_entregado:.1f}%)',
-    ))
-    
-    db.session.commit()
-    
-    return jsonify({
-        'ok': True,
-        'entrega': entrega.to_dict(),
-        'flujo': flujo.to_dict(),
-    }), 201
-
-
-@app.route('/api/entregas/<int:hoja_id>/parciales', methods=['GET'])
-@login_required
-@requires_any_permission([('entregas', 'view'), ('entregas', 'edit'), ('catalog', 'edit')])
-def api_obtener_entregas_parciales(hoja_id):
-    """Obtiene todas las entregas parciales de una hoja de ruta."""
-    hoja = HojaRuta.query.get(hoja_id)
-    if not hoja:
-        return jsonify({'error': 'Hoja de ruta no encontrada'}), 404
-    
-    entregas = EntregaParcial.query.filter_by(hoja_ruta_id=hoja_id).order_by(EntregaParcial.fecha_entrega.desc()).all()
-    
-    return jsonify({
-        'ok': True,
-        'hoja_id': hoja_id,
-        'entregas': [e.to_dict() for e in entregas],
-        'total_registros': len(entregas),
-    }), 200
-
-
-@app.route('/api/entregas/parcial/<int:parcial_id>', methods=['DELETE'])
-@login_required
-@requires_any_permission([('entregas', 'edit'), ('catalog', 'edit')])
-def api_eliminar_entrega_parcial(parcial_id):
-    """Elimina una entrega parcial (deshace la entrega)."""
-    entrega = EntregaParcial.query.get(parcial_id)
-    if not entrega:
-        return jsonify({'error': 'Entrega parcial no encontrada'}), 404
-    
-    flujo = entrega.flujo_logistica
-    hoja = entrega.hoja_ruta
-
-    if not flujo or flujo.estado != 'entregas':
-        return jsonify({'error': 'Solo puedes deshacer entregas parciales cuando la hoja está en Entregas'}), 409
-
-    _sync_flujo_parciales(flujo, hoja=hoja)
-    if entrega.cantidad_entregada > (flujo.cantidad_entregada or 0):
-        return jsonify({'error': 'La entrega parcial no se puede deshacer por inconsistencia de cantidades'}), 409
-
-    # Revertir contadores
-    flujo.cantidad_entregada -= entrega.cantidad_entregada
-    _sync_flujo_parciales(flujo, hoja=hoja)
-    
-    flujo.actualizado_por = _logistica_username()
-    
-    # Registrar en auditoría
-    db.session.add(EntregaRegistro(
-        hoja_ruta_id=hoja.id,
-        flujo_id=flujo.id,
-        accion='entrega_parcial_eliminada',
-        usuario=_logistica_username(),
-        notas=f'Se eliminó entrega de {entrega.cantidad_entregada} piezas. Nueva situación - Entregado: {flujo.cantidad_entregada}, Pendiente: {flujo.cantidad_pendiente}',
-    ))
-    
-    db.session.delete(entrega)
-    db.session.commit()
-    
-    return jsonify({
-        'ok': True,
-        'message': 'Entrega parcial eliminada',
-        'flujo': flujo.to_dict(),
-    }), 200
-
-
-@app.route('/api/entregas/completar-all/<int:flujo_id>', methods=['POST'])
-@login_required
-@requires_any_permission([('entregas', 'edit'), ('catalog', 'edit')])
-def api_entregas_completar_todas(flujo_id):
-    """Marca todas las entregas como completadas y envía a almacén si es necesario."""
-    flujo = HojaRutaFlujoLogistica.query.get(flujo_id)
-    if not flujo:
-        return jsonify({'error': 'Flujo de logística no encontrado'}), 404
-
-    _sync_flujo_parciales(flujo, hoja=flujo.hoja_ruta)
-    
-    if flujo.cantidad_entregada != flujo.cantidad_total_piezas:
-        return jsonify({
-            'error': f'No todas las piezas han sido entregadas. Entregado: {flujo.cantidad_entregada}/{flujo.cantidad_total_piezas}',
-            'cantidad_entregada': flujo.cantidad_entregada,
-            'cantidad_total': flujo.cantidad_total_piezas,
-        }), 409
-    
-    flujo.estado_parciales = 'todas'
-    flujo.actualizado_por = _logistica_username()
-    
-    db.session.add(EntregaRegistro(
-        hoja_ruta_id=flujo.hoja_ruta_id,
-        flujo_id=flujo.id,
-        accion='entregas_parciales_completadas',
-        usuario=_logistica_username(),
-        notas='Todas las entregas parciales completadas. Listo para enviar a almacén.',
-    ))
-    
-    db.session.commit()
-    
-    return jsonify({
-        'ok': True,
-        'message': 'Entregas completadas',
-        'flujo': flujo.to_dict(),
-    }), 200
 
 
 @app.route('/almacen')
@@ -1939,10 +1710,6 @@ def almacen_module():
 def almacen_recibir_item(item_id):
     item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
     if item.estado != 'almacen':
-        return redirect(url_for('almacen_module'))
-
-    _sync_flujo_parciales(item, hoja=item.hoja_ruta)
-    if item.cantidad_entregada != item.cantidad_total_piezas:
         return redirect(url_for('almacen_module'))
 
     recepcion_id = (request.form.get('recepcion_id') or '').strip()
