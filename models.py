@@ -101,6 +101,35 @@ class Proveedor(db.Model):
         }
 
 
+
+class EntregaParcial(db.Model):
+    """Registra entregas parciales de una hoja de ruta al módulo de entregas."""
+    __tablename__ = 'entregas_parciales'
+
+    id = db.Column(db.Integer, primary_key=True)
+    flujo_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_flujo_logistica.id'), nullable=False, index=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False, index=True)
+    
+    cantidad_entregada = db.Column(db.Integer, nullable=False)
+    usuario_entrega = db.Column(db.String(120), nullable=False)
+    notas = db.Column(db.Text, nullable=True)
+    
+    fecha_entrega = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    
+    hoja_ruta = db.relationship('HojaRuta', backref='entregas_parciales')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'flujo_id': self.flujo_id,
+            'hoja_ruta_id': self.hoja_ruta_id,
+            'cantidad_entregada': self.cantidad_entregada,
+            'usuario_entrega': self.usuario_entrega,
+            'notas': self.notas,
+            'fecha_entrega': self.fecha_entrega.isoformat() if self.fecha_entrega else None,
+            'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,
+        }
 # Role / Permission models
 role_permissions = db.Table('role_permissions',
     db.Column('role_id', db.Integer, db.ForeignKey('roles.id'), primary_key=True),
@@ -618,11 +647,19 @@ class HojaRutaFlujoLogistica(db.Model):
     facturacion_aprobado_por = db.Column(db.String(120), nullable=True)
     facturacion_aprobado_en = db.Column(db.DateTime, nullable=True)
 
+    # Campos de entregas parciales
+    cantidad_total_piezas = db.Column(db.Integer, nullable=True)
+    cantidad_entregada = db.Column(db.Integer, default=0, nullable=False)
+    cantidad_pendiente = db.Column(db.Integer, nullable=True)
+    porcentaje_entregado = db.Column(db.Float, default=0.0, nullable=False)
+    estado_parciales = db.Column(db.String(30), default='pendientes', nullable=False)
+
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     hoja_ruta = db.relationship('HojaRuta', backref=db.backref('flujo_logistica', uselist=False))
 
+    entregas_parciales = db.relationship('EntregaParcial', backref='flujo_logistica', lazy=True, cascade='all, delete-orphan')
     def to_dict(self):
         return {
             'id': self.id,
@@ -636,6 +673,11 @@ class HojaRutaFlujoLogistica(db.Model):
             'facturacion_aprobado': self.facturacion_aprobado,
             'facturacion_aprobado_por': self.facturacion_aprobado_por,
             'facturacion_aprobado_en': self.facturacion_aprobado_en.isoformat() if self.facturacion_aprobado_en else None,
+                        'cantidad_total_piezas': self.cantidad_total_piezas,
+                        'cantidad_entregada': self.cantidad_entregada,
+                        'cantidad_pendiente': self.cantidad_pendiente,
+                        'porcentaje_entregado': round(self.porcentaje_entregado, 2) if self.porcentaje_entregado else 0.0,
+                        'estado_parciales': self.estado_parciales,
             'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,
             'fecha_actualizacion': self.fecha_actualizacion.isoformat() if self.fecha_actualizacion else None,
         }

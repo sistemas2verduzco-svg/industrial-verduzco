@@ -6,14 +6,44 @@ from models import db, Role, Permission, Usuario
 from app import app
 
 with app.app_context():
-    # Create permissions
-    perms = [
-        ('tickets', 'view', 'Ver tickets'),
-        ('tickets', 'edit', 'Editar tickets'),
-        ('tickets', 'export', 'Exportar tickets a Excel'),
-        ('catalog', 'view', 'Ver catálogo'),
-        ('catalog', 'edit', 'Editar catálogo'),
+    # Definir módulos y acciones estándar
+    modules = [
+        ('users', 'Usuarios'),
+        ('roles', 'Roles'),
+        ('dashboard', 'Dashboard'),
+        ('reports', 'Reportes'),
+        ('settings', 'Configuraciones'),
+        ('notifications', 'Notificaciones'),
+        ('tickets', 'Tickets'),
+        ('catalog', 'Catálogo'),
+        ('products', 'Productos'),
+        ('suppliers', 'Proveedores'),
+        ('clients', 'Clientes'),
+        ('orders', 'Órdenes'),
+        ('inventory', 'Inventario'),
+        ('purchases', 'Compras'),
+        ('sales', 'Ventas'),
+        ('logs', 'Bitácora'),
+        ('profile', 'Perfil'),
+        ('plantillas', 'Plantillas'),
+        ('maquinas', 'Máquinas'),
+        ('hojas_ruta', 'Hojas de Ruta'),
+        ('almacen', 'Almacén'),
+        ('facturacion', 'Facturación'),
+        ('historial', 'Historial'),
     ]
+    actions = [
+        ('view', 'Ver'),
+        ('create', 'Crear'),
+        ('update', 'Editar'),
+        ('delete', 'Eliminar'),
+    ]
+    perms = []
+    for module, module_desc in modules:
+        for action, action_desc in actions:
+            desc = f"{action_desc} {module_desc}"
+            perms.append((module, action, desc))
+
     perm_objs = []
     for module, action, desc in perms:
         p = Permission.query.filter_by(module=module, action=action).first()
@@ -25,7 +55,8 @@ with app.app_context():
             print(f"Permiso ya existe: {module}:{action}")
         perm_objs.append(p)
 
-    # Create roles
+
+    # Crear roles
     admin_role = Role.query.filter_by(name='admin').first()
     if not admin_role:
         admin_role = Role(name='admin', descripcion='Administrador completo')
@@ -36,16 +67,28 @@ with app.app_context():
         support_role = Role(name='support', descripcion='Ingeniero de soporte')
         db.session.add(support_role)
         print('Creando role support')
+    viewer_role = Role.query.filter_by(name='viewer').first()
+    if not viewer_role:
+        viewer_role = Role(name='viewer', descripcion='Solo lectura')
+        db.session.add(viewer_role)
+        print('Creando role viewer')
 
     db.session.commit()
 
-    # Attach permissions to roles
-    # admin gets everything
+    # Asignar permisos a roles
+    # admin: todos los permisos
     admin_role.permissions = Permission.query.all()
-    # support gets tickets view/edit/export
-    support_role.permissions = [Permission.query.filter_by(module='tickets', action='view').first(),
-                                Permission.query.filter_by(module='tickets', action='edit').first(),
-                                Permission.query.filter_by(module='tickets', action='export').first()]
+    # support: solo tickets y reportes (ver, crear, editar)
+    support_perms = []
+    for module in ['tickets', 'reports']:
+        for action in ['view', 'create', 'update']:
+            p = Permission.query.filter_by(module=module, action=action).first()
+            if p:
+                support_perms.append(p)
+    support_role.permissions = support_perms
+    # viewer: solo ver todos los módulos
+    viewer_perms = [Permission.query.filter_by(module=module, action='view').first() for module, _ in modules]
+    viewer_role.permissions = [p for p in viewer_perms if p]
 
     db.session.commit()
 
