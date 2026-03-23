@@ -1691,24 +1691,14 @@ def entregas_mover_almacen(item_id):
 @app.route('/entregas/mover_facturacion/<int:item_id>', methods=['POST'])
 @login_required
 @requires_any_permission([('entregas', 'edit'), ('catalog', 'edit')])
+
 def entregas_mover_facturacion(item_id):
     item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
     if item.estado != 'entregas_lista_facturacion':
+        return redirect(url_for('entregas_module'))
 
-            _sync_flujo_parciales(item, hoja=item.hoja_ruta)
-            @app.route('/entregas/mover_facturacion/<int:item_id>', methods=['POST'])
-            @login_required
-            @requires_any_permission([('entregas', 'edit'), ('catalog', 'edit')])
-            def entregas_mover_facturacion(item_id):
-                item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
-                if item.estado != 'entregas_lista_facturacion':
-                    return redirect(url_for('entregas_module'))
-
-                _sync_flujo_parciales(item, hoja=item.hoja_ruta)
-                if item.cantidad_entregada != item.cantidad_total_piezas:
-                    return redirect(url_for('entregas_module'))
-            if item.cantidad_entregada != item.cantidad_total_piezas:
-                return redirect(url_for('entregas_module'))
+    _sync_flujo_parciales(item, hoja=item.hoja_ruta)
+    if item.cantidad_entregada != item.cantidad_total_piezas:
         return redirect(url_for('entregas_module'))
 
     item.estado = 'facturacion'
