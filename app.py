@@ -1713,6 +1713,7 @@ def entregas_mover_facturacion(item_id):
     return redirect(url_for('entregas_module'))
 
 
+
 @app.route('/entregas/quitar/<int:item_id>', methods=['POST'])
 @login_required
 @requires_any_permission([('entregas', 'edit'), ('catalog', 'edit')])
@@ -1720,24 +1721,8 @@ def entregas_quitar_item(item_id):
     item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
     if item.estado == 'entregas':
         db.session.delete(item)
-
-
-        # ===== ENTREGAS PARCIALES =====
-
-        @app.route('/api/entregas/parcial', methods=['POST'])
-        @login_required
-        @requires_any_permission([('entregas', 'edit'), ('catalog', 'edit')])
-        def api_registrar_entrega_parcial():
-            """Registra una entrega parcial de una hoja de ruta."""
-            data = request.get_json() or {}
-            flujo_id = data.get('flujo_id')
-            cantidad_entregada = data.get('cantidad_entregada')
-            notas = (data.get('notas') or '').strip()
-    
-            try:
-                flujo_id = int(flujo_id)
-                cantidad_entregada = int(cantidad_entregada)
-            except Exception:
+        db.session.commit()
+    return redirect(url_for('entregas_module'))
                 return jsonify({'error': 'Datos inválidos: flujo_id y cantidad_entregada deben ser números'}), 400
     
             if cantidad_entregada <= 0:
