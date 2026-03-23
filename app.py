@@ -1725,68 +1725,6 @@ def entregas_quitar_item(item_id):
     return redirect(url_for('entregas_module'))
 
 
-        @app.route('/api/entregas/<int:hoja_id>/parciales', methods=['GET'])
-        @login_required
-        @requires_any_permission([('entregas', 'view'), ('entregas', 'edit'), ('catalog', 'edit')])
-        def api_obtener_entregas_parciales(hoja_id):
-            """Obtiene todas las entregas parciales de una hoja de ruta."""
-            hoja = HojaRuta.query.get(hoja_id)
-            if not hoja:
-                return jsonify({'error': 'Hoja de ruta no encontrada'}), 404
-    
-            entregas = EntregaParcial.query.filter_by(hoja_ruta_id=hoja_id).order_by(EntregaParcial.fecha_entrega.desc()).all()
-    
-            return jsonify({
-                'ok': True,
-                'hoja_id': hoja_id,
-                'entregas': [e.to_dict() for e in entregas],
-                'total_registros': len(entregas),
-            }), 200
-
-
-        @app.route('/api/entregas/parcial/<int:parcial_id>', methods=['DELETE'])
-        @login_required
-        @requires_any_permission([('entregas', 'edit'), ('catalog', 'edit')])
-        def api_eliminar_entrega_parcial(parcial_id):
-            """Elimina una entrega parcial (deshace la entrega)."""
-            entrega = EntregaParcial.query.get(parcial_id)
-            if not entrega:
-                return jsonify({'error': 'Entrega parcial no encontrada'}), 404
-    
-            flujo = entrega.flujo_logistica
-            hoja = entrega.hoja_ruta
-
-            if not flujo or flujo.estado != 'entregas':
-                return jsonify({'error': 'Solo puedes deshacer entregas parciales cuando la hoja está en Entregas'}), 409
-
-            _sync_flujo_parciales(flujo, hoja=hoja)
-            if entrega.cantidad_entregada > (flujo.cantidad_entregada or 0):
-                return jsonify({'error': 'La entrega parcial no se puede deshacer por inconsistencia de cantidades'}), 409
-
-            flujo.cantidad_entregada -= entrega.cantidad_entregada
-            _sync_flujo_parciales(flujo, hoja=hoja)
-            flujo.actualizado_por = _logistica_username()
-    
-            db.session.add(EntregaRegistro(
-                hoja_ruta_id=hoja.id,
-                flujo_id=flujo.id,
-                accion='entrega_parcial_eliminada',
-                usuario=_logistica_username(),
-                notas=f'Se eliminó entrega de {entrega.cantidad_entregada} piezas. Nueva situación - Entregado: {flujo.cantidad_entregada}, Pendiente: {flujo.cantidad_pendiente}',
-            ))
-    
-            db.session.delete(entrega)
-            db.session.commit()
-    
-            return jsonify({
-                'ok': True,
-                'message': 'Entrega parcial eliminada',
-                'flujo': flujo.to_dict(),
-            }), 200
-        db.session.commit()
-    return redirect(url_for('entregas_module'))
-
-
 @app.route('/almacen')
 @login_required
 @requires_any_permission([('almacen', 'view'), ('catalog', 'edit')])
