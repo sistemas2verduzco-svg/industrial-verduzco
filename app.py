@@ -1723,21 +1723,6 @@ def entregas_quitar_item(item_id):
         db.session.delete(item)
         db.session.commit()
     return redirect(url_for('entregas_module'))
-                return jsonify({'error': 'Datos inválidos: flujo_id y cantidad_entregada deben ser números'}), 400
-    
-            if cantidad_entregada <= 0:
-                return jsonify({'error': 'La cantidad entregada debe ser mayor a 0'}), 400
-    
-            flujo = HojaRutaFlujoLogistica.query.get(flujo_id)
-            if not flujo:
-                return jsonify({'error': 'Flujo de logística no encontrado'}), 404
-    
-            if flujo.estado != 'entregas':
-                return jsonify({'error': 'La hoja debe estar en estado "entregas" para registrar entrega parcial'}), 409
-    
-            hoja = flujo.hoja_ruta
-            if not hoja:
-                return jsonify({'error': 'Hoja de ruta no encontrada'}), 404
 
             _sync_flujo_parciales(flujo, hoja=hoja)
             if (flujo.cantidad_total_piezas or 0) <= 0:
