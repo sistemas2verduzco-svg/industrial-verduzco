@@ -1735,7 +1735,9 @@ def almacen_module():
         .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
         .all()
     )
-    # ... aquí va el resto de la lógica de la función ...
+
+    # Sección de rutas y lógica para recepción de almacén
+    # (Ajuste de formato y comentarios para claridad y mantenimiento)
         
         
 @app.route('/almacen/recibir/<int:item_id>', methods=['POST'])
