@@ -1723,30 +1723,6 @@ def entregas_quitar_item(item_id):
         db.session.delete(item)
         db.session.commit()
     return redirect(url_for('entregas_module'))
-
-            _sync_flujo_parciales(flujo, hoja=hoja)
-            if (flujo.cantidad_total_piezas or 0) <= 0:
-                return jsonify({'error': 'La hoja no tiene cantidad total de piezas válida'}), 409
-    
-            cantidad_pendiente = int(flujo.cantidad_pendiente or 0)
-            if cantidad_entregada > cantidad_pendiente:
-                return jsonify({
-                    'error': f'No puedes entregar {cantidad_entregada} piezas. Pendiente: {cantidad_pendiente}',
-                    'cantidad_pendiente': cantidad_pendiente,
-                }), 400
-    
-            entrega = EntregaParcial(
-                flujo_id=flujo.id,
-                hoja_ruta_id=hoja.id,
-                cantidad_entregada=cantidad_entregada,
-                usuario_entrega=_logistica_username(),
-                notas=notas,
-            )
-            db.session.add(entrega)
-    
-            flujo.cantidad_entregada += cantidad_entregada
-            _sync_flujo_parciales(flujo, hoja=hoja)
-            flujo.actualizado_por = _logistica_username()
     
             db.session.add(EntregaRegistro(
                 hoja_ruta_id=hoja.id,
