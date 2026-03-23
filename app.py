@@ -1736,8 +1736,8 @@ def almacen_module():
         .all()
     )
     # ... aquí va el resto de la lógica de la función ...
-
-
+        
+        
 @app.route('/almacen/recibir/<int:item_id>', methods=['POST'])
 @login_required
 @requires_any_permission([('almacen', 'edit'), ('catalog', 'edit')])
