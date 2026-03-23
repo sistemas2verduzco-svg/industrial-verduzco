@@ -1723,22 +1723,6 @@ def entregas_quitar_item(item_id):
         db.session.delete(item)
         db.session.commit()
     return redirect(url_for('entregas_module'))
-    
-            db.session.add(EntregaRegistro(
-                hoja_ruta_id=hoja.id,
-                flujo_id=flujo.id,
-                accion='entrega_parcial_registrada',
-                usuario=_logistica_username(),
-                notas=f'Entregadas {cantidad_entregada} piezas. Pendiente: {flujo.cantidad_pendiente} ({flujo.porcentaje_entregado:.1f}%)',
-            ))
-    
-            db.session.commit()
-    
-            return jsonify({
-                'ok': True,
-                'entrega': entrega.to_dict(),
-                'flujo': flujo.to_dict(),
-            }), 201
 
 
         @app.route('/api/entregas/<int:hoja_id>/parciales', methods=['GET'])
