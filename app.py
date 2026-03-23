@@ -1736,11 +1736,63 @@ def almacen_module():
         .all()
     )
     # ... aquí va el resto de la lógica de la función ...
+
+
+@app.route('/almacen/recibir/<int:item_id>', methods=['POST'])
+@login_required
 @requires_any_permission([('almacen', 'edit'), ('catalog', 'edit')])
-            _sync_flujo_parciales(item, hoja=item.hoja_ruta)
-            if item.cantidad_entregada != item.cantidad_total_piezas:
-                return redirect(url_for('entregas_module'))
 def almacen_recibir_item(item_id):
+    item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
+    if item.estado != 'almacen':
+        return redirect(url_for('almacen_module'))
+
+    recepcion_id = (request.form.get('recepcion_id') or '').strip()
+    entregado = request.form.get('entregado') == 'on'
+    captura = request.files.get('captura_recepcion')
+
+    if not entregado or not recepcion_id:
+        return redirect(url_for('almacen_module'))
+
+    if not captura or not captura.filename:
+        return redirect(url_for('almacen_module'))
+
+    if not _logistica_allowed_image(captura.filename):
+        return redirect(url_for('almacen_module'))
+
+    ext = captura.filename.rsplit('.', 1)[-1].lower().strip()
+    nombre = secure_filename(f"recepcion_{item.hoja_ruta_id}_{uuid.uuid4().hex}.{ext}")
+    rel_dir = os.path.join('logistica_recepciones')
+    abs_dir = os.path.join(app.config['UPLOAD_FOLDER'], rel_dir)
+    os.makedirs(abs_dir, exist_ok=True)
+    abs_path = os.path.join(abs_dir, nombre)
+    captura.save(abs_path)
+
+    item.almacen_validado = True
+    item.almacen_recepcion_id = recepcion_id
+    item.almacen_captura_path = f"{rel_dir}/{nombre}".replace('\\', '/')
+    # Almacén solo recepciona/libera y devuelve a Entregas como lista para enviar a Facturación.
+    item.estado = 'entregas_lista_facturacion'
+    item.actualizado_por = _logistica_username()
+
+    db.session.add(AlmacenRegistro(
+        hoja_ruta_id=item.hoja_ruta_id,
+        flujo_id=item.id,
+        recepcion_id=recepcion_id,
+        captura_path=item.almacen_captura_path,
+        validado=True,
+        usuario=_logistica_username(),
+        notas='Recepción validada en almacén y liberada para Entregas.',
+    ))
+    db.session.add(EntregaRegistro(
+        hoja_ruta_id=item.hoja_ruta_id,
+        flujo_id=item.id,
+        accion='lista_para_facturacion',
+        usuario=_logistica_username(),
+        notas=f'Recepción {recepcion_id} validada en almacén.',
+    ))
+
+    db.session.commit()
+    return redirect(url_for('almacen_module'))
     item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
     if item.estado != 'almacen':
         return redirect(url_for('almacen_module'))
