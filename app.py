@@ -1733,8 +1733,9 @@ def almacen_module():
         HojaRutaFlujoLogistica.query
         .filter_by(estado='almacen')
         .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
-                return redirect(url_for('entregas_module'))
         .all()
+    )
+    # ... aquí va el resto de la lógica de la función ...
 @requires_any_permission([('almacen', 'edit'), ('catalog', 'edit')])
             _sync_flujo_parciales(item, hoja=item.hoja_ruta)
             if item.cantidad_entregada != item.cantidad_total_piezas:
