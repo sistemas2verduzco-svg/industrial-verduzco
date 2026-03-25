@@ -9,7 +9,7 @@
 <aside id="appSidebar" class="app-sidebar">
     <div style="margin-bottom:30px; font-weight:700; font-size:16px; color:#64b5f6; display:flex; align-items:center; gap:10px;">
         <span style="font-size:20px;">📊</span>
-        <span>ERP Catalogo</span>
+        <span>Sistema de Control de Produccion</span>
     </div>
 
     <div style="background:rgba(255,255,255,0.1); padding:12px; border-radius:8px; margin-bottom:20px; font-size:12px; border-left:3px solid #64b5f6;">
@@ -38,6 +38,19 @@
         {% endif %}
         {% if has_permission('mapa', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
         <a href="/mapa_maquinas" class="sb-link sb-sub" data-base="/mapa_maquinas"><span>🗺️</span> <span>Mapa de Maquinas</span></a>
+        {% endif %}
+
+        {% if has_permission('entregas', 'view') or has_permission('almacen', 'view') or has_permission('facturacion', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">LOGISTICA</div>
+        {% if has_permission('entregas', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        <a href="/entregas" class="sb-link" data-base="/entregas"><span>📦</span> <span>Entregas</span></a>
+        {% endif %}
+        {% if has_permission('almacen', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        <a href="/almacen" class="sb-link" data-base="/almacen"><span>🏬</span> <span>Almacen</span></a>
+        {% endif %}
+        {% if has_permission('facturacion', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        <a href="/facturacion" class="sb-link" data-base="/facturacion"><span>🧾</span> <span>Facturacion</span></a>
+        {% endif %}
         {% endif %}
         {% endif %}
 
@@ -70,7 +83,7 @@
     </nav>
 
     <div class="sb-footer">
-        <div style="margin-bottom:4px;">ERP v1.0</div>
+        <div style="margin-bottom:4px;">Sistema de Control de Produccion</div>
         <div style="color:#64b5f6; font-weight:600;">{% if current_user %}{{ current_user.username }}{% else %}Invitado{% endif %}</div>
     </div>
 </aside>
@@ -88,6 +101,7 @@
         color: #fff;
         padding: 20px;
         overflow: hidden;
+        overflow-x: hidden;
         box-shadow: 2px 0 10px rgba(0,0,0,0.2);
         z-index: 1000;
         transition: transform 0.25s ease;
@@ -97,7 +111,15 @@
         flex: 1 1 auto;
         min-height: 0;
         overflow-y: auto;
+        overflow-x: hidden;
         padding-right: 4px;
+        scrollbar-width: none;
+    }
+
+    .sb-nav::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+        display: none;
     }
 
     .sb-link {
@@ -243,6 +265,8 @@
 
 <script>
     (function() {
+        document.body.classList.add('with-sidebar');
+
         const sidebar = document.getElementById('appSidebar');
         const toggle = document.getElementById('sidebarToggle');
         const backdrop = document.getElementById('sidebarBackdrop');

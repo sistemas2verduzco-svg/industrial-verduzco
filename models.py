@@ -528,6 +528,13 @@ class HojaRuta(db.Model):
     # Relaciones
     maquina = db.relationship('Máquina', backref='hojas_ruta')
     estaciones = db.relationship('EstacionTrabajo', backref='hoja_ruta', lazy=True, cascade='all, delete-orphan')
+    historial_cargas = db.relationship(
+        'HojaRutaCargaPiezasHistorial',
+        backref='hoja_ruta',
+        lazy=True,
+        cascade='all, delete-orphan',
+        order_by='desc(HojaRutaCargaPiezasHistorial.fecha_creacion)'
+    )
 
     def to_dict(self):
         return {
@@ -560,6 +567,129 @@ class HojaRuta(db.Model):
             'fecha_actualizacion': self.fecha_actualizacion.isoformat(),
             'estaciones': [e.to_dict() for e in self.estaciones]
         }
+
+
+class HojaRutaCargaPiezasHistorial(db.Model):
+    """Historial de cambios de cantidad de piezas por hoja de ruta."""
+    __tablename__ = 'hojas_ruta_cargas_historial'
+
+    id = db.Column(db.Integer, primary_key=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False, index=True)
+    cantidad_anterior = db.Column(db.Integer, nullable=False, default=0)
+    cantidad_cambio = db.Column(db.Integer, nullable=False, default=0)
+    cantidad_nueva = db.Column(db.Integer, nullable=False, default=0)
+    tipo_movimiento = db.Column(db.String(30), nullable=False, default='ajuste')
+    usuario = db.Column(db.String(120), nullable=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'hoja_ruta_id': self.hoja_ruta_id,
+            'cantidad_anterior': self.cantidad_anterior,
+            'cantidad_cambio': self.cantidad_cambio,
+            'cantidad_nueva': self.cantidad_nueva,
+            'tipo_movimiento': self.tipo_movimiento,
+            'usuario': self.usuario,
+            'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,
+        }
+
+
+class HojaRutaFlujoLogistica(db.Model):
+    """Flujo temporal de entrega/recepción/facturación sin borrar la hoja base."""
+    __tablename__ = 'hojas_ruta_flujo_logistica'
+
+    id = db.Column(db.Integer, primary_key=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False, unique=True)
+
+    # entregas | almacen | entregas_lista_facturacion | facturacion | finalizada
+    estado = db.Column(db.String(30), nullable=False, default='entregas', index=True)
+
+    creado_por = db.Column(db.String(120), nullable=True)
+    actualizado_por = db.Column(db.String(120), nullable=True)
+
+    # Campos de recepción en almacén
+    almacen_validado = db.Column(db.Boolean, nullable=False, default=False)
+    almacen_recepcion_id = db.Column(db.String(120), nullable=True)
+    almacen_captura_path = db.Column(db.String(500), nullable=True)
+
+    # Campos de aprobación en facturación
+    facturacion_aprobado = db.Column(db.Boolean, nullable=False, default=False)
+    facturacion_aprobado_por = db.Column(db.String(120), nullable=True)
+    facturacion_aprobado_en = db.Column(db.DateTime, nullable=True)
+
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    hoja_ruta = db.relationship('HojaRuta', backref=db.backref('flujo_logistica', uselist=False))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'hoja_ruta_id': self.hoja_ruta_id,
+            'estado': self.estado,
+            'creado_por': self.creado_por,
+            'actualizado_por': self.actualizado_por,
+            'almacen_validado': self.almacen_validado,
+            'almacen_recepcion_id': self.almacen_recepcion_id,
+            'almacen_captura_path': self.almacen_captura_path,
+            'facturacion_aprobado': self.facturacion_aprobado,
+            'facturacion_aprobado_por': self.facturacion_aprobado_por,
+            'facturacion_aprobado_en': self.facturacion_aprobado_en.isoformat() if self.facturacion_aprobado_en else None,
+            'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,
+            'fecha_actualizacion': self.fecha_actualizacion.isoformat() if self.fecha_actualizacion else None,
+        }
+
+
+class EntregaRegistro(db.Model):
+    """Bitácora propia del módulo Entregas."""
+    __tablename__ = 'entregas_registros'
+
+    id = db.Column(db.Integer, primary_key=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False, index=True)
+    flujo_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_flujo_logistica.id'), nullable=True, index=True)
+    accion = db.Column(db.String(80), nullable=False)  # agregada_en_entregas | enviada_a_almacen | lista_para_facturacion | enviada_a_facturacion
+    usuario = db.Column(db.String(120), nullable=True)
+    notas = db.Column(db.Text, nullable=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    hoja_ruta = db.relationship('HojaRuta', backref='entregas_registros')
+    flujo = db.relationship('HojaRutaFlujoLogistica', backref='entregas_registros')
+
+
+class AlmacenRegistro(db.Model):
+    """Bitácora propia del módulo Almacén."""
+    __tablename__ = 'almacen_registros'
+
+    id = db.Column(db.Integer, primary_key=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False, index=True)
+    flujo_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_flujo_logistica.id'), nullable=True, index=True)
+    recepcion_id = db.Column(db.String(120), nullable=True)
+    captura_path = db.Column(db.String(500), nullable=True)
+    validado = db.Column(db.Boolean, nullable=False, default=False)
+    usuario = db.Column(db.String(120), nullable=True)
+    notas = db.Column(db.Text, nullable=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    hoja_ruta = db.relationship('HojaRuta', backref='almacen_registros')
+    flujo = db.relationship('HojaRutaFlujoLogistica', backref='almacen_registros')
+
+
+class FacturacionRegistro(db.Model):
+    """Bitácora propia del módulo Facturación."""
+    __tablename__ = 'facturacion_registros'
+
+    id = db.Column(db.Integer, primary_key=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False, index=True)
+    flujo_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_flujo_logistica.id'), nullable=True, index=True)
+    aprobado = db.Column(db.Boolean, nullable=False, default=False)
+    usuario = db.Column(db.String(120), nullable=True)
+    notas = db.Column(db.Text, nullable=True)
+    fecha_aprobacion = db.Column(db.DateTime, nullable=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    hoja_ruta = db.relationship('HojaRuta', backref='facturacion_registros')
+    flujo = db.relationship('HojaRutaFlujoLogistica', backref='facturacion_registros')
 
 
 class EstacionTrabajo(db.Model):
@@ -751,3 +881,5 @@ class ClaveProceso(db.Model):
             'tiempo_estimado': self.tiempo_estimado,
             'notas': self.notas,
         }
+
+

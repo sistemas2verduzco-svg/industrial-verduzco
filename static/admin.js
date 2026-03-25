@@ -510,6 +510,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
 });
 
 function importarExcel(archivo) {

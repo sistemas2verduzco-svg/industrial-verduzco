@@ -30,6 +30,17 @@
       <!-- Catálogo de procesos -->
       <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
         <h3 style="margin:0 0 12px; font-size:16px; color:#2d3748; font-weight:600;">Catálogo de Procesos</h3>
+        <div style="background:#f7fafc; border:1px dashed #cbd5e0; border-radius:8px; padding:10px; margin-bottom:12px;">
+          <div style="font-size:13px; color:#4a5568; margin-bottom:8px;">Importar procesos y claves desde archivo</div>
+          <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
+            <label for="import-procesos-sheet" style="font-size:12px; color:#4a5568;">Hoja:</label>
+            <input id="import-procesos-sheet" type="text" value="TIEMPOS" placeholder="Ej. TIEMPOS" style="padding:6px 8px; border:1px solid #cbd5e0; border-radius:6px; font-size:12px; min-width:140px;">
+            <span style="font-size:11px; color:#718096;">Usa la hoja que ya te funciona por comando en servidor.</span>
+          </div>
+          <input type="file" id="archivo-importar-procesos" accept=".xlsx,.xls,.csv" style="display:none;">
+          <button type="button" id="btnImportarProcesos" class="btn" style="padding:8px 12px; border:none; background:#2f855a; color:#fff; border-radius:6px; cursor:pointer; font-size:13px; font-weight:500;">📤 Seleccionar archivo</button>
+          <small id="archivo-procesos-nombre" style="display:block; margin-top:6px; color:#666;"></small>
+        </div>
         <form id="formProceso" action="{{ url_for('procesos_base_save') }}" method="POST" style="display:grid; gap:10px; margin-bottom:12px;">
           <input type="hidden" name="id" id="proc_id">
           <div>
@@ -120,7 +131,19 @@
       {% else %}
       <form action="{{ url_for('procesos_clave_secuencia_save', clave_id=clave_sel.id) }}" method="POST" id="formSecuencia">
         <div style="display:flex; gap:10px; align-items:center; margin-bottom:16px; flex-wrap:wrap;">
-          <select id="selectProceso" style="flex:1; min-width:200px; padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px;">
+          <div style="flex:1; min-width:260px; position:relative;">
+            <input
+              type="text"
+              id="buscarProcesoSecuencia"
+              placeholder="🔎 Buscar proceso por C.T., operación o nombre..."
+              autocomplete="off"
+              style="width:100%; padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px;"
+            >
+            <input type="hidden" id="procesoSeleccionadoId">
+            <div id="resultadosProcesoSecuencia" style="display:none; position:absolute; left:0; right:0; top:calc(100% + 4px); max-height:240px; overflow-y:auto; background:#fff; border:1px solid #e2e8f0; border-radius:8px; box-shadow:0 8px 18px rgba(0,0,0,0.08); z-index:40;"></div>
+          </div>
+
+          <select id="selectProceso" style="display:none;">
             <option value="">-- Seleccionar proceso --</option>
             {% for p in procesos %}
             <option value="{{ p.id }}" data-codigo="{{ p.codigo or '' }}" data-nombre="{{ p.nombre }}" data-ct="{{ p.centro_trabajo or '' }}" data-oper="{{ p.operacion or '' }}" data-te="{{ p.tiempo_estimado or '' }}">{{ p.centro_trabajo or 'C.T.?'}} - {{ p.operacion or p.nombre }}</option>
@@ -244,7 +267,7 @@
         align-items: stretch !important;
       }
 
-      #selectProceso,
+      #buscarProcesoSecuencia,
       #btnAgregarProceso,
       #btnNuevaClave {
         width: 100% !important;
@@ -283,18 +306,123 @@
     });
   }
 
-  // Secuencia: agregar desde select
+  // Secuencia: agregar desde buscador en tiempo real
+  const selProceso = document.getElementById('selectProceso');
+  const inputProcesoSecuencia = document.getElementById('buscarProcesoSecuencia');
+  const inputProcesoSeleccionado = document.getElementById('procesoSeleccionadoId');
+  const resultadosProcesoSecuencia = document.getElementById('resultadosProcesoSecuencia');
+  const procesosCatalogoSecuencia = [];
+
+  if (selProceso) {
+    Array.from(selProceso.options)
+      .filter(o => o.value)
+      .forEach(o => {
+        const item = {
+          id: o.value,
+          codigo: o.dataset.codigo || '',
+          nombre: o.dataset.nombre || '',
+          ct: o.dataset.ct || '',
+          oper: o.dataset.oper || '',
+          te: o.dataset.te || '',
+          label: o.textContent || ''
+        };
+        procesosCatalogoSecuencia.push(item);
+      });
+  }
+
+  function seleccionarProcesoSecuencia(item) {
+    if (!item) return;
+    if (inputProcesoSeleccionado) inputProcesoSeleccionado.value = item.id;
+    if (inputProcesoSecuencia) inputProcesoSecuencia.value = item.label;
+    if (resultadosProcesoSecuencia) resultadosProcesoSecuencia.style.display = 'none';
+  }
+
+  function renderResultadosProcesoSecuencia(term) {
+    if (!resultadosProcesoSecuencia) return;
+    const q = String(term || '').trim().toLowerCase();
+    if (!q) {
+      resultadosProcesoSecuencia.style.display = 'none';
+      resultadosProcesoSecuencia.innerHTML = '';
+      return;
+    }
+
+    const filtrados = procesosCatalogoSecuencia
+      .filter(p => (`${p.ct} ${p.oper} ${p.nombre} ${p.codigo}`).toLowerCase().includes(q))
+      .slice(0, 20);
+
+    if (!filtrados.length) {
+      resultadosProcesoSecuencia.innerHTML = '<div style="padding:10px 12px; color:#718096; font-size:13px;">Sin coincidencias</div>';
+      resultadosProcesoSecuencia.style.display = 'block';
+      return;
+    }
+
+    resultadosProcesoSecuencia.innerHTML = filtrados.map(p => {
+      const secondary = [p.ct, p.oper || p.nombre].filter(Boolean).join(' - ');
+      return `<button type="button" data-proceso-id="${p.id}" style="display:block; width:100%; text-align:left; border:none; background:#fff; padding:9px 12px; cursor:pointer; border-bottom:1px solid #f1f5f9;">
+        <div style="font-size:13px; color:#1f2937; font-weight:600;">${secondary || p.label}</div>
+        <div style="font-size:11px; color:#64748b;">${p.label}</div>
+      </button>`;
+    }).join('');
+    resultadosProcesoSecuencia.style.display = 'block';
+  }
+
+  if (inputProcesoSecuencia) {
+    inputProcesoSecuencia.addEventListener('input', () => {
+      if (inputProcesoSeleccionado) inputProcesoSeleccionado.value = '';
+      renderResultadosProcesoSecuencia(inputProcesoSecuencia.value);
+    });
+
+    inputProcesoSecuencia.addEventListener('focus', () => {
+      if (inputProcesoSecuencia.value.trim()) {
+        renderResultadosProcesoSecuencia(inputProcesoSecuencia.value);
+      }
+    });
+
+    inputProcesoSecuencia.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('btnAgregarProceso')?.click();
+      }
+    });
+  }
+
+  if (resultadosProcesoSecuencia) {
+    resultadosProcesoSecuencia.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-proceso-id]');
+      if (!btn) return;
+      const item = procesosCatalogoSecuencia.find(p => String(p.id) === String(btn.dataset.procesoId));
+      seleccionarProcesoSecuencia(item);
+    });
+  }
+
+  document.addEventListener('click', (e) => {
+    if (!resultadosProcesoSecuencia || !inputProcesoSecuencia) return;
+    if (!resultadosProcesoSecuencia.contains(e.target) && e.target !== inputProcesoSecuencia) {
+      resultadosProcesoSecuencia.style.display = 'none';
+    }
+  });
+
   const btnAgregarProceso = document.getElementById('btnAgregarProceso');
   if (btnAgregarProceso) {
     btnAgregarProceso.addEventListener('click', () => {
-      const sel = document.getElementById('selectProceso');
-      const val = sel.value;
+      const selectedId = inputProcesoSeleccionado?.value || '';
+      const typed = (inputProcesoSecuencia?.value || '').trim().toLowerCase();
+      const foundByTyped = typed
+        ? procesosCatalogoSecuencia.find(p => p.label.toLowerCase() === typed)
+          || procesosCatalogoSecuencia.find(p => (`${p.ct} ${p.oper} ${p.nombre} ${p.codigo}`).toLowerCase().includes(typed))
+        : null;
+
+      const item = selectedId
+        ? procesosCatalogoSecuencia.find(p => String(p.id) === String(selectedId))
+        : foundByTyped;
+
+      const val = item ? item.id : '';
       if (!val) return;
-      const codigo = sel.options[sel.selectedIndex].dataset.codigo;
-      const nombre = sel.options[sel.selectedIndex].dataset.nombre;
-      const defCt = sel.options[sel.selectedIndex].dataset.ct || '';
-      const defOper = sel.options[sel.selectedIndex].dataset.oper || '';
-      const defTe = sel.options[sel.selectedIndex].dataset.te || '';
+      const codigo = item.codigo;
+      const nombre = item.nombre;
+      const defCt = item.ct || '';
+      const defOper = item.oper || '';
+      const defTe = item.te || '';
       const tbody = document.getElementById('tbodySecuencia');
       const orden = tbody.querySelectorAll('tr').length + 1;
       const tr = document.createElement('tr');
@@ -317,7 +445,9 @@
           <button type=\"button\" class=\"btnRemove\" title=\"Quitar\" style=\"padding:6px 8px; color:#b71c1c;\">✖</button>
         </td>`;
       tbody.appendChild(tr);
-      sel.value = '';
+      if (inputProcesoSecuencia) inputProcesoSecuencia.value = '';
+      if (inputProcesoSeleccionado) inputProcesoSeleccionado.value = '';
+      if (resultadosProcesoSecuencia) resultadosProcesoSecuencia.style.display = 'none';
       bindRowButtons(tr);
       calcularTiempos();
     });
@@ -488,5 +618,120 @@
   // Initial calculation if rows exist
   if (document.querySelectorAll('#tbodySecuencia tr').length > 0) {
     calcularTiempos();
+  }
+
+  // Importador de procesos/claves en este módulo
+  const btnImportarProcesos = document.getElementById('btnImportarProcesos');
+  const inputImportarProcesos = document.getElementById('archivo-importar-procesos');
+  const statusImportProcesos = document.getElementById('archivo-procesos-nombre');
+  const inputImportSheet = document.getElementById('import-procesos-sheet');
+
+  if (btnImportarProcesos && inputImportarProcesos) {
+    btnImportarProcesos.addEventListener('click', () => inputImportarProcesos.click());
+    inputImportarProcesos.addEventListener('change', async (e) => {
+      const archivo = e.target.files && e.target.files[0];
+      if (!archivo) return;
+
+      if (statusImportProcesos) statusImportProcesos.textContent = `Cargando: ${archivo.name}...`;
+
+      const formData = new FormData();
+      formData.append('file', archivo);
+      const sheetName = (inputImportSheet?.value || '').trim();
+      if (sheetName) {
+        formData.append('sheet', sheetName);
+      }
+
+      try {
+        const response = await fetch('/api/procesos/importar-excel', {
+          method: 'POST',
+          body: formData,
+          credentials: 'same-origin'
+        });
+        const contentType = response.headers.get('content-type') || '';
+        let data = null;
+        let rawText = '';
+
+        if (contentType.includes('application/json')) {
+          data = await response.json();
+        } else {
+          rawText = await response.text();
+        }
+
+        if (!response.ok || (data && data.error)) {
+          const msg = data && data.error
+            ? data.error
+            : `Error HTTP ${response.status} al importar procesos`;
+          const detalle = (data && data.output)
+            ? data.output
+            : (rawText ? rawText.slice(0, 600) : 'Sin detalle del servidor');
+
+          alert(`Error: ${msg}`);
+          console.error('Detalle import procesos:', detalle);
+        } else {
+          const jobId = data && data.job_id;
+          if (!jobId) {
+            alert('Importación iniciada, pero no se recibió ID de seguimiento.');
+            return;
+          }
+
+          if (statusImportProcesos) {
+            statusImportProcesos.textContent = 'Importación en proceso...';
+          }
+
+          const maxChecks = 240; // hasta ~8 min con intervalo de 2s
+          let missingJobRetries = 0;
+          for (let i = 0; i < maxChecks; i++) {
+            await new Promise(r => setTimeout(r, 2000));
+            const stResp = await fetch(`/api/procesos/importar-excel/status/${jobId}`, {
+              credentials: 'same-origin'
+            });
+            const stCt = stResp.headers.get('content-type') || '';
+            let stData = null;
+            let stRaw = '';
+            if (stCt.includes('application/json')) {
+              stData = await stResp.json();
+            } else {
+              stRaw = await stResp.text();
+            }
+
+            if (!stResp.ok) {
+              const msg = stData && stData.error ? stData.error : `HTTP ${stResp.status}`;
+              if (stResp.status === 404 && /job no encontrado/i.test(msg) && missingJobRetries < 10) {
+                missingJobRetries += 1;
+                if (statusImportProcesos) {
+                  statusImportProcesos.textContent = `Inicializando importación... (${missingJobRetries}/10)`;
+                }
+                continue;
+              }
+              alert(`Error consultando importación: ${msg}`);
+              console.error('Detalle status import:', stData || stRaw);
+              break;
+            }
+
+            if (stData.status === 'success') {
+              alert('Importación de procesos completada. Se recargará la vista.');
+              window.location.reload();
+              break;
+            }
+
+            if (stData.status === 'error') {
+              alert(`Error en importación: ${stData.error || 'fallo desconocido'}`);
+              if (stData.output) console.error('Salida import procesos:', stData.output);
+              break;
+            }
+
+            if (statusImportProcesos) {
+              statusImportProcesos.textContent = `Importación en proceso... (${i + 1})`;
+            }
+          }
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error de red al importar procesos. Revisa logs de app/nginx y vuelve a intentar.');
+      } finally {
+        if (statusImportProcesos) statusImportProcesos.textContent = '';
+        inputImportarProcesos.value = '';
+      }
+    });
   }
 </script>

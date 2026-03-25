@@ -483,25 +483,25 @@ body {
 }
 
 /* ==================== ERP SIDEBAR LAYOUT ==================== */
-/* Ensure main content is offset when sidebar is present */
-body > .container,
-body > .admin-container,
-body > .ingeniero-container,
-body > .dashboard-container,
-body > .tabla-section,
-body > .tickets-container {
+/* Ensure main content is offset only when sidebar is present */
+body.with-sidebar > .container,
+body.with-sidebar > .admin-container,
+body.with-sidebar > .ingeniero-container,
+body.with-sidebar > .dashboard-container,
+body.with-sidebar > .tabla-section,
+body.with-sidebar > .tickets-container {
     margin-left: 280px;
     transition: margin-left 0.18s ease;
 }
 
 /* When viewport is small, hide sidebar and remove left margin */
-@media (max-width: 768px) {
-    body > .container,
-    body > .admin-container,
-    body > .ingeniero-container,
-    body > .dashboard-container,
-    body > .tabla-section,
-    body > .tickets-container {
+@media (max-width: 980px) {
+    body.with-sidebar > .container,
+    body.with-sidebar > .admin-container,
+    body.with-sidebar > .ingeniero-container,
+    body.with-sidebar > .dashboard-container,
+    body.with-sidebar > .tabla-section,
+    body.with-sidebar > .tickets-container {
         margin-left: 0;
     }
 }

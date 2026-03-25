@@ -62,11 +62,15 @@
                 <div style="font-size:13px; color:#5f7184;">
                     Hoja: <strong>{{ hoja.nombre or ('HOJA #' ~ hoja.id) }}</strong>
                     | Clave: <strong>{{ hoja.pn or '-' }}</strong>
-                    | Piezas: <strong>{{ hoja.cantidad_piezas or 0 }}</strong>
+                    | Piezas actuales: <strong>{{ hoja.cantidad_piezas or 0 }}</strong>
+                    | Lote referencia QC: <strong>{{ lote_referencia or 0 }}</strong>
                 </div>
             </div>
             <div>
                 <a href="/control_calidad" class="btn-back">Volver</a>
+                {% if certificado_disponible %}
+                <a href="/control_calidad/hoja/{{ hoja.id }}/certificado" class="btn-primary" style="text-decoration:none; margin-left:8px; display:inline-block;">Emitir certificado</a>
+                {% endif %}
             </div>
         </div>
 
@@ -76,12 +80,27 @@
         </div>
         {% endif %}
 
+        {% if error_guardado %}
+        <div class="card" style="margin-top:10px; background:#ffebee; border-color:#ffcdd2; color:#9a2525;">
+            {{ error_guardado }}
+        </div>
+        {% endif %}
+
         <div class="card" style="margin-top:12px;">
             <strong>Resumen</strong>
             <div style="font-size:13px; color:#5f7184; margin-top:6px;">
                 Procesos completados: {{ procesos|length }}
                 | Pendientes de QC: <span class="badge b-pending">{{ pendientes_qc }}</span>
+                | Estado QC final: 
+                {% if qc_finalizada %}
+                    <span class="badge b-ok">Finalizada</span>
+                {% else %}
+                    <span class="badge b-pending">En revisión</span>
+                {% endif %}
             </div>
+            {% if qc_finalizada and not certificado_disponible %}
+            <div style="margin-top:8px; font-size:12px; color:#9a2525;">La hoja finalizó QC pero no está aprobada; no se emite certificado.</div>
+            {% endif %}
         </div>
 
         {% if procesos %}
@@ -100,6 +119,7 @@
                         {% else %}
                             <span class="badge b-pending">Pendiente</span>
                         {% endif %}
+                        <span class="badge b-pending" style="margin-left:6px;">Scrap actual: {{ p.scrap_piezas or 0 }}</span>
                     </div>
                 </div>
 
@@ -122,6 +142,15 @@
                                 <option value="">Seleccionar</option>
                                 <option value="aprobado">Aprobado</option>
                                 <option value="rechazado">Rechazado</option>
+                            </select>
+                        </div>
+                        <div class="field" style="min-width:200px;">
+                            <label>Scrap en este proceso</label>
+                            <select name="scrap_piezas">
+                                {% set selected_scrap = p.scrap_piezas or 0 %}
+                                {% for n in range((lote_referencia or 0) + 1) %}
+                                    <option value="{{ n }}" {% if n == selected_scrap %}selected{% endif %}>{{ n }}</option>
+                                {% endfor %}
                             </select>
                         </div>
                         <div class="field" style="flex:1; min-width:260px;">

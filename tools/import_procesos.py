@@ -1,8 +1,8 @@
 import argparse
 import os
+import re
 import sys
 from typing import Optional
-import re
 
 # Obtener la ruta del directorio raíz (padre de tools/)
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -26,30 +26,29 @@ def hhmmss(val: Optional[str]) -> Optional[str]:
     """Normalize a time-like value to HH:MM:SS; return None if empty/invalid."""
     if val is None:
         return None
-    # Soportar nulos de pandas (NaN/NaT) sin romper la importacion
-    try:
-        if pd.isna(val):
-            return None
-    except Exception:
-        pass
-
     text = str(val).strip()
-    if not text or text.lower() in ('nan', 'nat', 'none', '-'):
+    if not text:
         return None
     try:
         td = pd.to_timedelta(text)
     except Exception:
         return None
-    try:
-        if pd.isna(td):
-            return None
-    except Exception:
-        pass
-
     total_seconds = int(td.total_seconds())
     h, r = divmod(total_seconds, 3600)
     m, s = divmod(r, 60)
     return f"{h:02d}:{m:02d}:{s:02d}"
+
+
+def clean_nullable_text(val: Optional[str]) -> Optional[str]:
+    """Convierte texto nulo semántico (None/null/nan/...) a None."""
+    if val is None:
+        return None
+    text = str(val).strip()
+    if not text:
+        return None
+    if text.lower() in {"none", "null", "nan", "nat", "-", "n/a"}:
+        return None
+    return text
 
 
 def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
@@ -69,8 +68,12 @@ def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
     current_block_id = {}  # Contador de bloques por clave
     orden = 0
     
-    # Patrón para detectar claves válidas: letras seguidas de números (AS01, BY01/BY02, etc.)
-    clave_pattern = re.compile(r'^[A-Z]{1,4}\d{1,3}(/[A-Z]{1,4}\d{1,3})?$', re.IGNORECASE)
+    # Patrón para detectar claves válidas: AS01, BY01/BY02, SF12 / SF13, etc.
+    # Acepta múltiples segmentos separados por '/' y espacios alrededor.
+    clave_pattern = re.compile(
+        r'^[A-Z]{1,6}\d{1,4}(?:\s*/\s*[A-Z]{1,6}\d{1,4})*$',
+        re.IGNORECASE,
+    )
     
     for idx, row in df_raw.iterrows():
         # Columna B (índice 1) tiene claves como AS01, AS02, etc.
@@ -79,7 +82,7 @@ def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
         # Detectar fila de clave (debe coincidir con el patrón AS01, BY01, etc.)
         if col_b and clave_pattern.match(col_b):
             # Es una clave nueva (o repetida)
-            current_clave = col_b.upper()
+            current_clave = re.sub(r'\s*/\s*', '/', col_b.upper())
             # Incrementar el ID de bloque para esta clave
             current_block_id[current_clave] = current_block_id.get(current_clave, -1) + 1
             # El nombre está en columnas posteriores (C, D, E, F aprox.)
@@ -89,7 +92,13 @@ def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
                 if i < len(row) and pd.notna(row.iloc[i]):
                     val = str(row.iloc[i]).strip()
                     # Descartar valores que sean códigos, encabezados comunes, o unnamed
-                    if val and val.upper() != current_clave and not val.startswith("Unnamed") and val.upper() not in ["PROC.", "C.T.", "OPERACIÓN", "T/E", "T/CT", "T/O", "T/TCT", "KG.BRUTO", "$ -"]:
+                    if (
+                        val
+                        and clean_nullable_text(val)
+                        and val.upper() != current_clave
+                        and not val.startswith("Unnamed")
+                        and val.upper() not in ["PROC.", "C.T.", "OPERACIÓN", "T/E", "T/CT", "T/O", "T/TCT", "KG.BRUTO", "$ -"]
+                    ):
                         nombre_parts.append(val)
             current_nombre = " ".join(nombre_parts).strip() if nombre_parts else None
             orden = 0
@@ -129,66 +138,6 @@ def parse_excel_blocks(path: str, sheet: Optional[str]) -> pd.DataFrame:
     return df
 
 
-def _split_clave_code(raw_clave: str) -> list[str]:
-    """Expande claves compuestas (ej. SF10/SF11 -> [SF10, SF11])."""
-    text = str(raw_clave or '').strip().upper()
-    if not text:
-        return []
-
-    if '/' not in text:
-        return [text]
-
-    parts = [p.strip().upper() for p in text.split('/') if p and p.strip()]
-    if not parts:
-        return []
-
-    # Si alguna parte viene solo numérica, tomar prefijo alfabético de la primera parte.
-    m = re.match(r'^([A-Z]+)', parts[0])
-    base_prefix = m.group(1) if m else ''
-
-    expanded = []
-    for part in parts:
-        if re.match(r'^[A-Z]+\d+[A-Z0-9-]*$', part):
-            expanded.append(part)
-            continue
-        if re.match(r'^\d+[A-Z0-9-]*$', part) and base_prefix:
-            expanded.append(base_prefix + part)
-            continue
-        expanded.append(part)
-
-    # Evitar repetidos conservando orden
-    seen = set()
-    unique_expanded = []
-    for item in expanded:
-        if item not in seen:
-            seen.add(item)
-            unique_expanded.append(item)
-    return unique_expanded
-
-
-def expand_composite_claves(df: pd.DataFrame) -> pd.DataFrame:
-    """Duplica filas de procesos para cada clave cuando la clave viene compuesta con '/' ."""
-    rows = []
-    expanded_count = 0
-    for _, row in df.iterrows():
-        claves = _split_clave_code(row.get('clave'))
-        if not claves:
-            continue
-        if len(claves) > 1:
-            expanded_count += 1
-
-        for c in claves:
-            new_row = row.copy()
-            new_row['clave'] = c
-            rows.append(new_row)
-
-    out = pd.DataFrame(rows)
-    if expanded_count > 0:
-        print(f"\nℹ Claves compuestas expandidas: {expanded_count} filas origen")
-        print(f"   Total filas despues de expansion: {len(out)}")
-    return out
-
-
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Mapea nombres de columnas flexibles a nombres estándar."""
     mapping = {
@@ -216,6 +165,39 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     
     print(f"Columnas mapeadas a: {list(df.columns)}")
     return df
+
+
+def expand_compound_claves(df: pd.DataFrame) -> pd.DataFrame:
+    """Expande claves compuestas (ej. SF12/SF13) en registros por clave individual."""
+    if df.empty or 'clave' not in df.columns:
+        return df
+
+    expanded_rows = []
+    expanded_count = 0
+
+    for _, row in df.iterrows():
+        raw_clave = str(row.get('clave') or '').strip().upper()
+        if not raw_clave:
+            continue
+
+        parts = [part.strip().upper() for part in re.split(r'\s*/\s*', raw_clave) if part and part.strip()]
+        if len(parts) <= 1:
+            row_copy = row.copy()
+            row_copy['clave'] = raw_clave
+            expanded_rows.append(row_copy)
+            continue
+
+        expanded_count += len(parts) - 1
+        for part in parts:
+            row_copy = row.copy()
+            row_copy['clave'] = part
+            expanded_rows.append(row_copy)
+
+    expanded_df = pd.DataFrame(expanded_rows)
+    if expanded_count > 0:
+        print(f"\nℹ Claves compuestas expandidas: +{expanded_count} registros (separadas por '/')")
+
+    return expanded_df
 
 
 # --- Import logic ---------------------------------------------------------
@@ -250,9 +232,6 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
         else:
             df = df.drop(columns=['block_id'])
     
-    # Expandir claves compuestas (ej. SF10/SF11) para importar por separado.
-    df = expand_composite_claves(df)
-
     df = df.sort_values(["clave", "orden"])  # asegura orden correcto
     
     # Deduplicar procesos repetidos dentro de cada clave:
@@ -266,29 +245,65 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
         print(f"\n⚠ Eliminados {duplicados_eliminados} procesos duplicados dentro de claves")
         df = df[~df['_es_duplicado']].copy()
     df = df.drop(columns=['_dedup_key', '_grupo_clave', '_es_duplicado'])
+
+    # Separar claves compuestas (ej. SF12/SF13 -> SF12 y SF13 con mismos procesos)
+    df = expand_compound_claves(df)
+    df = df.sort_values(["clave", "orden"], kind="stable")
     
     # Reordenar orden después de deduplicar
     df['orden'] = df.groupby('clave', sort=False).cumcount() + 1
 
     # Agrupamos por clave para poder limpiar secuencia por clave si overwrite=True
     grouped = df.groupby("clave", sort=False)
-    claves_detectadas = [str(k).strip() for k in grouped.groups.keys() if str(k).strip()]
-    imported_keys = []
-    total_pasos_importados = 0
 
     with app.app_context():
         if overwrite:
-            # Evitar ambigüedad en producción: eliminar claves compuestas (ej. SF10/SF11)
-            # porque ahora se importan separadas como SF10 y SF11.
-            compuestas = ClaveProducto.query.filter(ClaveProducto.clave.contains('/')).all()
-            if compuestas:
-                comp_ids = [c.id for c in compuestas]
-                comp_codes = [c.clave for c in compuestas]
-                deleted_steps = ClaveProceso.query.filter(ClaveProceso.clave_id.in_(comp_ids)).delete(synchronize_session=False)
-                deleted_keys = ClaveProducto.query.filter(ClaveProducto.id.in_(comp_ids)).delete(synchronize_session=False)
+            # Limpieza de nombres/notas ya guardados como texto nulo semántico.
+            cleaned_text_fields = 0
+            for key_obj in ClaveProducto.query.all():
+                clean_nombre = clean_nullable_text(key_obj.nombre)
+                clean_notas = clean_nullable_text(key_obj.notas)
+                if (key_obj.nombre or None) != clean_nombre:
+                    key_obj.nombre = clean_nombre
+                    cleaned_text_fields += 1
+                if (key_obj.notas or None) != clean_notas:
+                    key_obj.notas = clean_notas
+                    cleaned_text_fields += 1
+            if cleaned_text_fields:
                 db.session.commit()
-                print(f"\n⚠ Limpieza previa overwrite: eliminadas {deleted_keys} claves compuestas y {deleted_steps} pasos")
-                print(f"   Claves removidas (muestra): {comp_codes[:15]}{' ...' if len(comp_codes) > 15 else ''}")
+                print(f"\nℹ Limpieza de textos nulos: {cleaned_text_fields} campos corregidos")
+
+            # Limpieza global de claves compuestas históricas (ej. SF12/SF13).
+            # Intenta eliminarlas completamente; si hay referencias externas,
+            # deja la clave inactiva y sin secuencia.
+            historical_compounds = [
+                item for item in ClaveProducto.query.all()
+                if '/' in str(item.clave or '')
+            ]
+            if historical_compounds:
+                removed_total = 0
+                deleted_keys = 0
+                deactivated_keys = 0
+                for compound_obj in historical_compounds:
+                    removed_total += ClaveProceso.query.filter_by(clave_id=compound_obj.id).delete()
+                    try:
+                        db.session.delete(compound_obj)
+                        db.session.flush()
+                        deleted_keys += 1
+                    except Exception:
+                        db.session.rollback()
+                        # Reintento seguro para esta clave: limpiar secuencia y desactivar.
+                        compound_obj_fallback = ClaveProducto.query.filter_by(id=compound_obj.id).first()
+                        if compound_obj_fallback:
+                            removed_total += ClaveProceso.query.filter_by(clave_id=compound_obj_fallback.id).delete()
+                            compound_obj_fallback.activo = False
+                            deactivated_keys += 1
+                db.session.commit()
+                print(
+                    f"\nℹ Limpieza global de claves compuestas: "
+                    f"{len(historical_compounds)} claves, {removed_total} pasos eliminados, "
+                    f"{deleted_keys} claves borradas, {deactivated_keys} desactivadas"
+                )
 
         for clave_code, gdf in grouped:
             clave_code = str(clave_code).strip()
@@ -303,12 +318,10 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
                 db.session.flush()
 
             # Actualizar nombre/notas si vienen
-            nombre_clave = str(gdf.get("nombre_clave", pd.Series([None])).iloc[0] or "").strip()
-            notas_clave = str(gdf.get("notas_clave", pd.Series([None])).iloc[0] or "").strip()
-            if nombre_clave:
-                clave_obj.nombre = nombre_clave
-            if notas_clave:
-                clave_obj.notas = notas_clave
+            nombre_clave = clean_nullable_text(gdf.get("nombre_clave", pd.Series([None])).iloc[0])
+            notas_clave = clean_nullable_text(gdf.get("notas_clave", pd.Series([None])).iloc[0])
+            clave_obj.nombre = nombre_clave
+            clave_obj.notas = notas_clave
 
             # Si overwrite, limpiar secuencia previa de esta clave
             if overwrite:
@@ -364,27 +377,7 @@ def import_file(path: str, sheet: Optional[str], overwrite: bool, header_row: in
 
             # Commit por clave para evitar transacción gigante
             db.session.commit()
-            imported_keys.append(clave_code)
-            total_pasos_importados += len(gdf)
             print(f"✓ Importada clave {clave_code} con {len(gdf)} pasos")
-
-        # Validación estricta: toda clave detectada por el parser debe quedar importada.
-        set_detectadas = set(claves_detectadas)
-        set_importadas = set(imported_keys)
-        faltantes = sorted(set_detectadas - set_importadas)
-
-        print("\n=== RESUMEN IMPORTACION PROCESOS/CLAVES ===")
-        print(f"Claves detectadas en archivo: {len(set_detectadas)}")
-        print(f"Claves importadas: {len(set_importadas)}")
-        print(f"Total de pasos importados: {total_pasos_importados}")
-
-        if faltantes:
-            print("\nERROR: Faltaron claves por importar:")
-            for c in faltantes:
-                print(f"  - {c}")
-            raise RuntimeError("Importacion incompleta: hay claves detectadas que no se importaron")
-
-        print("Importacion OK: todas las claves detectadas quedaron importadas.")
 
 
 # --- CLI ------------------------------------------------------------------

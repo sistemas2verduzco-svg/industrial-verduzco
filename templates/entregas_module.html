@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entregas - Flujo de Hojas</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .panel { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px; }
+        .layout { display:grid; grid-template-columns:1.25fr 1fr; gap:12px; }
+        .cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:8px; }
+        .hoja-card { border:1px solid #dbe4f0; border-radius:8px; padding:10px; background:#f8fbff; cursor:grab; }
+        .hoja-card:active { cursor:grabbing; }
+        .dropzone { min-height:280px; border:2px dashed #8ab6e8; border-radius:10px; padding:10px; background:#f0f7ff; }
+        .dropzone.drag-over { background:#e3f0ff; border-color:#0b74de; }
+        .row { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+        .small { color:#64748b; font-size:12px; }
+        .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; background:#e2e8f0; }
+        .btn-mini { border:0; border-radius:6px; padding:6px 8px; font-size:12px; cursor:pointer; }
+        .btn-add { background:#0b74de; color:#fff; }
+        .btn-send { background:#0f766e; color:#fff; }
+        .btn-del { background:#dc2626; color:#fff; }
+
+        @media (max-width: 980px) {
+            .layout { grid-template-columns:1fr; }
+        }
+    </style>
+</head>
+<body>
+    {% include '_sidebar.html' %}
+
+    <div class="container" style="padding-top:20px;">
+        <h2 style="margin:0 0 8px 0;">Módulo Entregas</h2>
+        <p class="small" style="margin:0 0 12px 0;">Arrastra hojas de ruta a la bandeja temporal y luego envíalas a Almacén. Cuando Almacén recepciona, la hoja regresa aquí como "lista para facturación".</p>
+
+        <div class="layout">
+            <section class="panel">
+                <div class="row">
+                    <strong>Todas las Hojas de Ruta</strong>
+                    <span class="badge">{{ hojas|length }} totales</span>
+                </div>
+                <div class="cards">
+                    {% for h in hojas %}
+                    <div class="hoja-card" draggable="true" data-hoja-id="{{ h.id }}">
+                        <div><strong>{{ h.nombre or ('HOJA #' ~ h.id) }}</strong></div>
+                        <div class="small">ID: {{ h.id }} | Clave: {{ h.pn or '-' }}</div>
+                        <div class="small">Piezas: {{ h.cantidad_piezas or 0 }} | Estado: {{ h.estado or '-' }}</div>
+                        <div class="small" style="margin-top:4px;"><a href="/hoja/{{ h.id }}" target="_blank">Ver hoja de ruta</a></div>
+                        {% if has_permission('entregas', 'edit') or has_permission('catalog', 'edit') %}
+                        <div style="margin-top:8px;">
+                            <button class="btn-mini btn-add" type="button" data-hoja-id="{{ h.id }}" onclick="agregarAEntregas(this.dataset.hojaId)">Agregar</button>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="row">
+                    <strong>Bandeja temporal de Entregas</strong>
+                    <span class="badge">{{ pendientes_entregas|length }} en bandeja</span>
+                </div>
+                <div id="dropzoneEntregas" class="dropzone">
+                    {% if pendientes_entregas %}
+                        {% for item in pendientes_entregas %}
+                        {% set total_piezas_item = item.cantidad_total_piezas or item.hoja_ruta.cantidad_piezas or 0 %}
+                        {% set entregado_item = item.cantidad_entregada or 0 %}
+                        {% set pendiente_item = item.cantidad_pendiente if item.cantidad_pendiente is not none else (total_piezas_item - entregado_item) %}
+                        <div class="panel" style="margin-bottom:8px; background:#fff;">
+                            <div><strong>{{ item.hoja_ruta.nombre or ('HOJA #' ~ item.hoja_ruta.id) }}</strong></div>
+                            <div class="small">ID hoja: {{ item.hoja_ruta.id }} | Clave: {{ item.hoja_ruta.pn or '-' }}</div>
+
+                            {% if has_permission('entregas', 'edit') or has_permission('catalog', 'edit') %}
+                            <div style="margin-top:8px; display:flex; gap:6px;">
+                                <form method="post" action="/entregas/mover_almacen/{{ item.id }}">
+                                    <button class="btn-mini btn-send">Enviar a Almacén</button>
+                                </form>
+                                <form method="post" action="/entregas/quitar/{{ item.id }}" onsubmit="return confirm('¿Quitar de bandeja temporal?');" style="display:inline;">
+                                    <button class="btn-mini btn-del">Quitar</button>
+                                </form>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="small">Arrastra aquí una hoja de ruta para agregarla a Entregas.</div>
+                    {% endif %}
+                </div>
+            </section>
+        </div>
+
+        <div class="panel" style="margin-top:12px;">
+            <div class="row">
+                <strong>Regresadas por Almacén (Listas para Facturación)</strong>
+                <span class="badge">{{ listas_facturacion|length }} listas</span>
+            </div>
+
+            {% if listas_facturacion %}
+                {% for item in listas_facturacion %}
+                <div class="panel" style="margin-bottom:8px; background:#fff;">
+                    <div><strong>{{ item.hoja_ruta.nombre or ('HOJA #' ~ item.hoja_ruta.id) }}</strong></div>
+                    <div class="small">ID hoja: {{ item.hoja_ruta.id }} | Clave: {{ item.hoja_ruta.pn or '-' }}</div>
+                    <div class="small"><a href="/hoja/{{ item.hoja_ruta.id }}" target="_blank">Ver hoja de ruta</a></div>
+                    <div class="small">Recepción CONTPAQ: {{ item.almacen_recepcion_id or '-' }}</div>
+                    {% if item.almacen_captura_path %}
+                    <div class="small">Captura: <a href="/uploads/{{ item.almacen_captura_path }}" target="_blank">Ver captura</a></div>
+                    {% endif %}
+                    {% if has_permission('entregas', 'edit') or has_permission('catalog', 'edit') %}
+                    <div style="margin-top:8px; display:flex; gap:6px;">
+                        <form method="post" action="/entregas/mover_facturacion/{{ item.id }}">
+                            <button class="btn-mini btn-send" type="submit">Enviar a Facturación</button>
+                        </form>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="small">Aún no hay hojas regresadas por Almacén.</div>
+            {% endif %}
+        </div>
+
+        <div class="panel" style="margin-top:12px;">
+            <div class="row">
+                <strong>Historial Entregas</strong>
+                <span class="badge">{{ historial_entregas|length }} registros</span>
+            </div>
+            {% if historial_entregas %}
+                {% for r in historial_entregas %}
+                <div style="padding:6px 0; border-bottom:1px solid #eef2f7;">
+                    <div><strong>Hoja #{{ r.hoja_ruta_id }}</strong> - {{ r.accion }}</div>
+                    <div class="small">Usuario: {{ r.usuario or '-' }} | {{ r.fecha_creacion.strftime('%Y-%m-%d %H:%M') if r.fecha_creacion else '-' }}</div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="small">Sin movimientos en entregas.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        async function agregarAEntregas(hojaId) {
+            try {
+                const res = await fetch('/api/logistica/entregas/agregar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ hoja_id: hojaId })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'No se pudo agregar');
+                window.location.reload();
+            } catch (err) {
+                alert(err.message || err);
+            }
+        }
+
+        let draggedHojaId = null;
+        document.querySelectorAll('.hoja-card[draggable="true"]').forEach(card => {
+            card.addEventListener('dragstart', (e) => {
+                draggedHojaId = card.dataset.hojaId;
+                e.dataTransfer.setData('text/plain', draggedHojaId);
+            });
+        });
+
+        const dropzone = document.getElementById('dropzoneEntregas');
+        if (dropzone) {
+            dropzone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropzone.classList.add('drag-over');
+            });
+            dropzone.addEventListener('dragleave', () => {
+                dropzone.classList.remove('drag-over');
+            });
+            dropzone.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                dropzone.classList.remove('drag-over');
+                const hojaId = e.dataTransfer.getData('text/plain') || draggedHojaId;
+                if (!hojaId) return;
+                await agregarAEntregas(parseInt(hojaId, 10));
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,5 +1,5 @@
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRuta, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRuta, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -17,6 +17,9 @@ from io import BytesIO
 import uuid
 import math
 import re
+import subprocess
+import sys
+import threading
 
 # Configurar logging
 logging.basicConfig(
@@ -28,6 +31,95 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Jobs para importación asíncrona de procesos/claves.
+# Persistimos estado en disco para evitar problemas con múltiples workers de gunicorn.
+PROCESOS_IMPORT_LOCK = threading.Lock()
+PROCESOS_IMPORT_DIR = os.path.join('uploads', 'imports_jobs')
+os.makedirs(PROCESOS_IMPORT_DIR, exist_ok=True)
+
+
+def _procesos_import_job_path(job_id):
+    safe = re.sub(r'[^a-zA-Z0-9_-]', '', str(job_id or ''))
+    return os.path.join(PROCESOS_IMPORT_DIR, f'{safe}.json')
+
+
+def _get_procesos_import_job(job_id):
+    path = _procesos_import_job_path(job_id)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _set_procesos_import_job(job_id, **fields):
+    with PROCESOS_IMPORT_LOCK:
+        job = _get_procesos_import_job(job_id) or {}
+        job.update(fields)
+        path = _procesos_import_job_path(job_id)
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(job, f, ensure_ascii=False)
+
+
+def _run_procesos_import_job(job_id, filename, abs_saved_path, sheet):
+    _set_procesos_import_job(job_id, status='running', started_at=datetime.utcnow().isoformat())
+    try:
+        cmd = [sys.executable, 'tools/import_procesos.py', '--file', abs_saved_path, '--overwrite']
+        if sheet:
+            cmd.extend(['--sheet', sheet])
+
+        result = subprocess.run(
+            cmd,
+            cwd=os.getcwd(),
+            capture_output=True,
+            text=True,
+            timeout=900,
+        )
+        combined = '\n'.join([x for x in [result.stdout, result.stderr] if x]).strip()
+
+        if result.returncode != 0:
+            logger.error(f"[IMPORT_PROCESOS] Error importando {filename}: {combined}")
+            _set_procesos_import_job(
+                job_id,
+                status='error',
+                error='Falló la importación de procesos',
+                output=combined[-6000:] if combined else '',
+                finished_at=datetime.utcnow().isoformat(),
+            )
+            return
+
+        logger.info(f"[IMPORT_PROCESOS] Importación OK para archivo {filename}")
+        _set_procesos_import_job(
+            job_id,
+            status='success',
+            output=combined[-6000:] if combined else 'Importación ejecutada sin salida.',
+            finished_at=datetime.utcnow().isoformat(),
+        )
+    except subprocess.TimeoutExpired:
+        logger.error(f"[IMPORT_PROCESOS] Timeout importando {filename}")
+        _set_procesos_import_job(
+            job_id,
+            status='error',
+            error='La importación excedió el tiempo límite (900s)',
+            finished_at=datetime.utcnow().isoformat(),
+        )
+    except Exception as e:
+        logger.error(f"[IMPORT_PROCESOS] Excepción importando {filename}: {e}")
+        _set_procesos_import_job(
+            job_id,
+            status='error',
+            error=f'Error procesando importación: {str(e)}',
+            finished_at=datetime.utcnow().isoformat(),
+        )
+    finally:
+        try:
+            if os.path.exists(abs_saved_path):
+                os.remove(abs_saved_path)
+        except Exception:
+            pass
 
 # Jornada laboral para planeacion de hojas de ruta
 WORKDAY_BLOCKS = ((6, 30, 12, 0), (12, 30, 16, 0))
@@ -47,6 +139,94 @@ def _norm_text(value):
                 .replace('Í', 'I')
                 .replace('Ó', 'O')
                 .replace('Ú', 'U'))
+
+
+def _clean_nullable_text(value):
+    text = str(value or '').strip()
+    if text.lower() in ('none', 'null', 'nan', 'nat', '-'):
+        return ''
+    return text
+
+
+def _qc_strip_scrap_summary(text):
+    src = str(text or '')
+    cleaned = re.sub(
+        r'\n?\[QC_SCRAP_SUMMARY_START\].*?\[QC_SCRAP_SUMMARY_END\]\n?',
+        '\n',
+        src,
+        flags=re.S,
+    )
+    return cleaned.strip()
+
+
+def _qc_parse_scrap_summary(text):
+    src = str(text or '')
+    m = re.search(r'\[QC_SCRAP_SUMMARY_START\](.*?)\[QC_SCRAP_SUMMARY_END\]', src, flags=re.S)
+    if not m:
+        return None
+
+    block = m.group(1)
+    values = {}
+    for line in block.splitlines():
+        line = line.strip()
+        if not line or '=' not in line:
+            continue
+        k, v = line.split('=', 1)
+        values[k.strip().upper()] = v.strip()
+
+    def _to_int(key, default=0):
+        try:
+            return max(0, int(values.get(key, default)))
+        except Exception:
+            return default
+
+    return {
+        'lote_inicial': _to_int('LOTE_INICIAL', 0),
+        'total_scrap': _to_int('TOTAL_SCRAP', 0),
+        'lote_final': _to_int('LOTE_FINAL', 0),
+        'detalle': values.get('DETALLE', ''),
+        'actualizado_por': values.get('ACTUALIZADO_POR', ''),
+        'fecha': values.get('FECHA', ''),
+    }
+
+
+def _qc_extract_scrap_block(text):
+    src = str(text or '')
+    m = re.search(r'\[QC_SCRAP_SUMMARY_START\].*?\[QC_SCRAP_SUMMARY_END\]', src, flags=re.S)
+    return m.group(0).strip() if m else ''
+
+
+def _qc_parse_review_block(notas_text):
+    notas = str(notas_text or '')
+    status_match = re.search(r'STATUS=(QC_OK|QC_NOK)', notas)
+    status = status_match.group(1) if status_match else None
+
+    block_match = re.search(r'\[QC_REVIEW_START\](.*?)\[QC_REVIEW_END\]', notas, flags=re.S)
+    block = block_match.group(1) if block_match else ''
+
+    def _extract(field, default=''):
+        m = re.search(rf'^{field}=(.*)$', block, flags=re.M)
+        return m.group(1).strip() if m else default
+
+    def _extract_int(field, default=0):
+        try:
+            return max(0, int(_extract(field, str(default))))
+        except Exception:
+            return default
+
+    return {
+        'status': status,
+        'usuario': _extract('USUARIO', ''),
+        'fecha': _extract('FECHA', ''),
+        'dimensional': _extract('DIMENSIONAL', 'NO') == 'OK',
+        'visual': _extract('VISUAL', 'NO') == 'OK',
+        'rebaba': _extract('REBABA', 'NO') == 'OK',
+        'material': _extract('MATERIAL', 'NO') == 'OK',
+        'ajuste': _extract('AJUSTE', 'NO') == 'OK',
+        'limpieza': _extract('LIMPIEZA', 'NO') == 'OK',
+        'scrap_piezas': _extract_int('SCRAP_PIEZAS', 0),
+        'observaciones': _extract('OBSERVACIONES', ''),
+    }
 
 
 def _parse_time_to_seconds(value):
@@ -246,11 +426,11 @@ def _resolve_clave_descripcion_by_pn(pn_value):
         # Fallback: at least show the key code for legacy hojas.
         return pn
 
-    notas = (getattr(clave, 'notas', None) or '').strip()
+    notas = _clean_nullable_text(getattr(clave, 'notas', None))
     if notas:
         return notas
 
-    nombre_clave = (getattr(clave, 'nombre', None) or '').strip()
+    nombre_clave = _clean_nullable_text(getattr(clave, 'nombre', None))
     if nombre_clave:
         return nombre_clave
 
@@ -264,12 +444,12 @@ def _resolve_clave_descripcion_by_pn(pn_value):
             (cp.proceso.nombre if getattr(cp, 'proceso', None) else '') or '',
         ]
         for c in candidates:
-            text = str(c).strip()
+            text = _clean_nullable_text(c)
             if text:
                 return text
 
     # Final fallback for legacy data without notes/description.
-    return (getattr(clave, 'clave', None) or pn)
+    return _clean_nullable_text(getattr(clave, 'clave', None)) or pn
 
 
 def _sync_hoja_estado_with_checks(hoja, estaciones=None, now_dt=None):
@@ -293,6 +473,78 @@ def _sync_hoja_estado_with_checks(hoja, estaciones=None, now_dt=None):
     hoja.estado = new_estado
     hoja.fecha_termino = new_fecha_termino
     return changed
+
+
+_HOJA_CARGAS_TABLE_READY = False
+
+
+def _ensure_hoja_cargas_historial_table():
+    global _HOJA_CARGAS_TABLE_READY
+
+    if _HOJA_CARGAS_TABLE_READY:
+        return True
+
+    try:
+        HojaRutaCargaPiezasHistorial.__table__.create(bind=db.engine, checkfirst=True)
+        _HOJA_CARGAS_TABLE_READY = True
+        return True
+    except Exception as exc:
+        logger.warning(f"No se pudo asegurar la tabla de historial de cargas de hojas: {exc}")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return False
+
+
+def _current_username_for_audit(user=None):
+    username = getattr(user, 'username', None) if user else None
+    if username:
+        return username
+    return (session.get('user') or 'sistema').strip() or 'sistema'
+
+
+def _serialize_hoja_carga_historial(item):
+    return {
+        'id': item.id,
+        'cantidad_anterior': item.cantidad_anterior,
+        'cantidad_cambio': item.cantidad_cambio,
+        'cantidad_nueva': item.cantidad_nueva,
+        'tipo_movimiento': item.tipo_movimiento,
+        'usuario': item.usuario,
+        'fecha_creacion': item.fecha_creacion.isoformat() if item.fecha_creacion else None,
+    }
+
+
+def _registrar_carga_piezas_hoja(hoja, cantidad_anterior, cantidad_nueva, usuario, origen='ajuste'):
+    cantidad_anterior = int(cantidad_anterior or 0)
+    cantidad_nueva = int(cantidad_nueva or 0)
+
+    if cantidad_nueva == cantidad_anterior:
+        return None
+    if not _ensure_hoja_cargas_historial_table():
+        return None
+
+    delta = cantidad_nueva - cantidad_anterior
+    if origen == 'creacion':
+        tipo_movimiento = 'inicial'
+    elif delta > 0:
+        tipo_movimiento = 'incremento'
+    elif delta < 0:
+        tipo_movimiento = 'decremento'
+    else:
+        tipo_movimiento = 'ajuste'
+
+    movimiento = HojaRutaCargaPiezasHistorial(
+        hoja_ruta_id=hoja.id,
+        cantidad_anterior=cantidad_anterior,
+        cantidad_cambio=delta,
+        cantidad_nueva=cantidad_nueva,
+        tipo_movimiento=tipo_movimiento,
+        usuario=usuario,
+    )
+    db.session.add(movimiento)
+    return movimiento
 
 # Simple in-memory login rate limiter
 # Keys: by IP address. Tracks [attempt_count, first_attempt_ts, locked_until_ts]
@@ -511,17 +763,13 @@ def login():
             session['user'] = username
             logger.info(f"[LOGIN] ✓ Sesión iniciada para {username}")
             
-            # Redirigir automáticamente según rol
-            if usuario.es_admin:
-                logger.info(f"[LOGIN] Redirigiendo admin '{username}' a /admin")
-                return redirect(url_for('admin'))
-            elif usuario.role and usuario.role.name == 'support':
-                logger.info(f"[LOGIN] Redirigiendo ingeniero '{username}' a /soporte")
-                return redirect(url_for('soporte_tecnico'))
-            else:
-                # Usuario sin rol asignado
-                logger.warning(f"[LOGIN] Usuario '{username}' sin rol asignado; redirigiendo a /dashboard")
-                return redirect(url_for('dashboard'))
+            endpoint = _resolve_post_login_endpoint(usuario)
+            if endpoint:
+                logger.info(f"[LOGIN] Redirigiendo usuario '{username}' a /{endpoint}")
+                return redirect(url_for(endpoint))
+
+            logger.warning(f"[LOGIN] Usuario '{username}' autenticado sin módulos asignados; redirigiendo a /dashboard")
+            return redirect(url_for('dashboard'))
         else:
             # Gestionar intentos fallidos
             if not app.config.get('TESTING', False):
@@ -558,6 +806,37 @@ def get_current_user():
         return Usuario.query.filter_by(username=username, activo=True).first()
     except Exception:
         return None
+
+
+def _resolve_post_login_endpoint(user):
+    """Choose landing page based on effective module permissions."""
+    if not user:
+        return None
+    if user.es_admin:
+        return 'admin'
+
+    if user.has_permission('catalog', 'view'):
+        return 'index'
+    if user.has_permission('estaciones', 'view'):
+        return 'hojas_ruta_list'
+    if user.has_permission('mapa', 'view'):
+        return 'mapa_maquinas'
+    if user.has_permission('hojas', 'view'):
+        return 'hojas_ruta_form'
+    if user.has_permission('calidad', 'view'):
+        return 'control_calidad_list'
+    if user.has_permission('entregas', 'view'):
+        return 'entregas_module'
+    if user.has_permission('almacen', 'view'):
+        return 'almacen_module'
+    if user.has_permission('facturacion', 'view'):
+        return 'facturacion_module'
+    if user.has_permission('tickets', 'view'):
+        return 'soporte_tecnico'
+    if user.has_permission('proveedores', 'view') or user.has_permission('proveedores', 'edit'):
+        return 'proveedores'
+
+    return None
 
 
 @app.context_processor
@@ -630,6 +909,12 @@ ROLE_MODULE_BUNDLES = {
     'mapa_view': [('catalog', 'view'), ('mapa', 'view')],
     'calidad_view': [('catalog', 'view'), ('calidad', 'view')],
     'calidad_edit': [('catalog', 'view'), ('calidad', 'view'), ('calidad', 'edit')],
+    'entregas_view': [('catalog', 'view'), ('entregas', 'view')],
+    'entregas_edit': [('catalog', 'view'), ('entregas', 'view'), ('entregas', 'edit')],
+    'almacen_view': [('catalog', 'view'), ('almacen', 'view')],
+    'almacen_edit': [('catalog', 'view'), ('almacen', 'view'), ('almacen', 'edit')],
+    'facturacion_view': [('catalog', 'view'), ('facturacion', 'view')],
+    'facturacion_edit': [('catalog', 'view'), ('facturacion', 'view'), ('facturacion', 'edit')],
     'procesos_view': [('catalog', 'view'), ('procesos', 'view')],
     'proveedores_view': [('catalog', 'view'), ('proveedores', 'view')],
     'proveedores_edit': [('catalog', 'view'), ('proveedores', 'view'), ('proveedores', 'edit')],
@@ -673,6 +958,12 @@ DEFAULT_PERMISSION_CATALOG = [
     ('mapa', 'view', 'Ver mapa de maquinas'),
     ('calidad', 'view', 'Ver control de calidad'),
     ('calidad', 'edit', 'Registrar/editar revision de calidad'),
+    ('entregas', 'view', 'Ver módulo de entregas'),
+    ('entregas', 'edit', 'Operar módulo de entregas'),
+    ('almacen', 'view', 'Ver módulo de almacén'),
+    ('almacen', 'edit', 'Operar módulo de almacén'),
+    ('facturacion', 'view', 'Ver módulo de facturación'),
+    ('facturacion', 'edit', 'Operar módulo de facturación'),
     ('procesos', 'view', 'Ver procesos y claves'),
     ('proveedores', 'view', 'Ver proveedores'),
     ('proveedores', 'edit', 'Editar proveedores'),
@@ -844,16 +1135,13 @@ def dashboard():
     user = get_current_user()
     if not user:
         return redirect(url_for('login'))
-    
-    # Admin → ir a admin
-    if user.es_admin:
-        return redirect(url_for('admin'))
-    # Ingeniero de soporte → ir a soporte
-    elif user.role and user.role.name == 'support':
-        return redirect(url_for('soporte_tecnico'))
-    # Otro rol → mostrar página genérica de bienvenida
-    else:
-        return render_template('dashboard.html', user=user)
+
+    endpoint = _resolve_post_login_endpoint(user)
+    if endpoint and endpoint != 'dashboard':
+        return redirect(url_for(endpoint))
+
+    has_any_module = bool(user and user.role and user.role.permissions)
+    return render_template('dashboard.html', user=user, has_any_module=has_any_module)
 
 # ==================== RUTAS FRONTEND ====================
 
@@ -919,6 +1207,8 @@ def control_calidad_list():
                 rechazadas += 1
 
         pendientes = max(0, len(completadas) - reviewed)
+        finalizada_qc = len(completadas) > 0 and pendientes == 0
+        certificado_disponible = finalizada_qc
         hojas_qc.append({
             'id': hoja.id,
             'serie': hoja.nombre,
@@ -930,6 +1220,8 @@ def control_calidad_list():
             'procesos_revisados': reviewed,
             'procesos_pendientes_qc': pendientes,
             'procesos_rechazados_qc': rechazadas,
+            'finalizada_qc': finalizada_qc,
+            'certificado_disponible': certificado_disponible,
             'fecha': hoja.fecha_creacion,
         })
 
@@ -961,94 +1253,282 @@ def control_calidad_hoja(hoja_id):
         # Reemplaza bloque QC previo para evitar crecimiento infinito de notas.
         return re.sub(r'\n?\[QC_REVIEW_START\].*?\[QC_REVIEW_END\]\n?', '\n', src, flags=re.S).strip()
 
+    def qc_parse_review(estacion):
+        notas_text = estacion.notas or ''
+        status = qc_status(estacion)
+        block_match = re.search(r'\[QC_REVIEW_START\](.*?)\[QC_REVIEW_END\]', notas_text, flags=re.S)
+        block = block_match.group(1) if block_match else ''
+
+        def _extract(field, default=''):
+            m = re.search(rf'^{field}=(.*)$', block, flags=re.M)
+            return m.group(1).strip() if m else default
+
+        scrap_raw = _extract('SCRAP_PIEZAS', '0')
+        try:
+            scrap_piezas = int(scrap_raw)
+        except Exception:
+            scrap_piezas = 0
+        if scrap_piezas < 0:
+            scrap_piezas = 0
+
+        return {
+            'status': status,
+            'scrap_piezas': scrap_piezas,
+            'observaciones': _extract('OBSERVACIONES', ''),
+        }
+
+    def qc_extract_lote_inicial(comentarios_text):
+        src = comentarios_text or ''
+        m = re.search(r'^LOTE_INICIAL=(\d+)$', src, flags=re.M)
+        if not m:
+            return None
+        try:
+            return max(0, int(m.group(1)))
+        except Exception:
+            return None
+
     informe_guardado = False
+    error_guardado = None
+
+    def _is_checked(field_name):
+        value = request.form.get(field_name)
+        if value is None:
+            return False
+        return str(value).strip().lower() in ('1', 'true', 'on', 'yes', 'si', 'ok')
 
     if request.method == 'POST':
         if not (user and (user.has_permission('calidad', 'edit') or user.has_permission('catalog', 'edit'))):
-            return jsonify({'error': 'Permiso denegado para editar control de calidad'}), 403
-
-        estacion_id = request.form.get('estacion_id', type=int)
-        resultado = (request.form.get('resultado') or '').strip().lower()
-        observaciones = (request.form.get('observaciones') or '').strip()
-
-        estacion = EstacionTrabajo.query.filter_by(id=estacion_id, hoja_ruta_id=hoja.id).first()
-        if not estacion:
-            return jsonify({'error': 'Proceso no encontrado para esta hoja'}), 404
-        if (estacion.estado or '').lower() != 'completada':
-            return jsonify({'error': 'Solo se pueden validar procesos completados'}), 409
-
-        # Checklist estándar para refacciones (sinfines, engranes, etc.)
-        check_dimensional = bool(request.form.get('chk_dimensional'))
-        check_visual = bool(request.form.get('chk_visual'))
-        check_rebaba = bool(request.form.get('chk_rebaba'))
-        check_material = bool(request.form.get('chk_material'))
-        check_ajuste = bool(request.form.get('chk_ajuste'))
-        check_limpieza = bool(request.form.get('chk_limpieza'))
-
-        status_tag = 'QC_OK' if resultado == 'aprobado' else 'QC_NOK'
-        usuario_qc = session.get('user') or 'sistema'
-        ahora = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
-
-        bloque = (
-            "[QC_REVIEW_START]\n"
-            f"STATUS={status_tag}\n"
-            f"USUARIO={usuario_qc}\n"
-            f"FECHA={ahora}\n"
-            f"DIMENSIONAL={'OK' if check_dimensional else 'NO'}\n"
-            f"VISUAL={'OK' if check_visual else 'NO'}\n"
-            f"REBABA={'OK' if check_rebaba else 'NO'}\n"
-            f"MATERIAL={'OK' if check_material else 'NO'}\n"
-            f"AJUSTE={'OK' if check_ajuste else 'NO'}\n"
-            f"LIMPIEZA={'OK' if check_limpieza else 'NO'}\n"
-            f"OBSERVACIONES={observaciones}\n"
-            "[QC_REVIEW_END]"
-        )
-
-        base_notas = qc_clean_block(estacion.notas)
-        estacion.notas = (base_notas + "\n" + bloque).strip() if base_notas else bloque
-        estacion.firma_supervisor = status_tag
-        estacion.operador = usuario_qc
-
-        # Estado de hoja por consolidación QC de procesos completados
-        completadas = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id, estado='completada').all()
-        statuses = [qc_status(e) for e in completadas]
-        pendientes = any(s not in ('QC_OK', 'QC_NOK') for s in statuses)
-        hay_rechazo = any(s == 'QC_NOK' for s in statuses)
-
-        if pendientes:
-            hoja.aprobada = False
-            hoja.rechazada = False
+            error_guardado = 'Permiso denegado para editar control de calidad'
         else:
-            hoja.aprobada = not hay_rechazo
-            hoja.rechazada = hay_rechazo
+            estacion_id = request.form.get('estacion_id', type=int)
+            resultado = (request.form.get('resultado') or '').strip().lower()
+            observaciones = (request.form.get('observaciones') or '').strip()
+            scrap_piezas = request.form.get('scrap_piezas', type=int)
+            if scrap_piezas is None:
+                scrap_piezas = 0
 
-        db.session.commit()
-        informe_guardado = True
+            estacion = EstacionTrabajo.query.filter_by(id=estacion_id, hoja_ruta_id=hoja.id).first()
+            if not estacion:
+                error_guardado = 'Proceso no encontrado para esta hoja'
+            elif (estacion.estado or '').lower() != 'completada':
+                error_guardado = 'Solo se pueden validar procesos completados'
+            elif resultado not in ('aprobado', 'rechazado'):
+                error_guardado = 'Selecciona un resultado válido (Aprobado/Rechazado)'
+            elif scrap_piezas < 0:
+                error_guardado = 'Scrap inválido: no puede ser negativo'
+            else:
+                # Checklist estándar para refacciones (sinfines, engranes, etc.)
+                check_dimensional = _is_checked('chk_dimensional')
+                check_visual = _is_checked('chk_visual')
+                check_rebaba = _is_checked('chk_rebaba')
+                check_material = _is_checked('chk_material')
+                check_ajuste = _is_checked('chk_ajuste')
+                check_limpieza = _is_checked('chk_limpieza')
+
+                status_tag = 'QC_OK' if resultado == 'aprobado' else 'QC_NOK'
+                usuario_qc = session.get('user') or 'sistema'
+                ahora = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+
+                bloque = (
+                    "[QC_REVIEW_START]\n"
+                    f"STATUS={status_tag}\n"
+                    f"USUARIO={usuario_qc}\n"
+                    f"FECHA={ahora}\n"
+                    f"DIMENSIONAL={'OK' if check_dimensional else 'NO'}\n"
+                    f"VISUAL={'OK' if check_visual else 'NO'}\n"
+                    f"REBABA={'OK' if check_rebaba else 'NO'}\n"
+                    f"MATERIAL={'OK' if check_material else 'NO'}\n"
+                    f"AJUSTE={'OK' if check_ajuste else 'NO'}\n"
+                    f"LIMPIEZA={'OK' if check_limpieza else 'NO'}\n"
+                    f"SCRAP_PIEZAS={scrap_piezas}\n"
+                    f"OBSERVACIONES={observaciones}\n"
+                    "[QC_REVIEW_END]"
+                )
+
+                base_notas = qc_clean_block(estacion.notas)
+                estacion.notas = (base_notas + "\n" + bloque).strip() if base_notas else bloque
+                estacion.firma_supervisor = status_tag
+                estacion.operador = usuario_qc
+
+                # Estado de hoja por consolidación QC de procesos completados
+                completadas = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id, estado='completada').all()
+                reviews = [qc_parse_review(e) for e in completadas]
+                statuses = [r['status'] for r in reviews]
+                pendientes = any(s not in ('QC_OK', 'QC_NOK') for s in statuses)
+                hay_rechazo = any(s == 'QC_NOK' for s in statuses)
+
+                # Lote base fijo para evitar descuentos acumulados por re-ediciones.
+                lote_inicial = qc_extract_lote_inicial(hoja.materia_prima)
+                if lote_inicial is None:
+                    try:
+                        lote_inicial = max(0, int(hoja.cantidad_piezas or 0))
+                    except Exception:
+                        lote_inicial = 0
+
+                if pendientes:
+                    hoja.aprobada = False
+                    hoja.rechazada = False
+                else:
+                    hoja.aprobada = not hay_rechazo
+                    hoja.rechazada = hay_rechazo
+
+                if hoja.aprobada and not hoja.rechazada:
+                    total_scrap = sum(max(0, int(r['scrap_piezas'] or 0)) for r in reviews)
+                    if lote_inicial > 0:
+                        total_scrap = min(total_scrap, lote_inicial)
+                    cantidad_final = max(lote_inicial - total_scrap, 0)
+                    hoja.cantidad_piezas = cantidad_final
+                    hoja.scrap = str(total_scrap)
+
+                    detalles = []
+                    for est, rev in zip(completadas, reviews):
+                        scrap_est = max(0, int(rev['scrap_piezas'] or 0))
+                        if scrap_est <= 0:
+                            continue
+                        etiqueta = (est.centro_trabajo or est.operacion or f'Estacion {est.orden}').strip()
+                        detalles.append(f"P{est.orden} - {etiqueta}: {scrap_est}")
+
+                    detalles_txt = '; '.join(detalles) if detalles else 'Sin scrap por proceso.'
+                    fecha_resumen = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+                    bloque_scrap = (
+                        "[QC_SCRAP_SUMMARY_START]\n"
+                        f"LOTE_INICIAL={lote_inicial}\n"
+                        f"TOTAL_SCRAP={total_scrap}\n"
+                        f"LOTE_FINAL={cantidad_final}\n"
+                        f"DETALLE={detalles_txt}\n"
+                        f"ACTUALIZADO_POR={usuario_qc}\n"
+                        f"FECHA={fecha_resumen}\n"
+                        "[QC_SCRAP_SUMMARY_END]"
+                    )
+
+                    base_comentarios = _qc_strip_scrap_summary(hoja.materia_prima)
+                    hoja.materia_prima = (
+                        (base_comentarios + "\n\n" + bloque_scrap).strip()
+                        if base_comentarios else bloque_scrap
+                    )
+                else:
+                    # Si aun no queda aprobada, quitar resumen previo para evitar inconsistencias visuales.
+                    base_comentarios = _qc_strip_scrap_summary(hoja.materia_prima)
+                    if base_comentarios != (hoja.materia_prima or '').strip():
+                        hoja.materia_prima = base_comentarios or None
+                    if lote_inicial > 0:
+                        hoja.cantidad_piezas = lote_inicial
+                    hoja.scrap = None
+
+                try:
+                    db.session.commit()
+                    informe_guardado = True
+                except Exception:
+                    db.session.rollback()
+                    logger.exception('[QC] Error guardando revision de calidad')
+                    error_guardado = 'Ocurrio un error al guardar la revision. Intenta de nuevo.'
 
     estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden.asc()).all()
     procesos_completados = []
+    lote_referencia = qc_extract_lote_inicial(hoja.materia_prima)
+    if lote_referencia is None:
+        try:
+            lote_referencia = max(0, int(hoja.cantidad_piezas or 0))
+        except Exception:
+            lote_referencia = 0
+
     for e in estaciones:
         if (e.estado or '').lower() != 'completada':
             continue
-        status = qc_status(e)
+        review = qc_parse_review(e)
         procesos_completados.append({
             'id': e.id,
             'orden': e.orden,
             'centro_trabajo': e.centro_trabajo,
             'operacion': e.operacion,
-            'status_qc': status,
+            'status_qc': review['status'],
+            'scrap_piezas': review['scrap_piezas'],
             'notas': e.notas,
             'fecha_finalizacion': e.fecha_finalizacion,
         })
 
     pendientes_qc = sum(1 for p in procesos_completados if p['status_qc'] not in ('QC_OK', 'QC_NOK'))
+    qc_finalizada = len(procesos_completados) > 0 and pendientes_qc == 0
+    certificado_disponible = qc_finalizada
 
     return render_template(
         'control_calidad_detalle.html',
         hoja=hoja,
         procesos=procesos_completados,
+        lote_referencia=lote_referencia,
         pendientes_qc=pendientes_qc,
+        qc_finalizada=qc_finalizada,
+        certificado_disponible=certificado_disponible,
         informe_guardado=informe_guardado,
+        error_guardado=error_guardado,
+    )
+
+
+@app.route('/control_calidad/hoja/<int:hoja_id>/certificado')
+@login_required
+@requires_any_permission([('calidad', 'view'), ('catalog', 'view')])
+def control_calidad_certificado(hoja_id):
+    """Certificado imprimible de control de calidad por hoja de ruta."""
+    hoja = HojaRuta.query.get_or_404(hoja_id)
+    estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden.asc()).all()
+    completadas = [e for e in estaciones if (e.estado or '').lower() == 'completada']
+    reviews = [_qc_parse_review_block(e.notas) for e in completadas]
+
+    qc_finalizada = bool(completadas) and all(r.get('status') in ('QC_OK', 'QC_NOK') for r in reviews)
+    if not qc_finalizada:
+        return redirect(url_for('control_calidad_hoja', hoja_id=hoja.id))
+
+    checklist_fields = ('dimensional', 'visual', 'rebaba', 'material', 'ajuste', 'limpieza')
+    checklist_global = {
+        f: bool(reviews) and all(bool(r.get(f)) for r in reviews)
+        for f in checklist_fields
+    }
+
+    defectos = []
+    for est, rev in zip(completadas, reviews):
+        status = rev.get('status')
+        scrap_piezas = int(rev.get('scrap_piezas') or 0)
+        observaciones = (rev.get('observaciones') or '').strip()
+
+        detalle_partes = []
+        if observaciones:
+            detalle_partes.append(observaciones)
+        if scrap_piezas > 0:
+            detalle_partes.append(f"Scrap en proceso: {scrap_piezas}")
+
+        if status == 'QC_NOK' or scrap_piezas > 0 or observaciones:
+            defecto_detalle = ' | '.join(detalle_partes) if detalle_partes else 'No conforme detectado en inspeccion.'
+            etiqueta_proceso = (est.centro_trabajo or est.operacion or f'Proceso {est.orden}').strip()
+            defectos.append({
+                'proceso': f"P{est.orden} - {etiqueta_proceso}",
+                'resultado': 'RECHAZADO' if status == 'QC_NOK' else 'APROBADO',
+                'detalle': defecto_detalle,
+            })
+
+    comentarios_usuario = _qc_strip_scrap_summary(hoja.materia_prima)
+    scrap_qc = _qc_parse_scrap_summary(hoja.materia_prima)
+
+    fecha_qc = ''
+    qc_user = ''
+    if reviews:
+        ult = reviews[-1]
+        fecha_qc = ult.get('fecha') or ''
+        qc_user = ult.get('usuario') or ''
+
+    fecha_emision = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    qc_aprobada = all(r.get('status') == 'QC_OK' for r in reviews)
+
+    return render_template(
+        'control_calidad_certificado.html',
+        hoja=hoja,
+        fecha_emision=fecha_emision,
+        fecha_qc=fecha_qc,
+        qc_user=qc_user,
+        checklist_global=checklist_global,
+        defectos=defectos,
+        comentarios_usuario=comentarios_usuario,
+        scrap_qc=scrap_qc,
+        qc_aprobada=qc_aprobada,
     )
 
 
@@ -1058,6 +1538,359 @@ def control_calidad_hoja(hoja_id):
 def control_calidad_legacy_maquina(maquina_id):
     """Compatibilidad con links antiguos de Control Calidad por maquina."""
     return redirect(url_for('control_calidad_list'))
+
+
+# ==================== FLUJO TEMPORAL: ENTREGAS -> ALMACEN -> ENTREGAS(LISTA) -> FACTURACION ====================
+
+LOGISTICA_IMG_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
+
+
+def _logistica_username():
+    return (session.get('user') or 'sistema').strip()
+
+
+def _logistica_allowed_image(filename):
+    if not filename or '.' not in filename:
+        return False
+    ext = filename.rsplit('.', 1)[-1].lower().strip()
+    return ext in LOGISTICA_IMG_EXTENSIONS
+
+
+@app.route('/entregas')
+@login_required
+@requires_any_permission([('entregas', 'view'), ('catalog', 'edit')])
+def entregas_module():
+    hojas = HojaRuta.query.order_by(HojaRuta.fecha_creacion.desc()).all()
+    pendientes_entregas = (
+        HojaRutaFlujoLogistica.query
+        .filter_by(estado='entregas')
+        .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
+        .all()
+    )
+    listas_facturacion = (
+        HojaRutaFlujoLogistica.query
+        .filter_by(estado='entregas_lista_facturacion')
+        .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
+        .all()
+    )
+    historial_entregas = (
+        EntregaRegistro.query
+        .order_by(EntregaRegistro.fecha_creacion.desc())
+        .limit(80)
+        .all()
+    )
+    return render_template(
+        'entregas_module.html',
+        hojas=hojas,
+        pendientes_entregas=pendientes_entregas,
+        listas_facturacion=listas_facturacion,
+        historial_entregas=historial_entregas,
+    )
+
+
+@app.route('/api/logistica/entregas/agregar', methods=['POST'])
+@login_required
+@requires_any_permission([('entregas', 'edit'), ('catalog', 'edit')])
+def api_logistica_entregas_agregar():
+    data = request.get_json() or {}
+    hoja_id = data.get('hoja_id')
+    try:
+        hoja_id = int(hoja_id)
+    except Exception:
+        return jsonify({'error': 'hoja_id inválido'}), 400
+
+    hoja = HojaRuta.query.get(hoja_id)
+    if not hoja:
+        return jsonify({'error': 'Hoja de ruta no encontrada'}), 404
+
+    item = HojaRutaFlujoLogistica.query.filter_by(hoja_ruta_id=hoja_id).first()
+    if item:
+        if item.estado in ('entregas', 'entregas_lista_facturacion'):
+            return jsonify({'ok': True, 'message': 'La hoja ya está en la bandeja de Entregas.'})
+        if item.estado in ('almacen', 'facturacion'):
+            return jsonify({'error': f'La hoja ya fue transferida a {item.estado}.'}), 409
+        if item.estado == 'finalizada':
+            return jsonify({'error': 'La hoja ya fue finalizada en Facturación.'}), 409
+
+    item = HojaRutaFlujoLogistica(
+        hoja_ruta_id=hoja.id,
+        estado='entregas',
+        creado_por=_logistica_username(),
+        actualizado_por=_logistica_username(),
+    )
+    db.session.add(item)
+    db.session.flush()
+    db.session.add(EntregaRegistro(
+        hoja_ruta_id=hoja.id,
+        flujo_id=item.id,
+        accion='agregada_en_entregas',
+        usuario=_logistica_username(),
+    ))
+    db.session.commit()
+    return jsonify({'ok': True, 'item': item.to_dict()})
+
+
+@app.route('/entregas/mover_almacen/<int:item_id>', methods=['POST'])
+@login_required
+@requires_any_permission([('entregas', 'edit'), ('catalog', 'edit')])
+def entregas_mover_almacen(item_id):
+    item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
+    if item.estado != 'entregas':
+        return redirect(url_for('entregas_module'))
+
+    item.estado = 'almacen'
+    item.actualizado_por = _logistica_username()
+    db.session.add(EntregaRegistro(
+        hoja_ruta_id=item.hoja_ruta_id,
+        flujo_id=item.id,
+        accion='enviada_a_almacen',
+        usuario=_logistica_username(),
+    ))
+    db.session.commit()
+    return redirect(url_for('entregas_module'))
+
+
+@app.route('/entregas/mover_facturacion/<int:item_id>', methods=['POST'])
+@login_required
+@requires_any_permission([('entregas', 'edit'), ('catalog', 'edit')])
+def entregas_mover_facturacion(item_id):
+    item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
+    if item.estado != 'entregas_lista_facturacion':
+        return redirect(url_for('entregas_module'))
+
+    item.estado = 'facturacion'
+    item.actualizado_por = _logistica_username()
+    db.session.add(EntregaRegistro(
+        hoja_ruta_id=item.hoja_ruta_id,
+        flujo_id=item.id,
+        accion='enviada_a_facturacion',
+        usuario=_logistica_username(),
+    ))
+    db.session.commit()
+    return redirect(url_for('entregas_module'))
+
+
+@app.route('/entregas/quitar/<int:item_id>', methods=['POST'])
+@login_required
+@requires_any_permission([('entregas', 'edit'), ('catalog', 'edit')])
+def entregas_quitar_item(item_id):
+    item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
+    if item.estado == 'entregas':
+        db.session.delete(item)
+        db.session.commit()
+    return redirect(url_for('entregas_module'))
+
+
+@app.route('/almacen')
+@login_required
+@requires_any_permission([('almacen', 'view'), ('catalog', 'edit')])
+def almacen_module():
+    pendientes_almacen = (
+        HojaRutaFlujoLogistica.query
+        .filter_by(estado='almacen')
+        .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
+        .all()
+    )
+    historial_almacen = (
+        AlmacenRegistro.query
+        .order_by(AlmacenRegistro.fecha_creacion.desc())
+        .limit(80)
+        .all()
+    )
+    return render_template(
+        'almacen_module.html',
+        pendientes_almacen=pendientes_almacen,
+        historial_almacen=historial_almacen,
+    )
+
+
+@app.route('/almacen/recibir/<int:item_id>', methods=['POST'])
+@login_required
+@requires_any_permission([('almacen', 'edit'), ('catalog', 'edit')])
+def almacen_recibir_item(item_id):
+    item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
+    if item.estado != 'almacen':
+        return redirect(url_for('almacen_module'))
+
+    recepcion_id = (request.form.get('recepcion_id') or '').strip()
+    entregado = request.form.get('entregado') == 'on'
+    captura = request.files.get('captura_recepcion')
+
+    if not entregado or not recepcion_id:
+        return redirect(url_for('almacen_module'))
+
+    if not captura or not captura.filename:
+        return redirect(url_for('almacen_module'))
+
+    if not _logistica_allowed_image(captura.filename):
+        return redirect(url_for('almacen_module'))
+
+    ext = captura.filename.rsplit('.', 1)[-1].lower().strip()
+    nombre = secure_filename(f"recepcion_{item.hoja_ruta_id}_{uuid.uuid4().hex}.{ext}")
+    rel_dir = os.path.join('logistica_recepciones')
+    abs_dir = os.path.join(app.config['UPLOAD_FOLDER'], rel_dir)
+    os.makedirs(abs_dir, exist_ok=True)
+    abs_path = os.path.join(abs_dir, nombre)
+    captura.save(abs_path)
+
+    item.almacen_validado = True
+    item.almacen_recepcion_id = recepcion_id
+    item.almacen_captura_path = f"{rel_dir}/{nombre}".replace('\\', '/')
+    # Almacén solo recepciona/libera y devuelve a Entregas como lista para enviar a Facturación.
+    item.estado = 'entregas_lista_facturacion'
+    item.actualizado_por = _logistica_username()
+
+    db.session.add(AlmacenRegistro(
+        hoja_ruta_id=item.hoja_ruta_id,
+        flujo_id=item.id,
+        recepcion_id=recepcion_id,
+        captura_path=item.almacen_captura_path,
+        validado=True,
+        usuario=_logistica_username(),
+        notas='Recepción validada en almacén y liberada para Entregas.',
+    ))
+    db.session.add(EntregaRegistro(
+        hoja_ruta_id=item.hoja_ruta_id,
+        flujo_id=item.id,
+        accion='lista_para_facturacion',
+        usuario=_logistica_username(),
+        notas=f'Recepción {recepcion_id} validada en almacén.',
+    ))
+
+    db.session.commit()
+    return redirect(url_for('almacen_module'))
+
+
+@app.route('/almacen/regresar_entregas/<int:item_id>', methods=['POST'])
+@login_required
+@requires_any_permission([('almacen', 'edit'), ('catalog', 'edit')])
+def almacen_regresar_entregas(item_id):
+    item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
+    if item.estado != 'almacen':
+        return redirect(url_for('almacen_module'))
+
+    motivo = (request.form.get('motivo_regreso') or '').strip()
+    if not motivo:
+        motivo = 'Datos incompletos o recepción no válida en almacén.'
+
+    item.estado = 'entregas'
+    item.actualizado_por = _logistica_username()
+
+    db.session.add(AlmacenRegistro(
+        hoja_ruta_id=item.hoja_ruta_id,
+        flujo_id=item.id,
+        recepcion_id=item.almacen_recepcion_id,
+        captura_path=item.almacen_captura_path,
+        validado=False,
+        usuario=_logistica_username(),
+        notas=f'Devuelta a Entregas: {motivo}',
+    ))
+    db.session.add(EntregaRegistro(
+        hoja_ruta_id=item.hoja_ruta_id,
+        flujo_id=item.id,
+        accion='devuelta_desde_almacen',
+        usuario=_logistica_username(),
+        notas=motivo,
+    ))
+
+    db.session.commit()
+    return redirect(url_for('almacen_module'))
+
+
+@app.route('/facturacion')
+@login_required
+@requires_any_permission([('facturacion', 'view'), ('catalog', 'edit')])
+def facturacion_module():
+    pendientes_facturacion = (
+        HojaRutaFlujoLogistica.query
+        .filter_by(estado='facturacion')
+        .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
+        .all()
+    )
+    finalizadas = (
+        HojaRutaFlujoLogistica.query
+        .filter_by(estado='finalizada')
+        .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
+        .limit(50)
+        .all()
+    )
+    historial_facturacion = (
+        FacturacionRegistro.query
+        .order_by(FacturacionRegistro.fecha_creacion.desc())
+        .limit(80)
+        .all()
+    )
+    return render_template(
+        'facturacion_module.html',
+        pendientes_facturacion=pendientes_facturacion,
+        finalizadas=finalizadas,
+        historial_facturacion=historial_facturacion,
+    )
+
+
+@app.route('/facturacion/aprobar/<int:item_id>', methods=['POST'])
+@login_required
+@requires_any_permission([('facturacion', 'edit'), ('catalog', 'edit')])
+def facturacion_aprobar_item(item_id):
+    item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
+    if item.estado != 'facturacion':
+        return redirect(url_for('facturacion_module'))
+
+    aprobado = request.form.get('aprobado_facturacion') == 'on'
+    if not aprobado:
+        return redirect(url_for('facturacion_module'))
+
+    item.facturacion_aprobado = True
+    item.facturacion_aprobado_por = _logistica_username()
+    item.facturacion_aprobado_en = datetime.utcnow()
+    item.estado = 'finalizada'
+    item.actualizado_por = _logistica_username()
+
+    db.session.add(FacturacionRegistro(
+        hoja_ruta_id=item.hoja_ruta_id,
+        flujo_id=item.id,
+        aprobado=True,
+        usuario=_logistica_username(),
+        fecha_aprobacion=item.facturacion_aprobado_en,
+        notas='Hoja liberada por facturación.',
+    ))
+    db.session.commit()
+    return redirect(url_for('facturacion_module'))
+
+
+@app.route('/facturacion/regresar_entregas/<int:item_id>', methods=['POST'])
+@login_required
+@requires_any_permission([('facturacion', 'edit'), ('catalog', 'edit')])
+def facturacion_regresar_entregas(item_id):
+    item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
+    if item.estado != 'facturacion':
+        return redirect(url_for('facturacion_module'))
+
+    motivo = (request.form.get('motivo_regreso') or '').strip()
+    if not motivo:
+        motivo = 'Documentación o recepción no corresponde para facturación.'
+
+    item.estado = 'entregas'
+    item.actualizado_por = _logistica_username()
+
+    db.session.add(FacturacionRegistro(
+        hoja_ruta_id=item.hoja_ruta_id,
+        flujo_id=item.id,
+        aprobado=False,
+        usuario=_logistica_username(),
+        notas=f'Devuelta a Entregas: {motivo}',
+        fecha_aprobacion=None,
+    ))
+    db.session.add(EntregaRegistro(
+        hoja_ruta_id=item.hoja_ruta_id,
+        flujo_id=item.id,
+        accion='devuelta_desde_facturacion',
+        usuario=_logistica_username(),
+        notas=motivo,
+    ))
+
+    db.session.commit()
+    return redirect(url_for('facturacion_module'))
 
 
 @app.route('/uploads/<path:filename>')
@@ -1078,13 +1911,28 @@ def uploaded_file(filename):
 def hojas_ruta_list():
     """Lista de máquinas con sus hojas de ruta activas y estado de producción."""
     maquinas = Máquina.query.all()
-    hojas_activas = HojaRuta.query.filter(HojaRuta.maquina_id.isnot(None), HojaRuta.estado == 'activa').all()
-    hoja_activa_por_maquina = {h.maquina_id: h for h in hojas_activas if h.maquina_id is not None}
+    hojas_activas = HojaRuta.query.filter(
+        HojaRuta.maquina_id.isnot(None),
+        HojaRuta.estado.in_(['activa', 'pausada'])
+    ).order_by(HojaRuta.fecha_creacion.desc()).all()
+    # Preferir 'activa' sobre 'pausada'; en caso de duplicados por maquina, quedarse con la primera encontrada.
+    hoja_activa_por_maquina: dict = {}
+    for h in hojas_activas:
+        existing = hoja_activa_por_maquina.get(h.maquina_id)
+        if existing is None:
+            hoja_activa_por_maquina[h.maquina_id] = h
+        elif existing.estado != 'activa' and h.estado == 'activa':
+            hoja_activa_por_maquina[h.maquina_id] = h
 
-    # Regla operativa: sin hoja activa asignada => maquina desactivada por default.
+    # Regla operativa: sincronizar activo con la presencia de hoja activa asignada.
     estado_maquina_changed = False
     for maq in maquinas:
-        if maq.id not in hoja_activa_por_maquina and bool(getattr(maq, 'activo', False)):
+        tiene_hoja = maq.id in hoja_activa_por_maquina
+        activo_actual = bool(getattr(maq, 'activo', False))
+        if tiene_hoja and not activo_actual:
+            maq.activo = True
+            estado_maquina_changed = True
+        elif not tiene_hoja and activo_actual:
             maq.activo = False
             estado_maquina_changed = True
 
@@ -1119,11 +1967,12 @@ def hojas_ruta_list():
 
     maquinas = sorted(maquinas, key=maquina_sort_key)
     
-    # Mostrar cualquier hoja sin maquina asignada para evitar que se "pierdan"
-    # por cambios de estado heredados (ej. completada por flujo anterior).
+    # Hojas pendientes de asignar: solo las que aún tienen trabajo por hacer.
+    # 'completada' se excluye intencionalmente: si todos los procesos terminaron
+    # la hoja no necesita asignarse a ninguna máquina.
     hojas_pendientes = HojaRuta.query.filter(
         HojaRuta.maquina_id.is_(None),
-        HojaRuta.estado.in_(['activa', 'pausada', 'completada'])
+        HojaRuta.estado.in_(['activa', 'pausada'])
     ).order_by(HojaRuta.fecha_creacion.asc()).all()
 
     # Obtener hoja activa para cada máquina
@@ -1185,7 +2034,22 @@ def hojas_ruta_list():
         except Exception:
             db.session.rollback()
 
-    resp = make_response(render_template('hojas_ruta_list.html', maquinas=maquinas_data, hojas_pendientes=pendientes_data))
+    # Hojas liberadas por Facturación (estado='finalizada' en flujo logístico)
+    facturadas_flujos = HojaRutaFlujoLogistica.query.filter_by(estado='finalizada').all()
+    facturadas_info = {
+        f.hoja_ruta_id: {
+            'aprobado_por': f.facturacion_aprobado_por or '',
+            'aprobado_en': f.facturacion_aprobado_en.strftime('%d/%m/%Y %H:%M') if f.facturacion_aprobado_en else ''
+        }
+        for f in facturadas_flujos
+    }
+
+    resp = make_response(render_template(
+        'hojas_ruta_list.html',
+        maquinas=maquinas_data,
+        hojas_pendientes=pendientes_data,
+        facturadas_info=facturadas_info
+    ))
     # Evita que navegador/proxy muestren HTML viejo tras deploy.
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     resp.headers['Pragma'] = 'no-cache'
@@ -1207,8 +2071,17 @@ def mapa_maquinas():
 def api_mapa_maquinas():
     """Datos para el mapa de maquinas (estado, hoja activa, pieza, tiempo)."""
     todas_maquinas = Máquina.query.order_by(Máquina.nombre.asc()).all()
-    hojas_activas = HojaRuta.query.filter(HojaRuta.maquina_id.isnot(None), HojaRuta.estado == 'activa').all()
-    hoja_activa_por_maquina = {h.maquina_id: h for h in hojas_activas if h.maquina_id is not None}
+    hojas_activas = HojaRuta.query.filter(
+        HojaRuta.maquina_id.isnot(None),
+        HojaRuta.estado.in_(['activa', 'pausada'])
+    ).order_by(HojaRuta.fecha_creacion.desc()).all()
+    hoja_activa_por_maquina: dict = {}
+    for h in hojas_activas:
+        existing = hoja_activa_por_maquina.get(h.maquina_id)
+        if existing is None:
+            hoja_activa_por_maquina[h.maquina_id] = h
+        elif existing.estado != 'activa' and h.estado == 'activa':
+            hoja_activa_por_maquina[h.maquina_id] = h
 
     # Regla operativa: sin hoja activa asignada => maquina desactivada por default.
     estado_maquina_changed = False
@@ -1380,27 +2253,86 @@ def api_mapa_maquinas():
 def hojas_ruta_form():
     """Formulario simplificado para crear hojas de ruta de produccion."""
     almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria']
-    # Listado reciente (máximo 50) para consulta rápida
-    hojas = HojaRuta.query.order_by(HojaRuta.fecha_creacion.desc()).limit(50).all()
+    # Listado completo para consulta
+    hojas = HojaRuta.query.order_by(HojaRuta.fecha_creacion.desc()).all()
+
+    hoja_ids = [h.id for h in hojas]
+    flujos_facturacion = HojaRutaFlujoLogistica.query.filter(
+        HojaRutaFlujoLogistica.hoja_ruta_id.in_(hoja_ids),
+        HojaRutaFlujoLogistica.estado == 'finalizada'
+    ).all() if hoja_ids else []
+    facturacion_por_hoja = {f.hoja_ruta_id: f for f in flujos_facturacion}
+
+    registros_facturacion = FacturacionRegistro.query.filter(
+        FacturacionRegistro.hoja_ruta_id.in_(hoja_ids)
+    ).order_by(
+        FacturacionRegistro.fecha_aprobacion.desc().nullslast(),
+        FacturacionRegistro.fecha_creacion.desc()
+    ).all() if hoja_ids else []
+    ultimo_registro_facturacion = {}
+    for registro in registros_facturacion:
+        if registro.hoja_ruta_id not in ultimo_registro_facturacion:
+            ultimo_registro_facturacion[registro.hoja_ruta_id] = registro
+
+    historial_cargas_por_hoja = {}
+    if hoja_ids and _ensure_hoja_cargas_historial_table():
+        historial_cargas = HojaRutaCargaPiezasHistorial.query.filter(
+            HojaRutaCargaPiezasHistorial.hoja_ruta_id.in_(hoja_ids)
+        ).order_by(
+            HojaRutaCargaPiezasHistorial.fecha_creacion.desc(),
+            HojaRutaCargaPiezasHistorial.id.desc()
+        ).all()
+        for item in historial_cargas:
+            historial_cargas_por_hoja.setdefault(item.hoja_ruta_id, []).append(_serialize_hoja_carga_historial(item))
+
+    claves_all = ClaveProducto.query.all()
+    claves_idx = {
+        (str(c.clave or '').strip().upper()): c
+        for c in claves_all
+        if str(c.clave or '').strip()
+    }
+
     hojas_data = []
     for h in hojas:
+        flujo_fact = facturacion_por_hoja.get(h.id)
+        registro_fact = ultimo_registro_facturacion.get(h.id)
         qr_payload = f"HRID:{h.id};SERIE:{h.nombre or ''}"
         descripcion_clave = _resolve_clave_descripcion_by_pn(h.pn)
+        clave_obj = claves_idx.get(str(h.pn or '').strip().upper())
+        comentarios_bruto = _clean_nullable_text(h.materia_prima)
+        scrap_summary = _qc_parse_scrap_summary(comentarios_bruto)
+        comentarios_val = _qc_strip_scrap_summary(comentarios_bruto)
         hojas_data.append({
             'id': h.id,
             'maquina_id': h.maquina_id,
             'serie': h.nombre,
             'qr_payload': qr_payload,
             'clave': h.pn,
+            'clave_id': clave_obj.id if clave_obj else None,
             'descripcion_clave': descripcion_clave,
             'calidad': h.calidad,
             'almacen': h.almacen,
             'orden_trabajo': h.orden_trabajo_hr,
-            'comentarios': h.descripcion,
+            'comentarios': comentarios_val,
+            'scrap_qc': scrap_summary,
             'firma_ing_jose': h.supervisor,
             'firma_ing_rodrigo': h.operador,
             'estado': h.estado,
+            'liberada_facturacion': bool(flujo_fact),
+            'facturacion_aprobado_por': (flujo_fact.facturacion_aprobado_por if flujo_fact else None),
+            'facturacion_aprobado_en': (flujo_fact.facturacion_aprobado_en.isoformat() if flujo_fact and flujo_fact.facturacion_aprobado_en else None),
+            'facturacion_registro_estado': (
+                'APROBADA' if registro_fact and registro_fact.aprobado else 'REGRESADA'
+            ) if registro_fact else None,
+            'facturacion_registro_usuario': registro_fact.usuario if registro_fact else None,
+            'facturacion_registro_fecha': (
+                registro_fact.fecha_aprobacion.isoformat()
+                if registro_fact and registro_fact.fecha_aprobacion
+                else (registro_fact.fecha_creacion.isoformat() if registro_fact and registro_fact.fecha_creacion else None)
+            ),
+            'facturacion_registro_notas': registro_fact.notas if registro_fact else None,
             'cantidad_piezas': h.cantidad_piezas,
+            'historial_cargas': historial_cargas_por_hoja.get(h.id, []),
             'fecha_salida': h.fecha_salida.isoformat() if h.fecha_salida else None,
             'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None,
         })
@@ -1409,11 +2341,14 @@ def hojas_ruta_form():
 
 @app.route('/hoja/<int:hoja_id>')
 @login_required
-@requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
+@requires_any_permission([('hojas', 'view'), ('catalog', 'view'), ('entregas', 'view'), ('almacen', 'view'), ('facturacion', 'view')])
 def hoja_ruta_ver(hoja_id):
     """Vista independiente para ver una hoja por ID, sin requerir máquina."""
     hoja = HojaRuta.query.get_or_404(hoja_id)
     h = hoja.to_dict()
+    comentarios_bruto = _clean_nullable_text(h.get('materia_prima'))
+    h['comentarios_usuario'] = _qc_strip_scrap_summary(comentarios_bruto)
+    h['scrap_qc'] = _qc_parse_scrap_summary(comentarios_bruto)
     h['descripcion_clave'] = _resolve_clave_descripcion_by_pn(hoja.pn)
     h['qr_payload'] = f"HRID:{hoja.id};SERIE:{hoja.nombre or ''}"
     h['qr_deeplink'] = request.url_root.rstrip('/') + f"/hoja/{hoja.id}"
@@ -1490,8 +2425,22 @@ def hojas_ruta_detalle(maquina_id):
         estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
         h['estaciones'] = [e.to_dict() for e in estaciones]
         hojas_data.append(h)
-    
-    return render_template('hojas_ruta_detalle.html', maquina=maquina, hojas=hojas_data)
+
+    # Hojas liberadas por Facturación para esta máquina
+    hoja_ids = [h['id'] for h in hojas_data]
+    facturadas_flujos = HojaRutaFlujoLogistica.query.filter(
+        HojaRutaFlujoLogistica.hoja_ruta_id.in_(hoja_ids),
+        HojaRutaFlujoLogistica.estado == 'finalizada'
+    ).all() if hoja_ids else []
+    facturadas_info = {
+        f.hoja_ruta_id: {
+            'aprobado_por': f.facturacion_aprobado_por or '',
+            'aprobado_en': f.facturacion_aprobado_en.strftime('%d/%m/%Y %H:%M') if f.facturacion_aprobado_en else ''
+        }
+        for f in facturadas_flujos
+    }
+
+    return render_template('hojas_ruta_detalle.html', maquina=maquina, hojas=hojas_data, facturadas_info=facturadas_info)
 
 
 @app.route('/qc_estaciones/<int:maquina_id>')
@@ -1545,43 +2494,55 @@ def api_crear_hoja_ruta():
         return jsonify({'error': 'Clave no encontrada'}), 404
 
     # Politica de duplicados por clave (configurable)
+    # none/off/allow: permite crear hojas aunque ya exista la clave (default).
     # active: bloquea si existe hoja activa/pausada con la misma clave.
     # day: bloquea si ya existe hoja de esa clave creada hoy.
     # week: bloquea si ya existe hoja de esa clave creada en la semana actual.
-    duplicate_scope = (os.getenv('HOJA_RUTA_DUPLICATE_SCOPE', 'active') or 'active').strip().lower()
-    existing_q = HojaRuta.query.filter(HojaRuta.pn == clave.clave)
-    if duplicate_scope == 'day':
-        now_dt = datetime.utcnow()
-        day_start = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-        existing_q = existing_q.filter(HojaRuta.fecha_creacion >= day_start)
-    elif duplicate_scope == 'week':
-        now_dt = datetime.utcnow()
-        day_start = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-        week_start = day_start - timedelta(days=day_start.weekday())
-        existing_q = existing_q.filter(HojaRuta.fecha_creacion >= week_start)
-    else:
-        duplicate_scope = 'active'
-        existing_q = existing_q.filter(HojaRuta.estado.in_(['activa', 'pausada']))
+    duplicate_scope = (os.getenv('HOJA_RUTA_DUPLICATE_SCOPE', 'none') or 'none').strip().lower()
+    if duplicate_scope in ('active', 'day', 'week'):
+        existing_q = HojaRuta.query.filter(HojaRuta.pn == clave.clave)
+        if duplicate_scope == 'day':
+            now_dt = datetime.utcnow()
+            day_start = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+            existing_q = existing_q.filter(HojaRuta.fecha_creacion >= day_start)
+        elif duplicate_scope == 'week':
+            now_dt = datetime.utcnow()
+            day_start = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+            week_start = day_start - timedelta(days=day_start.weekday())
+            existing_q = existing_q.filter(HojaRuta.fecha_creacion >= week_start)
+        else:
+            existing_q = existing_q.filter(HojaRuta.estado.in_(['activa', 'pausada']))
 
-    hoja_existente = existing_q.order_by(HojaRuta.fecha_creacion.desc()).first()
-    if hoja_existente:
-        return jsonify({
-            'error': 'Ya existe una hoja de ruta con esta clave.',
-            'code': 'duplicate_clave',
-            'scope': duplicate_scope,
-            'existing_hoja': {
-                'id': hoja_existente.id,
-                'folio': hoja_existente.nombre,
-                'fecha': hoja_existente.fecha_creacion.isoformat() if hoja_existente.fecha_creacion else None,
-                'estado': hoja_existente.estado,
-            }
-        }), 409
+        hoja_existente = existing_q.order_by(HojaRuta.fecha_creacion.desc()).first()
+        if hoja_existente:
+            return jsonify({
+                'error': 'Ya existe una hoja de ruta con esta clave.',
+                'code': 'duplicate_clave',
+                'scope': duplicate_scope,
+                'existing_hoja': {
+                    'id': hoja_existente.id,
+                    'folio': hoja_existente.nombre,
+                    'fecha': hoja_existente.fecha_creacion.isoformat() if hoja_existente.fecha_creacion else None,
+                    'estado': hoja_existente.estado,
+                }
+            }), 409
 
     maquina_id = int(data.get('maquina_id')) if data.get('maquina_id') else None
     if maquina_id:
-        hoja_activa_misma_clave = HojaRuta.query.filter_by(maquina_id=maquina_id, pn=clave.clave, estado='activa').first()
-        if hoja_activa_misma_clave:
-            return jsonify({'error': 'La clave ya tiene una hoja activa en esta máquina'}), 409
+        hoja_ocupada = HojaRuta.query.filter(
+            HojaRuta.maquina_id == maquina_id,
+            HojaRuta.estado.in_(['activa', 'pausada'])
+        ).first()
+        if hoja_ocupada:
+            return jsonify({
+                'error': 'La máquina ya tiene una hoja activa o pausada. Retira la hoja actual antes de crear una nueva.',
+                'code': 'machine_busy',
+                'existing_hoja': {
+                    'id': hoja_ocupada.id,
+                    'folio': hoja_ocupada.nombre,
+                    'estado': hoja_ocupada.estado,
+                }
+            }), 409
 
     veces_previas_maquina = 0
     if maquina_id:
@@ -1594,7 +2555,8 @@ def api_crear_hoja_ruta():
     try:
         fecha_actual = datetime.utcnow()
         maquina = Máquina.query.get(int(data.get('maquina_id'))) if data.get('maquina_id') else None
-        descripcion_hoja = (comentarios or '').strip() or None
+        descripcion_hoja = _resolve_clave_descripcion_by_pn(clave.clave)
+        audit_username = _current_username_for_audit(user)
 
         hoja = HojaRuta(
             maquina_id=maquina_id,
@@ -1611,7 +2573,7 @@ def api_crear_hoja_ruta():
             orden_trabajo_pt=None,
             almacen=almacen,
             no_sin_orden=None,
-            materia_prima=None,
+            materia_prima=(comentarios or '').strip() or None,
             total_tiempo=None,
             dias_a_laborar=None,
             fecha_termino=None,
@@ -1658,6 +2620,7 @@ def api_crear_hoja_ruta():
             maquina_tipo=maquina.tipo if maquina else None,
             fallback_total_time=hoja.total_tiempo,
         )
+        _registrar_carga_piezas_hoja(hoja, 0, int(cantidad_piezas), audit_username, origen='creacion')
 
         db.session.commit()
         logger.info(
@@ -1716,12 +2679,36 @@ def api_actualizar_hoja_ruta(hoja_id):
     
     if 'estado' in data:
         hoja.estado = data['estado']
+    if 'clave_id' in data and data.get('clave_id') is not None:
+        try:
+            clave_id = int(data.get('clave_id'))
+        except Exception:
+            return jsonify({'error': 'clave_id inválido'}), 400
+
+        if clave_id <= 0:
+            return jsonify({'error': 'clave_id inválido'}), 400
+
+        clave_obj = ClaveProducto.query.get(clave_id)
+        if not clave_obj:
+            return jsonify({'error': 'Clave no encontrada'}), 404
+
+        hoja.pn = clave_obj.clave
+        hoja.producto = _clean_nullable_text(clave_obj.nombre) or clave_obj.clave
+        hoja.descripcion = _resolve_clave_descripcion_by_pn(clave_obj.clave)
     if 'nombre' in data:
         hoja.nombre = data['nombre']
     if 'descripcion' in data:
         hoja.descripcion = data['descripcion']
     if 'comentarios' in data:
-        hoja.descripcion = (data.get('comentarios') or '').strip() or None
+        comentarios_usuario = (data.get('comentarios') or '').strip()
+        scrap_block = _qc_extract_scrap_block(hoja.materia_prima)
+        if scrap_block:
+            hoja.materia_prima = (
+                (comentarios_usuario + "\n\n" + scrap_block).strip()
+                if comentarios_usuario else scrap_block
+            )
+        else:
+            hoja.materia_prima = comentarios_usuario or None
     if 'firma_ing_jose' in data:
         hoja.supervisor = (data.get('firma_ing_jose') or '').strip() or None
     if 'firma_ing_rodrigo' in data:
@@ -1739,7 +2726,13 @@ def api_actualizar_hoja_ruta(hoja_id):
             return jsonify({'error': 'cantidad_piezas inválida'}), 400
         if cantidad <= 0:
             return jsonify({'error': 'cantidad_piezas debe ser mayor a 0'}), 400
+        cantidad_anterior = int(hoja.cantidad_piezas or 0)
         hoja.cantidad_piezas = cantidad
+        _registrar_carga_piezas_hoja(hoja, cantidad_anterior, cantidad, _current_username_for_audit(user), origen='edicion')
+
+    # Regla de negocio: descripcion de hoja siempre proviene de la clave actual.
+    if hoja.pn:
+        hoja.descripcion = _resolve_clave_descripcion_by_pn(hoja.pn)
 
     estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
     maquina = Máquina.query.get(hoja.maquina_id) if hoja.maquina_id else None
@@ -1789,8 +2782,8 @@ def api_claves_procesos():
                 result.append({
                     'id': clave.id,
                     'clave': clave.clave,
-                    'nombre': clave.nombre or clave.clave,
-                    'notas': getattr(clave, 'notas', None) or '',
+                    'nombre': _clean_nullable_text(clave.nombre) or clave.clave,
+                    'notas': _clean_nullable_text(getattr(clave, 'notas', None)),
                     'tiempo_to': tiempo_to,
                     'procesos': procesos_payload,
                 })
@@ -1921,6 +2914,7 @@ def api_asignar_hoja_maquina(maquina_id):
         if not hoja.fecha_salida:
             hoja.fecha_salida = datetime.utcnow()
         hoja.estado = 'activa'
+        maq.activo = True  # Activar la máquina al recibir una hoja
 
         estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
         now_ref = datetime.utcnow()
@@ -2156,9 +3150,12 @@ def api_ingresar_piezas():
     except Exception:
         return jsonify({'error': 'maquina_id inválido'}), 400
 
-    hoja_activa_misma_clave = HojaRuta.query.filter_by(maquina_id=maquina_id_int, pn=clave, estado='activa').first()
-    if hoja_activa_misma_clave:
-        return jsonify({'error': 'Esta pieza/clave ya tiene hoja activa en esta máquina'}), 409
+    hoja_ocupada = HojaRuta.query.filter(
+        HojaRuta.maquina_id == maquina_id_int,
+        HojaRuta.estado.in_(['activa', 'pausada'])
+    ).first()
+    if hoja_ocupada:
+        return jsonify({'error': 'La máquina ya tiene una hoja activa o pausada. Retira la hoja actual antes de agregar otra.'}), 409
 
     veces_previas_maquina = HojaRuta.query.filter_by(maquina_id=maquina_id_int, pn=clave).count()
 
@@ -3248,6 +4245,81 @@ def importar_excel():
     
     except Exception as e:
         return jsonify({'error': f'Error procesando Excel: {str(e)}'}), 500
+
+
+@app.route('/api/procesos/importar-excel', methods=['POST'])
+@login_required
+def importar_procesos_excel():
+    """Inicia importación asíncrona de claves/procesos desde Excel/CSV."""
+    if not is_admin_user():
+        return jsonify({'error': 'Solo admins pueden importar procesos'}), 403
+
+    if 'file' not in request.files:
+        return jsonify({'error': 'No se encontró archivo'}), 400
+
+    file = request.files['file']
+    if not file or file.filename == '':
+        return jsonify({'error': 'Archivo vacío'}), 400
+
+    filename = secure_filename(file.filename)
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in ('.xlsx', '.xls', '.csv'):
+        return jsonify({'error': 'Formato no soportado. Usa .xlsx, .xls o .csv'}), 400
+
+    sheet = (request.form.get('sheet') or '').strip()
+    imports_dir = os.path.join('uploads', 'imports')
+    os.makedirs(imports_dir, exist_ok=True)
+
+    tmp_name = f"procesos_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}{ext}"
+    saved_path = os.path.join(imports_dir, tmp_name)
+    abs_saved_path = os.path.abspath(saved_path)
+    job_id = uuid.uuid4().hex
+
+    try:
+        file.save(abs_saved_path)
+
+        _set_procesos_import_job(
+            job_id,
+            status='queued',
+            filename=filename,
+            created_at=datetime.utcnow().isoformat(),
+            output='',
+        )
+
+        worker = threading.Thread(
+            target=_run_procesos_import_job,
+            args=(job_id, filename, abs_saved_path, sheet),
+            daemon=True,
+        )
+        worker.start()
+
+        return jsonify({
+            'ok': True,
+            'job_id': job_id,
+            'mensaje': 'Importación iniciada'
+        }), 202
+    except Exception as e:
+        try:
+            if os.path.exists(abs_saved_path):
+                os.remove(abs_saved_path)
+        except Exception:
+            pass
+        logger.error(f"[IMPORT_PROCESOS] Excepción importando {filename}: {e}")
+        return jsonify({'error': f'Error procesando importación: {str(e)}'}), 500
+
+
+@app.route('/api/procesos/importar-excel/status/<job_id>', methods=['GET'])
+@login_required
+def importar_procesos_excel_status(job_id):
+    if not is_admin_user():
+        return jsonify({'error': 'Solo admins pueden consultar importaciones'}), 403
+
+    job = _get_procesos_import_job(job_id)
+
+    if not job:
+        return jsonify({'error': 'Job no encontrado'}), 404
+
+    return jsonify(job), 200
 
 
 @app.route('/api/productos/bajo-stock', methods=['GET'])
@@ -4388,9 +5460,9 @@ def procesos_clave_save():
     """Crear o actualizar una clave producto."""
     try:
         clave_id = request.form.get('id', type=int)
-        clave = request.form.get('clave', '').strip()
-        nombre = request.form.get('nombre', '').strip()
-        notas = request.form.get('notas', '').strip()
+        clave = _clean_nullable_text(request.form.get('clave', ''))
+        nombre = _clean_nullable_text(request.form.get('nombre', ''))
+        notas = _clean_nullable_text(request.form.get('notas', ''))
         activo = request.form.get('activo') == 'on'
 
         if not clave:

@@ -413,6 +413,60 @@
             font-size: 13px;
         }
 
+        .filter-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(43, 107, 162, 0.35);
+            flex-wrap: wrap;
+        }
+
+        .filter-label {
+            font-size: 12px;
+            color: var(--muted);
+            margin-right: 4px;
+        }
+
+        .filter-btn {
+            border: 1px solid #2d6996;
+            background: linear-gradient(180deg, #0b3259, #072542);
+            color: #8eb5d6;
+            border-radius: 20px;
+            padding: 5px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            letter-spacing: 0.2px;
+        }
+
+        .filter-btn:hover {
+            border-color: #40b5ff;
+            color: #cde9ff;
+        }
+
+        .filter-btn.active {
+            border-color: #14c678;
+            background: linear-gradient(180deg, rgba(20,198,120,0.2), rgba(20,198,120,0.1));
+            color: #9ff5cf;
+        }
+
+        .filter-btn.active-warn {
+            border-color: var(--warn);
+            background: linear-gradient(180deg, rgba(244,180,0,0.2), rgba(244,180,0,0.1));
+            color: #ffe093;
+        }
+
+        .filter-count {
+            display: inline-block;
+            margin-left: 5px;
+            background: rgba(255,255,255,0.12);
+            border-radius: 999px;
+            padding: 1px 7px;
+            font-size: 11px;
+        }
+
         .toast-zone {
             position: fixed;
             right: 16px;
@@ -583,6 +637,12 @@
                     <span>Maquinas en operacion</span>
                     <span id="primaryCount">0 equipos</span>
                 </div>
+                <div class="filter-bar">
+                    <span class="filter-label">Filtrar:</span>
+                    <button class="filter-btn active" id="filterTodas" onclick="setFilter('todas')">Todas <span class="filter-count" id="fcTodas">0</span></button>
+                    <button class="filter-btn" id="filterConHoja" onclick="setFilter('con_hoja')">Con hoja de ruta <span class="filter-count" id="fcConHoja">0</span></button>
+                    <button class="filter-btn" id="filterSinHoja" onclick="setFilter('sin_hoja')">Sin hoja de ruta <span class="filter-count" id="fcSinHoja">0</span></button>
+                </div>
                 <div class="primary-grid" id="primaryGrid"></div>
             </section>
         </section>
@@ -666,6 +726,24 @@
         const MAP_REFRESH_MS = 6000;
         const notifiedDone = new Set();
         let emergencyShownKey = null;
+        let allMaquinas = [];
+        let currentFilter = 'todas';
+
+        function setFilter(filter) {
+            currentFilter = filter;
+            ['todas', 'con_hoja', 'sin_hoja'].forEach(f => {
+                const btn = document.getElementById('filter' + f.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(''));
+                if (btn) btn.className = 'filter-btn';
+            });
+            const activeBtn = document.getElementById(
+                filter === 'todas' ? 'filterTodas' :
+                filter === 'con_hoja' ? 'filterConHoja' : 'filterSinHoja'
+            );
+            if (activeBtn) {
+                activeBtn.className = filter === 'sin_hoja' ? 'filter-btn active-warn' : 'filter-btn active';
+            }
+            renderMachineGroups(allMaquinas);
+        }
 
         function getSecondsUntilTarget(now, hour, minute) {
             const target = new Date(now);
@@ -821,12 +899,31 @@
             const primary = document.getElementById('primaryGrid');
             primary.innerHTML = '';
 
-            const mainList = maquinas;
+            const conHoja = maquinas.filter(m => m.estado_code === 'produciendo' || m.estado_code === 'activa');
+            const sinHoja = maquinas.filter(m => m.estado_code === 'sin_hoja');
+
+            // Actualizar contadores en botones
+            document.getElementById('fcTodas').textContent = maquinas.length;
+            document.getElementById('fcConHoja').textContent = conHoja.length;
+            document.getElementById('fcSinHoja').textContent = sinHoja.length;
+
+            let mainList;
+            if (currentFilter === 'con_hoja') {
+                mainList = conHoja;
+            } else if (currentFilter === 'sin_hoja') {
+                mainList = sinHoja;
+            } else {
+                mainList = maquinas;
+            }
 
             if (!mainList.length) {
                 const emptyMain = document.createElement('div');
                 emptyMain.className = 'empty';
-                emptyMain.textContent = 'No hay maquinas activas para mostrar.';
+                emptyMain.textContent = currentFilter === 'con_hoja'
+                    ? 'No hay maquinas con hoja de ruta asignada.'
+                    : currentFilter === 'sin_hoja'
+                    ? 'No hay maquinas sin hoja de ruta.'
+                    : 'No hay maquinas activas para mostrar.';
                 primary.appendChild(emptyMain);
             } else {
                 mainList.forEach(m => primary.appendChild(buildMachineCard(m)));
@@ -876,6 +973,7 @@
 
                 const data = await res.json();
                 const maquinas = Array.isArray(data.maquinas) ? data.maquinas.filter(m => m.activo) : [];
+                allMaquinas = maquinas;
                 renderMachineGroups(maquinas);
                 renderStats(maquinas);
                 renderEfficiency(data.eficiencia_planta || null);

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Almacén - Recepción de Hojas</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .panel { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px; }
+        .small { color:#64748b; font-size:12px; }
+        .row-grid { display:grid; grid-template-columns:2fr 1fr 1fr auto; gap:8px; align-items:end; }
+        .field { display:flex; flex-direction:column; gap:4px; }
+        .field input { border:1px solid #d1d5db; border-radius:6px; padding:7px; }
+        .btn-ok { border:0; border-radius:6px; padding:8px 10px; background:#0f766e; color:#fff; font-weight:700; cursor:pointer; }
+
+        @media (max-width: 980px) {
+            .row-grid { grid-template-columns:1fr; }
+        }
+    </style>
+</head>
+<body>
+    {% include '_sidebar.html' %}
+
+    <div class="container" style="padding-top:20px;">
+        <h2 style="margin:0 0 8px 0;">Módulo Almacén</h2>
+        <p class="small" style="margin:0 0 12px 0;">Valida recepción de hojas enviadas por Entregas. Requiere check, ID de recepción y captura; después regresa a Entregas como lista para facturación.</p>
+
+        <div class="panel">
+            {% if pendientes_almacen %}
+                {% for item in pendientes_almacen %}
+                <div class="panel" style="margin-bottom:10px; background:#f8fbff;">
+                    <div><strong>{{ item.hoja_ruta.nombre or ('HOJA #' ~ item.hoja_ruta.id) }}</strong></div>
+                    <div class="small">ID hoja: {{ item.hoja_ruta.id }} | Clave: {{ item.hoja_ruta.pn or '-' }} | Piezas: {{ item.hoja_ruta.cantidad_piezas or 0 }}</div>
+                    <div class="small">Entregado: <strong style="color:#0f766e;">{{ item.cantidad_entregada or 0 }}</strong> / {{ item.cantidad_total_piezas or item.hoja_ruta.cantidad_piezas or 0 }} | Pendiente: <strong style="color:#b91c1c;">{{ item.cantidad_pendiente if item.cantidad_pendiente is not none else ((item.cantidad_total_piezas or item.hoja_ruta.cantidad_piezas or 0) - (item.cantidad_entregada or 0)) }}</strong></div>
+                    <div class="small"><a href="/hoja/{{ item.hoja_ruta.id }}" target="_blank">Ver hoja de ruta</a></div>
+
+                    <form method="post" action="/almacen/recibir/{{ item.id }}" enctype="multipart/form-data" style="margin-top:10px;">
+                        <div class="row-grid">
+                            <label class="field">
+                                <span>ID recepción (CONTPAQ)</span>
+                                <input type="text" name="recepcion_id" required placeholder="Ej: RX-2026-000123">
+                            </label>
+                            <label class="field">
+                                <span>Captura de recepción</span>
+                                <input type="file" name="captura_recepcion" accept="image/*" required>
+                            </label>
+                            <label class="field" style="justify-content:flex-end;">
+                                <span>&nbsp;</span>
+                                <label style="display:flex; align-items:center; gap:6px; font-size:13px;">
+                                    <input type="checkbox" name="entregado" required>
+                                    Entregado / validado
+                                </label>
+                            </label>
+                            {% if has_permission('almacen', 'edit') or has_permission('catalog', 'edit') %}
+                            <button class="btn-ok" type="submit">Validar recepción y liberar</button>
+                            {% endif %}
+                        </div>
+                    </form>
+
+                    {% if has_permission('almacen', 'edit') or has_permission('catalog', 'edit') %}
+                    <form method="post" action="/almacen/regresar_entregas/{{ item.id }}" style="margin-top:8px; display:grid; gap:6px;">
+                        <label class="field">
+                            <span>Motivo de regreso a Entregas</span>
+                            <input type="text" name="motivo_regreso" placeholder="Ej: recepción no corresponde, datos incompletos" required>
+                        </label>
+                        <div>
+                            <button type="submit" style="border:0; border-radius:6px; padding:8px 10px; background:#dc2626; color:#fff; font-weight:700; cursor:pointer;">Regresar a Entregas</button>
+                        </div>
+                    </form>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="small">No hay hojas pendientes de recepción en Almacén.</div>
+            {% endif %}
+        </div>
+
+        <div class="panel" style="margin-top:12px;">
+            <h3 style="margin:0 0 8px 0; font-size:16px;">Historial Almacén</h3>
+            {% if historial_almacen %}
+                {% for r in historial_almacen %}
+                <div style="padding:6px 0; border-bottom:1px solid #eef2f7;">
+                    <div><strong>Hoja #{{ r.hoja_ruta_id }}</strong> | Recepción: {{ r.recepcion_id or '-' }}</div>
+                    <div class="small">Usuario: {{ r.usuario or '-' }} | Validado: {{ 'Sí' if r.validado else 'No' }} | {{ r.fecha_creacion.strftime('%Y-%m-%d %H:%M') if r.fecha_creacion else '-' }}</div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="small">Sin registros de almacén.</div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

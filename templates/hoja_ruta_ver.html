@@ -186,14 +186,22 @@
       word-break: break-word;
     }
 
+    .v-preline {
+      white-space: pre-line;
+      line-height: 1.35;
+    }
+
     .table-wrap {
       border: 1px solid var(--line-strong);
       border-radius: 10px;
-      overflow: hidden;
+      overflow-x: auto;
+      overflow-y: hidden;
+      -webkit-overflow-scrolling: touch;
     }
 
     table {
       width: 100%;
+      min-width: 820px;
       border-collapse: collapse;
     }
 
@@ -271,6 +279,9 @@
       }
       .sign-row {
         grid-template-columns: 1fr;
+      }
+      table {
+        min-width: 760px;
       }
     }
 
@@ -484,7 +495,20 @@
           </div>
           <div class="field" style="grid-column: 1 / -1;">
             <div class="k">Comentarios</div>
-            <div class="v">{{ hoja.descripcion or '' }}</div>
+            <div class="v">{{ hoja.comentarios_usuario or '' }}</div>
+          </div>
+          <div class="field" style="grid-column: 1 / -1;">
+            <div class="k">Resumen Scrap QC</div>
+            {% if hoja.scrap_qc %}
+            <div class="v v-preline">Lote inicial: {{ hoja.scrap_qc.lote_inicial }}
+Scrap total: {{ hoja.scrap_qc.total_scrap }}
+Lote final: {{ hoja.scrap_qc.lote_final }}
+Detalle: {{ hoja.scrap_qc.detalle or 'Sin scrap por proceso.' }}
+Actualizado por: {{ hoja.scrap_qc.actualizado_por or 'N/A' }}
+Fecha: {{ hoja.scrap_qc.fecha or 'N/A' }}</div>
+            {% else %}
+            <div class="v" style="color:#64748b;">Sin resumen de scrap QC para esta hoja.</div>
+            {% endif %}
           </div>
           <div class="field">
             <div class="k">Creada Por</div>
