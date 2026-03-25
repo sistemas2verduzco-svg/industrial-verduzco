@@ -493,6 +493,7 @@ class Máquina(db.Model):
             'pos_y': self.pos_y,
             'fecha_creacion': self.fecha_creacion.isoformat(),
             'fecha_actualizacion': self.fecha_actualizacion.isoformat(),
+            'activo': self.activo,
             'componentes': [c.to_dict() for c in self.componentes]
         }
 
