@@ -14104,3 +14104,111 @@ sqlalchemy.exc.OperationalError: (psycopg2.OperationalError) could not translate
 2026-01-16 21:30:51,098 - app - INFO - [HOJAS_RUTA] Nueva hoja creada: 9 con 4 estaciones desde clave AS01
 2026-01-16 21:36:13,038 - app - INFO - [HOJAS_RUTA] Nueva hoja creada: 10 con 4 estaciones desde clave AS01
 2026-01-16 22:23:30,958 - app - INFO - [HOJAS_RUTA] Nueva hoja creada: 11 con 4 estaciones desde clave AS01
+2026-03-23 19:40:08,352 - app - INFO - [LOGIN UNIFICADO] Intento de login para usuario: admin
+2026-03-23 19:40:08,357 - app - DEBUG - [LOGIN] Consultando usuario 'admin' en BD...
+2026-03-23 19:40:08,736 - app - INFO - [LOGIN] ✓ Autenticación exitosa para admin
+2026-03-23 19:40:08,737 - app - INFO - [LOGIN] ✓ Sesión iniciada para admin
+2026-03-23 19:40:08,738 - app - INFO - [LOGIN] Redirigiendo usuario 'admin' a /admin
+2026-03-23 19:45:11,258 - app - INFO - [LOGIN UNIFICADO] Intento de login para usuario: Moises
+2026-03-23 19:45:11,258 - app - DEBUG - [LOGIN] Consultando usuario 'Moises' en BD...
+2026-03-23 19:45:11,435 - app - INFO - [LOGIN] ✓ Autenticación exitosa para Moises
+2026-03-23 19:45:11,436 - app - INFO - [LOGIN] ✓ Sesión iniciada para Moises
+2026-03-23 19:45:11,473 - app - INFO - [LOGIN] Redirigiendo usuario 'Moises' a /index
+2026-03-23 20:03:20,096 - app - INFO - [LOGIN UNIFICADO] Intento de login para usuario: Margarita
+2026-03-23 20:03:20,096 - app - DEBUG - [LOGIN] Consultando usuario 'Margarita' en BD...
+2026-03-23 20:03:20,236 - app - INFO - [LOGIN] ✓ Autenticación exitosa para Margarita
+2026-03-23 20:03:20,236 - app - INFO - [LOGIN] ✓ Sesión iniciada para Margarita
+2026-03-23 20:03:20,239 - app - INFO - [LOGIN] Redirigiendo usuario 'Margarita' a /index
+2026-03-23 20:08:38,800 - app - INFO - [HOJAS_RUTA] Nueva hoja creada HR-20260323-TE02-0210 (210) con 10 estaciones para clave TE02
+2026-03-23 20:09:19,758 - app - INFO - [HOJAS_RUTA] Nueva hoja creada HR-20260323-CH11-0211 (211) con 7 estaciones para clave CH11
+2026-03-23 20:11:04,956 - app - INFO - [HOJAS_RUTA] Nueva hoja creada HR-20260323-CK01-0212 (212) con 6 estaciones para clave CK01
+2026-03-23 20:23:52,789 - app - INFO - [HOJAS_RUTA] Hoja actualizada: 210
+2026-03-23 21:03:00,363 - app - INFO - [LOGIN UNIFICADO] Intento de login para usuario: admin
+2026-03-23 21:03:00,363 - app - DEBUG - [LOGIN] Consultando usuario 'admin' en BD...
+2026-03-23 21:03:00,488 - app - INFO - [LOGIN] ✓ Autenticación exitosa para admin
+2026-03-23 21:03:00,489 - app - INFO - [LOGIN] ✓ Sesión iniciada para admin
+2026-03-23 21:03:00,489 - app - INFO - [LOGIN] Redirigiendo usuario 'admin' a /admin
+2026-03-23 21:03:59,009 - app - INFO - [LOGIN UNIFICADO] Intento de login para usuario: admin
+2026-03-23 21:03:59,009 - app - DEBUG - [LOGIN] Consultando usuario 'admin' en BD...
+2026-03-23 21:03:59,124 - app - INFO - [LOGIN] ✓ Autenticación exitosa para admin
+2026-03-23 21:03:59,125 - app - INFO - [LOGIN] ✓ Sesión iniciada para admin
+2026-03-23 21:03:59,125 - app - INFO - [LOGIN] Redirigiendo usuario 'admin' a /admin
+2026-03-23 21:07:54,622 - app - INFO - [LOGIN UNIFICADO] Intento de login para usuario: admin
+2026-03-23 21:07:54,622 - app - DEBUG - [LOGIN] Consultando usuario 'admin' en BD...
+2026-03-23 21:07:54,757 - app - WARNING - [LOGIN] ✗ Credenciales inválidas para admin
+2026-03-23 21:08:05,711 - app - INFO - [LOGIN UNIFICADO] Intento de login para usuario: admin
+2026-03-23 21:08:05,712 - app - DEBUG - [LOGIN] Consultando usuario 'admin' en BD...
+2026-03-23 21:08:05,893 - app - WARNING - [LOGIN] ✗ Credenciales inválidas para admin
+2026-03-23 21:08:18,444 - app - INFO - [LOGIN UNIFICADO] Intento de login para usuario: admin
+2026-03-23 21:08:18,445 - app - DEBUG - [LOGIN] Consultando usuario 'admin' en BD...
+2026-03-23 21:08:18,621 - app - INFO - [LOGIN] ✓ Autenticación exitosa para admin
+2026-03-23 21:08:18,622 - app - INFO - [LOGIN] ✓ Sesión iniciada para admin
+2026-03-23 21:08:18,622 - app - INFO - [LOGIN] Redirigiendo usuario 'admin' a /admin
+2026-03-23 21:20:16,463 - app - INFO - [HOJAS_RUTA] Nueva hoja creada HR-20260323-RC00-0213 (213) con 1 estaciones para clave RC00
+2026-03-23 21:38:43,009 - app - INFO - [HOJAS_RUTA] Nueva hoja creada HR-20260323-RO114-0214 (214) con 1 estaciones para clave RO114
+2026-03-23 21:47:53,763 - app - INFO - [LOGIN UNIFICADO] Intento de login para usuario: admin
+2026-03-23 21:47:53,763 - app - DEBUG - [LOGIN] Consultando usuario 'admin' en BD...
+2026-03-23 21:47:53,880 - app - INFO - [LOGIN] ✓ Autenticación exitosa para admin
+2026-03-23 21:47:53,880 - app - INFO - [LOGIN] ✓ Sesión iniciada para admin
+2026-03-23 21:47:53,880 - app - INFO - [LOGIN] Redirigiendo usuario 'admin' a /admin
+2026-03-23 22:00:43,072 - app - INFO - [LOGIN UNIFICADO] Intento de login para usuario: admin
+2026-03-23 22:00:43,073 - app - DEBUG - [LOGIN] Consultando usuario 'admin' en BD...
+2026-03-23 22:00:43,220 - app - INFO - [LOGIN] ✓ Autenticación exitosa para admin
+2026-03-23 22:00:43,220 - app - INFO - [LOGIN] ✓ Sesión iniciada para admin
+2026-03-23 22:00:43,221 - app - INFO - [LOGIN] Redirigiendo usuario 'admin' a /admin
+2026-03-24 13:29:44,086 - app - INFO - [LOGIN UNIFICADO] Intento de login para usuario: admin
+2026-03-24 13:29:44,087 - app - DEBUG - [LOGIN] Consultando usuario 'admin' en BD...
+2026-03-24 13:29:44,245 - app - INFO - [LOGIN] ✓ Autenticación exitosa para admin
+2026-03-24 13:29:44,246 - app - INFO - [LOGIN] ✓ Sesión iniciada para admin
+2026-03-24 13:29:44,246 - app - INFO - [LOGIN] Redirigiendo usuario 'admin' a /admin
+2026-03-24 14:14:06,875 - app - INFO - [LOGIN UNIFICADO] Intento de login para usuario: Margarita
+2026-03-24 14:14:06,875 - app - DEBUG - [LOGIN] Consultando usuario 'Margarita' en BD...
+2026-03-24 14:14:06,994 - app - INFO - [LOGIN] ✓ Autenticación exitosa para Margarita
+2026-03-24 14:14:06,995 - app - INFO - [LOGIN] ✓ Sesión iniciada para Margarita
+2026-03-24 14:14:06,998 - app - INFO - [LOGIN] Redirigiendo usuario 'Margarita' a /index
+2026-03-24 14:21:56,478 - app - INFO - [HOJAS_RUTA] Nueva hoja creada HR-20260324-CH04-0215 (215) con 4 estaciones para clave CH04
+2026-03-24 14:31:52,865 - app - INFO - [LOGIN UNIFICADO] Intento de login para usuario: Moises
+2026-03-24 14:31:52,865 - app - DEBUG - [LOGIN] Consultando usuario 'Moises' en BD...
+2026-03-24 14:31:52,980 - app - INFO - [LOGIN] ✓ Autenticación exitosa para Moises
+2026-03-24 14:31:52,980 - app - INFO - [LOGIN] ✓ Sesión iniciada para Moises
+2026-03-24 14:31:52,983 - app - INFO - [LOGIN] Redirigiendo usuario 'Moises' a /index
+2026-03-24 14:36:20,770 - app - INFO - [LOGIN UNIFICADO] Intento de login para usuario: admin
+2026-03-24 14:36:20,771 - app - DEBUG - [LOGIN] Consultando usuario 'admin' en BD...
+2026-03-24 14:36:20,908 - app - INFO - [LOGIN] ✓ Autenticación exitosa para admin
+2026-03-24 14:36:20,909 - app - INFO - [LOGIN] ✓ Sesión iniciada para admin
+2026-03-24 14:36:20,909 - app - INFO - [LOGIN] Redirigiendo usuario 'admin' a /admin
+2026-03-24 14:36:39,732 - app - INFO - [LOGIN UNIFICADO] Intento de login para usuario: admin
+2026-03-24 14:36:39,733 - app - DEBUG - [LOGIN] Consultando usuario 'admin' en BD...
+2026-03-24 14:36:39,850 - app - INFO - [LOGIN] ✓ Autenticación exitosa para admin
+2026-03-24 14:36:39,850 - app - INFO - [LOGIN] ✓ Sesión iniciada para admin
+2026-03-24 14:36:39,850 - app - INFO - [LOGIN] Redirigiendo usuario 'admin' a /admin
+2026-03-24 14:43:29,306 - app - INFO - [MAQUINA] Paro mantenimiento maquina 74
+2026-03-24 15:10:52,535 - app - INFO - [HOJAS_RUTA] Nueva hoja creada HR-20260324-BM00-0216 (216) con 1 estaciones para clave BM00
+2026-03-24 15:16:36,514 - app - INFO - [HOJAS_RUTA] Nueva hoja creada HR-20260324-BM002-0217 (217) con 1 estaciones para clave BM002
+2026-03-24 15:33:19,077 - app - INFO - [LOGIN UNIFICADO] Intento de login para usuario: Moises
+2026-03-24 15:33:19,078 - app - DEBUG - [LOGIN] Consultando usuario 'Moises' en BD...
+2026-03-24 15:33:19,197 - app - INFO - [LOGIN] ✓ Autenticación exitosa para Moises
+2026-03-24 15:33:19,197 - app - INFO - [LOGIN] ✓ Sesión iniciada para Moises
+2026-03-24 15:33:19,200 - app - INFO - [LOGIN] Redirigiendo usuario 'Moises' a /index
+2026-03-24 15:36:14,318 - app - INFO - [HOJAS_RUTA] Hoja 5 asignada a maquina 91
+2026-03-24 15:56:29,098 - app - INFO - [HOJAS_RUTA] Nueva hoja creada HR-20260324-FL15-0218 (218) con 5 estaciones para clave FL15
+2026-03-24 17:02:31,217 - app - INFO - [HOJAS_RUTA] Nueva hoja creada HR-20260324-SG03-0219 (219) con 2 estaciones para clave SG03
+2026-03-24 17:06:01,148 - app - INFO - [HOJAS_RUTA] Nueva hoja creada HR-20260324-TU02-0220 (220) con 4 estaciones para clave TU02
+2026-03-24 17:12:19,893 - app - INFO - [HOJAS_RUTA] Nueva hoja creada HR-20260324-TU03-0221 (221) con 4 estaciones para clave TU03
+2026-03-24 17:23:04,121 - app - INFO - [HOJAS_RUTA] Hoja actualizada: 219
+2026-03-24 17:23:19,038 - app - INFO - [HOJAS_RUTA] Hoja actualizada: 219
+2026-03-24 17:46:28,660 - app - INFO - [HOJAS_RUTA] Hoja actualizada: 218
+2026-03-24 18:52:22,931 - app - INFO - [HOJAS_RUTA] Nueva hoja creada HR-20260324-PO12-0222 (222) con 6 estaciones para clave PO12
+2026-03-24 19:59:32,871 - app - INFO - [HOJAS_RUTA] Nueva hoja creada HR-20260324-CO05-0223 (223) con 8 estaciones para clave CO05
+2026-03-24 21:33:24,014 - app - INFO - [HOJAS_RUTA] Nueva hoja creada HR-20260324-FLTOR621-0224 (224) con 1 estaciones para clave FLTOR621
+2026-03-24 21:38:54,243 - app - INFO - [HOJAS_RUTA] Hoja actualizada: 224
+2026-03-25 12:50:40,987 - app - INFO - [LOGIN UNIFICADO] Intento de login para usuario: Moises
+2026-03-25 12:50:40,987 - app - DEBUG - [LOGIN] Consultando usuario 'Moises' en BD...
+2026-03-25 12:50:41,153 - app - INFO - [LOGIN] ✓ Autenticación exitosa para Moises
+2026-03-25 12:50:41,153 - app - INFO - [LOGIN] ✓ Sesión iniciada para Moises
+2026-03-25 12:50:41,158 - app - INFO - [LOGIN] Redirigiendo usuario 'Moises' a /index
+2026-03-25 13:13:28,562 - app - INFO - [LOGIN UNIFICADO] Intento de login para usuario: Margarita
+2026-03-25 13:13:28,562 - app - DEBUG - [LOGIN] Consultando usuario 'Margarita' en BD...
+2026-03-25 13:13:28,678 - app - INFO - [LOGIN] ✓ Autenticación exitosa para Margarita
+2026-03-25 13:13:28,678 - app - INFO - [LOGIN] ✓ Sesión iniciada para Margarita
+2026-03-25 13:13:28,681 - app - INFO - [LOGIN] Redirigiendo usuario 'Margarita' a /index
