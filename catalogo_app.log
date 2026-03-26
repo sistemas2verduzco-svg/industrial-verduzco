@@ -16788,3 +16788,4 @@ WHERE hojas_ruta_flujo_logistica.hoja_ruta_id IN (%(hoja_ruta_id_1_1)s, %(hoja_r
 2026-03-26 15:29:46,436 - app - INFO - [HOJAS_RUTA] Hoja actualizada: 238
 2026-03-26 15:32:37,892 - app - INFO - [HOJAS_RUTA] Hoja actualizada: 240
 2026-03-26 15:33:43,771 - app - INFO - [HOJAS_RUTA] Hoja actualizada: 241
+2026-03-26 15:56:28,477 - app - INFO - [MAQUINA] Paro mantenimiento maquina 2
