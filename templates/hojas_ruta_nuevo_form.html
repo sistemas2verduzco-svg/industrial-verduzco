@@ -1,3 +1,33 @@
-<!-- Copia de hojas_ruta_form.html para el nuevo módulo -->
-{% extends "hojas_ruta_form.html" %}
-<!-- Aquí se personalizará para el nuevo módulo -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Nueva Hoja de Ruta NUEVA</title>
+	<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+	<div class="module-head">
+		<h1 class="module-title">Crear Hoja de Ruta NUEVA</h1>
+		<a href="/hojas_ruta_nuevo" class="btn btn-secondary mb-3">Volver a listado</a>
+	</div>
+	<div class="container">
+		<form method="post" action="/hojas_ruta_nuevo_form">
+			<div class="grid">
+				<label>Nombre:<input type="text" name="nombre" required></label>
+				<label>Descripción:<textarea name="descripcion"></textarea></label>
+				<label>Producto:<input type="text" name="producto"></label>
+				<label>Cantidad de piezas:<input type="number" name="cantidad_piezas" min="1"></label>
+				<label>Almacén:
+					<select name="almacen">
+						{% for a in almacenes %}
+						<option value="{{ a }}">{{ a }}</option>
+						{% endfor %}
+					</select>
+				</label>
+			</div>
+			<button type="submit" class="btn btn-primary mt-3">Guardar</button>
+		</form>
+	</div>
+</body>
+</html>

@@ -1,4 +1,44 @@
-<!-- Copia de hojas_ruta_list.html para el nuevo módulo -->
-<a href="/hojas_ruta_entregas" class="btn btn-secondary mb-3">Ver Hojas de Ruta Entregas</a>
-{% extends "hojas_ruta_list.html" %}
-<!-- Aquí se personalizará para el nuevo módulo -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Hojas de Ruta NUEVAS</title>
+	<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+	<div class="module-head">
+		<h1 class="module-title">Hojas de Ruta NUEVAS</h1>
+		<a href="/hojas_ruta_entregas" class="btn btn-secondary mb-3">Ver Hojas de Ruta Entregas</a>
+		<a href="/hojas_ruta_nuevo_form" class="btn btn-primary mb-3">Crear Nueva Hoja de Ruta</a>
+	</div>
+	<div class="container">
+		<table class="table">
+			<thead>
+				<tr>
+					<th>ID</th>
+					<th>Serie</th>
+					<th>Clave</th>
+					<th>Estado</th>
+					<th>Cantidad</th>
+					<th>Fecha Creación</th>
+					<th>Acciones</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for hoja in hojas_pendientes %}
+				<tr>
+					<td>{{ hoja.id }}</td>
+					<td>{{ hoja.serie }}</td>
+					<td>{{ hoja.clave }}</td>
+					<td>{{ hoja.estado }}</td>
+					<td>{{ hoja.cantidad_piezas }}</td>
+					<td>{{ hoja.fecha_creacion }}</td>
+					<td><a href="/hoja_nuevo/{{ hoja.id }}" class="btn btn-info btn-sm">Ver</a></td>
+				</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	</div>
+</body>
+</html>

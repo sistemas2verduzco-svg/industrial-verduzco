@@ -1,3 +1,26 @@
-<!-- Copia de hoja_ruta_ver.html para el nuevo módulo -->
-{% extends "hoja_ruta_ver.html" %}
-<!-- Aquí se personalizará para el nuevo módulo -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Hoja de Ruta NUEVA</title>
+	<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+	<div class="module-head">
+		<h1 class="module-title">Hoja de Ruta NUEVA</h1>
+		<a href="/hojas_ruta_nuevo" class="btn btn-secondary mb-3">Volver a listado</a>
+	</div>
+	<div class="container">
+		<table class="table">
+			<tr><th>ID</th><td>{{ hoja.id }}</td></tr>
+			<tr><th>Nombre</th><td>{{ hoja.nombre }}</td></tr>
+			<tr><th>Descripción</th><td>{{ hoja.descripcion }}</td></tr>
+			<tr><th>Producto</th><td>{{ hoja.producto }}</td></tr>
+			<tr><th>Cantidad</th><td>{{ hoja.cantidad_piezas }}</td></tr>
+			<tr><th>Estado</th><td>{{ hoja.estado }}</td></tr>
+			<tr><th>Fecha Creación</th><td>{{ hoja.fecha_creacion }}</td></tr>
+		</table>
+	</div>
+</body>
+</html>

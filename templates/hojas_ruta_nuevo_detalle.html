@@ -1,3 +1,40 @@
-<!-- Copia de hojas_ruta_detalle.html para el nuevo módulo -->
-{% extends "hojas_ruta_detalle.html" %}
-<!-- Aquí se personalizará para el nuevo módulo -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Detalle Hoja de Ruta NUEVA</title>
+	<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+	<div class="module-head">
+		<h1 class="module-title">Detalle Hoja de Ruta NUEVA</h1>
+		<a href="/hojas_ruta_nuevo" class="btn btn-secondary mb-3">Volver a listado</a>
+	</div>
+	<div class="container">
+		<h2>Máquina: {{ maquina.nombre }}</h2>
+		<table class="table">
+			<thead>
+				<tr>
+					<th>ID</th>
+					<th>Nombre</th>
+					<th>Producto</th>
+					<th>Cantidad</th>
+					<th>Estado</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for hoja in hojas %}
+				<tr>
+					<td>{{ hoja.id }}</td>
+					<td>{{ hoja.nombre }}</td>
+					<td>{{ hoja.producto }}</td>
+					<td>{{ hoja.cantidad_piezas }}</td>
+					<td>{{ hoja.estado }}</td>
+				</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	</div>
+</body>
+</html>

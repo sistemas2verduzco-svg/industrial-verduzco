@@ -1,3 +1,67 @@
+# ==================== NUEVO MODELO PARA HOJAS DE RUTA NUEVAS ====================
+class HojaRutaNueva(db.Model):
+    """Hojas de ruta NUEVAS, independientes del módulo legacy."""
+    __tablename__ = 'hojas_ruta_nueva'
+    id = db.Column(db.Integer, primary_key=True)
+    maquina_id = db.Column(db.Integer, db.ForeignKey('maquinas.id'), nullable=True)
+    nombre = db.Column(db.String(255), nullable=False)
+    descripcion = db.Column(db.Text, nullable=True)
+    estado = db.Column(db.String(20), default='activa')
+    producto = db.Column(db.String(255), nullable=True)
+    calidad = db.Column(db.String(255), nullable=True)
+    pn = db.Column(db.String(255), nullable=True)
+    revision = db.Column(db.String(100), nullable=True)
+    fecha_salida = db.Column(db.DateTime, nullable=True)
+    cantidad_piezas = db.Column(db.Integer, nullable=True)
+    orden_trabajo_hr = db.Column(db.String(100), nullable=True)
+    orden_trabajo_pt = db.Column(db.String(100), nullable=True)
+    almacen = db.Column(db.String(100), nullable=True)
+    no_sin_orden = db.Column(db.String(100), nullable=True)
+    materia_prima = db.Column(db.String(255), nullable=True)
+    total_tiempo = db.Column(db.String(50), nullable=True)
+    dias_a_laborar = db.Column(db.Float, nullable=True)
+    fecha_termino = db.Column(db.DateTime, nullable=True)
+    aprobada = db.Column(db.Boolean, default=False)
+    rechazada = db.Column(db.Boolean, default=False)
+    scrap = db.Column(db.String(255), nullable=True)
+    retrabajo = db.Column(db.String(255), nullable=True)
+    supervisor = db.Column(db.String(200), nullable=True)
+    operador = db.Column(db.String(200), nullable=True)
+    eficiencia = db.Column(db.Float, nullable=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    maquina = db.relationship('Máquina', backref='hojas_ruta_nueva')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'maquina_id': self.maquina_id,
+            'nombre': self.nombre,
+            'descripcion': self.descripcion,
+            'producto': self.producto,
+            'calidad': self.calidad,
+            'pn': self.pn,
+            'revision': self.revision,
+            'fecha_salida': self.fecha_salida.isoformat() if self.fecha_salida else None,
+            'cantidad_piezas': self.cantidad_piezas,
+            'orden_trabajo_hr': self.orden_trabajo_hr,
+            'orden_trabajo_pt': self.orden_trabajo_pt,
+            'almacen': self.almacen,
+            'no_sin_orden': self.no_sin_orden,
+            'materia_prima': self.materia_prima,
+            'total_tiempo': self.total_tiempo,
+            'dias_a_laborar': self.dias_a_laborar,
+            'fecha_termino': self.fecha_termino.isoformat() if self.fecha_termino else None,
+            'aprobada': self.aprobada,
+            'rechazada': self.rechazada,
+            'scrap': self.scrap,
+            'retrabajo': self.retrabajo,
+            'supervisor': self.supervisor,
+            'operador': self.operador,
+            'eficiencia': self.eficiencia,
+            'fecha_creacion': self.fecha_creacion.isoformat(),
+            'fecha_actualizacion': self.fecha_actualizacion.isoformat(),
+        }
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash

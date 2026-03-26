@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRuta, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRuta, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -1998,12 +1998,11 @@ def uploaded_file(filename):
 @requires_any_permission([('estaciones', 'view'), ('catalog', 'view')])
 def hojas_ruta_nuevo_list():
     """Lista de máquinas con sus hojas de ruta nuevas y estado de producción."""
-    # Lógica idéntica a hojas_ruta_list, pero usando los nuevos templates y filtrando solo hojas nuevas (por ahora, todas las hojas que no estén en entregas/finalizadas)
     maquinas = Máquina.query.all()
-    hojas_activas = HojaRuta.query.filter(
-        HojaRuta.maquina_id.isnot(None),
-        HojaRuta.estado.in_(['activa', 'pausada'])
-    ).order_by(HojaRuta.fecha_creacion.desc()).all()
+    hojas_activas = HojaRutaNueva.query.filter(
+        HojaRutaNueva.maquina_id.isnot(None),
+        HojaRutaNueva.estado.in_(['activa', 'pausada'])
+    ).order_by(HojaRutaNueva.fecha_creacion.desc()).all()
     hoja_activa_por_maquina = {}
     for h in hojas_activas:
         existing = hoja_activa_por_maquina.get(h.maquina_id)
@@ -2011,10 +2010,34 @@ def hojas_ruta_nuevo_list():
             hoja_activa_por_maquina[h.maquina_id] = h
         elif existing.estado != 'activa' and h.estado == 'activa':
             hoja_activa_por_maquina[h.maquina_id] = h
-
-    # ...existing code for sorting and syncing...
-    # (Copiar la lógica de hojas_ruta_list, pero usar 'hojas_ruta_nuevo_list.html' como template)
-    # ...existing code...
+    # ...sorting y sync igual que legacy...
+    maquinas_data = []
+    for maq in maquinas:
+        hoja_activa = hoja_activa_por_maquina.get(maq.id)
+        maquinas_data.append({
+            'id': maq.id,
+            'nombre': maq.nombre,
+            'descripcion': maq.descripcion,
+            'imagen_url': maq.imagen_url,
+            'hoja_activa': hoja_activa.to_dict() if hoja_activa else None,
+            'activo': getattr(maq, 'activo', False),
+            'tipo': getattr(maq, 'tipo', None),
+            'plantilla_default': getattr(maq, 'plantilla_default', None)
+        })
+    hojas_pendientes = HojaRutaNueva.query.filter(
+        HojaRutaNueva.maquina_id.is_(None),
+        HojaRutaNueva.estado.in_(['activa', 'pausada'])
+    ).order_by(HojaRutaNueva.fecha_creacion.asc()).all()
+    pendientes_data = [{
+        'id': h.id,
+        'serie': h.nombre,
+        'clave': h.pn,
+        'estado': h.estado,
+        'cantidad_piezas': h.cantidad_piezas,
+        'tiempo_total': h.total_tiempo,
+        'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None
+    } for h in hojas_pendientes]
+    facturadas_info = {}
     resp = make_response(render_template(
         'hojas_ruta_nuevo_list.html',
         maquinas=maquinas_data,
@@ -2032,8 +2055,8 @@ def hojas_ruta_nuevo_list():
 def hojas_ruta_nuevo_form():
     """Formulario para crear hojas de ruta nuevas."""
     almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria']
-    hojas = HojaRuta.query.order_by(HojaRuta.fecha_creacion.desc()).all()
-    # ...existing code...
+    hojas = HojaRutaNueva.query.order_by(HojaRutaNueva.fecha_creacion.desc()).all()
+    hojas_data = [h.to_dict() for h in hojas]
     return render_template('hojas_ruta_nuevo_form.html', hojas=hojas_data, almacenes=almacenes)
 
 @app.route('/hojas_ruta_nuevo/<int:maquina_id>')
@@ -2041,8 +2064,9 @@ def hojas_ruta_nuevo_form():
 def hojas_ruta_nuevo_detalle(maquina_id):
     """Detalle de hojas de ruta nuevas para una máquina específica."""
     maquina = Máquina.query.get_or_404(maquina_id)
-    hojas = HojaRuta.query.filter_by(maquina_id=maquina_id).order_by(HojaRuta.fecha_creacion.desc()).all()
-    # ...existing code...
+    hojas = HojaRutaNueva.query.filter_by(maquina_id=maquina_id).order_by(HojaRutaNueva.fecha_creacion.desc()).all()
+    hojas_data = [h.to_dict() for h in hojas]
+    facturadas_info = {}
     return render_template('hojas_ruta_nuevo_detalle.html', maquina=maquina, hojas=hojas_data, facturadas_info=facturadas_info)
 
 @app.route('/hoja_nuevo/<int:hoja_id>')
@@ -2050,9 +2074,8 @@ def hojas_ruta_nuevo_detalle(maquina_id):
 @requires_any_permission([('hojas', 'view'), ('catalog', 'view'), ('entregas', 'view'), ('almacen', 'view'), ('facturacion', 'view')])
 def hoja_ruta_nuevo_ver(hoja_id):
     """Vista independiente para ver una hoja nueva por ID, sin requerir máquina."""
-    hoja = HojaRuta.query.get_or_404(hoja_id)
+    hoja = HojaRutaNueva.query.get_or_404(hoja_id)
     h = hoja.to_dict()
-    # ...existing code...
     return render_template('hoja_ruta_nuevo_ver.html', hoja=h)
 
 @app.route('/hojas_ruta')
