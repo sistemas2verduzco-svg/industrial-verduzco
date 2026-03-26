@@ -1,0 +1,29 @@
+# Comandos para habilitar HTTPS y revisar tu servidor
+
+## 1. Instala y habilita UFW (si no está instalado)
+apt update
+apt install ufw -y
+ufw enable
+
+## 2. Abre los puertos 80 y 443
+ufw allow 80
+ufw allow 443
+ufw reload
+ufw status
+
+## 3. Reinicia tus servicios Docker (en la carpeta de tu proyecto)
+docker compose down
+docker compose up -d
+
+## 4. Verifica que nginx está corriendo
+docker ps
+# (Busca que catalogo_nginx esté en estado "Up")
+
+## 5. Revisa los logs de nginx
+docker logs catalogo_nginx
+
+## 6. Prueba si tu sitio responde por HTTPS
+curl -I https://controlcalidad360.site
+
+---
+Haz cada paso y si algún comando te da error, copia aquí el mensaje y te ayudo.
