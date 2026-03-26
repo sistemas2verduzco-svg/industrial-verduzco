@@ -12,7 +12,7 @@ docker compose up -d
 
 # 3. Verificar que los contenedores estén corriendo
 docker ps
-
+git p
 # COMANDOS PARA LOCALIZAR Y VERIFICAR LA BASE DE DATOS
 
 # 1. Buscar archivos .db en todo el sistema (puede tardar)
