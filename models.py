@@ -1,3 +1,5 @@
+from flask_sqlalchemy import SQLAlchemy
+db = SQLAlchemy()
 # ==================== NUEVO MODELO PARA HOJAS DE RUTA NUEVAS ====================
 class HojaRutaNueva(db.Model):
     """Hojas de ruta NUEVAS, independientes del módulo legacy."""
@@ -62,12 +64,9 @@ class HojaRutaNueva(db.Model):
             'fecha_creacion': self.fecha_creacion.isoformat(),
             'fecha_actualizacion': self.fecha_actualizacion.isoformat(),
         }
-from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from crypto_utils import encrypt_text, decrypt_text
-
-db = SQLAlchemy()
 
 class Usuario(db.Model):
     __tablename__ = 'usuarios'
