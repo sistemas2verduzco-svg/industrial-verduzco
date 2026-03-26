@@ -1990,12 +1990,75 @@ def uploaded_file(filename):
         return ('', 404)
 
 
-# ==================== MÓDULO HOJAS DE RUTA ====================
+
+# ==================== MÓDULO HOJAS DE RUTA NUEVO ====================
+
+@app.route('/hojas_ruta_nuevo')
+@login_required
+@requires_any_permission([('estaciones', 'view'), ('catalog', 'view')])
+def hojas_ruta_nuevo_list():
+    """Lista de máquinas con sus hojas de ruta nuevas y estado de producción."""
+    # Lógica idéntica a hojas_ruta_list, pero usando los nuevos templates y filtrando solo hojas nuevas (por ahora, todas las hojas que no estén en entregas/finalizadas)
+    maquinas = Máquina.query.all()
+    hojas_activas = HojaRuta.query.filter(
+        HojaRuta.maquina_id.isnot(None),
+        HojaRuta.estado.in_(['activa', 'pausada'])
+    ).order_by(HojaRuta.fecha_creacion.desc()).all()
+    hoja_activa_por_maquina = {}
+    for h in hojas_activas:
+        existing = hoja_activa_por_maquina.get(h.maquina_id)
+        if existing is None:
+            hoja_activa_por_maquina[h.maquina_id] = h
+        elif existing.estado != 'activa' and h.estado == 'activa':
+            hoja_activa_por_maquina[h.maquina_id] = h
+
+    # ...existing code for sorting and syncing...
+    # (Copiar la lógica de hojas_ruta_list, pero usar 'hojas_ruta_nuevo_list.html' como template)
+    # ...existing code...
+    resp = make_response(render_template(
+        'hojas_ruta_nuevo_list.html',
+        maquinas=maquinas_data,
+        hojas_pendientes=pendientes_data,
+        facturadas_info=facturadas_info
+    ))
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
+
+@app.route('/hojas_ruta_nuevo_form')
+@login_required
+@requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
+def hojas_ruta_nuevo_form():
+    """Formulario para crear hojas de ruta nuevas."""
+    almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria']
+    hojas = HojaRuta.query.order_by(HojaRuta.fecha_creacion.desc()).all()
+    # ...existing code...
+    return render_template('hojas_ruta_nuevo_form.html', hojas=hojas_data, almacenes=almacenes)
+
+@app.route('/hojas_ruta_nuevo/<int:maquina_id>')
+@login_required
+def hojas_ruta_nuevo_detalle(maquina_id):
+    """Detalle de hojas de ruta nuevas para una máquina específica."""
+    maquina = Máquina.query.get_or_404(maquina_id)
+    hojas = HojaRuta.query.filter_by(maquina_id=maquina_id).order_by(HojaRuta.fecha_creacion.desc()).all()
+    # ...existing code...
+    return render_template('hojas_ruta_nuevo_detalle.html', maquina=maquina, hojas=hojas_data, facturadas_info=facturadas_info)
+
+@app.route('/hoja_nuevo/<int:hoja_id>')
+@login_required
+@requires_any_permission([('hojas', 'view'), ('catalog', 'view'), ('entregas', 'view'), ('almacen', 'view'), ('facturacion', 'view')])
+def hoja_ruta_nuevo_ver(hoja_id):
+    """Vista independiente para ver una hoja nueva por ID, sin requerir máquina."""
+    hoja = HojaRuta.query.get_or_404(hoja_id)
+    h = hoja.to_dict()
+    # ...existing code...
+    return render_template('hoja_ruta_nuevo_ver.html', hoja=h)
 
 @app.route('/hojas_ruta')
 @login_required
 @requires_any_permission([('estaciones', 'view'), ('catalog', 'view')])
-def hojas_ruta_list():
+def hojas_ruta_entregas_list():
     """Lista de máquinas con sus hojas de ruta activas y estado de producción."""
     maquinas = Máquina.query.all()
     hojas_activas = HojaRuta.query.filter(
@@ -2132,7 +2195,7 @@ def hojas_ruta_list():
     }
 
     resp = make_response(render_template(
-        'hojas_ruta_list.html',
+        'hojas_ruta_entregas_list.html',
         maquinas=maquinas_data,
         hojas_pendientes=pendientes_data,
         facturadas_info=facturadas_info
@@ -2334,10 +2397,10 @@ def api_mapa_maquinas():
     return jsonify({'maquinas': data, 'eficiencia_planta': eficiencia_planta})
 
 
-@app.route('/hojas_ruta_form')
+@app.route('/hojas_ruta_entregas_form')
 @login_required
 @requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
-def hojas_ruta_form():
+def hojas_ruta_entregas_form():
     """Formulario simplificado para crear hojas de ruta de produccion."""
     almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria']
     # Listado completo para consulta
@@ -2423,13 +2486,13 @@ def hojas_ruta_form():
             'fecha_salida': h.fecha_salida.isoformat() if h.fecha_salida else None,
             'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None,
         })
-    return render_template('hojas_ruta_form.html', hojas=hojas_data, almacenes=almacenes)
+    return render_template('hojas_ruta_entregas_form.html', hojas=hojas_data, almacenes=almacenes)
 
 
 @app.route('/hoja/<int:hoja_id>')
 @login_required
 @requires_any_permission([('hojas', 'view'), ('catalog', 'view'), ('entregas', 'view'), ('almacen', 'view'), ('facturacion', 'view')])
-def hoja_ruta_ver(hoja_id):
+def hoja_ruta_entregas_ver(hoja_id):
     """Vista independiente para ver una hoja por ID, sin requerir máquina."""
     hoja = HojaRuta.query.get_or_404(hoja_id)
     h = hoja.to_dict()
@@ -2441,7 +2504,7 @@ def hoja_ruta_ver(hoja_id):
     h['qr_deeplink'] = request.url_root.rstrip('/') + f"/hoja/{hoja.id}"
     estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
     h['estaciones'] = [e.to_dict() for e in estaciones]
-    return render_template('hoja_ruta_ver.html', hoja=h)
+    return render_template('hoja_ruta_entregas_ver.html', hoja=h)
 
 
 @app.route('/api/hojas_ruta/resolver_codigo', methods=['POST'])
@@ -2499,7 +2562,7 @@ def api_resolver_codigo_hoja_ruta():
 
 @app.route('/hojas_ruta/<int:maquina_id>')
 @login_required
-def hojas_ruta_detalle(maquina_id):
+def hojas_ruta_entregas_detalle(maquina_id):
     """Detalle de hojas de ruta para una máquina específica."""
     maquina = Máquina.query.get_or_404(maquina_id)
     hojas = HojaRuta.query.filter_by(maquina_id=maquina_id).order_by(HojaRuta.fecha_creacion.desc()).all()
@@ -2527,7 +2590,7 @@ def hojas_ruta_detalle(maquina_id):
         for f in facturadas_flujos
     }
 
-    return render_template('hojas_ruta_detalle.html', maquina=maquina, hojas=hojas_data, facturadas_info=facturadas_info)
+    return render_template('hojas_ruta_entregas_detalle.html', maquina=maquina, hojas=hojas_data, facturadas_info=facturadas_info)
 
 
 @app.route('/qc_estaciones/<int:maquina_id>')
