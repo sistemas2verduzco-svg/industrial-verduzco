@@ -1189,7 +1189,7 @@ def control_calidad_list():
         m = re.search(r'STATUS=(QC_OK|QC_NOK)', notas)
         return m.group(1) if m else None
 
-    hojas = HojaRuta.query.order_by(HojaRuta.fecha_creacion.desc()).all()
+    hojas = HojaRutaEntrega.query.order_by(HojaRutaEntrega.fecha_creacion.desc()).all()
     hojas_qc = []
     for hoja in hojas:
         estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden.asc()).all()
@@ -1240,7 +1240,7 @@ def control_calidad_list():
 @requires_any_permission([('calidad', 'view'), ('catalog', 'view')])
 def control_calidad_hoja(hoja_id):
     """Revisión de calidad por hoja de ruta y por proceso completado."""
-    hoja = HojaRuta.query.get_or_404(hoja_id)
+    hoja = HojaRutaEntrega.query.get_or_404(hoja_id)
     user = get_current_user()
 
     def qc_status(estacion):
@@ -2084,10 +2084,10 @@ def hoja_ruta_nuevo_ver(hoja_id):
 def hojas_ruta_entregas_list():
     """Lista de máquinas con sus hojas de ruta activas y estado de producción."""
     maquinas = Máquina.query.all()
-    hojas_activas = HojaRuta.query.filter(
-        HojaRuta.maquina_id.isnot(None),
-        HojaRuta.estado.in_(['activa', 'pausada'])
-    ).order_by(HojaRuta.fecha_creacion.desc()).all()
+    hojas_activas = HojaRutaEntrega.query.filter(
+        HojaRutaEntrega.maquina_id.isnot(None),
+        HojaRutaEntrega.estado.in_(['activa', 'pausada'])
+    ).order_by(HojaRutaEntrega.fecha_creacion.desc()).all()
     # Preferir 'activa' sobre 'pausada'; en caso de duplicados por maquina, quedarse con la primera encontrada.
     hoja_activa_por_maquina: dict = {}
     for h in hojas_activas:

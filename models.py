@@ -183,7 +183,7 @@ class EntregaParcial(db.Model):
     fecha_entrega = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     
-    hoja_ruta = db.relationship('HojaRutaEntrega', backref='entregas_parciales')
+    hoja_ruta = db.relationship('HojaRutaEntrega', backref='entregas_parciales', foreign_keys=[hoja_ruta_id])
     
     def to_dict(self):
         return {
