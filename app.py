@@ -1152,6 +1152,14 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/hojas_ruta_form')
+@login_required
+@requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
+def hojas_ruta_form():
+    """Alias del formulario legacy para mantener compatibilidad con navbar y enlaces existentes."""
+    return hojas_ruta_entregas_form()
+
+
 @app.route('/producto/<int:producto_id>')
 @login_required
 def producto_detalle(producto_id):
@@ -2045,7 +2053,8 @@ def hojas_ruta_nuevo_list():
         nuevo_modulo=True,
         hoja_detalle_base='/hojas_ruta_nuevo',
         api_resolver_codigo='/api/hojas_ruta_nuevo/resolver_codigo',
-        api_maquina_base='/api/maquinas_nuevo'
+        api_maquina_base='/api/maquinas_nuevo',
+        api_hojas_base='/api/hojas_ruta_nuevo'
     ))
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     resp.headers['Pragma'] = 'no-cache'
