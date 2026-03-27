@@ -174,7 +174,7 @@ class EntregaParcial(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     flujo_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_flujo_logistica.id'), nullable=False, index=True)
-    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False, index=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_entrega.id'), nullable=False, index=True)
     
     cantidad_entregada = db.Column(db.Integer, nullable=False)
     usuario_entrega = db.Column(db.String(120), nullable=False)
@@ -494,7 +494,7 @@ class QCProduccionRegistro(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     maquina_id = db.Column(db.Integer, db.ForeignKey('maquinas.id'), nullable=False)
-    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_entrega.id'), nullable=True)
     clave_pieza = db.Column(db.String(255), nullable=False)
     lote = db.Column(db.String(255), nullable=True)
     cantidad_inspeccionada = db.Column(db.Integer, nullable=True)
@@ -664,7 +664,7 @@ class HojaRutaCargaPiezasHistorial(db.Model):
     __tablename__ = 'hojas_ruta_cargas_historial'
 
     id = db.Column(db.Integer, primary_key=True)
-    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False, index=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_entrega.id'), nullable=False, index=True)
     cantidad_anterior = db.Column(db.Integer, nullable=False, default=0)
     cantidad_cambio = db.Column(db.Integer, nullable=False, default=0)
     cantidad_nueva = db.Column(db.Integer, nullable=False, default=0)
@@ -690,7 +690,7 @@ class HojaRutaFlujoLogistica(db.Model):
     __tablename__ = 'hojas_ruta_flujo_logistica'
 
     id = db.Column(db.Integer, primary_key=True)
-    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False, unique=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_entrega.id'), nullable=False, unique=True)
 
     # entregas | almacen | entregas_lista_facturacion | facturacion | finalizada
     estado = db.Column(db.String(30), nullable=False, default='entregas', index=True)
@@ -749,7 +749,7 @@ class EntregaRegistro(db.Model):
     __tablename__ = 'entregas_registros'
 
     id = db.Column(db.Integer, primary_key=True)
-    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False, index=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_entrega.id'), nullable=False, index=True)
     flujo_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_flujo_logistica.id'), nullable=True, index=True)
     accion = db.Column(db.String(80), nullable=False)  # agregada_en_entregas | enviada_a_almacen | lista_para_facturacion | enviada_a_facturacion
     usuario = db.Column(db.String(120), nullable=True)
@@ -765,7 +765,7 @@ class AlmacenRegistro(db.Model):
     __tablename__ = 'almacen_registros'
 
     id = db.Column(db.Integer, primary_key=True)
-    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False, index=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_entrega.id'), nullable=False, index=True)
     flujo_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_flujo_logistica.id'), nullable=True, index=True)
     recepcion_id = db.Column(db.String(120), nullable=True)
     captura_path = db.Column(db.String(500), nullable=True)
@@ -783,7 +783,7 @@ class FacturacionRegistro(db.Model):
     __tablename__ = 'facturacion_registros'
 
     id = db.Column(db.Integer, primary_key=True)
-    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False, index=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_entrega.id'), nullable=False, index=True)
     flujo_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_flujo_logistica.id'), nullable=True, index=True)
     aprobado = db.Column(db.Boolean, nullable=False, default=False)
     usuario = db.Column(db.String(120), nullable=True)
@@ -800,7 +800,7 @@ class EstacionTrabajo(db.Model):
     __tablename__ = 'estaciones_trabajo'
 
     id = db.Column(db.Integer, primary_key=True)
-    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta.id'), nullable=False)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_entrega.id'), nullable=False)
     nombre = db.Column(db.String(255), nullable=False)
     pro_c = db.Column(db.String(50), nullable=True)  # PRO C. (número o código)
     centro_trabajo = db.Column(db.String(100), nullable=True)  # C.T.
