@@ -62,13 +62,16 @@
         <a href="/reportar" class="sb-link sb-sub" data-base="/reportar"><span>📋</span> <span>Reportar Incidencia</span></a>
         {% endif %}
 
-        {% if has_permission('catalog', 'edit') or has_permission('proveedores', 'view') or current_user and current_user.es_admin %}
+        {% if has_permission('catalog', 'edit') or has_permission('proveedores', 'view') or has_permission('admin', 'view') or has_permission('users', 'view') or has_permission('roles', 'view') or has_permission('permissions', 'view') or current_user and current_user.es_admin %}
         <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">ADMINISTRACION CATALOGO</div>
-        {% if has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        {% if has_permission('catalog', 'edit') or has_permission('admin', 'view') or current_user and current_user.es_admin %}
         <a href="/admin" class="sb-link" data-base="/admin"><span>⚙️</span> <span>Administrar</span></a>
         {% endif %}
         {% if has_permission('proveedores', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
         <a href="/proveedores" class="sb-link sb-sub" data-base="/proveedores"><span>🏢</span> <span>Proveedores</span></a>
+        {% endif %}
+        {% if has_permission('users', 'view') or has_permission('roles', 'view') or has_permission('permissions', 'view') or current_user and current_user.es_admin %}
+        <a href="/admin/users" class="sb-link sb-sub" data-base="/admin/users"><span>👥</span> <span>Usuarios y Roles</span></a>
         {% endif %}
         {% endif %}
 

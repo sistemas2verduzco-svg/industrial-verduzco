@@ -833,6 +833,8 @@ def _resolve_post_login_endpoint(user):
         return 'facturacion_module'
     if user.has_permission('tickets', 'view'):
         return 'soporte_tecnico'
+    if user.has_permission('users', 'view') or user.has_permission('roles', 'view') or user.has_permission('permissions', 'view'):
+        return 'admin_users_page'
     if user.has_permission('proveedores', 'view') or user.has_permission('proveedores', 'edit'):
         return 'proveedores'
 
@@ -896,6 +898,15 @@ def requires_any_permission(permission_pairs):
 ROLE_MODULE_BUNDLES = {
     'catalog': [('catalog', 'view')],
     'admin_catalog': [('catalog', 'view'), ('catalog', 'edit')],
+    'admin_panel_view': [('admin', 'view')],
+    'users_view': [('users', 'view')],
+    'users_edit': [('users', 'view'), ('users', 'edit')],
+    'roles_view': [('roles', 'view')],
+    'roles_edit': [('roles', 'view'), ('roles', 'edit')],
+    'permissions_view': [('permissions', 'view')],
+    'permissions_edit': [('permissions', 'view'), ('permissions', 'edit')],
+    'admin_user_manager_view': [('admin', 'view'), ('users', 'view'), ('roles', 'view'), ('permissions', 'view')],
+    'admin_user_manager_edit': [('admin', 'view'), ('users', 'edit'), ('roles', 'edit'), ('permissions', 'edit')],
     'hojas_readonly': [('catalog', 'view'), ('hojas', 'view')],
     'hojas_generacion': [('catalog', 'view'), ('hojas', 'view'), ('hojas', 'create')],
     'hojas_edicion_basica': [('catalog', 'view'), ('hojas', 'view'), ('hojas', 'edit_basico')],
@@ -933,6 +944,13 @@ ROLE_MODULE_BUNDLES = {
 
 
 DEFAULT_PERMISSION_CATALOG = [
+    ('admin', 'view', 'Ver panel de administracion'),
+    ('users', 'view', 'Ver gestion de usuarios'),
+    ('users', 'edit', 'Editar usuarios'),
+    ('roles', 'view', 'Ver roles'),
+    ('roles', 'edit', 'Editar roles'),
+    ('permissions', 'view', 'Ver permisos'),
+    ('permissions', 'edit', 'Editar permisos'),
     ('catalog', 'view', 'Ver catalogo'),
     ('catalog', 'edit', 'Editar catalogo'),
     ('hojas', 'view', 'Ver hojas de ruta'),
@@ -1124,6 +1142,41 @@ def _permissions_from_modules_and_ids(modules, permission_ids):
         seen.add(pair)
         resolved.append(perm)
     return resolved
+
+
+def _can_view_admin_panel(user):
+    if not user:
+        return False
+    if user.es_admin:
+        return True
+    return user.has_permission('admin', 'view') or user.has_permission('catalog', 'edit')
+
+
+def _can_view_user_admin(user):
+    if not user:
+        return False
+    if user.es_admin:
+        return True
+    return (
+        user.has_permission('users', 'view')
+        or user.has_permission('users', 'edit')
+        or user.has_permission('roles', 'view')
+        or user.has_permission('roles', 'edit')
+        or user.has_permission('permissions', 'view')
+        or user.has_permission('permissions', 'edit')
+    )
+
+
+def _can_edit_user_admin(user):
+    if not user:
+        return False
+    if user.es_admin:
+        return True
+    return (
+        user.has_permission('users', 'edit')
+        or user.has_permission('roles', 'edit')
+        or user.has_permission('permissions', 'edit')
+    )
 
 # ==================== DASHBOARD / HOME CENTRAL ====================
 
@@ -3835,6 +3888,9 @@ def plantillas_page():
 @login_required
 def admin():
     """Panel de administración"""
+    user = get_current_user()
+    if not _can_view_admin_panel(user):
+        return render_template('403.html'), 403
     return render_template('admin.html')
 
 
@@ -3842,7 +3898,8 @@ def admin():
 @login_required
 def admin_users_page():
     """Página de administración de usuarios (solo admin)."""
-    if not is_admin_user():
+    user = get_current_user()
+    if not _can_view_user_admin(user):
         return render_template('403.html'), 403
     return render_template('admin_users.html')
 
@@ -3851,7 +3908,8 @@ def admin_users_page():
 @app.route('/api/users')
 @login_required
 def api_list_users():
-    if not is_admin_user():
+    user = get_current_user()
+    if not _can_view_user_admin(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     users = Usuario.query.order_by(Usuario.id.asc()).all()
     data = []
@@ -3871,7 +3929,8 @@ def api_list_users():
 @app.route('/api/permissions')
 @login_required
 def api_list_permissions():
-    if not is_admin_user():
+    user = get_current_user()
+    if not _can_view_user_admin(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     _ensure_default_permissions()
     perms = Permission.query.order_by(Permission.module, Permission.action).all()
@@ -3881,7 +3940,8 @@ def api_list_permissions():
 @app.route('/api/roles')
 @login_required
 def api_list_roles():
-    if not is_admin_user():
+    user = get_current_user()
+    if not _can_view_user_admin(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     _ensure_default_permissions()
     roles = Role.query.order_by(Role.name).all()
@@ -3897,7 +3957,8 @@ def api_list_roles():
 @app.route('/api/roles', methods=['POST'])
 @login_required
 def api_create_role():
-    if not is_admin_user():
+    user = get_current_user()
+    if not _can_edit_user_admin(user):
         return jsonify({'error': 'Permiso denegado'}), 403
 
     _ensure_default_permissions()
@@ -3929,7 +3990,8 @@ def api_create_role():
 @app.route('/api/roles/<int:role_id>/permissions', methods=['PUT'])
 @login_required
 def api_set_role_permissions(role_id):
-    if not is_admin_user():
+    user = get_current_user()
+    if not _can_edit_user_admin(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     payload = request.get_json() or {}
     perm_ids = payload.get('permission_ids', [])
@@ -3945,7 +4007,8 @@ def api_set_role_permissions(role_id):
 @app.route('/api/roles/<int:role_id>/modules', methods=['PUT'])
 @login_required
 def api_set_role_modules(role_id):
-    if not is_admin_user():
+    user = get_current_user()
+    if not _can_edit_user_admin(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     _ensure_default_permissions()
     payload = request.get_json() or {}
@@ -3970,7 +4033,8 @@ def api_set_role_modules(role_id):
 @app.route('/api/users', methods=['POST'])
 @login_required
 def api_create_user():
-    if not is_admin_user():
+    user = get_current_user()
+    if not _can_edit_user_admin(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     data = request.get_json() or {}
     username = data.get('username')
@@ -4017,7 +4081,8 @@ def api_create_user():
 @app.route('/api/users/<int:user_id>/toggle_active', methods=['PUT'])
 @login_required
 def api_toggle_active(user_id):
-    if not is_admin_user():
+    user = get_current_user()
+    if not _can_edit_user_admin(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     u = Usuario.query.get_or_404(user_id)
     if u.username == 'admin':
@@ -4031,7 +4096,8 @@ def api_toggle_active(user_id):
 @app.route('/api/users/<int:user_id>/role', methods=['PUT'])
 @login_required
 def api_set_role(user_id):
-    if not is_admin_user():
+    user = get_current_user()
+    if not _can_edit_user_admin(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     payload = request.get_json() or {}
     role_name = payload.get('role')
@@ -4053,7 +4119,8 @@ def api_set_role(user_id):
 @app.route('/api/users/<int:user_id>', methods=['DELETE'])
 @login_required
 def api_delete_user(user_id):
-    if not is_admin_user():
+    user = get_current_user()
+    if not _can_edit_user_admin(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     u = Usuario.query.get_or_404(user_id)
     if u.username == 'admin':
@@ -4066,7 +4133,8 @@ def api_delete_user(user_id):
 @app.route('/api/users/<int:user_id>', methods=['GET'])
 @login_required
 def api_get_user(user_id):
-    if not is_admin_user():
+    user = get_current_user()
+    if not _can_view_user_admin(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     u = Usuario.query.get_or_404(user_id)
     data = {
@@ -4089,7 +4157,8 @@ def api_get_user(user_id):
 @app.route('/api/users/<int:user_id>', methods=['PUT'])
 @login_required
 def api_update_user(user_id):
-    if not is_admin_user():
+    user = get_current_user()
+    if not _can_edit_user_admin(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     u = Usuario.query.get_or_404(user_id)
     data = request.get_json() or {}
