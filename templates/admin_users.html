@@ -170,10 +170,11 @@ document.getElementById('btn-create-user').addEventListener('click', async ()=>{
         const role = document.getElementById('new-role').value || null;
         const custom_role_name = document.getElementById('new-custom-role-name').value.trim();
         const modules = getCheckedModules('new-user');
+        const permission_ids = getCheckedPermissions('new-user');
         const es_admin = document.getElementById('new-es-admin').checked;
         if(!username || !password){ alert('username y password son requeridos'); return; }
 
-        const hasCustomProfile = modules.length > 0 || !!custom_role_name;
+        const hasCustomProfile = modules.length > 0 || permission_ids.length > 0 || !!custom_role_name;
         if(role && hasCustomProfile){
             alert('Selecciona role existente O perfil personalizado, no ambos.');
             return;
@@ -184,6 +185,7 @@ document.getElementById('btn-create-user').addEventListener('click', async ()=>{
             payload.custom_role_name = custom_role_name;
             payload.custom_role_description = `Perfil de ${username}`;
             payload.modules = modules;
+            payload.permission_ids = permission_ids;
         }
 
         const res = await fetch('/api/users', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
@@ -375,7 +377,23 @@ function getCheckedModules(scope){
 }
 
 function getCheckedPermissions(scope){
-    return [];
+    const selected = getCheckedModules(scope);
+    const ids = [];
+
+    selected.forEach((modId) => {
+        const sep = modId.lastIndexOf('_');
+        if (sep <= 0 || sep === modId.length - 1) {
+            return;
+        }
+        const module = modId.slice(0, sep);
+        const action = modId.slice(sep + 1);
+        const perm = ALL_PERMISSIONS.find((p) => p.module === module && p.action === action);
+        if (perm && perm.id) {
+            ids.push(perm.id);
+        }
+    });
+
+    return Array.from(new Set(ids));
 }
 
 async function loadPermissions(){
@@ -447,8 +465,10 @@ async function openRolesModal(){
         try{
             const rid = parseInt(select.value,10);
             const checked = getCheckedModules('role-modal');
+            const permissionIds = getCheckedPermissions('role-modal');
             const rolesData = {
                 modules: checked,
+                permission_ids: permissionIds,
                 description: ALL_ROLES.find(r=>r.id===rid)?.description || ALL_ROLES.find(r=>r.id===rid)?.descripcion || ''
             };
             const res = await fetch(`/api/roles/${rid}/modules`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(rolesData)});
@@ -469,9 +489,12 @@ function closeRolesModal(){
 
 function renderRoleModules(roleId){
     const role = ALL_ROLES.find(r=>r.id===roleId) || {modules:[], permissions:[]};
-    const mods = (role.modules||[]);
+    const mods = new Set(role.modules || []);
+    const moduleActions = new Set((role.permissions || []).map((p) => `${p.module}_${p.action}`));
+
     Array.from(document.querySelectorAll('input[data-scope="role-modal"][data-mod-id]')).forEach(cb=>{
-        cb.checked = mods.indexOf(cb.dataset.modId) !== -1;
+        const modId = cb.dataset.modId;
+        cb.checked = moduleActions.has(modId) || mods.has(modId);
     });
 
     const selectedPermissionIds = new Set((role.permissions || []).map(p=>p.id));
