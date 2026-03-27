@@ -584,16 +584,14 @@ class ComponenteMáquina(db.Model):
         }
 
 
-class HojaRuta(db.Model):
-    """Hojas de ruta de producción para máquinas."""
-    __tablename__ = 'hojas_ruta'
+class HojaRutaEntrega(db.Model):
+    """Hojas de ruta de producción para máquinas (ENTREGAS, legacy)."""
+    __tablename__ = 'hojas_ruta_entrega'
     id = db.Column(db.Integer, primary_key=True)
     maquina_id = db.Column(db.Integer, db.ForeignKey('maquinas.id'), nullable=True)
     nombre = db.Column(db.String(255), nullable=False)
     descripcion = db.Column(db.Text, nullable=True)
-    estado = db.Column(db.String(20), default='activa')  # activa, pausada, completada
-
-    # Campos adicionales según plantilla HOJA DE RUTA
+    estado = db.Column(db.String(20), default='activa')
     producto = db.Column(db.String(255), nullable=True)
     calidad = db.Column(db.String(255), nullable=True)
     pn = db.Column(db.String(255), nullable=True)
@@ -605,28 +603,24 @@ class HojaRuta(db.Model):
     almacen = db.Column(db.String(100), nullable=True)
     no_sin_orden = db.Column(db.String(100), nullable=True)
     materia_prima = db.Column(db.String(255), nullable=True)
-    total_tiempo = db.Column(db.String(50), nullable=True)  # formato HH:MM:SS
+    total_tiempo = db.Column(db.String(50), nullable=True)
     dias_a_laborar = db.Column(db.Float, nullable=True)
     fecha_termino = db.Column(db.DateTime, nullable=True)
-
     aprobada = db.Column(db.Boolean, default=False)
     rechazada = db.Column(db.Boolean, default=False)
-    scrap = db.Column(db.String(255), nullable=True)  # Cambiado a texto opcional
-    retrabajo = db.Column(db.String(255), nullable=True)  # Cambiado a texto opcional
-
+    scrap = db.Column(db.String(255), nullable=True)
+    retrabajo = db.Column(db.String(255), nullable=True)
     supervisor = db.Column(db.String(200), nullable=True)
     operador = db.Column(db.String(200), nullable=True)
     eficiencia = db.Column(db.Float, nullable=True)
-
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
     # Relaciones
-    maquina = db.relationship('Máquina', backref='hojas_ruta')
-    estaciones = db.relationship('EstacionTrabajo', backref='hoja_ruta', lazy=True, cascade='all, delete-orphan')
+    maquina = db.relationship('Máquina', backref='hojas_ruta_entrega')
+    estaciones = db.relationship('EstacionTrabajo', backref='hoja_ruta_entrega', lazy=True, cascade='all, delete-orphan')
     historial_cargas = db.relationship(
         'HojaRutaCargaPiezasHistorial',
-        backref='hoja_ruta',
+        backref='hoja_ruta_entrega',
         lazy=True,
         cascade='all, delete-orphan',
         order_by='desc(HojaRutaCargaPiezasHistorial.fecha_creacion)'
