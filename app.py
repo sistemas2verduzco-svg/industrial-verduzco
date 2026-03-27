@@ -2004,69 +2004,8 @@ def uploaded_file(filename):
 @login_required
 @requires_any_permission([('estaciones', 'view'), ('catalog', 'view')])
 def hojas_ruta_nuevo_list():
-    """Lista de máquinas con sus hojas de ruta nuevas y estado de producción."""
-    maquinas = Máquina.query.all()
-    hojas_activas = HojaRutaNueva.query.filter(
-        HojaRutaNueva.maquina_id.isnot(None),
-        HojaRutaNueva.estado.in_(['activa', 'pausada'])
-    ).order_by(HojaRutaNueva.fecha_creacion.desc()).all()
-    hoja_activa_por_maquina = {}
-    for h in hojas_activas:
-        existing = hoja_activa_por_maquina.get(h.maquina_id)
-        if existing is None:
-            hoja_activa_por_maquina[h.maquina_id] = h
-        elif existing.estado != 'activa' and h.estado == 'activa':
-            hoja_activa_por_maquina[h.maquina_id] = h
-    # ...sorting y sync igual que legacy...
-    maquinas_data = []
-    for maq in maquinas:
-        hoja_activa = hoja_activa_por_maquina.get(maq.id)
-        hoja_activa_dict = hoja_activa.to_dict() if hoja_activa else None
-        if hoja_activa_dict is not None:
-            hoja_activa_dict['estaciones'] = []
-        maquinas_data.append({
-            'id': maq.id,
-            'nombre': maq.nombre,
-            'descripcion': maq.descripcion,
-            'imagen_url': maq.imagen_url,
-            'hoja_activa': hoja_activa_dict,
-            'activo': getattr(maq, 'activo', False),
-            'estacion_actual': 'Sin producción',
-            'tiempo_real': None,
-            'tipo': getattr(maq, 'tipo', None),
-            'plantilla_default': getattr(maq, 'plantilla_default', None)
-        })
-    hojas_pendientes = HojaRutaNueva.query.filter(
-        HojaRutaNueva.maquina_id.is_(None),
-        HojaRutaNueva.estado.in_(['activa', 'pausada'])
-    ).order_by(HojaRutaNueva.fecha_creacion.asc()).all()
-    pendientes_data = [{
-        'id': h.id,
-        'serie': h.nombre,
-        'clave': h.pn,
-        'estado': h.estado,
-        'cantidad_piezas': h.cantidad_piezas,
-        'tiempo_total': h.total_tiempo,
-        'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None,
-        'estaciones': [],
-    } for h in hojas_pendientes]
-    facturadas_info = {}
-    resp = make_response(render_template(
-        'hojas_ruta_list.html',
-        maquinas=maquinas_data,
-        hojas_pendientes=pendientes_data,
-        facturadas_info=facturadas_info,
-        nuevo_modulo=True,
-        hoja_detalle_base='/hojas_ruta_nuevo',
-        api_resolver_codigo='/api/hojas_ruta_nuevo/resolver_codigo',
-        api_maquina_base='/api/maquinas_nuevo',
-        api_hojas_base='/api/hojas_ruta_nuevo',
-        modulo_titulo='HOJAS DE RUTA MP'
-    ))
-    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-    resp.headers['Pragma'] = 'no-cache'
-    resp.headers['Expires'] = '0'
-    return resp
+    """Acceso principal del módulo MP: mismo flujo visual que Hojas de ruta, independiente."""
+    return hojas_ruta_nuevo_form()
 
 @app.route('/hojas_ruta_nuevo_form')
 @login_required
@@ -2134,8 +2073,104 @@ def hoja_ruta_nuevo_ver(hoja_id):
 @login_required
 @requires_any_permission([('estaciones', 'view'), ('catalog', 'view')])
 def hojas_ruta_entregas_list():
-    """Estaciones T ahora usa el flujo MP/nuevo."""
-    return hojas_ruta_nuevo_list()
+    """Lista legacy de Estaciones T usando hojas_ruta_entrega."""
+    maquinas = Máquina.query.all()
+
+    hojas_activas = HojaRutaEntrega.query.filter(
+        HojaRutaEntrega.maquina_id.isnot(None),
+        HojaRutaEntrega.estado.in_(['activa', 'pausada'])
+    ).order_by(HojaRutaEntrega.fecha_creacion.desc()).all()
+
+    hoja_activa_por_maquina = {}
+    for hoja in hojas_activas:
+        existing = hoja_activa_por_maquina.get(hoja.maquina_id)
+        if existing is None:
+            hoja_activa_por_maquina[hoja.maquina_id] = hoja
+        elif existing.estado != 'activa' and hoja.estado == 'activa':
+            hoja_activa_por_maquina[hoja.maquina_id] = hoja
+
+    maquinas_data = []
+    for maq in maquinas:
+        hoja_activa = hoja_activa_por_maquina.get(maq.id)
+        hoja_activa_dict = hoja_activa.to_dict() if hoja_activa else None
+        estacion_actual = 'Sin producción'
+        tiempo_real = None
+
+        if hoja_activa:
+            estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja_activa.id).order_by(EstacionTrabajo.orden).all()
+            estaciones_dict = [e.to_dict() for e in estaciones]
+            if hoja_activa_dict is not None:
+                hoja_activa_dict['estaciones'] = estaciones_dict
+            est_en_curso = next((e for e in estaciones_dict if (e.get('estado') or '').lower() in ('en_curso', 'activa')), None)
+            est_pendiente = next((e for e in estaciones_dict if (e.get('estado') or '').lower() == 'pendiente'), None)
+            est_ref = est_en_curso or est_pendiente
+            if est_ref:
+                estacion_actual = est_ref.get('operacion') or est_ref.get('nombre') or 'En proceso'
+            elif estaciones_dict:
+                estacion_actual = 'Finalizada'
+            tiempo_real = hoja_activa.total_tiempo
+
+        maquinas_data.append({
+            'id': maq.id,
+            'nombre': maq.nombre,
+            'descripcion': maq.descripcion,
+            'imagen_url': maq.imagen_url,
+            'hoja_activa': hoja_activa_dict,
+            'activo': getattr(maq, 'activo', False),
+            'estacion_actual': estacion_actual,
+            'tiempo_real': tiempo_real,
+            'tipo': getattr(maq, 'tipo', None),
+            'plantilla_default': getattr(maq, 'plantilla_default', None),
+        })
+
+    hojas_pendientes = HojaRutaEntrega.query.filter(
+        HojaRutaEntrega.maquina_id.is_(None),
+        HojaRutaEntrega.estado.in_(['activa', 'pausada'])
+    ).order_by(HojaRutaEntrega.fecha_creacion.asc()).all()
+
+    pendientes_data = []
+    for hoja in hojas_pendientes:
+        estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
+        pendientes_data.append({
+            'id': hoja.id,
+            'serie': hoja.nombre,
+            'clave': hoja.pn,
+            'estado': hoja.estado,
+            'cantidad_piezas': hoja.cantidad_piezas,
+            'tiempo_total': hoja.total_tiempo,
+            'fecha_creacion': hoja.fecha_creacion.isoformat() if hoja.fecha_creacion else None,
+            'estaciones': [e.to_dict() for e in estaciones],
+        })
+
+    hoja_ids = [h['id'] for h in pendientes_data]
+    facturadas_flujos = HojaRutaFlujoLogistica.query.filter(
+        HojaRutaFlujoLogistica.hoja_ruta_id.in_(hoja_ids),
+        HojaRutaFlujoLogistica.estado == 'finalizada'
+    ).all() if hoja_ids else []
+    facturadas_info = {
+        f.hoja_ruta_id: {
+            'aprobado_por': f.facturacion_aprobado_por or '',
+            'aprobado_en': f.facturacion_aprobado_en.strftime('%d/%m/%Y %H:%M') if f.facturacion_aprobado_en else ''
+        }
+        for f in facturadas_flujos
+    }
+
+    resp = make_response(render_template(
+        'hojas_ruta_list.html',
+        maquinas=maquinas_data,
+        hojas_pendientes=pendientes_data,
+        facturadas_info=facturadas_info,
+        nuevo_modulo=False,
+        hoja_detalle_base='/hojas_ruta',
+        api_resolver_codigo='/api/hojas_ruta/resolver_codigo',
+        api_maquina_base='/api/maquinas',
+        api_hojas_base='/api/hojas_ruta',
+        modulo_titulo='Estaciones T - Produccion por Maquina'
+    ))
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
 
 
 @app.route('/mapa_maquinas')

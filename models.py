@@ -66,8 +66,8 @@ class HojaRutaNueva(db.Model):
             'supervisor': self.supervisor,
             'operador': self.operador,
             'eficiencia': self.eficiencia,
-            'fecha_creacion': self.fecha_creacion.isoformat(),
-            'fecha_actualizacion': self.fecha_actualizacion.isoformat(),
+            'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,
+            'fecha_actualizacion': self.fecha_actualizacion.isoformat() if self.fecha_actualizacion else None,
         }
 
 
