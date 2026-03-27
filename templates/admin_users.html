@@ -335,6 +335,19 @@ function makeModuleCheckboxes(containerId, inputScope){
             wrap.style.cursor = 'pointer';
             wrap.style.fontSize = '12px';
             wrap.innerHTML = `<input type="checkbox" id="${rid}" data-mod-id="${moduleActionId}" data-scope="${inputScope}" /> <span>${actionMeta.label}</span>`;
+
+            // Auto-marcar VER cuando se activa cualquier acción no-view.
+            if (actionMeta.id !== 'view') {
+                const cb = wrap.querySelector('input[type="checkbox"]');
+                cb.addEventListener('change', function() {
+                    if (this.checked) {
+                        const viewId = `${inputScope}_${moduleItem.id}_view`;
+                        const viewCb = document.getElementById(viewId);
+                        if (viewCb && !viewCb.checked) viewCb.checked = true;
+                    }
+                });
+            }
+
             actionsRow.appendChild(wrap);
         });
 

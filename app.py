@@ -1084,6 +1084,13 @@ def _apply_role_modules(role, modules):
         for perm_pair in ROLE_MODULE_BUNDLES.get(module_id, []):
             required.add(perm_pair)
 
+    # Auto-grant view for any module that has a non-view action assigned.
+    # Without view, the user can't even load the page to use edit/create/etc.
+    modules_with_action = {module for module, action in required if action != 'view'}
+    modules_with_view = {module for module, action in required if action == 'view'}
+    for module in modules_with_action - modules_with_view:
+        required.add((module, 'view'))
+
     # Preserve unrelated permissions and ensure required ones are present.
     existing = {(p.module, p.action): p for p in (role.permissions or [])}
     current_perms = list(role.permissions or [])
