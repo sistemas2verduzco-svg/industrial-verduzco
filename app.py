@@ -1742,9 +1742,18 @@ def almacen_module():
         .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
         .all()
     )
+    historial_almacen = (
+        AlmacenRegistro.query
+        .order_by(AlmacenRegistro.fecha_creacion.desc())
+        .limit(80)
+        .all()
+    )
 
-    # Sección de rutas y lógica para recepción de almacén
-    # (Ajuste de formato y comentarios para claridad y mantenimiento)
+    return render_template(
+        'almacen_module.html',
+        pendientes_almacen=pendientes_almacen,
+        historial_almacen=historial_almacen,
+    )
         
         
 @app.route('/almacen/recibir/<int:item_id>', methods=['POST'])
