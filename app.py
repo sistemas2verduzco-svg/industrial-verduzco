@@ -2021,13 +2021,18 @@ def hojas_ruta_nuevo_list():
     maquinas_data = []
     for maq in maquinas:
         hoja_activa = hoja_activa_por_maquina.get(maq.id)
+        hoja_activa_dict = hoja_activa.to_dict() if hoja_activa else None
+        if hoja_activa_dict is not None:
+            hoja_activa_dict['estaciones'] = []
         maquinas_data.append({
             'id': maq.id,
             'nombre': maq.nombre,
             'descripcion': maq.descripcion,
             'imagen_url': maq.imagen_url,
-            'hoja_activa': hoja_activa.to_dict() if hoja_activa else None,
+            'hoja_activa': hoja_activa_dict,
             'activo': getattr(maq, 'activo', False),
+            'estacion_actual': 'Sin producción',
+            'tiempo_real': None,
             'tipo': getattr(maq, 'tipo', None),
             'plantilla_default': getattr(maq, 'plantilla_default', None)
         })
@@ -2042,7 +2047,8 @@ def hojas_ruta_nuevo_list():
         'estado': h.estado,
         'cantidad_piezas': h.cantidad_piezas,
         'tiempo_total': h.total_tiempo,
-        'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None
+        'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None,
+        'estaciones': [],
     } for h in hojas_pendientes]
     facturadas_info = {}
     resp = make_response(render_template(
@@ -2054,7 +2060,8 @@ def hojas_ruta_nuevo_list():
         hoja_detalle_base='/hojas_ruta_nuevo',
         api_resolver_codigo='/api/hojas_ruta_nuevo/resolver_codigo',
         api_maquina_base='/api/maquinas_nuevo',
-        api_hojas_base='/api/hojas_ruta_nuevo'
+        api_hojas_base='/api/hojas_ruta_nuevo',
+        modulo_titulo='HOJAS DE RUTA MP'
     ))
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     resp.headers['Pragma'] = 'no-cache'
@@ -2086,7 +2093,7 @@ def hojas_ruta_nuevo_form():
         nuevo_modulo=True,
         api_hojas_base='/api/hojas_ruta_nuevo',
         hoja_view_base='/hoja_nuevo',
-        modulo_titulo='Hojas de Ruta NUEVAS'
+        modulo_titulo='HOJAS DE RUTA MP'
     )
 
 @app.route('/hojas_ruta_nuevo/<int:maquina_id>')
