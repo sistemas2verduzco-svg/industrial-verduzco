@@ -123,6 +123,7 @@
                     </div>
                 </div>
 
+                {% if can_edit_qc %}
                 <form method="post" style="margin-top:10px;">
                     <input type="hidden" name="estacion_id" value="{{ p.id }}">
 
@@ -163,6 +164,11 @@
                         <button type="submit" class="btn-primary">Guardar Revision QC</button>
                     </div>
                 </form>
+                {% else %}
+                <div style="margin-top:10px; padding:10px; border-radius:8px; background:#f8fafc; color:#64748b; font-size:13px;">
+                    Modo solo vista: no tienes permiso para capturar o modificar revisiones de calidad.
+                </div>
+                {% endif %}
             </div>
             {% endfor %}
         {% else %}

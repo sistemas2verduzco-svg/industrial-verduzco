@@ -1358,6 +1358,7 @@ def control_calidad_hoja(hoja_id):
     """Revisión de calidad por hoja de ruta y por proceso completado."""
     hoja = HojaRutaEntrega.query.get_or_404(hoja_id)
     user = get_current_user()
+    can_edit_qc = bool(user and (user.has_permission('calidad', 'edit') or user.has_permission('calidad', 'update')))
 
     def qc_status(estacion):
         notas = estacion.notas or ''
@@ -1413,7 +1414,7 @@ def control_calidad_hoja(hoja_id):
         return str(value).strip().lower() in ('1', 'true', 'on', 'yes', 'si', 'ok')
 
     if request.method == 'POST':
-        if not (user and (user.has_permission('calidad', 'edit') or user.has_permission('catalog', 'edit'))):
+        if not can_edit_qc:
             error_guardado = 'Permiso denegado para editar control de calidad'
         else:
             estacion_id = request.form.get('estacion_id', type=int)
@@ -1571,6 +1572,7 @@ def control_calidad_hoja(hoja_id):
         'control_calidad_detalle.html',
         hoja=hoja,
         procesos=procesos_completados,
+        can_edit_qc=can_edit_qc,
         lote_referencia=lote_referencia,
         pendientes_qc=pendientes_qc,
         qc_finalizada=qc_finalizada,
@@ -5957,7 +5959,7 @@ def actualizar_ingeniero(ingeniero_id):
 
 @app.route('/procesos')
 @login_required
-@requires_permission('catalog', 'edit')
+@requires_any_permission([('procesos', 'view'), ('procesos', 'edit'), ('procesos', 'update'), ('procesos', 'create'), ('procesos', 'delete')])
 def procesos_panel():
     """Panel de administración para procesos (catálogo) y claves (productos)."""
     try:
@@ -5973,7 +5975,7 @@ def procesos_panel():
 
 @app.route('/procesos/clave/save', methods=['POST'])
 @login_required
-@requires_permission('catalog', 'edit')
+@requires_any_permission([('procesos', 'create'), ('procesos', 'edit'), ('procesos', 'update')])
 def procesos_clave_save():
     """Crear o actualizar una clave producto."""
     try:
@@ -6005,7 +6007,7 @@ def procesos_clave_save():
 
 @app.route('/procesos/clave/<int:clave_id>/secuencia/save', methods=['POST'])
 @login_required
-@requires_permission('catalog', 'edit')
+@requires_any_permission([('procesos', 'edit'), ('procesos', 'update')])
 def procesos_clave_secuencia_save(clave_id):
     """Guardar la secuencia de procesos para una clave."""
     try:
@@ -6066,7 +6068,7 @@ def procesos_clave_secuencia_save(clave_id):
 
 @app.route('/procesos/clave/<int:clave_id>/delete', methods=['POST'])
 @login_required
-@requires_permission('catalog', 'edit')
+@requires_any_permission([('procesos', 'delete')])
 def procesos_clave_delete(clave_id):
     try:
         obj = ClaveProducto.query.get_or_404(clave_id)
@@ -6081,7 +6083,7 @@ def procesos_clave_delete(clave_id):
 
 @app.route('/procesos/base/save', methods=['POST'])
 @login_required
-@requires_permission('catalog', 'edit')
+@requires_any_permission([('procesos', 'create'), ('procesos', 'edit'), ('procesos', 'update')])
 def procesos_base_save():
     """Crear o actualizar un proceso del catálogo."""
     try:
@@ -6120,7 +6122,7 @@ def procesos_base_save():
 
 @app.route('/procesos/base/<int:proc_id>/delete', methods=['POST'])
 @login_required
-@requires_permission('catalog', 'edit')
+@requires_any_permission([('procesos', 'delete')])
 def procesos_base_delete(proc_id):
     try:
         uso = ClaveProceso.query.filter_by(proceso_id=proc_id).count()
