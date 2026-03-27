@@ -1556,7 +1556,7 @@ def _logistica_allowed_image(filename):
     return ext in LOGISTICA_IMG_EXTENSIONS
 
 
-def _sync_flujo_parciales(flujo: HojaRutaFlujoLogistica, hoja: HojaRuta = None):
+def _sync_flujo_parciales(flujo: HojaRutaFlujoLogistica, hoja: HojaRutaEntrega = None):
     """Sincroniza totales/pendientes/porcentaje para entregas parciales."""
     if not flujo:
         return
