@@ -263,45 +263,46 @@ document.getElementById('btn-delete-nonadmin').addEventListener('click', async (
     }catch(e){ alert('Error: '+e.message); }
 });
 
-// Roles / Módulos modal wiring
-const MODULES = [
-    {id: 'admin_panel_view', label: 'PANEL ADMIN (SOLO VISTA)', icon: '🛡️'},
-    {id: 'users_view', label: 'USUARIOS (SOLO VISTA)', icon: '👀'},
-    {id: 'users_edit', label: 'USUARIOS (CREAR/EDITAR/ELIMINAR)', icon: '👥'},
-    {id: 'roles_view', label: 'ROLES (SOLO VISTA)', icon: '📚'},
-    {id: 'roles_edit', label: 'ROLES (EDITAR)', icon: '🧰'},
-    {id: 'permissions_view', label: 'PERMISOS (SOLO VISTA)', icon: '🔐'},
-    {id: 'permissions_edit', label: 'PERMISOS (EDITAR)', icon: '🗝️'},
-    {id: 'admin_user_manager_view', label: 'GESTIÓN USUARIOS/ROLES (VISTA)', icon: '🧭'},
-    {id: 'admin_user_manager_edit', label: 'GESTIÓN USUARIOS/ROLES (EDICIÓN)', icon: '⚡'},
-    {id: 'catalog', label: 'CATÁLOGO (SOLO VISTA)', icon: '📊'},
-    {id: 'admin_catalog', label: 'CATÁLOGO (EDICIÓN)', icon: '⚙️'},
-    {id: 'hojas_readonly', label: 'HOJAS DE RUTA (SOLO LECTURA)', icon: '📘'},
-    {id: 'hojas_generacion', label: 'HOJAS DE RUTA (GENERACIÓN)', icon: '📄'},
-    {id: 'hojas_edicion_basica', label: 'HOJAS (EDITAR BÁSICO)', icon: '📝'},
-    {id: 'hojas_edicion_firmas', label: 'HOJAS (EDITAR FIRMAS)', icon: '✍️'},
-    {id: 'hojas_edicion_planeacion', label: 'HOJAS (EDITAR PLANEACIÓN)', icon: '📐'},
-    {id: 'hojas_edicion_estado', label: 'HOJAS (EDITAR ESTADO)', icon: '🔁'},
-    {id: 'hojas_edicion', label: 'HOJAS DE RUTA (EDICIÓN)', icon: '📝'},
-    {id: 'hojas_eliminar', label: 'HOJAS (ELIMINAR)', icon: '🗑️'},
-    {id: 'estaciones_view', label: 'ESTACIONES T (SOLO VISTA)', icon: '🏭'},
-    {id: 'estaciones_operate', label: 'ESTACIONES T (OPERAR MÁQUINAS)', icon: '🎛️'},
-    {id: 'mapa_view', label: 'MAPA DE MÁQUINAS (SOLO VISTA)', icon: '🗺️'},
-    {id: 'calidad_view', label: 'CONTROL CALIDAD (SOLO VISTA)', icon: '🔍'},
-    {id: 'calidad_edit', label: 'CONTROL CALIDAD (EDITAR)', icon: '✅'},
-    {id: 'entregas_view', label: 'ENTREGAS (SOLO VISTA)', icon: '📦'},
-    {id: 'entregas_edit', label: 'ENTREGAS (OPERAR)', icon: '📤'},
-    {id: 'almacen_view', label: 'ALMACÉN (SOLO VISTA)', icon: '🏬'},
-    {id: 'almacen_edit', label: 'ALMACÉN (OPERAR RECEPCIÓN)', icon: '📥'},
-    {id: 'facturacion_view', label: 'FACTURACIÓN (SOLO VISTA)', icon: '🧾'},
-    {id: 'facturacion_edit', label: 'FACTURACIÓN (APROBAR/LIBERAR)', icon: '✔️'},
-    {id: 'procesos_view', label: 'PROCESOS Y CLAVES (SOLO VISTA)', icon: '🧩'},
-    {id: 'proveedores_view', label: 'PROVEEDORES (SOLO VISTA)', icon: '🏢'},
-    {id: 'proveedores_edit', label: 'PROVEEDORES (EDICIÓN)', icon: '🏬'},
-    {id: 'soporte', label: 'TICKETS (SOLO VISTA)', icon: '🔧'},
-    {id: 'soporte_edit', label: 'TICKETS (EDICIÓN / EXPORTAR)', icon: '🛠️'},
-    {id: 'supervisor_produccion', label: 'ROL PRESET: SUPERVISOR PRODUCCIÓN', icon: '👷'}
+// Roles / Módulos modal wiring (matriz simple por módulo y acción)
+const SIMPLE_MODULES = [
+    {id: 'admin', label: 'PANEL ADMIN', icon: '🛡️'},
+    {id: 'users', label: 'USUARIOS', icon: '👥'},
+    {id: 'roles', label: 'ROLES', icon: '📚'},
+    {id: 'permissions', label: 'PERMISOS', icon: '🔐'},
+    {id: 'catalog', label: 'CATÁLOGO', icon: '📦'},
+    {id: 'hojas', label: 'HOJAS DE RUTA', icon: '📄'},
+    {id: 'estaciones', label: 'ESTACIONES T', icon: '🏭'},
+    {id: 'mapa', label: 'MAPA DE MÁQUINAS', icon: '🗺️'},
+    {id: 'calidad', label: 'CONTROL CALIDAD', icon: '✅'},
+    {id: 'entregas', label: 'ENTREGAS', icon: '📤'},
+    {id: 'almacen', label: 'ALMACÉN', icon: '🏬'},
+    {id: 'facturacion', label: 'FACTURACIÓN', icon: '🧾'},
+    {id: 'procesos', label: 'PROCESOS Y CLAVES', icon: '🧩'},
+    {id: 'proveedores', label: 'PROVEEDORES', icon: '🏢'},
+    {id: 'tickets', label: 'TICKETS', icon: '🎫'}
 ];
+
+const SIMPLE_ACTIONS = [
+    {id: 'view', label: 'VER', icon: '👀'},
+    {id: 'create', label: 'CREAR', icon: '➕'},
+    {id: 'edit', label: 'EDITAR', icon: '📝'},
+    {id: 'update', label: 'ACTUALIZAR', icon: '🔁'},
+    {id: 'delete', label: 'BORRAR', icon: '🗑️'}
+];
+
+const MODULES = [];
+SIMPLE_MODULES.forEach((m) => {
+    SIMPLE_ACTIONS.forEach((a) => {
+        MODULES.push({
+            id: `${m.id}_${a.id}`,
+            label: `${m.label} (${a.label})`,
+            icon: `${m.icon}${a.icon}`,
+        });
+    });
+});
+
+// Preset opcional de rol operativo.
+MODULES.push({id: 'supervisor_produccion', label: 'ROL PRESET: SUPERVISOR PRODUCCIÓN', icon: '👷'});
 
 let ALL_PERMISSIONS = [];
 

@@ -990,6 +990,40 @@ DEFAULT_PERMISSION_CATALOG = [
     ('tickets', 'export', 'Exportar tickets'),
 ]
 
+# Matriz simple de permisos por modulo: ver/crear/editar/actualizar/borrar.
+SIMPLE_PERMISSION_MODULES = [
+    ('admin', 'Panel admin'),
+    ('users', 'Usuarios'),
+    ('roles', 'Roles'),
+    ('permissions', 'Permisos'),
+    ('catalog', 'Catalogo'),
+    ('hojas', 'Hojas de ruta'),
+    ('estaciones', 'Estaciones T'),
+    ('mapa', 'Mapa de maquinas'),
+    ('calidad', 'Control de calidad'),
+    ('entregas', 'Entregas'),
+    ('almacen', 'Almacen'),
+    ('facturacion', 'Facturacion'),
+    ('procesos', 'Procesos y claves'),
+    ('proveedores', 'Proveedores'),
+    ('tickets', 'Tickets'),
+]
+
+SIMPLE_PERMISSION_ACTIONS = [
+    ('view', 'Ver'),
+    ('create', 'Crear'),
+    ('edit', 'Editar'),
+    ('update', 'Actualizar'),
+    ('delete', 'Borrar'),
+]
+
+for module, module_desc in SIMPLE_PERMISSION_MODULES:
+    for action, action_desc in SIMPLE_PERMISSION_ACTIONS:
+        ROLE_MODULE_BUNDLES.setdefault(f'{module}_{action}', [(module, action)])
+        exists = any((m == module and a == action) for m, a, _ in DEFAULT_PERMISSION_CATALOG)
+        if not exists:
+            DEFAULT_PERMISSION_CATALOG.append((module, action, f'{action_desc} {module_desc}'))
+
 
 HOJA_FIELD_GROUP_ACTIONS = {
     'estado': 'edit_estado',
