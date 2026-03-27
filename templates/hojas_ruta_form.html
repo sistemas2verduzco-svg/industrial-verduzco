@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nueva Hoja de Ruta</title>
+    <title>{{ modulo_titulo or 'Nueva Hoja de Ruta' }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <style>
         .card {
@@ -523,7 +523,7 @@
     {% include '_sidebar.html' %}
 
     <div class="container hoja-ruta-page">
-        <h2 style="margin: 0 0 14px 0;">Nueva Hoja de Ruta</h2>
+        <h2 style="margin: 0 0 14px 0;">{{ modulo_titulo or 'Nueva Hoja de Ruta' }}</h2>
 
         <div class="card">
             <form id="hojaForm">
@@ -739,7 +739,7 @@
                                 onclick="eliminarHojaDesdeFormulario({{ h.id }}, '{{ (h.serie or ('HOJA ' ~ h.id))|e }}')">
                                 Eliminar
                             </button>
-                            <a href="/hoja/{{ h.id }}">Ver / QR</a>
+                            <a href="{{ hoja_view_base or '/hoja' }}/{{ h.id }}">Ver / QR</a>
                         </td>
                     </tr>
                     {% endfor %}
@@ -879,6 +879,7 @@
     </div>
 
     <script>
+        const API_HOJAS_BASE = {{ (api_hojas_base or '/api/hojas_ruta')|tojson }};
         let clavesData = [];
         const hojasReporteData = {{ hojas|tojson }};
         const hojasDataById = new Map(hojasReporteData.map((item) => [String(item.id), item]));
@@ -1163,7 +1164,7 @@
             }
 
             try {
-                const res = await fetch('/api/hojas_ruta', {
+                const res = await fetch(API_HOJAS_BASE, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'same-origin',
@@ -1258,7 +1259,7 @@
             }
 
             try {
-                const res = await fetch('/api/hojas_ruta/' + hojaId, {
+                const res = await fetch(API_HOJAS_BASE + '/' + hojaId, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'same-origin',
@@ -1287,7 +1288,7 @@
             }
 
             try {
-                const res = await fetch('/api/hojas_ruta/' + hojaId, {
+                const res = await fetch(API_HOJAS_BASE + '/' + hojaId, {
                     method: 'DELETE',
                     credentials: 'same-origin'
                 });

@@ -61,9 +61,9 @@
 
     <div class="container">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;">
-            <a href="/hojas_ruta" style="text-decoration:none;color:#0b74de;">← Volver</a>
+            <a href="{{ volver_url or '/hojas_ruta' }}" style="text-decoration:none;color:#0b74de;">← Volver</a>
             <h2 style="margin:0;">{{ maquina.nombre }} - Hojas de Ruta</h2>
-            <a href="/hojas_ruta_form" style="text-decoration:none;color:#0b74de;">Nueva hoja</a>
+            <a href="{{ nueva_hoja_url or '/hojas_ruta_form' }}" style="text-decoration:none;color:#0b74de;">Nueva hoja</a>
         </div>
 
         {% if hojas %}
@@ -145,7 +145,7 @@
                 </div>
 
                 <div style="margin-top:10px; text-align:right;">
-                    <a href="/hoja/{{ hoja.id }}">Ver hoja completa</a>
+                    <a href="{{ hoja_view_base or '/hoja' }}/{{ hoja.id }}">Ver hoja completa</a>
                 </div>
             </div>
             {% endfor %}

@@ -1042,29 +1042,6 @@ def _apply_role_modules(role, modules):
 
     role.permissions = filtered
 
-    # --- Módulo original: Hojas de Ruta (legacy, HojaRutaEntrega) ---
-    @app.route('/hojas_ruta_form')
-    @login_required
-    @requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
-    def hojas_ruta_form():
-        """Formulario para crear hojas de ruta (legacy, tabla hojas_ruta_entrega)."""
-        almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria']
-        hojas = HojaRutaEntrega.query.order_by(HojaRutaEntrega.fecha_creacion.desc()).all()
-        hojas_data = [h.to_dict() for h in hojas]
-        return render_template('hojas_ruta_form.html', hojas=hojas_data, almacenes=almacenes)
-
-    # --- Módulo nuevo: Hojas de Ruta NUEVAS (HojaRutaNueva) ---
-    @app.route('/hojas_ruta_nuevo_form')
-    @login_required
-    @requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
-    def hojas_ruta_nuevo_form():
-        """Formulario para crear hojas de ruta nuevas (tabla hojas_ruta_nueva)."""
-        almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria']
-        hojas = HojaRutaNueva.query.order_by(HojaRutaNueva.fecha_creacion.desc()).all() if hasattr(HojaRutaNueva, 'fecha_creacion') else HojaRutaNueva.query.all()
-        hojas_data = [h.to_dict() for h in hojas]
-        return render_template('hojas_ruta_form.html', hojas=hojas_data, almacenes=almacenes, nuevo_modulo=True)
-
-
 def _get_or_create_permission(module, action):
     perm = Permission.query.filter_by(module=module, action=action).first()
     if perm:
@@ -2061,10 +2038,14 @@ def hojas_ruta_nuevo_list():
     } for h in hojas_pendientes]
     facturadas_info = {}
     resp = make_response(render_template(
-        'hojas_ruta_nuevo_list.html',
+        'hojas_ruta_entregas_list.html',
         maquinas=maquinas_data,
         hojas_pendientes=pendientes_data,
-        facturadas_info=facturadas_info
+        facturadas_info=facturadas_info,
+        nuevo_modulo=True,
+        hoja_detalle_base='/hojas_ruta_nuevo',
+        api_resolver_codigo='/api/hojas_ruta_nuevo/resolver_codigo',
+        api_maquina_base='/api/maquinas_nuevo'
     ))
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     resp.headers['Pragma'] = 'no-cache'
@@ -2078,8 +2059,26 @@ def hojas_ruta_nuevo_form():
     """Formulario para crear hojas de ruta nuevas."""
     almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria']
     hojas = HojaRutaNueva.query.order_by(HojaRutaNueva.fecha_creacion.desc()).all()
-    hojas_data = [h.to_dict() for h in hojas]
-    return render_template('hojas_ruta_nuevo_form.html', hojas=hojas_data, almacenes=almacenes)
+    hojas_data = []
+    for h in hojas:
+        item = h.to_dict()
+        item['serie'] = item.get('nombre')
+        item['clave'] = item.get('pn')
+        item['orden_trabajo'] = item.get('orden_trabajo_hr')
+        item['comentarios'] = _clean_nullable_text(item.get('materia_prima'))
+        item['firma_ing_jose'] = item.get('supervisor')
+        item['firma_ing_rodrigo'] = item.get('operador')
+        item['historial_cargas'] = []
+        hojas_data.append(item)
+    return render_template(
+        'hojas_ruta_form.html',
+        hojas=hojas_data,
+        almacenes=almacenes,
+        nuevo_modulo=True,
+        api_hojas_base='/api/hojas_ruta_nuevo',
+        hoja_view_base='/hoja_nuevo',
+        modulo_titulo='Hojas de Ruta NUEVAS'
+    )
 
 @app.route('/hojas_ruta_nuevo/<int:maquina_id>')
 @login_required
@@ -2089,7 +2088,16 @@ def hojas_ruta_nuevo_detalle(maquina_id):
     hojas = HojaRutaNueva.query.filter_by(maquina_id=maquina_id).order_by(HojaRutaNueva.fecha_creacion.desc()).all()
     hojas_data = [h.to_dict() for h in hojas]
     facturadas_info = {}
-    return render_template('hojas_ruta_nuevo_detalle.html', maquina=maquina, hojas=hojas_data, facturadas_info=facturadas_info)
+    return render_template(
+        'hojas_ruta_detalle.html',
+        maquina=maquina,
+        hojas=hojas_data,
+        facturadas_info=facturadas_info,
+        nuevo_modulo=True,
+        volver_url='/hojas_ruta_nuevo',
+        nueva_hoja_url='/hojas_ruta_nuevo_form',
+        hoja_view_base='/hoja_nuevo'
+    )
 
 @app.route('/hoja_nuevo/<int:hoja_id>')
 @login_required
@@ -2098,7 +2106,13 @@ def hoja_ruta_nuevo_ver(hoja_id):
     """Vista independiente para ver una hoja nueva por ID, sin requerir máquina."""
     hoja = HojaRutaNueva.query.get_or_404(hoja_id)
     h = hoja.to_dict()
-    return render_template('hoja_ruta_nuevo_ver.html', hoja=h)
+    h['comentarios_usuario'] = _clean_nullable_text(h.get('materia_prima'))
+    h['scrap_qc'] = None
+    h['descripcion_clave'] = _resolve_clave_descripcion_by_pn(hoja.pn)
+    h['qr_payload'] = f"HRNID:{hoja.id};SERIE:{hoja.nombre or ''}"
+    h['qr_deeplink'] = request.url_root.rstrip('/') + f"/hoja_nuevo/{hoja.id}"
+    h['estaciones'] = []
+    return render_template('hoja_ruta_ver.html', hoja=h, volver_url='/hojas_ruta_nuevo_form')
 
 @app.route('/hojas_ruta')
 @login_required
@@ -2531,7 +2545,7 @@ def hojas_ruta_entregas_form():
             'fecha_salida': h.fecha_salida.isoformat() if h.fecha_salida else None,
             'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None,
         })
-    return render_template('hojas_ruta_entregas_form.html', hojas=hojas_data, almacenes=almacenes)
+    return render_template('hojas_ruta_form.html', hojas=hojas_data, almacenes=almacenes)
 
 
 @app.route('/hoja/<int:hoja_id>')
@@ -2549,7 +2563,7 @@ def hoja_ruta_entregas_ver(hoja_id):
     h['qr_deeplink'] = request.url_root.rstrip('/') + f"/hoja/{hoja.id}"
     estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
     h['estaciones'] = [e.to_dict() for e in estaciones]
-    return render_template('hoja_ruta_entregas_ver.html', hoja=h)
+    return render_template('hoja_ruta_ver.html', hoja=h)
 
 
 @app.route('/api/hojas_ruta/resolver_codigo', methods=['POST'])
@@ -2605,6 +2619,51 @@ def api_resolver_codigo_hoja_ruta():
     }), 200
 
 
+@app.route('/api/hojas_ruta_nuevo/resolver_codigo', methods=['POST'])
+@login_required
+@requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
+def api_resolver_codigo_hoja_ruta_nuevo():
+    """Resuelve texto escaneado (QR/codigo) a una hoja de ruta del módulo nuevo."""
+    data = request.get_json() or {}
+    raw_value = (data.get('value') or '').strip()
+    if not raw_value:
+        return jsonify({'error': 'Codigo vacio'}), 400
+
+    value = raw_value.strip()
+    upper_value = value.upper()
+    hoja_id = None
+
+    m_url = re.search(r'/hoja_nuevo/(\d+)', value)
+    if m_url:
+        hoja_id = int(m_url.group(1))
+
+    if hoja_id is None:
+        m_hrid = re.search(r'HRNID\s*[:=]\s*(\d+)', upper_value)
+        if m_hrid:
+            hoja_id = int(m_hrid.group(1))
+
+    if hoja_id is None and value.isdigit():
+        hoja_id = int(value)
+
+    hoja = HojaRutaNueva.query.get(hoja_id) if hoja_id is not None else None
+    if hoja is None:
+        hoja = HojaRutaNueva.query.filter_by(nombre=value).first()
+
+    if hoja is None:
+        return jsonify({'error': 'No se encontro hoja para el codigo escaneado'}), 404
+
+    return jsonify({
+        'ok': True,
+        'hoja': {
+            'id': hoja.id,
+            'serie': hoja.nombre,
+            'clave': hoja.pn,
+            'estado': hoja.estado,
+            'maquina_id': hoja.maquina_id,
+        }
+    }), 200
+
+
 @app.route('/hojas_ruta/<int:maquina_id>')
 @login_required
 def hojas_ruta_entregas_detalle(maquina_id):
@@ -2635,7 +2694,7 @@ def hojas_ruta_entregas_detalle(maquina_id):
         for f in facturadas_flujos
     }
 
-    return render_template('hojas_ruta_entregas_detalle.html', maquina=maquina, hojas=hojas_data, facturadas_info=facturadas_info)
+    return render_template('hojas_ruta_detalle.html', maquina=maquina, hojas=hojas_data, facturadas_info=facturadas_info)
 
 
 @app.route('/qc_estaciones/<int:maquina_id>')
@@ -3322,6 +3381,203 @@ def api_eliminar_hoja_ruta(hoja_id):
         db.session.rollback()
         logger.error(f"Error eliminando hoja {hoja_id}: {e}", exc_info=True)
         return jsonify({'error': 'No se pudo eliminar la hoja de ruta'}), 500
+
+
+@app.route('/api/hojas_ruta_nuevo', methods=['POST'])
+@login_required
+@requires_any_permission([('hojas', 'create'), ('catalog', 'edit')])
+def api_crear_hoja_ruta_nuevo():
+    """Crear hoja de ruta del módulo nuevo (tabla hojas_ruta_nueva)."""
+    data = request.get_json() or {}
+    clave_id = data.get('clave_id')
+    calidad = (data.get('calidad') or '').strip()
+    almacen = (data.get('almacen') or '').strip()
+    orden_trabajo = (data.get('orden_trabajo') or '').strip()
+    comentarios = (data.get('comentarios') or '').strip()
+    cantidad_piezas = data.get('cantidad_piezas')
+
+    if not clave_id:
+        return jsonify({'error': 'clave_id requerido'}), 400
+    if not calidad:
+        return jsonify({'error': 'calidad requerida'}), 400
+    if not almacen:
+        return jsonify({'error': 'almacen requerido'}), 400
+    if not cantidad_piezas or int(cantidad_piezas) <= 0:
+        return jsonify({'error': 'cantidad_piezas debe ser mayor a 0'}), 400
+
+    clave = ClaveProducto.query.get(clave_id)
+    if not clave:
+        return jsonify({'error': 'Clave no encontrada'}), 404
+
+    try:
+        fecha_actual = datetime.utcnow()
+        hoja = HojaRutaNueva(
+            maquina_id=int(data.get('maquina_id')) if data.get('maquina_id') else None,
+            nombre='PENDIENTE_SERIE',
+            descripcion=_resolve_clave_descripcion_by_pn(clave.clave),
+            estado='activa',
+            producto=clave.nombre,
+            calidad=calidad,
+            pn=clave.clave,
+            fecha_salida=fecha_actual,
+            cantidad_piezas=int(cantidad_piezas),
+            orden_trabajo_hr=orden_trabajo or None,
+            almacen=almacen,
+            materia_prima=comentarios or None,
+        )
+        db.session.add(hoja)
+        db.session.flush()
+
+        clave_segura = ''.join(ch for ch in (clave.clave or '') if ch.isalnum())[:10] or 'CLAVE'
+        hoja.nombre = f"HRN-{fecha_actual.strftime('%Y%m%d')}-{clave_segura}-{hoja.id:04d}"
+
+        db.session.commit()
+        return jsonify(hoja.to_dict()), 201
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error creando hoja nueva: {e}", exc_info=True)
+        return jsonify({'error': 'No se pudo crear la hoja de ruta nueva'}), 500
+
+
+@app.route('/api/hojas_ruta_nuevo/<int:hoja_id>', methods=['PUT'])
+@login_required
+@requires_any_permission([('hojas', 'edit'), ('catalog', 'edit')])
+def api_actualizar_hoja_ruta_nuevo(hoja_id):
+    """Actualizar hoja de ruta del módulo nuevo."""
+    hoja = HojaRutaNueva.query.get_or_404(hoja_id)
+    data = request.get_json() or {}
+
+    if 'estado' in data:
+        hoja.estado = data['estado']
+    if 'clave_id' in data and data.get('clave_id') is not None:
+        clave_obj = ClaveProducto.query.get(int(data.get('clave_id')))
+        if not clave_obj:
+            return jsonify({'error': 'Clave no encontrada'}), 404
+        hoja.pn = clave_obj.clave
+        hoja.producto = _clean_nullable_text(clave_obj.nombre) or clave_obj.clave
+        hoja.descripcion = _resolve_clave_descripcion_by_pn(clave_obj.clave)
+    if 'calidad' in data:
+        hoja.calidad = (data.get('calidad') or '').strip() or None
+    if 'cantidad_piezas' in data and data.get('cantidad_piezas') is not None:
+        try:
+            hoja.cantidad_piezas = max(1, int(data.get('cantidad_piezas')))
+        except Exception:
+            return jsonify({'error': 'cantidad_piezas invalida'}), 400
+    if 'almacen' in data:
+        hoja.almacen = (data.get('almacen') or '').strip() or None
+    if 'orden_trabajo' in data:
+        hoja.orden_trabajo_hr = (data.get('orden_trabajo') or '').strip() or None
+    if 'comentarios' in data:
+        hoja.materia_prima = (data.get('comentarios') or '').strip() or None
+
+    try:
+        db.session.commit()
+        return jsonify(hoja.to_dict()), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error actualizando hoja nueva {hoja_id}: {e}", exc_info=True)
+        return jsonify({'error': 'No se pudo actualizar la hoja de ruta nueva'}), 500
+
+
+@app.route('/api/hojas_ruta_nuevo/<int:hoja_id>', methods=['DELETE'])
+@login_required
+@requires_any_permission([('hojas', 'delete'), ('catalog', 'edit')])
+def api_eliminar_hoja_ruta_nuevo(hoja_id):
+    """Eliminar hoja de ruta nueva no asignada."""
+    hoja = HojaRutaNueva.query.get_or_404(hoja_id)
+    if hoja.maquina_id is not None:
+        return jsonify({'error': 'No puedes eliminar una hoja asignada a una maquina. Primero desasignala.'}), 409
+
+    try:
+        db.session.delete(hoja)
+        db.session.commit()
+        return jsonify({'success': True, 'id': hoja_id}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error eliminando hoja nueva {hoja_id}: {e}", exc_info=True)
+        return jsonify({'error': 'No se pudo eliminar la hoja de ruta nueva'}), 500
+
+
+@app.route('/api/maquinas_nuevo/<int:maquina_id>/activar', methods=['POST'])
+@login_required
+@requires_any_permission([('estaciones', 'operate'), ('catalog', 'edit')])
+def api_activar_maquina_nuevo(maquina_id):
+    maq = Máquina.query.get_or_404(maquina_id)
+    maq.activo = True
+    db.session.commit()
+    return jsonify({'ok': True, 'maquina_id': maquina_id, 'activo': True}), 200
+
+
+@app.route('/api/maquinas_nuevo/<int:maquina_id>/desactivar', methods=['POST'])
+@login_required
+@requires_any_permission([('estaciones', 'operate'), ('catalog', 'edit')])
+def api_desactivar_maquina_nuevo(maquina_id):
+    maq = Máquina.query.get_or_404(maquina_id)
+    maq.activo = False
+    db.session.commit()
+    return jsonify({'ok': True, 'maquina_id': maquina_id, 'activo': False}), 200
+
+
+@app.route('/api/maquinas_nuevo/<int:maquina_id>/paro_mantenimiento', methods=['POST'])
+@login_required
+@requires_any_permission([('estaciones', 'operate'), ('catalog', 'edit')])
+def api_paro_mantenimiento_nuevo(maquina_id):
+    maq = Máquina.query.get_or_404(maquina_id)
+    maq.activo = False
+    db.session.commit()
+    return jsonify({'ok': True, 'maquina_id': maquina_id, 'activo': False, 'motivo': 'mantenimiento'}), 200
+
+
+@app.route('/api/maquinas_nuevo/<int:maquina_id>/asignar_hoja', methods=['POST'])
+@login_required
+@requires_any_permission([('estaciones', 'operate'), ('catalog', 'edit')])
+def api_asignar_hoja_maquina_nuevo(maquina_id):
+    maq = Máquina.query.get_or_404(maquina_id)
+    data = request.get_json() or {}
+    hoja_id = data.get('hoja_id')
+    if not hoja_id:
+        return jsonify({'error': 'hoja_id requerido'}), 400
+
+    hoja = HojaRutaNueva.query.get_or_404(int(hoja_id))
+    if hoja.maquina_id and hoja.maquina_id != maq.id:
+        return jsonify({'error': 'La hoja ya está asignada a otra máquina'}), 409
+
+    activa_actual = HojaRutaNueva.query.filter_by(maquina_id=maq.id, estado='activa').first()
+    if activa_actual and activa_actual.id != hoja.id:
+        return jsonify({'error': 'La máquina ya tiene una hoja activa asignada'}), 409
+
+    hoja.maquina_id = maq.id
+    hoja.estado = 'activa'
+    if not hoja.fecha_salida:
+        hoja.fecha_salida = datetime.utcnow()
+    maq.activo = True
+    db.session.commit()
+    return jsonify({'success': True, 'hoja': hoja.to_dict()}), 200
+
+
+@app.route('/api/maquinas_nuevo/<int:maquina_id>/retirar_hoja', methods=['POST'])
+@login_required
+@requires_any_permission([('estaciones', 'operate'), ('catalog', 'edit')])
+def api_retirar_hoja_maquina_nuevo(maquina_id):
+    maq = Máquina.query.get_or_404(maquina_id)
+    data = request.get_json() or {}
+    hoja_id = data.get('hoja_id')
+
+    if hoja_id:
+        hoja = HojaRutaNueva.query.get_or_404(int(hoja_id))
+        if hoja.maquina_id != maq.id:
+            return jsonify({'error': 'La hoja no pertenece a esta máquina'}), 409
+    else:
+        hoja = HojaRutaNueva.query.filter_by(maquina_id=maq.id, estado='activa').order_by(HojaRutaNueva.fecha_creacion.desc()).first()
+        if not hoja:
+            return jsonify({'error': 'No hay hoja activa asignada a esta máquina'}), 404
+
+    hoja.maquina_id = None
+    hoja.estado = 'activa'
+    hoja.fecha_salida = None
+    hoja.fecha_termino = None
+    db.session.commit()
+    return jsonify({'success': True, 'hoja': hoja.to_dict()}), 200
 
 
 @app.route('/api/produccion/ingresar_piezas', methods=['POST'])

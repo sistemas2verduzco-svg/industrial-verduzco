@@ -700,8 +700,13 @@
         }
     </style>
     <script>
+    const API_MAQUINA_BASE = {{ (api_maquina_base or '/api/maquinas')|tojson }};
+    const API_HOJAS_BASE = {{ (api_hojas_base or '/api/hojas_ruta')|tojson }};
+    const API_RESOLVER_CODIGO = {{ (api_resolver_codigo or '/api/hojas_ruta/resolver_codigo')|tojson }};
+    const HOJA_DETALLE_BASE = {{ (hoja_detalle_base or '/hojas_ruta')|tojson }};
+
     function toggleActivacion(maquinaId, activar) {
-        const url = '/api/maquinas/' + maquinaId + (activar ? '/activar' : '/desactivar');
+        const url = API_MAQUINA_BASE + '/' + maquinaId + (activar ? '/activar' : '/desactivar');
         fetch(url, { method: 'POST', credentials: 'same-origin' })
         .then(r => r.json())
         .then(data => {
@@ -827,7 +832,7 @@
                             <button class="btn-small btn-assign" onclick="abrirModalAsignar({{ maq.id }}, '{{ maq.nombre|e }}')">Asignar hoja de ruta</button>
                             <button class="btn-small btn-maintenance" onclick="paroMantenimiento({{ maq.id }})">Paro por mantenimiento</button>
                             <button class="btn-small btn-retire" onclick="retirarHojaRuta({{ maq.id }})">Retirar hoja de ruta</button>
-                            <a href="/hojas_ruta/{{ maq.id }}" class="btn-small btn-view">Ver hojas</a>
+                            <a href="{{ hoja_detalle_base or '/hojas_ruta' }}/{{ maq.id }}" class="btn-small btn-view">Ver hojas</a>
                             {% if not maq.activo %}
                                 <button id="btn-toggle-{{ maq.id }}" class="btn-small btn-resume" onclick="toggleActivacion({{ maq.id }}, true)">Reanudar máquina</button>
                             {% endif %}
@@ -1177,7 +1182,7 @@
     }
 
     async function resolverHojaPorCodigo(scanValue) {
-        const res = await fetch('/api/hojas_ruta/resolver_codigo', {
+        const res = await fetch(API_RESOLVER_CODIGO, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
@@ -1310,7 +1315,7 @@
         }
 
         try {
-            const res = await fetch('/api/maquinas/' + maquinaId + '/asignar_hoja', {
+            const res = await fetch(API_MAQUINA_BASE + '/' + maquinaId + '/asignar_hoja', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'same-origin',
@@ -1332,7 +1337,7 @@
 
     async function paroMantenimiento(maquinaId) {
         try {
-            const res = await fetch('/api/maquinas/' + maquinaId + '/paro_mantenimiento', {
+            const res = await fetch(API_MAQUINA_BASE + '/' + maquinaId + '/paro_mantenimiento', {
                 method: 'POST',
                 credentials: 'same-origin'
             });
@@ -1352,7 +1357,7 @@
             return;
         }
         try {
-            const res = await fetch('/api/maquinas/' + maquinaId + '/retirar_hoja', {
+            const res = await fetch(API_MAQUINA_BASE + '/' + maquinaId + '/retirar_hoja', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'same-origin',
@@ -1399,7 +1404,7 @@
         }
 
         try {
-            const res = await fetch('/api/hojas_ruta/' + hojaId, {
+            const res = await fetch(API_HOJAS_BASE + '/' + hojaId, {
                 method: 'DELETE',
                 credentials: 'same-origin'
             });
