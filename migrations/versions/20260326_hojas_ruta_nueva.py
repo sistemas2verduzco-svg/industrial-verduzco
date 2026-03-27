@@ -1,12 +1,10 @@
-"""
-Migration: Crear tabla hojas_ruta_nueva para el nuevo módulo independiente
-Fecha: 2026-03-26
-# --- Alembic identifiers ---
 revision = '20260326_hojas_ruta_nueva'
 down_revision = None
 branch_labels = None
 depends_on = None
-# --- Fin Alembic identifiers ---
+"""
+Migration: Crear tabla hojas_ruta_nueva para el nuevo módulo independiente
+Fecha: 2026-03-26
 """
 from alembic import op
 import sqlalchemy as sa
