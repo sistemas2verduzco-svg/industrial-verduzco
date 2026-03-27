@@ -1042,6 +1042,28 @@ def _apply_role_modules(role, modules):
 
     role.permissions = filtered
 
+    # --- Módulo original: Hojas de Ruta (legacy, HojaRutaEntrega) ---
+    @app.route('/hojas_ruta_form')
+    @login_required
+    @requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
+    def hojas_ruta_form():
+        """Formulario para crear hojas de ruta (legacy, tabla hojas_ruta_entrega)."""
+        almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria']
+        hojas = HojaRutaEntrega.query.order_by(HojaRutaEntrega.fecha_creacion.desc()).all()
+        hojas_data = [h.to_dict() for h in hojas]
+        return render_template('hojas_ruta_form.html', hojas=hojas_data, almacenes=almacenes)
+
+    # --- Módulo nuevo: Hojas de Ruta NUEVAS (HojaRutaNueva) ---
+    @app.route('/hojas_ruta_nuevo_form')
+    @login_required
+    @requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
+    def hojas_ruta_nuevo_form():
+        """Formulario para crear hojas de ruta nuevas (tabla hojas_ruta_nueva)."""
+        almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria']
+        hojas = HojaRutaNueva.query.order_by(HojaRutaNueva.fecha_creacion.desc()).all() if hasattr(HojaRutaNueva, 'fecha_creacion') else HojaRutaNueva.query.all()
+        hojas_data = [h.to_dict() for h in hojas]
+        return render_template('hojas_ruta_form.html', hojas=hojas_data, almacenes=almacenes, nuevo_modulo=True)
+
 
 def _get_or_create_permission(module, action):
     perm = Permission.query.filter_by(module=module, action=action).first()
