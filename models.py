@@ -183,7 +183,7 @@ class EntregaParcial(db.Model):
     fecha_entrega = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     
-    hoja_ruta = db.relationship('HojaRuta', backref='entregas_parciales')
+    hoja_ruta = db.relationship('HojaRutaEntrega', backref='entregas_parciales')
     
     def to_dict(self):
         return {
@@ -718,7 +718,7 @@ class HojaRutaFlujoLogistica(db.Model):
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    hoja_ruta = db.relationship('HojaRuta', backref=db.backref('flujo_logistica', uselist=False))
+    hoja_ruta = db.relationship('HojaRutaEntrega', backref=db.backref('flujo_logistica', uselist=False))
 
     entregas_parciales = db.relationship('EntregaParcial', backref='flujo_logistica', lazy=True, cascade='all, delete-orphan')
     def to_dict(self):
@@ -756,7 +756,7 @@ class EntregaRegistro(db.Model):
     notas = db.Column(db.Text, nullable=True)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
 
-    hoja_ruta = db.relationship('HojaRuta', backref='entregas_registros')
+    hoja_ruta = db.relationship('HojaRutaEntrega', backref='entregas_registros')
     flujo = db.relationship('HojaRutaFlujoLogistica', backref='entregas_registros')
 
 
@@ -774,7 +774,7 @@ class AlmacenRegistro(db.Model):
     notas = db.Column(db.Text, nullable=True)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
 
-    hoja_ruta = db.relationship('HojaRuta', backref='almacen_registros')
+    hoja_ruta = db.relationship('HojaRutaEntrega', backref='almacen_registros')
     flujo = db.relationship('HojaRutaFlujoLogistica', backref='almacen_registros')
 
 
@@ -791,7 +791,7 @@ class FacturacionRegistro(db.Model):
     fecha_aprobacion = db.Column(db.DateTime, nullable=True)
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
 
-    hoja_ruta = db.relationship('HojaRuta', backref='facturacion_registros')
+    hoja_ruta = db.relationship('HojaRutaEntrega', backref='facturacion_registros')
     flujo = db.relationship('HojaRutaFlujoLogistica', backref='facturacion_registros')
 
 
