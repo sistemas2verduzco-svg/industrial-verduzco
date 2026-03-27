@@ -385,6 +385,19 @@
             font-size: 13px;
         }
 
+        .sibling-panel {
+            margin-top: 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            background: #f8fafc;
+            padding: 10px;
+            display: none;
+        }
+
+        .sibling-panel.open {
+            display: block;
+        }
+
         /* Esta vista debe usar todo el ancho restante junto al sidebar */
         .hoja-ruta-page {
             max-width: none;
@@ -611,6 +624,16 @@
         <div class="section-title hojas-toolbar">
             <span>Hojas registradas</span>
             <div class="hojas-search-wrap">
+                {% if companion_hojas %}
+                <button
+                    type="button"
+                    id="toggleSiblingBtn"
+                    class="btn btn-secondary"
+                    style="padding:8px 10px;"
+                    onclick="toggleSiblingPanel()">
+                    Ver {{ companion_modulo_titulo or 'Módulo hermano' }}
+                </button>
+                {% endif %}
                 <input
                     type="search"
                     id="hojasSearch"
@@ -751,6 +774,50 @@
             <div style="color:#6b7280;">Aun no hay hojas registradas.</div>
             {% endif %}
         </div>
+
+        {% if companion_hojas %}
+        <div id="siblingPanel" class="sibling-panel">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+                <strong>Tabla de {{ companion_modulo_titulo or 'módulo hermano' }}</strong>
+                <span style="font-size:12px; color:#64748b;">{{ companion_hojas|length }} registro(s)</span>
+            </div>
+
+            <div class="table-scroll">
+                <table class="hojas-recientes-table">
+                    <thead>
+                        <tr>
+                            <th>Serie</th>
+                            <th>Clave</th>
+                            <th>Descripcion clave</th>
+                            <th>Calidad</th>
+                            <th>Fecha</th>
+                            <th>Piezas</th>
+                            <th>Almacen</th>
+                            <th>Orden Trabajo</th>
+                            <th>Comentarios</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for h in companion_hojas %}
+                        <tr>
+                            <td>{{ h.serie or '' }}</td>
+                            <td>{{ h.clave or '' }}</td>
+                            <td>{{ h.descripcion_clave or h.clave or '' }}</td>
+                            <td>{{ h.calidad or '' }}</td>
+                            <td>{{ h.fecha_salida[:16] if h.fecha_salida else '' }}</td>
+                            <td>{{ h.cantidad_piezas or '' }}</td>
+                            <td>{{ h.almacen or '' }}</td>
+                            <td>{{ h.orden_trabajo or '' }}</td>
+                            <td>{{ h.comentarios or '' }}</td>
+                            <td>{{ h.estado or '' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     <div id="editModal" class="modal-backdrop">
@@ -1047,6 +1114,16 @@
             });
 
             applyFilter();
+        }
+
+        function toggleSiblingPanel() {
+            const panel = document.getElementById('siblingPanel');
+            const btn = document.getElementById('toggleSiblingBtn');
+            if (!panel || !btn) return;
+            const opened = panel.classList.toggle('open');
+            btn.textContent = opened
+                ? 'Ocultar ' + {{ (companion_modulo_titulo or 'Módulo hermano')|tojson }}
+                : 'Ver ' + {{ (companion_modulo_titulo or 'Módulo hermano')|tojson }};
         }
 
         function renderProcesos(claveId) {

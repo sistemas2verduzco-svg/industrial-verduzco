@@ -2034,6 +2034,25 @@ def hojas_ruta_nuevo_form():
         item['firma_ing_rodrigo'] = item.get('operador')
         item['historial_cargas'] = []
         hojas_data.append(item)
+
+    companion_hojas = []
+    hojas_entregas = HojaRutaEntrega.query.order_by(HojaRutaEntrega.fecha_creacion.desc()).limit(120).all()
+    for h in hojas_entregas:
+        comentarios_bruto = _clean_nullable_text(h.materia_prima)
+        companion_hojas.append({
+            'id': h.id,
+            'serie': h.nombre,
+            'clave': h.pn,
+            'descripcion_clave': _resolve_clave_descripcion_by_pn(h.pn),
+            'calidad': h.calidad,
+            'fecha_salida': h.fecha_salida.isoformat() if h.fecha_salida else None,
+            'cantidad_piezas': h.cantidad_piezas,
+            'almacen': h.almacen,
+            'orden_trabajo': h.orden_trabajo_hr,
+            'comentarios': _qc_strip_scrap_summary(comentarios_bruto),
+            'estado': h.estado,
+        })
+
     return render_template(
         'hojas_ruta_form.html',
         hojas=hojas_data,
@@ -2041,7 +2060,9 @@ def hojas_ruta_nuevo_form():
         nuevo_modulo=True,
         api_hojas_base='/api/hojas_ruta_nuevo',
         hoja_view_base='/hoja_nuevo',
-        modulo_titulo='HOJAS DE RUTA MP'
+        modulo_titulo='HOJAS DE RUTA MP',
+        companion_modulo_titulo='HOJAS DE RUTA ENTREGAS',
+        companion_hojas=companion_hojas,
     )
 
 @app.route('/hojas_ruta_nuevo/<int:maquina_id>')
@@ -2461,7 +2482,32 @@ def hojas_ruta_entregas_form():
             'fecha_salida': h.fecha_salida.isoformat() if h.fecha_salida else None,
             'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None,
         })
-    return render_template('hojas_ruta_form.html', hojas=hojas_data, almacenes=almacenes)
+
+    companion_hojas = []
+    hojas_mp = HojaRutaNueva.query.order_by(HojaRutaNueva.fecha_creacion.desc()).limit(120).all()
+    for h in hojas_mp:
+        companion_hojas.append({
+            'id': h.id,
+            'serie': h.nombre,
+            'clave': h.pn,
+            'descripcion_clave': _resolve_clave_descripcion_by_pn(h.pn),
+            'calidad': h.calidad,
+            'fecha_salida': h.fecha_salida.isoformat() if h.fecha_salida else None,
+            'cantidad_piezas': h.cantidad_piezas,
+            'almacen': h.almacen,
+            'orden_trabajo': h.orden_trabajo_hr,
+            'comentarios': _clean_nullable_text(h.materia_prima),
+            'estado': h.estado,
+        })
+
+    return render_template(
+        'hojas_ruta_form.html',
+        hojas=hojas_data,
+        almacenes=almacenes,
+        modulo_titulo='HOJAS DE RUTA ENTREGAS',
+        companion_modulo_titulo='HOJAS DE RUTA MP',
+        companion_hojas=companion_hojas,
+    )
 
 
 @app.route('/hoja/<int:hoja_id>')
