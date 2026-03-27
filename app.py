@@ -821,7 +821,7 @@ def _resolve_post_login_endpoint(user):
         return 'hojas_ruta_list'
     if user.has_permission('mapa', 'view'):
         return 'mapa_maquinas'
-    if user.has_permission('hojas', 'view'):
+    if user.has_permission('hojas_entregas', 'view') or user.has_permission('hojas_mp', 'view') or user.has_permission('hojas', 'view'):
         return 'hojas_ruta_form'
     if user.has_permission('calidad', 'view'):
         return 'control_calidad_list'
@@ -997,7 +997,8 @@ SIMPLE_PERMISSION_MODULES = [
     ('roles', 'Roles'),
     ('permissions', 'Permisos'),
     ('catalog', 'Catalogo'),
-    ('hojas', 'Hojas de ruta'),
+    ('hojas_entregas', 'Hojas de ruta entregas'),
+    ('hojas_mp', 'Hojas de ruta MP'),
     ('estaciones', 'Estaciones T'),
     ('mapa', 'Mapa de maquinas'),
     ('calidad', 'Control de calidad'),
@@ -1241,7 +1242,7 @@ def index():
 
 @app.route('/hojas_ruta_form')
 @login_required
-@requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
+@requires_any_permission([('hojas_entregas', 'view'), ('hojas', 'view'), ('catalog', 'view')])
 def hojas_ruta_form():
     """Alias del formulario legacy para mantener compatibilidad con navbar y enlaces existentes."""
     return hojas_ruta_entregas_form()
@@ -2098,14 +2099,14 @@ def uploaded_file(filename):
 
 @app.route('/hojas_ruta_nuevo')
 @login_required
-@requires_any_permission([('estaciones', 'view'), ('catalog', 'view')])
+@requires_any_permission([('hojas_mp', 'view'), ('hojas', 'view'), ('catalog', 'view')])
 def hojas_ruta_nuevo_list():
     """Acceso principal del módulo MP: mismo flujo visual que Hojas de ruta, independiente."""
     return hojas_ruta_nuevo_form()
 
 @app.route('/hojas_ruta_nuevo_form')
 @login_required
-@requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
+@requires_any_permission([('hojas_mp', 'view'), ('hojas', 'view'), ('catalog', 'view')])
 def hojas_ruta_nuevo_form():
     """Formulario para crear hojas de ruta nuevas."""
     almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria']
@@ -2173,7 +2174,7 @@ def hojas_ruta_nuevo_detalle(maquina_id):
 
 @app.route('/hoja_nuevo/<int:hoja_id>')
 @login_required
-@requires_any_permission([('hojas', 'view'), ('catalog', 'view'), ('entregas', 'view'), ('almacen', 'view'), ('facturacion', 'view')])
+@requires_any_permission([('hojas_mp', 'view'), ('hojas', 'view'), ('catalog', 'view'), ('entregas', 'view'), ('almacen', 'view'), ('facturacion', 'view')])
 def hoja_ruta_nuevo_ver(hoja_id):
     """Vista independiente para ver una hoja nueva por ID, sin requerir máquina."""
     hoja = HojaRutaNueva.query.get_or_404(hoja_id)
@@ -2462,7 +2463,7 @@ def api_mapa_maquinas():
 
 @app.route('/hojas_ruta_entregas_form')
 @login_required
-@requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
+@requires_any_permission([('hojas_entregas', 'view'), ('hojas', 'view'), ('catalog', 'view')])
 def hojas_ruta_entregas_form():
     """Formulario simplificado para crear hojas de ruta de produccion."""
     almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria']
@@ -2579,7 +2580,7 @@ def hojas_ruta_entregas_form():
 
 @app.route('/hoja/<int:hoja_id>')
 @login_required
-@requires_any_permission([('hojas', 'view'), ('catalog', 'view'), ('entregas', 'view'), ('almacen', 'view'), ('facturacion', 'view')])
+@requires_any_permission([('hojas_entregas', 'view'), ('hojas', 'view'), ('catalog', 'view'), ('entregas', 'view'), ('almacen', 'view'), ('facturacion', 'view')])
 def hoja_ruta_entregas_ver(hoja_id):
     """Vista independiente para ver una hoja por ID, sin requerir máquina."""
     hoja = HojaRutaEntrega.query.get_or_404(hoja_id)
@@ -2597,7 +2598,7 @@ def hoja_ruta_entregas_ver(hoja_id):
 
 @app.route('/api/hojas_ruta/resolver_codigo', methods=['POST'])
 @login_required
-@requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
+@requires_any_permission([('hojas_entregas', 'view'), ('hojas', 'view'), ('catalog', 'view')])
 def api_resolver_codigo_hoja_ruta():
     """Resuelve texto escaneado (QR/codigo) a una hoja de ruta."""
     data = request.get_json() or {}
@@ -2650,7 +2651,7 @@ def api_resolver_codigo_hoja_ruta():
 
 @app.route('/api/hojas_ruta_nuevo/resolver_codigo', methods=['POST'])
 @login_required
-@requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
+@requires_any_permission([('hojas_mp', 'view'), ('hojas', 'view'), ('catalog', 'view')])
 def api_resolver_codigo_hoja_ruta_nuevo():
     """Resuelve texto escaneado (QR/codigo) a una hoja de ruta del módulo nuevo."""
     data = request.get_json() or {}
@@ -2740,7 +2741,7 @@ def qc_estaciones_maquina(maquina_id):
 
 @app.route('/api/hojas_ruta', methods=['POST'])
 @login_required
-@requires_any_permission([('hojas', 'create'), ('catalog', 'edit')])
+@requires_any_permission([('hojas_entregas', 'create'), ('hojas', 'create'), ('catalog', 'edit')])
 def api_crear_hoja_ruta():
     """Crear una hoja de ruta con formato simplificado y procesos desde la clave."""
     data = request.get_json() or {}
@@ -2921,7 +2922,7 @@ def api_crear_hoja_ruta():
 
 @app.route('/api/hojas_ruta/<int:hoja_id>', methods=['PUT'])
 @login_required
-@requires_any_permission([('hojas', 'edit'), ('catalog', 'edit')])
+@requires_any_permission([('hojas_entregas', 'edit'), ('hojas', 'edit'), ('catalog', 'edit')])
 def api_actualizar_hoja_ruta(hoja_id):
     """Actualizar campos editables de una hoja de ruta."""
     hoja = HojaRutaEntrega.query.get_or_404(hoja_id)
@@ -2934,7 +2935,7 @@ def api_actualizar_hoja_ruta(hoja_id):
     }
     denied_fields = _check_field_level_permissions(
         user=user,
-        module='hojas',
+        module='hojas_entregas',
         payload=data,
         field_actions=hoja_field_permissions,
         broad_action='edit',
@@ -3033,7 +3034,7 @@ def api_actualizar_hoja_ruta(hoja_id):
 
 @app.route('/api/claves_procesos', methods=['GET'])
 @login_required
-@requires_any_permission([('hojas', 'view'), ('catalog', 'view')])
+@requires_any_permission([('hojas_entregas', 'view'), ('hojas_mp', 'view'), ('hojas', 'view'), ('catalog', 'view')])
 def api_claves_procesos():
     """Obtener todas las claves con sus procesos y tiempo total T/O."""
     try:
@@ -3081,7 +3082,7 @@ def api_claves_procesos():
 
 @app.route('/api/estaciones', methods=['POST'])
 @login_required
-@requires_any_permission([('hojas', 'edit'), ('catalog', 'edit')])
+@requires_any_permission([('hojas_entregas', 'edit'), ('hojas', 'edit'), ('catalog', 'edit')])
 def api_crear_estacion():
     """Crear una nueva estación de trabajo en una hoja de ruta."""
     data = request.get_json()
@@ -3393,7 +3394,7 @@ def api_check_proceso_estacion(estacion_id):
 
 @app.route('/api/hojas_ruta/<int:hoja_id>', methods=['DELETE'])
 @login_required
-@requires_any_permission([('hojas', 'delete'), ('catalog', 'edit')])
+@requires_any_permission([('hojas_entregas', 'delete'), ('hojas', 'delete'), ('catalog', 'edit')])
 def api_eliminar_hoja_ruta(hoja_id):
     """Eliminar una hoja de ruta. Solo permite borrar hojas no asignadas a maquina."""
     hoja = HojaRutaEntrega.query.get_or_404(hoja_id)
@@ -3414,7 +3415,7 @@ def api_eliminar_hoja_ruta(hoja_id):
 
 @app.route('/api/hojas_ruta_nuevo', methods=['POST'])
 @login_required
-@requires_any_permission([('hojas', 'create'), ('catalog', 'edit')])
+@requires_any_permission([('hojas_mp', 'create'), ('hojas', 'create'), ('catalog', 'edit')])
 def api_crear_hoja_ruta_nuevo():
     """Crear hoja de ruta del módulo nuevo (tabla hojas_ruta_nueva)."""
     data = request.get_json() or {}
@@ -3470,7 +3471,7 @@ def api_crear_hoja_ruta_nuevo():
 
 @app.route('/api/hojas_ruta_nuevo/<int:hoja_id>', methods=['PUT'])
 @login_required
-@requires_any_permission([('hojas', 'edit'), ('catalog', 'edit')])
+@requires_any_permission([('hojas_mp', 'edit'), ('hojas', 'edit'), ('catalog', 'edit')])
 def api_actualizar_hoja_ruta_nuevo(hoja_id):
     """Actualizar hoja de ruta del módulo nuevo."""
     hoja = HojaRutaNueva.query.get_or_404(hoja_id)
@@ -3510,7 +3511,7 @@ def api_actualizar_hoja_ruta_nuevo(hoja_id):
 
 @app.route('/api/hojas_ruta_nuevo/<int:hoja_id>', methods=['DELETE'])
 @login_required
-@requires_any_permission([('hojas', 'delete'), ('catalog', 'edit')])
+@requires_any_permission([('hojas_mp', 'delete'), ('hojas', 'delete'), ('catalog', 'edit')])
 def api_eliminar_hoja_ruta_nuevo(hoja_id):
     """Eliminar hoja de ruta nueva no asignada."""
     hoja = HojaRutaNueva.query.get_or_404(hoja_id)
