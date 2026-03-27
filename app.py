@@ -885,7 +885,13 @@ def requires_any_permission(permission_pairs):
                     return jsonify({'error': 'Autenticación requerida'}), 401
                 return redirect(url_for('login'))
 
-            if not any(user.has_permission(module, action) for module, action in (permission_pairs or [])):
+            pairs = list(permission_pairs or [])
+            # Evita bypass global por catalog:edit en usuarios no admin.
+            # Admin conserva acceso total por su bandera es_admin.
+            if not user.es_admin:
+                pairs = [pair for pair in pairs if pair != ('catalog', 'edit')]
+
+            if not any(user.has_permission(module, action) for module, action in pairs):
                 if request.path.startswith('/api/'):
                     return jsonify({'error': 'Permiso denegado'}), 403
                 return render_template('403.html'), 403
@@ -1024,6 +1030,12 @@ for module, module_desc in SIMPLE_PERMISSION_MODULES:
         exists = any((m == module and a == action) for m, a, _ in DEFAULT_PERMISSION_CATALOG)
         if not exists:
             DEFAULT_PERMISSION_CATALOG.append((module, action, f'{action_desc} {module_desc}'))
+
+# Bundle simple por módulo para UI sin desglose por acción.
+for module, _module_desc in SIMPLE_PERMISSION_MODULES:
+    module_perms = sorted({(m, a) for (m, a, _d) in DEFAULT_PERMISSION_CATALOG if m == module})
+    if module_perms:
+        ROLE_MODULE_BUNDLES.setdefault(module, module_perms)
 
 
 HOJA_FIELD_GROUP_ACTIONS = {

@@ -34,12 +34,8 @@
             </div>
             <div style="margin-top:10px; padding:10px; border:1px dashed #d0dae8; border-radius:6px; background:#fff;">
                 <div style="font-weight:600; margin-bottom:6px;">Perfil personalizado (opcional)</div>
-                <div style="font-size:12px; color:#555; margin-bottom:8px;">Si marcas módulos o permisos aquí, se crea un role nuevo para este usuario.</div>
+                <div style="font-size:12px; color:#555; margin-bottom:8px;">Si marcas módulos aquí, se crea un role nuevo para este usuario.</div>
                 <div id="new-user-modules" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:6px;"></div>
-                <div style="margin-top:8px;">
-                    <button id="toggle-new-user-advanced" type="button" class="btn btn-secondary" style="font-size:12px; padding:6px 10px;">Permisos avanzados</button>
-                </div>
-                <div id="new-user-advanced-permissions" style="display:none; margin-top:8px; max-height:180px; overflow:auto; border:1px solid #eee; padding:8px;"></div>
             </div>
         </div>
 
@@ -82,8 +78,6 @@
                 <div style="flex:2;">
                     <label><strong>Módulos Accesibles</strong></label>
                     <div id="modules-list" style="max-height:320px; overflow:auto; border:1px solid #eee; padding:8px; margin-top:6px;"></div>
-                    <label style="display:block; margin-top:10px;"><strong>Permisos Avanzados (módulo:acción)</strong></label>
-                    <div id="advanced-permissions-list" style="max-height:180px; overflow:auto; border:1px solid #eee; padding:8px; margin-top:6px;"></div>
                 </div>
             </div>
             <div style="margin-top:14px; text-align:right;">
@@ -176,11 +170,10 @@ document.getElementById('btn-create-user').addEventListener('click', async ()=>{
         const role = document.getElementById('new-role').value || null;
         const custom_role_name = document.getElementById('new-custom-role-name').value.trim();
         const modules = getCheckedModules('new-user');
-        const permission_ids = getCheckedPermissions('new-user');
         const es_admin = document.getElementById('new-es-admin').checked;
         if(!username || !password){ alert('username y password son requeridos'); return; }
 
-        const hasCustomProfile = modules.length > 0 || permission_ids.length > 0 || !!custom_role_name;
+        const hasCustomProfile = modules.length > 0 || !!custom_role_name;
         if(role && hasCustomProfile){
             alert('Selecciona role existente O perfil personalizado, no ambos.');
             return;
@@ -191,7 +184,6 @@ document.getElementById('btn-create-user').addEventListener('click', async ()=>{
             payload.custom_role_name = custom_role_name;
             payload.custom_role_description = `Perfil de ${username}`;
             payload.modules = modules;
-            payload.permission_ids = permission_ids;
         }
 
         const res = await fetch('/api/users', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
@@ -263,7 +255,7 @@ document.getElementById('btn-delete-nonadmin').addEventListener('click', async (
     }catch(e){ alert('Error: '+e.message); }
 });
 
-// Roles / Módulos modal wiring (matriz simple por módulo y acción)
+// Roles / Módulos modal wiring (selección simple por módulo)
 const SIMPLE_MODULES = [
     {id: 'admin', label: 'PANEL ADMIN', icon: '🛡️'},
     {id: 'users', label: 'USUARIOS', icon: '👥'},
@@ -283,24 +275,7 @@ const SIMPLE_MODULES = [
     {id: 'tickets', label: 'TICKETS', icon: '🎫'}
 ];
 
-const SIMPLE_ACTIONS = [
-    {id: 'view', label: 'VER', icon: '👀'},
-    {id: 'create', label: 'CREAR', icon: '➕'},
-    {id: 'edit', label: 'EDITAR', icon: '📝'},
-    {id: 'update', label: 'ACTUALIZAR', icon: '🔁'},
-    {id: 'delete', label: 'BORRAR', icon: '🗑️'}
-];
-
-const MODULES = [];
-SIMPLE_MODULES.forEach((m) => {
-    SIMPLE_ACTIONS.forEach((a) => {
-        MODULES.push({
-            id: `${m.id}_${a.id}`,
-            label: `${m.label} (${a.label})`,
-            icon: `${m.icon}${a.icon}`,
-        });
-    });
-});
+const MODULES = [...SIMPLE_MODULES];
 
 // Preset opcional de rol operativo.
 MODULES.push({id: 'supervisor_produccion', label: 'ROL PRESET: SUPERVISOR PRODUCCIÓN', icon: '👷'});
@@ -312,107 +287,20 @@ function makeModuleCheckboxes(containerId, inputScope){
     if(!node) return;
     node.innerHTML = '';
 
-    const actionsOrder = SIMPLE_ACTIONS.map(a => a.id);
-
-    SIMPLE_MODULES.forEach((moduleItem) => {
-        const section = document.createElement('div');
-        section.style.marginBottom = '10px';
-        section.style.padding = '8px';
-        section.style.background = '#f8fafc';
-        section.style.border = '1px solid #e5e7eb';
-        section.style.borderRadius = '6px';
-
-        const title = document.createElement('div');
-        title.style.fontWeight = '700';
-        title.style.fontSize = '13px';
-        title.style.marginBottom = '8px';
-        title.textContent = `${moduleItem.icon} ${moduleItem.label}:`;
-        section.appendChild(title);
-
-        const actionsRow = document.createElement('div');
-        actionsRow.style.display = 'flex';
-        actionsRow.style.flexWrap = 'wrap';
-        actionsRow.style.gap = '10px';
-
-        actionsOrder.forEach((actionId) => {
-            const moduleActionId = `${moduleItem.id}_${actionId}`;
-            const actionMeta = SIMPLE_ACTIONS.find(a => a.id === actionId);
-            const rid = `${inputScope}_${moduleActionId}`;
-
-            const wrap = document.createElement('label');
-            wrap.style.display = 'inline-flex';
-            wrap.style.alignItems = 'center';
-            wrap.style.gap = '6px';
-            wrap.style.cursor = 'pointer';
-            wrap.style.fontSize = '12px';
-            wrap.innerHTML = `<input type="checkbox" id="${rid}" data-mod-id="${moduleActionId}" data-scope="${inputScope}" /> <span>${actionMeta ? actionMeta.label : actionId}</span>`;
-            actionsRow.appendChild(wrap);
-        });
-
-        section.appendChild(actionsRow);
-        node.appendChild(section);
-    });
-
-    // Agrega presets especiales fuera de la matriz estándar.
-    const presets = MODULES.filter(m => !m.id.includes('_') || m.id === 'supervisor_produccion');
-    const hasPreset = presets.some(p => p.id === 'supervisor_produccion');
-    if (hasPreset) {
-        const presetBox = document.createElement('div');
-        presetBox.style.marginTop = '8px';
-        presetBox.style.padding = '8px';
-        presetBox.style.border = '1px dashed #cbd5e1';
-        presetBox.style.borderRadius = '6px';
-        presetBox.style.background = '#fff';
-        const p = MODULES.find(x => x.id === 'supervisor_produccion');
-        const rid = `${inputScope}_${p.id}`;
-        presetBox.innerHTML = `<label style="display:flex; align-items:center; gap:8px; cursor:pointer;"><input type="checkbox" id="${rid}" data-mod-id="${p.id}" data-scope="${inputScope}" /><span>${p.icon} ${p.label}</span></label>`;
-        node.appendChild(presetBox);
-    }
-}
-
-function makeAdvancedPermissionCheckboxes(containerId, inputScope){
-    const node = document.getElementById(containerId);
-    if(!node) return;
-    node.innerHTML = '';
-    if(!ALL_PERMISSIONS.length){
-        node.innerHTML = '<div style="color:#666; font-size:12px;">Sin permisos definidos.</div>';
-        return;
-    }
-    const grouped = {};
-    ALL_PERMISSIONS.forEach(p=>{
-        if(!grouped[p.module]) grouped[p.module] = [];
-        grouped[p.module].push(p);
-    });
-
-    Object.keys(grouped).sort().forEach(moduleName=>{
-        const section = document.createElement('div');
-        section.style.marginBottom = '8px';
-        section.style.paddingBottom = '6px';
-        section.style.borderBottom = '1px dashed #eee';
-
-        const title = document.createElement('div');
-        title.style.fontWeight = '600';
-        title.style.fontSize = '12px';
-        title.style.color = '#333';
-        title.style.marginBottom = '6px';
-        title.textContent = moduleName.toUpperCase();
-        section.appendChild(title);
-
-        grouped[moduleName].forEach(p=>{
-            const rid = `${inputScope}_perm_${p.id}`;
-            const wrap = document.createElement('label');
-            wrap.style.display = 'inline-flex';
-            wrap.style.alignItems = 'center';
-            wrap.style.gap = '6px';
-            wrap.style.cursor = 'pointer';
-            wrap.style.marginRight = '10px';
-            wrap.style.marginBottom = '6px';
-            const labelText = p.descripcion ? `${p.action} - ${p.descripcion}` : p.action;
-            wrap.innerHTML = `<input type="checkbox" id="${rid}" data-perm-id="${p.id}" data-scope="${inputScope}" /> <code>${labelText}</code>`;
-            section.appendChild(wrap);
-        });
-
-        node.appendChild(section);
+    MODULES.forEach((m) => {
+        const rid = `${inputScope}_${m.id}`;
+        const row = document.createElement('label');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.gap = '8px';
+        row.style.cursor = 'pointer';
+        row.style.marginBottom = '8px';
+        row.style.padding = '8px';
+        row.style.background = '#f8fafc';
+        row.style.border = '1px solid #e5e7eb';
+        row.style.borderRadius = '6px';
+        row.innerHTML = `<input type="checkbox" id="${rid}" data-mod-id="${m.id}" data-scope="${inputScope}" /> <span style="font-weight:600;">${m.icon} ${m.label}</span>`;
+        node.appendChild(row);
     });
 }
 
@@ -421,26 +309,19 @@ function getCheckedModules(scope){
 }
 
 function getCheckedPermissions(scope){
-    return Array.from(document.querySelectorAll(`input[data-scope="${scope}"][data-perm-id]:checked`)).map(i=>parseInt(i.dataset.permId, 10));
+    return [];
 }
 
 async function loadPermissions(){
     try{
         const data = await fetchJson('/api/permissions');
         ALL_PERMISSIONS = data.permissions || [];
-        makeAdvancedPermissionCheckboxes('advanced-permissions-list', 'role-modal');
-        makeAdvancedPermissionCheckboxes('new-user-advanced-permissions', 'new-user');
     }catch(e){
         console.error('No se pudieron cargar permisos', e);
     }
 }
 
 makeModuleCheckboxes('new-user-modules', 'new-user');
-
-document.getElementById('toggle-new-user-advanced').addEventListener('click', ()=>{
-    const box = document.getElementById('new-user-advanced-permissions');
-    box.style.display = box.style.display === 'none' ? 'block' : 'none';
-});
 
 document.getElementById('btn-create-role').addEventListener('click', async ()=>{
     try{
@@ -500,10 +381,8 @@ async function openRolesModal(){
         try{
             const rid = parseInt(select.value,10);
             const checked = getCheckedModules('role-modal');
-            const permission_ids = getCheckedPermissions('role-modal');
             const rolesData = {
                 modules: checked,
-                permission_ids: permission_ids,
                 description: ALL_ROLES.find(r=>r.id===rid)?.description || ALL_ROLES.find(r=>r.id===rid)?.descripcion || ''
             };
             const res = await fetch(`/api/roles/${rid}/modules`, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(rolesData)});
