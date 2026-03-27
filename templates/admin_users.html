@@ -310,16 +310,63 @@ function makeModuleCheckboxes(containerId, inputScope){
     const node = document.getElementById(containerId);
     if(!node) return;
     node.innerHTML = '';
-    MODULES.forEach(m=>{
-        const rid = `${inputScope}_${m.id}`;
-        const wrap = document.createElement('label');
-        wrap.style.display = 'flex';
-        wrap.style.alignItems = 'center';
-        wrap.style.gap = '6px';
-        wrap.style.cursor = 'pointer';
-        wrap.innerHTML = `<input type="checkbox" id="${rid}" data-mod-id="${m.id}" data-scope="${inputScope}" /> <span>${m.icon} ${m.label}</span>`;
-        node.appendChild(wrap);
+
+    const actionsOrder = SIMPLE_ACTIONS.map(a => a.id);
+
+    SIMPLE_MODULES.forEach((moduleItem) => {
+        const section = document.createElement('div');
+        section.style.marginBottom = '10px';
+        section.style.padding = '8px';
+        section.style.background = '#f8fafc';
+        section.style.border = '1px solid #e5e7eb';
+        section.style.borderRadius = '6px';
+
+        const title = document.createElement('div');
+        title.style.fontWeight = '700';
+        title.style.fontSize = '13px';
+        title.style.marginBottom = '8px';
+        title.textContent = `${moduleItem.icon} ${moduleItem.label}:`;
+        section.appendChild(title);
+
+        const actionsRow = document.createElement('div');
+        actionsRow.style.display = 'flex';
+        actionsRow.style.flexWrap = 'wrap';
+        actionsRow.style.gap = '10px';
+
+        actionsOrder.forEach((actionId) => {
+            const moduleActionId = `${moduleItem.id}_${actionId}`;
+            const actionMeta = SIMPLE_ACTIONS.find(a => a.id === actionId);
+            const rid = `${inputScope}_${moduleActionId}`;
+
+            const wrap = document.createElement('label');
+            wrap.style.display = 'inline-flex';
+            wrap.style.alignItems = 'center';
+            wrap.style.gap = '6px';
+            wrap.style.cursor = 'pointer';
+            wrap.style.fontSize = '12px';
+            wrap.innerHTML = `<input type="checkbox" id="${rid}" data-mod-id="${moduleActionId}" data-scope="${inputScope}" /> <span>${actionMeta ? actionMeta.label : actionId}</span>`;
+            actionsRow.appendChild(wrap);
+        });
+
+        section.appendChild(actionsRow);
+        node.appendChild(section);
     });
+
+    // Agrega presets especiales fuera de la matriz estándar.
+    const presets = MODULES.filter(m => !m.id.includes('_') || m.id === 'supervisor_produccion');
+    const hasPreset = presets.some(p => p.id === 'supervisor_produccion');
+    if (hasPreset) {
+        const presetBox = document.createElement('div');
+        presetBox.style.marginTop = '8px';
+        presetBox.style.padding = '8px';
+        presetBox.style.border = '1px dashed #cbd5e1';
+        presetBox.style.borderRadius = '6px';
+        presetBox.style.background = '#fff';
+        const p = MODULES.find(x => x.id === 'supervisor_produccion');
+        const rid = `${inputScope}_${p.id}`;
+        presetBox.innerHTML = `<label style="display:flex; align-items:center; gap:8px; cursor:pointer;"><input type="checkbox" id="${rid}" data-mod-id="${p.id}" data-scope="${inputScope}" /><span>${p.icon} ${p.label}</span></label>`;
+        node.appendChild(presetBox);
+    }
 }
 
 function makeAdvancedPermissionCheckboxes(containerId, inputScope){
@@ -440,14 +487,7 @@ async function openRolesModal(){
     });
 
     const mlist = document.getElementById('modules-list');
-    mlist.innerHTML = '';
-    MODULES.forEach(m=>{
-        const id = 'mod_'+m.id;
-        const row = document.createElement('div');
-        row.style.marginBottom='8px; padding: 8px; background: #f5f5f5; border-radius: 4px;';
-        row.innerHTML = `<label style="display:flex; align-items:center; gap:8px; cursor:pointer;"><input type="checkbox" id="${id}" data-mod-id="${m.id}" data-scope="role-modal" /> <span style="font-weight:600;">${m.icon} ${m.label}</span></label>`;
-        mlist.appendChild(row);
-    });
+    makeModuleCheckboxes('modules-list', 'role-modal');
 
     select.addEventListener('change', ()=>{ renderRoleModules(parseInt(select.value,10)); });
 
@@ -484,9 +524,8 @@ function closeRolesModal(){
 function renderRoleModules(roleId){
     const role = ALL_ROLES.find(r=>r.id===roleId) || {modules:[], permissions:[]};
     const mods = (role.modules||[]);
-    MODULES.forEach(m=>{
-        const cb = document.getElementById('mod_'+m.id);
-        if(cb) cb.checked = mods.indexOf(m.id) !== -1;
+    Array.from(document.querySelectorAll('input[data-scope="role-modal"][data-mod-id]')).forEach(cb=>{
+        cb.checked = mods.indexOf(cb.dataset.modId) !== -1;
     });
 
     const selectedPermissionIds = new Set((role.permissions || []).map(p=>p.id));
