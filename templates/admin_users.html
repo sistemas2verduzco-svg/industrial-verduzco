@@ -275,7 +275,24 @@ const SIMPLE_MODULES = [
     {id: 'tickets', label: 'TICKETS', icon: '🎫'}
 ];
 
-const MODULES = [...SIMPLE_MODULES];
+const SIMPLE_ACTIONS = [
+    {id: 'view', label: 'VER', icon: '👀'},
+    {id: 'create', label: 'CREAR', icon: '➕'},
+    {id: 'edit', label: 'EDITAR', icon: '📝'},
+    {id: 'update', label: 'ACTUALIZAR', icon: '🔁'},
+    {id: 'delete', label: 'BORRAR', icon: '🗑️'}
+];
+
+const MODULES = [];
+SIMPLE_MODULES.forEach((m) => {
+    SIMPLE_ACTIONS.forEach((a) => {
+        MODULES.push({
+            id: `${m.id}_${a.id}`,
+            label: `${m.label} (${a.label})`,
+            icon: `${m.icon}${a.icon}`,
+        });
+    });
+});
 
 // Preset opcional de rol operativo.
 MODULES.push({id: 'supervisor_produccion', label: 'ROL PRESET: SUPERVISOR PRODUCCIÓN', icon: '👷'});
@@ -287,21 +304,57 @@ function makeModuleCheckboxes(containerId, inputScope){
     if(!node) return;
     node.innerHTML = '';
 
-    MODULES.forEach((m) => {
-        const rid = `${inputScope}_${m.id}`;
-        const row = document.createElement('label');
-        row.style.display = 'flex';
-        row.style.alignItems = 'center';
-        row.style.gap = '8px';
-        row.style.cursor = 'pointer';
-        row.style.marginBottom = '8px';
-        row.style.padding = '8px';
-        row.style.background = '#f8fafc';
-        row.style.border = '1px solid #e5e7eb';
-        row.style.borderRadius = '6px';
-        row.innerHTML = `<input type="checkbox" id="${rid}" data-mod-id="${m.id}" data-scope="${inputScope}" /> <span style="font-weight:600;">${m.icon} ${m.label}</span>`;
-        node.appendChild(row);
+    SIMPLE_MODULES.forEach((moduleItem) => {
+        const section = document.createElement('div');
+        section.style.marginBottom = '10px';
+        section.style.padding = '8px';
+        section.style.background = '#f8fafc';
+        section.style.border = '1px solid #e5e7eb';
+        section.style.borderRadius = '6px';
+
+        const title = document.createElement('div');
+        title.style.fontWeight = '700';
+        title.style.fontSize = '13px';
+        title.style.marginBottom = '8px';
+        title.textContent = `${moduleItem.icon} ${moduleItem.label}:`;
+        section.appendChild(title);
+
+        const actionsRow = document.createElement('div');
+        actionsRow.style.display = 'flex';
+        actionsRow.style.flexWrap = 'wrap';
+        actionsRow.style.gap = '10px';
+
+        SIMPLE_ACTIONS.forEach((actionMeta) => {
+            const moduleActionId = `${moduleItem.id}_${actionMeta.id}`;
+            const rid = `${inputScope}_${moduleActionId}`;
+
+            const wrap = document.createElement('label');
+            wrap.style.display = 'inline-flex';
+            wrap.style.alignItems = 'center';
+            wrap.style.gap = '6px';
+            wrap.style.cursor = 'pointer';
+            wrap.style.fontSize = '12px';
+            wrap.innerHTML = `<input type="checkbox" id="${rid}" data-mod-id="${moduleActionId}" data-scope="${inputScope}" /> <span>${actionMeta.label}</span>`;
+            actionsRow.appendChild(wrap);
+        });
+
+        section.appendChild(actionsRow);
+        node.appendChild(section);
     });
+
+    // Preset opcional fuera de la matriz por acción.
+    const presetBox = document.createElement('div');
+    presetBox.style.marginTop = '8px';
+    presetBox.style.padding = '8px';
+    presetBox.style.border = '1px dashed #cbd5e1';
+    presetBox.style.borderRadius = '6px';
+    presetBox.style.background = '#fff';
+    const p = MODULES.find(x => x.id === 'supervisor_produccion');
+    if (p) {
+        const rid = `${inputScope}_${p.id}`;
+        presetBox.innerHTML = `<label style="display:flex; align-items:center; gap:8px; cursor:pointer;"><input type="checkbox" id="${rid}" data-mod-id="${p.id}" data-scope="${inputScope}" /><span>${p.icon} ${p.label}</span></label>`;
+        node.appendChild(presetBox);
+    }
 }
 
 function getCheckedModules(scope){
