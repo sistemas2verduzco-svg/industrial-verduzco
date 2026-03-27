@@ -1469,7 +1469,7 @@ def control_calidad_hoja(hoja_id):
 @requires_any_permission([('calidad', 'view'), ('catalog', 'view')])
 def control_calidad_certificado(hoja_id):
     """Certificado imprimible de control de calidad por hoja de ruta."""
-    hoja = HojaRuta.query.get_or_404(hoja_id)
+    hoja = HojaRutaEntrega.query.get_or_404(hoja_id)
     estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden.asc()).all()
     completadas = [e for e in estaciones if (e.estado or '').lower() == 'completada']
     reviews = [_qc_parse_review_block(e.notas) for e in completadas]
@@ -1585,7 +1585,7 @@ def _sync_flujo_parciales(flujo: HojaRutaFlujoLogistica, hoja: HojaRutaEntrega =
 @login_required
 @requires_any_permission([('entregas', 'view'), ('catalog', 'edit')])
 def entregas_module():
-    hojas = HojaRuta.query.order_by(HojaRuta.fecha_creacion.desc()).all()
+    hojas = HojaRutaEntrega.query.order_by(HojaRutaEntrega.fecha_creacion.desc()).all()
     pendientes_entregas = (
         HojaRutaFlujoLogistica.query
         .filter_by(estado='entregas')
@@ -1624,7 +1624,7 @@ def api_logistica_entregas_agregar():
     except Exception:
         return jsonify({'error': 'hoja_id inválido'}), 400
 
-    hoja = HojaRuta.query.get(hoja_id)
+    hoja = HojaRutaEntrega.query.get(hoja_id)
     if not hoja:
         return jsonify({'error': 'Hoja de ruta no encontrada'}), 404
 
@@ -2143,10 +2143,10 @@ def hojas_ruta_entregas_list():
     # Hojas pendientes de asignar: solo las que aún tienen trabajo por hacer.
     # 'completada' se excluye intencionalmente: si todos los procesos terminaron
     # la hoja no necesita asignarse a ninguna máquina.
-    hojas_pendientes = HojaRuta.query.filter(
-        HojaRuta.maquina_id.is_(None),
-        HojaRuta.estado.in_(['activa', 'pausada'])
-    ).order_by(HojaRuta.fecha_creacion.asc()).all()
+    hojas_pendientes = HojaRutaEntrega.query.filter(
+        HojaRutaEntrega.maquina_id.is_(None),
+        HojaRutaEntrega.estado.in_(['activa', 'pausada'])
+    ).order_by(HojaRutaEntrega.fecha_creacion.asc()).all()
 
     # Obtener hoja activa para cada máquina
     maquinas_data = []
@@ -2244,10 +2244,10 @@ def mapa_maquinas():
 def api_mapa_maquinas():
     """Datos para el mapa de maquinas (estado, hoja activa, pieza, tiempo)."""
     todas_maquinas = Máquina.query.order_by(Máquina.nombre.asc()).all()
-    hojas_activas = HojaRuta.query.filter(
-        HojaRuta.maquina_id.isnot(None),
-        HojaRuta.estado.in_(['activa', 'pausada'])
-    ).order_by(HojaRuta.fecha_creacion.desc()).all()
+    hojas_activas = HojaRutaEntrega.query.filter(
+        HojaRutaEntrega.maquina_id.isnot(None),
+        HojaRutaEntrega.estado.in_(['activa', 'pausada'])
+    ).order_by(HojaRutaEntrega.fecha_creacion.desc()).all()
     hoja_activa_por_maquina: dict = {}
     for h in hojas_activas:
         existing = hoja_activa_por_maquina.get(h.maquina_id)
@@ -2427,7 +2427,7 @@ def hojas_ruta_entregas_form():
     """Formulario simplificado para crear hojas de ruta de produccion."""
     almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria']
     # Listado completo para consulta
-    hojas = HojaRuta.query.order_by(HojaRuta.fecha_creacion.desc()).all()
+    hojas = HojaRutaEntrega.query.order_by(HojaRutaEntrega.fecha_creacion.desc()).all()
 
     hoja_ids = [h.id for h in hojas]
     flujos_facturacion = HojaRutaFlujoLogistica.query.filter(
@@ -2517,7 +2517,7 @@ def hojas_ruta_entregas_form():
 @requires_any_permission([('hojas', 'view'), ('catalog', 'view'), ('entregas', 'view'), ('almacen', 'view'), ('facturacion', 'view')])
 def hoja_ruta_entregas_ver(hoja_id):
     """Vista independiente para ver una hoja por ID, sin requerir máquina."""
-    hoja = HojaRuta.query.get_or_404(hoja_id)
+    hoja = HojaRutaEntrega.query.get_or_404(hoja_id)
     h = hoja.to_dict()
     comentarios_bruto = _clean_nullable_text(h.get('materia_prima'))
     h['comentarios_usuario'] = _qc_strip_scrap_summary(comentarios_bruto)
@@ -2562,11 +2562,11 @@ def api_resolver_codigo_hoja_ruta():
 
     hoja = None
     if hoja_id is not None:
-        hoja = HojaRuta.query.get(hoja_id)
+        hoja = HojaRutaEntrega.query.get(hoja_id)
 
     # 4) Fallback por serie exacta
     if hoja is None:
-        hoja = HojaRuta.query.filter_by(nombre=value).first()
+        hoja = HojaRutaEntrega.query.filter_by(nombre=value).first()
 
     if hoja is None:
         return jsonify({'error': 'No se encontro hoja para el codigo escaneado'}), 404
@@ -2588,7 +2588,7 @@ def api_resolver_codigo_hoja_ruta():
 def hojas_ruta_entregas_detalle(maquina_id):
     """Detalle de hojas de ruta para una máquina específica."""
     maquina = Máquina.query.get_or_404(maquina_id)
-    hojas = HojaRuta.query.filter_by(maquina_id=maquina_id).order_by(HojaRuta.fecha_creacion.desc()).all()
+    hojas = HojaRutaEntrega.query.filter_by(maquina_id=maquina_id).order_by(HojaRutaEntrega.fecha_creacion.desc()).all()
     
     hojas_data = []
     for hoja in hojas:
@@ -2621,7 +2621,7 @@ def hojas_ruta_entregas_detalle(maquina_id):
 def qc_estaciones_maquina(maquina_id):
     """Vista independiente de control de calidad para producción por máquina."""
     maquina = Máquina.query.get_or_404(maquina_id)
-    hoja_activa = HojaRuta.query.filter_by(maquina_id=maquina_id, estado='activa').first()
+    hoja_activa = HojaRutaEntrega.query.filter_by(maquina_id=maquina_id, estado='activa').first()
     registros = QCProduccionRegistro.query.filter_by(maquina_id=maquina_id).order_by(QCProduccionRegistro.creado_en.desc()).limit(50).all()
     return render_template('qc_estaciones.html', maquina=maquina, hoja_activa=hoja_activa, registros=registros)
 
@@ -2673,20 +2673,20 @@ def api_crear_hoja_ruta():
     # week: bloquea si ya existe hoja de esa clave creada en la semana actual.
     duplicate_scope = (os.getenv('HOJA_RUTA_DUPLICATE_SCOPE', 'none') or 'none').strip().lower()
     if duplicate_scope in ('active', 'day', 'week'):
-        existing_q = HojaRuta.query.filter(HojaRuta.pn == clave.clave)
+        existing_q = HojaRutaEntrega.query.filter(HojaRutaEntrega.pn == clave.clave)
         if duplicate_scope == 'day':
             now_dt = datetime.utcnow()
             day_start = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-            existing_q = existing_q.filter(HojaRuta.fecha_creacion >= day_start)
+            existing_q = existing_q.filter(HojaRutaEntrega.fecha_creacion >= day_start)
         elif duplicate_scope == 'week':
             now_dt = datetime.utcnow()
             day_start = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
             week_start = day_start - timedelta(days=day_start.weekday())
-            existing_q = existing_q.filter(HojaRuta.fecha_creacion >= week_start)
+            existing_q = existing_q.filter(HojaRutaEntrega.fecha_creacion >= week_start)
         else:
-            existing_q = existing_q.filter(HojaRuta.estado.in_(['activa', 'pausada']))
+            existing_q = existing_q.filter(HojaRutaEntrega.estado.in_(['activa', 'pausada']))
 
-        hoja_existente = existing_q.order_by(HojaRuta.fecha_creacion.desc()).first()
+        hoja_existente = existing_q.order_by(HojaRutaEntrega.fecha_creacion.desc()).first()
         if hoja_existente:
             return jsonify({
                 'error': 'Ya existe una hoja de ruta con esta clave.',
@@ -2702,9 +2702,9 @@ def api_crear_hoja_ruta():
 
     maquina_id = int(data.get('maquina_id')) if data.get('maquina_id') else None
     if maquina_id:
-        hoja_ocupada = HojaRuta.query.filter(
-            HojaRuta.maquina_id == maquina_id,
-            HojaRuta.estado.in_(['activa', 'pausada'])
+        hoja_ocupada = HojaRutaEntrega.query.filter(
+            HojaRutaEntrega.maquina_id == maquina_id,
+            HojaRutaEntrega.estado.in_(['activa', 'pausada'])
         ).first()
         if hoja_ocupada:
             return jsonify({
@@ -2719,7 +2719,7 @@ def api_crear_hoja_ruta():
 
     veces_previas_maquina = 0
     if maquina_id:
-        veces_previas_maquina = HojaRuta.query.filter_by(maquina_id=maquina_id, pn=clave.clave).count()
+        veces_previas_maquina = HojaRutaEntrega.query.filter_by(maquina_id=maquina_id, pn=clave.clave).count()
 
     procesos = ClaveProceso.query.filter_by(clave_id=clave_id).order_by(ClaveProceso.orden).all()
     if not procesos:
@@ -2731,7 +2731,7 @@ def api_crear_hoja_ruta():
         descripcion_hoja = _resolve_clave_descripcion_by_pn(clave.clave)
         audit_username = _current_username_for_audit(user)
 
-        hoja = HojaRuta(
+        hoja = HojaRutaEntrega(
             maquina_id=maquina_id,
             nombre='PENDIENTE_SERIE',
             descripcion=descripcion_hoja,
@@ -2814,7 +2814,7 @@ def api_crear_hoja_ruta():
 @requires_any_permission([('hojas', 'edit'), ('catalog', 'edit')])
 def api_actualizar_hoja_ruta(hoja_id):
     """Actualizar campos editables de una hoja de ruta."""
-    hoja = HojaRuta.query.get_or_404(hoja_id)
+    hoja = HojaRutaEntrega.query.get_or_404(hoja_id)
     data = request.get_json() or {}
 
     user = get_current_user()
@@ -3074,11 +3074,11 @@ def api_asignar_hoja_maquina(maquina_id):
     if not hoja_id:
         return jsonify({'error': 'hoja_id requerido'}), 400
 
-    hoja = HojaRuta.query.get_or_404(int(hoja_id))
+    hoja = HojaRutaEntrega.query.get_or_404(int(hoja_id))
     if hoja.maquina_id and hoja.maquina_id != maq.id:
         return jsonify({'error': 'La hoja ya está asignada a otra máquina'}), 409
 
-    activa_actual = HojaRuta.query.filter_by(maquina_id=maq.id, estado='activa').first()
+    activa_actual = HojaRutaEntrega.query.filter_by(maquina_id=maq.id, estado='activa').first()
     if activa_actual and activa_actual.id != hoja.id:
         return jsonify({'error': 'La máquina ya tiene una hoja activa asignada'}), 409
 
@@ -3174,11 +3174,11 @@ def api_retirar_hoja_maquina(maquina_id):
     hoja_id = data.get('hoja_id')
 
     if hoja_id:
-        hoja = HojaRuta.query.get_or_404(int(hoja_id))
+        hoja = HojaRutaEntrega.query.get_or_404(int(hoja_id))
         if hoja.maquina_id != maq.id:
             return jsonify({'error': 'La hoja no pertenece a esta máquina'}), 409
     else:
-        hoja = HojaRuta.query.filter_by(maquina_id=maq.id, estado='activa').order_by(HojaRuta.fecha_creacion.desc()).first()
+        hoja = HojaRutaEntrega.query.filter_by(maquina_id=maq.id, estado='activa').order_by(HojaRutaEntrega.fecha_creacion.desc()).first()
         if not hoja:
             return jsonify({'error': 'No hay hoja activa asignada a esta máquina'}), 404
 
@@ -3203,7 +3203,7 @@ def api_retirar_hoja_maquina(maquina_id):
 def api_check_proceso_estacion(estacion_id):
     """Marcar/desmarcar proceso de estación y avanzar automáticamente al siguiente pendiente."""
     estacion = EstacionTrabajo.query.get_or_404(estacion_id)
-    hoja = HojaRuta.query.get_or_404(estacion.hoja_ruta_id)
+    hoja = HojaRutaEntrega.query.get_or_404(estacion.hoja_ruta_id)
     data = request.get_json() or {}
     completada = bool(data.get('completada', False))
 
@@ -3286,7 +3286,7 @@ def api_check_proceso_estacion(estacion_id):
 @requires_any_permission([('hojas', 'delete'), ('catalog', 'edit')])
 def api_eliminar_hoja_ruta(hoja_id):
     """Eliminar una hoja de ruta. Solo permite borrar hojas no asignadas a maquina."""
-    hoja = HojaRuta.query.get_or_404(hoja_id)
+    hoja = HojaRutaEntrega.query.get_or_404(hoja_id)
 
     if hoja.maquina_id is not None:
         return jsonify({'error': 'No puedes eliminar una hoja asignada a una maquina. Primero desasignala.'}), 409
@@ -3323,19 +3323,19 @@ def api_ingresar_piezas():
     except Exception:
         return jsonify({'error': 'maquina_id inválido'}), 400
 
-    hoja_ocupada = HojaRuta.query.filter(
-        HojaRuta.maquina_id == maquina_id_int,
-        HojaRuta.estado.in_(['activa', 'pausada'])
+    hoja_ocupada = HojaRutaEntrega.query.filter(
+        HojaRutaEntrega.maquina_id == maquina_id_int,
+        HojaRutaEntrega.estado.in_(['activa', 'pausada'])
     ).first()
     if hoja_ocupada:
         return jsonify({'error': 'La máquina ya tiene una hoja activa o pausada. Retira la hoja actual antes de agregar otra.'}), 409
 
-    veces_previas_maquina = HojaRuta.query.filter_by(maquina_id=maquina_id_int, pn=clave).count()
+    veces_previas_maquina = HojaRutaEntrega.query.filter_by(maquina_id=maquina_id_int, pn=clave).count()
 
     try:
         nombre = f"Producción {clave}"
         maquina = Máquina.query.get(maquina_id_int)
-        hoja = HojaRuta(
+        hoja = HojaRutaEntrega(
             maquina_id=maquina_id_int,
             nombre=nombre,
             producto=producto or clave,
