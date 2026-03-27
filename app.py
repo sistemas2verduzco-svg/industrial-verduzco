@@ -2052,7 +2052,7 @@ def hojas_ruta_nuevo_list():
     } for h in hojas_pendientes]
     facturadas_info = {}
     resp = make_response(render_template(
-        'hojas_ruta_entregas_list.html',
+        'hojas_ruta_list.html',
         maquinas=maquinas_data,
         hojas_pendientes=pendientes_data,
         facturadas_info=facturadas_info,
@@ -2134,152 +2134,8 @@ def hoja_ruta_nuevo_ver(hoja_id):
 @login_required
 @requires_any_permission([('estaciones', 'view'), ('catalog', 'view')])
 def hojas_ruta_entregas_list():
-    """Lista de máquinas con sus hojas de ruta activas y estado de producción."""
-    maquinas = Máquina.query.all()
-    hojas_activas = HojaRutaEntrega.query.filter(
-        HojaRutaEntrega.maquina_id.isnot(None),
-        HojaRutaEntrega.estado.in_(['activa', 'pausada'])
-    ).order_by(HojaRutaEntrega.fecha_creacion.desc()).all()
-    # Preferir 'activa' sobre 'pausada'; en caso de duplicados por maquina, quedarse con la primera encontrada.
-    hoja_activa_por_maquina: dict = {}
-    for h in hojas_activas:
-        existing = hoja_activa_por_maquina.get(h.maquina_id)
-        if existing is None:
-            hoja_activa_por_maquina[h.maquina_id] = h
-        elif existing.estado != 'activa' and h.estado == 'activa':
-            hoja_activa_por_maquina[h.maquina_id] = h
-
-    # Regla operativa: sincronizar activo con la presencia de hoja activa asignada.
-    estado_maquina_changed = False
-    for maq in maquinas:
-        tiene_hoja = maq.id in hoja_activa_por_maquina
-        activo_actual = bool(getattr(maq, 'activo', False))
-        if tiene_hoja and not activo_actual:
-            maq.activo = True
-            estado_maquina_changed = True
-        elif not tiene_hoja and activo_actual:
-            maq.activo = False
-            estado_maquina_changed = True
-
-    if estado_maquina_changed:
-        try:
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-
-    # Orden operativo por tipo y consecutivo (#01, #02, ...)
-    tipo_priority = {
-        'CNC': 1,
-        'TORNO': 2,
-        'FRESADORA': 3,
-        'TALADRO': 4,
-        'CEPILLO': 5,
-        'ESCOPLO': 6,
-    }
-
-    def maquina_sort_key(m):
-        tipo = (getattr(m, 'tipo', None) or '').strip().upper()
-        nombre = (getattr(m, 'nombre', None) or '').strip().upper()
-
-        match_num = re.search(r'#\s*(\d+)', nombre)
-        numero = int(match_num.group(1)) if match_num else 9999
-
-        base = re.sub(r'#\s*\d+', '', nombre).strip()
-        tipo_ref = tipo or base
-        prioridad = tipo_priority.get(tipo_ref, 99)
-
-        return (prioridad, tipo_ref, numero, nombre)
-
-    maquinas = sorted(maquinas, key=maquina_sort_key)
-    
-    # Hojas pendientes de asignar: solo las que aún tienen trabajo por hacer.
-    # 'completada' se excluye intencionalmente: si todos los procesos terminaron
-    # la hoja no necesita asignarse a ninguna máquina.
-    hojas_pendientes = HojaRutaEntrega.query.filter(
-        HojaRutaEntrega.maquina_id.is_(None),
-        HojaRutaEntrega.estado.in_(['activa', 'pausada'])
-    ).order_by(HojaRutaEntrega.fecha_creacion.asc()).all()
-
-    # Obtener hoja activa para cada máquina
-    maquinas_data = []
-    for maq in maquinas:
-        hoja_activa = hoja_activa_por_maquina.get(maq.id)
-        estacion_actual = None
-        tiempo_real = None
-        if hoja_activa:
-            estacion_actual = EstacionTrabajo.query.filter_by(
-                hoja_ruta_id=hoja_activa.id, 
-                estado='en_curso'
-            ).order_by(EstacionTrabajo.orden).first()
-            if hoja_activa.fecha_salida:
-                elapsed = _working_seconds_between(hoja_activa.fecha_salida, datetime.utcnow())
-                tiempo_real = _format_seconds_to_hms(elapsed)
-        
-        maquinas_data.append({
-            'id': maq.id,
-            'nombre': maq.nombre,
-            'descripcion': maq.descripcion,
-            'imagen_url': maq.imagen_url,
-            'hoja_activa': hoja_activa.to_dict() if hoja_activa else None,
-            'activo': getattr(maq, 'activo', False),
-            'estacion_actual': estacion_actual.nombre if estacion_actual else 'Sin producción',
-            'tiempo_real': tiempo_real,
-            'tipo': getattr(maq, 'tipo', None),
-            'plantilla_default': getattr(maq, 'plantilla_default', None)
-        })
-
-    pendientes_data = []
-    pending_state_changed = False
-    for h in hojas_pendientes:
-        estaciones_h = EstacionTrabajo.query.filter_by(hoja_ruta_id=h.id).order_by(EstacionTrabajo.orden.asc()).all()
-        if _sync_hoja_estado_with_checks(h, estaciones=estaciones_h):
-            pending_state_changed = True
-        pendientes_data.append({
-            'id': h.id,
-            'serie': h.nombre,
-            'clave': h.pn,
-            'estado': h.estado,
-            'cantidad_piezas': h.cantidad_piezas,
-            'tiempo_total': h.total_tiempo,
-            'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None,
-            'estaciones': [
-                {
-                    'id': e.id,
-                    'orden': e.orden,
-                    'operacion': e.operacion,
-                    'estado': e.estado,
-                }
-                for e in estaciones_h
-            ],
-        })
-
-    if pending_state_changed:
-        try:
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-
-    # Hojas liberadas por Facturación (estado='finalizada' en flujo logístico)
-    facturadas_flujos = HojaRutaFlujoLogistica.query.filter_by(estado='finalizada').all()
-    facturadas_info = {
-        f.hoja_ruta_id: {
-            'aprobado_por': f.facturacion_aprobado_por or '',
-            'aprobado_en': f.facturacion_aprobado_en.strftime('%d/%m/%Y %H:%M') if f.facturacion_aprobado_en else ''
-        }
-        for f in facturadas_flujos
-    }
-
-    resp = make_response(render_template(
-        'hojas_ruta_entregas_list.html',
-        maquinas=maquinas_data,
-        hojas_pendientes=pendientes_data,
-        facturadas_info=facturadas_info
-    ))
-    # Evita que navegador/proxy muestren HTML viejo tras deploy.
-    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-    resp.headers['Pragma'] = 'no-cache'
-    resp.headers['Expires'] = '0'
-    return resp
+    """Estaciones T ahora usa el flujo MP/nuevo."""
+    return hojas_ruta_nuevo_list()
 
 
 @app.route('/mapa_maquinas')
