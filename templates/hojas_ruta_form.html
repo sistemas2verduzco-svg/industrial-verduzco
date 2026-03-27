@@ -385,17 +385,59 @@
             font-size: 13px;
         }
 
-        .sibling-panel {
-            margin-top: 12px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            background: #f8fafc;
-            padding: 10px;
+        .sibling-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.5);
             display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 3200;
+            padding: 12px;
         }
 
-        .sibling-panel.open {
-            display: block;
+        .sibling-modal-backdrop.open {
+            display: flex;
+        }
+
+        .sibling-modal-card {
+            width: min(1240px, 96vw);
+            max-height: 88vh;
+            overflow: hidden;
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            background: #f8fafc;
+            box-shadow: 0 22px 55px rgba(2, 6, 23, 0.28);
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .sibling-modal-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .sibling-modal-close {
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: #fff;
+            color: #0f172a;
+            font-weight: 700;
+            cursor: pointer;
+            padding: 6px 10px;
+        }
+
+        .sibling-modal-table-wrap {
+            border: 1px solid #dbe3ef;
+            border-radius: 8px;
+            background: #fff;
+            overflow: auto;
+            max-height: calc(88vh - 90px);
         }
 
         /* Esta vista debe usar todo el ancho restante junto al sidebar */
@@ -776,13 +818,17 @@
         </div>
 
         {% if companion_hojas %}
-        <div id="siblingPanel" class="sibling-panel">
-            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
-                <strong>Tabla de {{ companion_modulo_titulo or 'módulo hermano' }}</strong>
-                <span style="font-size:12px; color:#64748b;">{{ companion_hojas|length }} registro(s)</span>
-            </div>
+        <div id="siblingPanel" class="sibling-modal-backdrop" onclick="if(event.target===this){toggleSiblingPanel(false);}">
+            <div class="sibling-modal-card" role="dialog" aria-modal="true" aria-label="Tabla del módulo hermano">
+                <div class="sibling-modal-head">
+                    <strong>Tabla de {{ companion_modulo_titulo or 'módulo hermano' }}</strong>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-size:12px; color:#64748b;">{{ companion_hojas|length }} registro(s)</span>
+                        <button type="button" class="sibling-modal-close" onclick="toggleSiblingPanel(false)">Cerrar</button>
+                    </div>
+                </div>
 
-            <div class="table-scroll">
+            <div class="sibling-modal-table-wrap table-scroll">
                 <table class="hojas-recientes-table">
                     <thead>
                         <tr>
@@ -816,6 +862,7 @@
                     </tbody>
                 </table>
             </div>
+        </div>
         </div>
         {% endif %}
     </div>
@@ -1116,15 +1163,28 @@
             applyFilter();
         }
 
-        function toggleSiblingPanel() {
+        function toggleSiblingPanel(forceOpen = null) {
             const panel = document.getElementById('siblingPanel');
             const btn = document.getElementById('toggleSiblingBtn');
             if (!panel || !btn) return;
-            const opened = panel.classList.toggle('open');
+            let opened;
+            if (forceOpen === null) {
+                opened = !panel.classList.contains('open');
+            } else {
+                opened = !!forceOpen;
+            }
+            panel.classList.toggle('open', opened);
             btn.textContent = opened
                 ? 'Ocultar ' + {{ (companion_modulo_titulo or 'Módulo hermano')|tojson }}
                 : 'Ver ' + {{ (companion_modulo_titulo or 'Módulo hermano')|tojson }};
+            document.body.style.overflow = opened ? 'hidden' : '';
         }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                toggleSiblingPanel(false);
+            }
+        });
 
         function renderProcesos(claveId) {
             const tbody = document.getElementById('tbodyProcesos');
