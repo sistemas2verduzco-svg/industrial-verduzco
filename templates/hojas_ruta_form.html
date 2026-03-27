@@ -666,7 +666,6 @@
         <div class="section-title hojas-toolbar">
             <span>Hojas registradas</span>
             <div class="hojas-search-wrap">
-                {% if companion_hojas %}
                 <button
                     type="button"
                     id="toggleSiblingBtn"
@@ -675,7 +674,6 @@
                     onclick="toggleSiblingPanel()">
                     Ver {{ companion_modulo_titulo or 'Módulo hermano' }}
                 </button>
-                {% endif %}
                 <input
                     type="search"
                     id="hojasSearch"
@@ -817,13 +815,12 @@
             {% endif %}
         </div>
 
-        {% if companion_hojas %}
         <div id="siblingPanel" class="sibling-modal-backdrop" onclick="if(event.target===this){toggleSiblingPanel(false);}">
             <div class="sibling-modal-card" role="dialog" aria-modal="true" aria-label="Tabla del módulo hermano">
                 <div class="sibling-modal-head">
                     <strong>Tabla de {{ companion_modulo_titulo or 'módulo hermano' }}</strong>
                     <div style="display:flex; align-items:center; gap:8px;">
-                        <span style="font-size:12px; color:#64748b;">{{ companion_hojas|length }} registro(s)</span>
+                        <span style="font-size:12px; color:#64748b;">{{ (companion_hojas or [])|length }} registro(s)</span>
                         <button type="button" class="sibling-modal-close" onclick="toggleSiblingPanel(false)">Cerrar</button>
                     </div>
                 </div>
@@ -845,6 +842,7 @@
                         </tr>
                     </thead>
                     <tbody>
+                        {% if companion_hojas %}
                         {% for h in companion_hojas %}
                         <tr>
                             <td>{{ h.serie or '' }}</td>
@@ -859,12 +857,18 @@
                             <td>{{ h.estado or '' }}</td>
                         </tr>
                         {% endfor %}
+                        {% else %}
+                        <tr>
+                            <td colspan="10" style="text-align:center; color:#64748b; padding:16px;">
+                                No hay registros en {{ companion_modulo_titulo or 'el módulo hermano' }}.
+                            </td>
+                        </tr>
+                        {% endif %}
                     </tbody>
                 </table>
             </div>
         </div>
         </div>
-        {% endif %}
     </div>
 
     <div id="editModal" class="modal-backdrop">
