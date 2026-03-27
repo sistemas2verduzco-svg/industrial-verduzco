@@ -886,10 +886,12 @@ def requires_any_permission(permission_pairs):
                 return redirect(url_for('login'))
 
             pairs = list(permission_pairs or [])
-            # Evita bypass global por catalog:edit en usuarios no admin.
-            # Admin conserva acceso total por su bandera es_admin.
+            # En usuarios no admin, evita bypass por permisos de catálogo cuando
+            # la ruta también declara permisos de otro módulo.
             if not user.es_admin:
-                pairs = [pair for pair in pairs if pair != ('catalog', 'edit')]
+                non_catalog_pairs = [pair for pair in pairs if pair[0] != 'catalog']
+                if non_catalog_pairs:
+                    pairs = non_catalog_pairs
 
             if not any(user.has_permission(module, action) for module, action in pairs):
                 if request.path.startswith('/api/'):

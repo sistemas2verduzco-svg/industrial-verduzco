@@ -24,36 +24,36 @@
         {% if has_permission('catalog', 'view') or current_user and current_user.es_admin %}
         <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">CATALOGO</div>
         <a href="/" class="sb-link" data-exact="1"><span>🏠</span> <span>Ver Catalogo</span></a>
-        {% if has_permission('hojas_entregas', 'view') or has_permission('hojas_mp', 'view') or has_permission('hojas', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
-        {% if has_permission('hojas_entregas', 'view') or has_permission('hojas', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        {% if has_permission('hojas_entregas', 'view') or has_permission('hojas_mp', 'view') or has_permission('hojas', 'view') or current_user and current_user.es_admin %}
+        {% if has_permission('hojas_entregas', 'view') or has_permission('hojas', 'view') or current_user and current_user.es_admin %}
         <a href="/hojas_ruta_form" class="sb-link" data-base="/hojas_ruta_form" data-extra="/hoja/"><span>📄</span> <span>HOJAS DE RUTA ENTREGAS</span></a>
         {% endif %}
-        {% if has_permission('hojas_mp', 'view') or has_permission('hojas', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        {% if has_permission('hojas_mp', 'view') or has_permission('hojas', 'view') or current_user and current_user.es_admin %}
         <a href="/hojas_ruta_nuevo_form" class="sb-link" data-base="/hojas_ruta_nuevo_form" data-extra="/hoja_nuevo/"><span>🆕</span> <span>HOJAS DE RUTA MP</span></a>
         {% endif %}
         {% endif %}
-        {% if has_permission('procesos', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        {% if has_permission('procesos', 'view') or current_user and current_user.es_admin %}
         <a href="/procesos" class="sb-link" data-base="/procesos"><span>🧩</span> <span>Procesos y Claves</span></a>
         {% endif %}
-        {% if has_permission('calidad', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        {% if has_permission('calidad', 'view') or current_user and current_user.es_admin %}
         <a href="/control_calidad" class="sb-link" data-base="/control_calidad"><span>🔍</span> <span>Control Calidad</span></a>
         {% endif %}
-        {% if has_permission('estaciones', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        {% if has_permission('estaciones', 'view') or current_user and current_user.es_admin %}
         <a href="/hojas_ruta" class="sb-link" data-base="/hojas_ruta" data-extra="/hojas_ruta_nuevo/"><span>🏭</span> <span>Estaciones T</span></a>
         {% endif %}
-        {% if has_permission('mapa', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        {% if has_permission('mapa', 'view') or current_user and current_user.es_admin %}
         <a href="/mapa_maquinas" class="sb-link sb-sub" data-base="/mapa_maquinas"><span>🗺️</span> <span>Mapa de Maquinas</span></a>
         {% endif %}
 
-        {% if has_permission('entregas', 'view') or has_permission('almacen', 'view') or has_permission('facturacion', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        {% if has_permission('entregas', 'view') or has_permission('almacen', 'view') or has_permission('facturacion', 'view') or current_user and current_user.es_admin %}
         <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">LOGISTICA</div>
-        {% if has_permission('entregas', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        {% if has_permission('entregas', 'view') or current_user and current_user.es_admin %}
         <a href="/entregas" class="sb-link" data-base="/entregas"><span>📦</span> <span>Entregas</span></a>
         {% endif %}
-        {% if has_permission('almacen', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        {% if has_permission('almacen', 'view') or current_user and current_user.es_admin %}
         <a href="/almacen" class="sb-link" data-base="/almacen"><span>🏬</span> <span>Almacen</span></a>
         {% endif %}
-        {% if has_permission('facturacion', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        {% if has_permission('facturacion', 'view') or current_user and current_user.es_admin %}
         <a href="/facturacion" class="sb-link" data-base="/facturacion"><span>🧾</span> <span>Facturacion</span></a>
         {% endif %}
         {% endif %}
