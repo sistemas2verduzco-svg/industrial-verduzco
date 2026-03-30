@@ -113,15 +113,20 @@
     </style>
 </head>
 <body>
-    {% include '_sidebar.html' %}
-
     <div class="conciliacion-wrap">
         <h2>Conciliacion CONTPAQi</h2>
-        <p class="muted">Modulo oculto por URL. Consulta pedidos serie P-/D y sus remisiones relacionadas.</p>
+        <p class="muted">Vista privada sin menu lateral. Filtros combinables tipo Excel para buscar por multiples campos.</p>
 
-        <div class="toolbar">
-            <input id="q" type="text" placeholder="Buscar por titulo/semana, folio o sucursal">
-            <button class="btn btn-primary" id="btnBuscar">Buscar</button>
+        <div class="toolbar" style="grid-template-columns: repeat(4, minmax(180px, 1fr));">
+            <input id="q" type="text" placeholder="Busqueda global (varios terminos)">
+            <input id="folio" type="text" placeholder="Folio pedido/remision">
+            <input id="cliente" type="text" placeholder="Cliente">
+            <input id="sucursal" type="text" placeholder="Sucursal">
+            <input id="titulo" type="text" placeholder="Titulo o semana">
+            <input id="fecha_desde" type="date" title="Fecha desde">
+            <input id="fecha_hasta" type="date" title="Fecha hasta">
+            <button class="btn btn-primary" id="btnBuscar">Aplicar filtros</button>
+            <button class="btn btn-secondary" id="btnLimpiar">Limpiar</button>
             <button class="btn btn-secondary" id="btnSync">Sincronizar ahora</button>
         </div>
 
@@ -221,12 +226,20 @@
         }
 
         async function cargar() {
-            const q = document.getElementById('q').value.trim();
             const status = document.getElementById('status');
             status.textContent = 'Consultando...';
 
             const params = new URLSearchParams();
-            if (q) params.set('q', q);
+            const campos = [
+                'q', 'folio', 'cliente', 'sucursal', 'titulo',
+                'fecha_desde', 'fecha_hasta'
+            ];
+
+            for (const campo of campos) {
+                const val = (document.getElementById(campo)?.value || '').trim();
+                if (val) params.set(campo, val);
+            }
+
             params.set('limit', '60');
 
             const resp = await fetch(`/api/contpaq/conciliacion?${params.toString()}`);
@@ -256,12 +269,27 @@
 
         document.getElementById('btnBuscar').addEventListener('click', cargar);
         document.getElementById('btnSync').addEventListener('click', syncNow);
-        document.getElementById('q').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                cargar();
+
+        document.getElementById('btnLimpiar').addEventListener('click', () => {
+            const campos = [
+                'q', 'folio', 'cliente', 'sucursal', 'titulo',
+                'fecha_desde', 'fecha_hasta'
+            ];
+            for (const campo of campos) {
+                const el = document.getElementById(campo);
+                if (el) el.value = '';
             }
+            cargar();
         });
+
+        for (const id of ['q', 'folio', 'cliente', 'sucursal', 'titulo']) {
+            document.getElementById(id).addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    cargar();
+                }
+            });
+        }
 
         cargar();
     </script>

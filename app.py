@@ -6557,25 +6557,73 @@ def api_contpaq_conciliacion():
     """Devuelve pedidos P-/D con detalle y remisiones relacionadas para consulta en UI."""
     try:
         q = (request.args.get('q') or '').strip()
+        folio = (request.args.get('folio') or '').strip()
+        cliente = (request.args.get('cliente') or '').strip()
+        sucursal = (request.args.get('sucursal') or '').strip()
+        titulo = (request.args.get('titulo') or '').strip()
+        fecha_desde_raw = (request.args.get('fecha_desde') or '').strip()
+        fecha_hasta_raw = (request.args.get('fecha_hasta') or '').strip()
+
         limit = request.args.get('limit', default=40, type=int)
         limit = max(1, min(limit, 200))
 
         pedidos_q = ContpaqPedido.query
 
-        # Mantener foco por cliente principal para evitar ruido.
-        if CONTPAQ_CUSTOMER_NAME:
+        # Por defecto mantenemos foco en cliente principal.
+        # Si el usuario especifica cliente, se prioriza ese filtro.
+        if cliente:
+            pedidos_q = pedidos_q.filter(ContpaqPedido.cliente.ilike(f"%{cliente}%"))
+        elif CONTPAQ_CUSTOMER_NAME:
             pedidos_q = pedidos_q.filter(ContpaqPedido.cliente == CONTPAQ_CUSTOMER_NAME)
 
-        if q:
-            like = f"%{q}%"
+        if folio:
+            like_folio = f"%{folio}%"
             pedidos_q = pedidos_q.filter(
                 db.or_(
-                    ContpaqPedido.titulo.ilike(like),
-                    ContpaqPedido.periodo_semana.ilike(like),
-                    ContpaqPedido.doc_folio.ilike(like),
-                    ContpaqPedido.sucursal.ilike(like),
+                    ContpaqPedido.doc_folio.ilike(like_folio),
+                    ContpaqPedido.serie.ilike(like_folio),
                 )
             )
+
+        if sucursal:
+            pedidos_q = pedidos_q.filter(ContpaqPedido.sucursal.ilike(f"%{sucursal}%"))
+
+        if titulo:
+            lt = f"%{titulo}%"
+            pedidos_q = pedidos_q.filter(
+                db.or_(
+                    ContpaqPedido.titulo.ilike(lt),
+                    ContpaqPedido.periodo_semana.ilike(lt),
+                )
+            )
+
+        if fecha_desde_raw:
+            fecha_desde = _parse_date(fecha_desde_raw)
+            if not fecha_desde:
+                return jsonify({'error': 'fecha_desde invalida. Usa YYYY-MM-DD'}), 400
+            pedidos_q = pedidos_q.filter(ContpaqPedido.fecha_documento >= datetime.combine(fecha_desde, datetime.min.time()))
+
+        if fecha_hasta_raw:
+            fecha_hasta = _parse_date(fecha_hasta_raw)
+            if not fecha_hasta:
+                return jsonify({'error': 'fecha_hasta invalida. Usa YYYY-MM-DD'}), 400
+            pedidos_q = pedidos_q.filter(ContpaqPedido.fecha_documento < datetime.combine(fecha_hasta + timedelta(days=1), datetime.min.time()))
+
+        # Busqueda global por terminos combinables (AND por termino, OR por columna).
+        if q:
+            terms = [t.strip() for t in q.split() if t.strip()]
+            for term in terms:
+                like = f"%{term}%"
+                pedidos_q = pedidos_q.filter(
+                    db.or_(
+                        ContpaqPedido.titulo.ilike(like),
+                        ContpaqPedido.periodo_semana.ilike(like),
+                        ContpaqPedido.doc_folio.ilike(like),
+                        ContpaqPedido.serie.ilike(like),
+                        ContpaqPedido.sucursal.ilike(like),
+                        ContpaqPedido.cliente.ilike(like),
+                    )
+                )
 
         pedidos = pedidos_q.order_by(ContpaqPedido.fecha_documento.desc(), ContpaqPedido.id.desc()).limit(limit).all()
         if not pedidos:
