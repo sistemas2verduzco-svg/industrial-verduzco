@@ -1,94 +1,101 @@
-CONTPAQ - GUIA CORTA ANTI-RENDER
+CONTPAQ - GUIA OPERATIVA ANTI-RENDER
 
-ESTADO
-1. Nube lista.
-2. Ruta conciliacion responde.
-3. Tablas contpaq_ creadas.
-4. Push exitoso ya validado desde servidor interno.
-5. Pendiente: backfill historico desde 2025-01-01 en lotes.
+ESTADO REAL
+1. La nube ya funciona.
+2. El push desde servidor interno ya fue validado.
+3. La vista privada ya existe.
+4. Ahora hay que desplegar la ultima version con:
+	 - filtros mejorados
+	 - indice de sucursales cargable por Excel/CSV
+	 - faltantes detectados desde indice y desde pedidos D
 
 REGLA
-1. Linux solo en servidor nube por SSH.
-2. PowerShell solo en servidor interno Windows.
+1. Linux: solo servidor nube por SSH.
+2. PowerShell: solo servidor interno Windows.
 
 ==================================================
-SECCION A - NUBE (VALIDACION RAPIDA)
+SECCION 1 - SUBIR A LA REPO (TU MAQUINA)
 ==================================================
 
-Paso A1 (desde tu PC local):
+Rama correcta:
+contpaq-mi4-integration
+
+Comandos:
+git switch contpaq-mi4-integration
+git add app.py
+git add models.py
+git add templates/contpaq_conciliacion.html
+git status
+git commit -m "CONTPAQ: indice sucursales y conciliacion mejorada"
+git push -u origin contpaq-mi4-integration
+
+NO subir:
+backups/
+scripts/contpaq_sync_agent.env
+
+==================================================
+SECCION 2 - DEPLOY EN NUBE
+==================================================
+
+Entrar por SSH:
 ssh root@209.97.188.176
 
-Paso A2 (ya dentro del servidor nube):
+Ya dentro del servidor nube:
 cd ~/industrial-verduzco
+git fetch origin --prune
+git checkout origin/contpaq-mi4-integration -- app.py
+git checkout origin/contpaq-mi4-integration -- models.py
+git checkout origin/contpaq-mi4-integration -- templates/contpaq_conciliacion.html
+docker compose up -d --no-deps --build app
+docker compose exec app python create_db.py
 docker compose logs --tail=40 app
 curl -s -o /dev/null -w "%{http_code}\n" https://controlcalidad360.site/contpaq/conciliacion
-curl -s -X POST "https://controlcalidad360.site/api/contpaq/sync/push" -H "X-API-KEY: bGS9G0wC6BY6BQIPSl9X87IrhpPLL0KsVCN5SA6AxX0=" -H "Content-Type: application/json" -d '{"pedidos":[],"pedidos_detalle":[],"remisiones":[],"remisiones_detalle":[]}'
-docker compose exec -T db psql -U catalogo_user -d catalogo_db -c "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name LIKE 'contpaq_%' ORDER BY 1;"
 
 Esperado:
-302 o 200 en conciliacion
-{"ok":true,...} en push de prueba
-5 tablas contpaq_
+302 o 200
 
 ==================================================
-SECCION B - SERVIDOR INTERNO (CONFIG .ENV)
+SECCION 3 - VERIFICAR TABLA NUEVA DEL INDICE
 ==================================================
 
-En PowerShell del servidor interno pega TODO:
+En la nube:
+cd ~/industrial-verduzco
+docker compose exec -T db psql -U catalogo_user -d catalogo_db -c "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('contpaq_sucursales_indice','contpaq_pedidos','contpaq_pedidos_detalle','contpaq_remisiones','contpaq_remisiones_detalle','contpaq_sync_runs') ORDER BY 1;"
 
-@"
-CONTPAQ_CLOUD_PUSH_URL=https://controlcalidad360.site/api/contpaq/sync/push
-SYNC_API_KEY=bGS9G0wC6BY6BQIPSl9X87IrhpPLL0KsVCN5SA6AxX0=
-CONTPAQ_CUSTOMER_NAME=RUTH VERDUZCO SANTOS
-CONTPAQ_START_DATE=2026-03-01
-CONTPAQ_SQLSERVER_HOST=192.168.0.102\compac
-CONTPAQ_SQLSERVER_PORT=
-CONTPAQ_SQLSERVER_DATABASE=GIV
-CONTPAQ_SQLSERVER_USER=sa
-CONTPAQ_SQLSERVER_PASSWORD=Limac00
-CONTPAQ_SQLSERVER_DRIVER=ODBC Driver 17 for SQL Server
-CONTPAQ_SQLSERVER_TRUST_CERT=yes
-"@ | Out-File "C:\contpaq-sync\.env" -Encoding ascii
-
-Get-Content C:\contpaq-sync\.env
-
-NOTA IMPORTANTE DE FECHA
-Se uso fecha reciente para arrancar porque con 2025-01-01 el payload inicial era muy grande (413/500).
-Despues de validar push exitoso, se hace backfill por etapas para cubrir desde 2025-01-01.
+Debe aparecer:
+contpaq_sucursales_indice
 
 ==================================================
-SECCION C - SERVIDOR INTERNO (PRUEBA PUSH)
+SECCION 4 - CARGAR ARCHIVO DE SUCURSALES
 ==================================================
 
+Abre la plataforma:
+https://controlcalidad360.site/contpaq/conciliacion
+
+En esa vista:
+1. Busca el bloque "Indice principal de sucursales".
+2. Selecciona tu archivo .xlsx, .xls o .csv.
+3. Pulsa "Subir indice".
+
+Columnas obligatorias del archivo:
+SEMANA
+CLAVE
+CANTIDAD
+SUCURSAL
+
+Columnas opcionales:
+FOLIO
+FECHA
+DESCRIPCION
+
+==================================================
+SECCION 5 - REFRESCAR DATOS DESDE CONTPAQ
+==================================================
+
+Servidor interno PowerShell:
 py -3 C:\contpaq-sync\contpaq_sync_agent.py
 
-Si dice Push exitoso, sigue a Seccion D.
-
-Si dice 413:
-1. Ajusta fecha aun mas reciente:
-CONTPAQ_START_DATE=2026-04-01
-2. Guarda .env
-3. Repite:
-py -3 C:\contpaq-sync\contpaq_sync_agent.py
-
-Si dice 500 This transaction is closed:
-1. Deja abierta una terminal SSH en nube con:
-docker compose logs -f --tail=120 app
-2. Corre de nuevo el agente en interno.
-3. Copia el traceback completo del log y corregimos exacto.
-
-Si dice 10061:
-1. Verifica host:
-CONTPAQ_SQLSERVER_HOST=192.168.0.102\compac
-2. Verifica puerto vacio:
-CONTPAQ_SQLSERVER_PORT=
-3. Repite prueba.
-
-==================================================
-SECCION C2 - BACKFILL HISTORICO (DESDE 2025-01-01)
-==================================================
-
-Ejecuta en servidor interno (PowerShell):
+Si quieres backfill historico desde 2025-01-01, usar esto:
 
 $envFile = "C:\contpaq-sync\.env"
 $script = "C:\contpaq-sync\contpaq_sync_agent.py"
@@ -109,30 +116,22 @@ foreach ($f in $fechas) {
 	Start-Sleep -Seconds 8
 }
 
-Al terminar el backfill, deja fecha operativa diaria (recomendada):
-
+Al final dejar fecha operativa:
 (Get-Content C:\contpaq-sync\.env) -replace '^CONTPAQ_START_DATE=.*$', 'CONTPAQ_START_DATE=2026-03-01' | Set-Content C:\contpaq-sync\.env -Encoding ascii
-Get-Content C:\contpaq-sync\.env
 
 ==================================================
-SECCION D - PROGRAMAR AUTOMATICO (INTERNO)
-==================================================
-
-schtasks /Create /SC MINUTE /MO 15 /TN ContpaqSyncPush /TR "py -3 C:\contpaq-sync\contpaq_sync_agent.py >> C:\contpaq-sync\sync.log 2>&1" /RL HIGHEST /F
-Get-Content C:\contpaq-sync\sync.log -Tail 50
-
-==================================================
-SECCION E - VERIFICACION FINAL EN NUBE
+SECCION 6 - VERIFICACION FINAL EN NUBE
 ==================================================
 
 cd ~/industrial-verduzco
 docker compose exec -T db psql -U catalogo_user -d catalogo_db -c "SELECT COUNT(*) AS pedidos FROM contpaq_pedidos;"
 docker compose exec -T db psql -U catalogo_user -d catalogo_db -c "SELECT COUNT(*) AS remisiones FROM contpaq_remisiones;"
+docker compose exec -T db psql -U catalogo_user -d catalogo_db -c "SELECT COUNT(*) AS indice_sucursales FROM contpaq_sucursales_indice;"
 docker compose exec -T db psql -U catalogo_user -d catalogo_db -c "SELECT id, status, started_at, finished_at, pedidos_upserted, remisiones_upserted FROM contpaq_sync_runs ORDER BY id DESC LIMIT 10;"
 docker compose exec -T db psql -U catalogo_user -d catalogo_db -c "SELECT MIN(fecha_documento) AS min_fecha_pedido, MAX(fecha_documento) AS max_fecha_pedido FROM contpaq_pedidos;"
 
 ==================================================
-URL DE USO
+URL FINAL
 ==================================================
 
 https://controlcalidad360.site/contpaq/conciliacion

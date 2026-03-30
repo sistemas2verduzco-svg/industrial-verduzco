@@ -1135,3 +1135,33 @@ class ContpaqRemisionDetalle(db.Model):
             'total_partida': self.total_partida,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+class ContpaqSucursalIndice(db.Model):
+    __tablename__ = 'contpaq_sucursales_indice'
+
+    id = db.Column(db.Integer, primary_key=True)
+    semana = db.Column(db.String(80), nullable=True, index=True)
+    sucursal = db.Column(db.String(255), nullable=True, index=True)
+    clave_producto = db.Column(db.String(120), nullable=True, index=True)
+    descripcion = db.Column(db.Text, nullable=True)
+    cantidad = db.Column(db.String(40), nullable=True, index=True)
+    folio = db.Column(db.String(120), nullable=True, index=True)
+    fecha_documento = db.Column(db.String(80), nullable=True)
+    source_filename = db.Column(db.String(255), nullable=True)
+    imported_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    raw_payload = db.Column(db.Text, nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'semana': self.semana,
+            'sucursal': self.sucursal,
+            'clave_producto': self.clave_producto,
+            'descripcion': self.descripcion,
+            'cantidad': self.cantidad,
+            'folio': self.folio,
+            'fecha_documento': self.fecha_documento,
+            'source_filename': self.source_filename,
+            'imported_at': self.imported_at.isoformat() if self.imported_at else None,
+        }

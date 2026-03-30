@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -12,6 +12,7 @@ from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
 from time import time, sleep
 import logging
+import pandas as pd
 from openpyxl import Workbook
 from io import BytesIO
 import uuid
@@ -934,6 +935,45 @@ def _upsert_contpaq_data(payload):
         stats['remision_detalles_upserted'] += 1
 
     return stats
+
+
+def _contpaq_norm_text(value):
+    return str(value or '').strip().upper()
+
+
+def _contpaq_norm_qty(value):
+    try:
+        numeric = float(str(value).replace(',', '').strip())
+        if numeric.is_integer():
+            return str(int(numeric))
+        return f"{numeric:.4f}".rstrip('0').rstrip('.')
+    except Exception:
+        return _contpaq_norm_text(value)
+
+
+def _contpaq_detect_import_column(columns, aliases):
+    normalized = [(col, col.strip().lower().replace('-', '').replace('_', '').replace(' ', '')) for col in columns]
+    for alias in aliases:
+        alias_norm = alias.strip().lower().replace('-', '').replace('_', '').replace(' ', '')
+        for original, current in normalized:
+            if alias_norm == current or alias_norm in current:
+                return original
+    return None
+
+
+def _contpaq_read_indice_dataframe(file_storage, filename, ext, sheet_name=''):
+    if ext == '.csv':
+        return pd.read_csv(file_storage, dtype=str, encoding='utf-8').fillna('')
+    if ext in ('.xlsx', '.xls'):
+        kwargs = {'dtype': str}
+        if sheet_name:
+            kwargs['sheet_name'] = sheet_name
+        data = pd.read_excel(file_storage, **kwargs)
+        if isinstance(data, dict):
+            first_sheet = next(iter(data.values()))
+            return first_sheet.fillna('')
+        return data.fillna('')
+    raise ValueError(f'Formato no soportado: {filename}')
 
 
 def run_contpaq_sync(trigger='manual'):
@@ -5243,6 +5283,105 @@ def importar_procesos_excel_status(job_id):
     return jsonify(job), 200
 
 
+@app.route('/api/contpaq/indice/upload', methods=['POST'])
+@login_required
+@requires_permission('catalog', 'edit')
+def contpaq_indice_upload():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No se encontró archivo'}), 400
+
+    file = request.files['file']
+    if not file or file.filename == '':
+        return jsonify({'error': 'Archivo vacío'}), 400
+
+    filename = secure_filename(file.filename)
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in ('.xlsx', '.xls', '.csv'):
+        return jsonify({'error': 'Formato no soportado. Usa .xlsx, .xls o .csv'}), 400
+
+    try:
+        df = _contpaq_read_indice_dataframe(file, filename, ext, request.form.get('sheet', '').strip())
+    except Exception as exc:
+        return jsonify({'error': f'No se pudo leer archivo: {exc}'}), 400
+
+    if df.empty:
+        return jsonify({'error': 'El archivo no contiene filas'}), 400
+
+    semana_col = _contpaq_detect_import_column(df.columns, ['SEMANA'])
+    clave_col = _contpaq_detect_import_column(df.columns, ['CLAVE', 'DETALLECLAVE', 'CLAVEPRODUCTO'])
+    cantidad_col = _contpaq_detect_import_column(df.columns, ['CANTIDAD', 'DETALLECANTIDAD'])
+    sucursal_col = _contpaq_detect_import_column(df.columns, ['SUCURSAL'])
+    descripcion_col = _contpaq_detect_import_column(df.columns, ['DESCRIPCION', 'DETALLEDESCRIPCION'])
+    folio_col = _contpaq_detect_import_column(df.columns, ['FOLIO'])
+    fecha_col = _contpaq_detect_import_column(df.columns, ['FECHA', 'FECHADOCUMENTO'])
+
+    missing = []
+    if not semana_col:
+        missing.append('SEMANA')
+    if not clave_col:
+        missing.append('CLAVE')
+    if not cantidad_col:
+        missing.append('CANTIDAD')
+    if not sucursal_col:
+        missing.append('SUCURSAL')
+
+    if missing:
+        return jsonify({'error': f'Faltan columnas obligatorias: {", ".join(missing)}'}), 400
+
+    imported = 0
+    db.session.query(ContpaqSucursalIndice).delete()
+
+    for _, row in df.iterrows():
+        semana = str(row.get(semana_col) or '').strip()
+        clave = str(row.get(clave_col) or '').strip().upper()
+        cantidad = str(row.get(cantidad_col) or '').strip()
+        sucursal = str(row.get(sucursal_col) or '').strip()
+        if not any([semana, clave, cantidad, sucursal]):
+            continue
+
+        item = ContpaqSucursalIndice(
+            semana=semana,
+            sucursal=sucursal,
+            clave_producto=clave,
+            descripcion=str(row.get(descripcion_col) or '').strip() if descripcion_col else '',
+            cantidad=cantidad,
+            folio=str(row.get(folio_col) or '').strip() if folio_col else '',
+            fecha_documento=str(row.get(fecha_col) or '').strip() if fecha_col else '',
+            source_filename=filename,
+            raw_payload=json.dumps({str(col): str(row.get(col) or '') for col in df.columns}, ensure_ascii=False),
+        )
+        db.session.add(item)
+        imported += 1
+
+    db.session.commit()
+    return jsonify({
+        'ok': True,
+        'imported': imported,
+        'filename': filename,
+        'detected_columns': {
+            'semana': semana_col,
+            'clave': clave_col,
+            'cantidad': cantidad_col,
+            'sucursal': sucursal_col,
+            'descripcion': descripcion_col,
+            'folio': folio_col,
+            'fecha': fecha_col,
+        }
+    }), 200
+
+
+@app.route('/api/contpaq/indice/summary', methods=['GET'])
+@login_required
+@requires_permission('catalog', 'view')
+def contpaq_indice_summary():
+    total = ContpaqSucursalIndice.query.count()
+    latest = ContpaqSucursalIndice.query.order_by(ContpaqSucursalIndice.imported_at.desc()).first()
+    return jsonify({
+        'total': total,
+        'latest': latest.to_dict() if latest else None,
+    }), 200
+
+
 @app.route('/api/productos/bajo-stock', methods=['GET'])
 @login_required
 def bajo_stock():
@@ -6564,17 +6703,15 @@ def api_contpaq_conciliacion():
         fecha_desde_raw = (request.args.get('fecha_desde') or '').strip()
         fecha_hasta_raw = (request.args.get('fecha_hasta') or '').strip()
 
-        limit = request.args.get('limit', default=40, type=int)
-        limit = max(1, min(limit, 200))
+        limit = request.args.get('limit', default=120, type=int)
+        limit = max(1, min(limit, 500))
 
         pedidos_q = ContpaqPedido.query
 
-        # Por defecto mantenemos foco en cliente principal.
-        # Si el usuario especifica cliente, se prioriza ese filtro.
+        # Mostrar todos los clientes por defecto.
+        # Si el usuario especifica cliente, filtrar por ese valor.
         if cliente:
             pedidos_q = pedidos_q.filter(ContpaqPedido.cliente.ilike(f"%{cliente}%"))
-        elif CONTPAQ_CUSTOMER_NAME:
-            pedidos_q = pedidos_q.filter(ContpaqPedido.cliente == CONTPAQ_CUSTOMER_NAME)
 
         if folio:
             like_folio = f"%{folio}%"
@@ -6650,9 +6787,38 @@ def api_contpaq_conciliacion():
             remisiones_map.setdefault(r.source_document_id, []).append(r)
 
         items = []
+        total_partidas = 0
+        total_importe = 0.0
+        total_remisiones = 0
+        semana_totales = {}
+
+        def _norm_txt(v):
+            return str(v or '').strip().upper()
+
+        def _norm_num(v):
+            try:
+                f = float(str(v).replace(',', '').strip())
+                if f.is_integer():
+                    return str(int(f))
+                return f"{f:.4f}".rstrip('0').rstrip('.')
+            except Exception:
+                return _norm_txt(v)
+
+        p_set = set()
+        d_rows = []
+
         for p in pedidos:
             pedido_rows = []
+            pedido_total = 0.0
+            semana_norm = _norm_txt(p.periodo_semana)
+            sucursal_norm = _norm_txt(p.sucursal)
+            folio_norm = _norm_txt(p.doc_folio)
+
             for d in detalles_map.get(p.document_id, []):
+                partida_total = float(d.total_partida or 0)
+                pedido_total += partida_total
+                total_partidas += 1
+
                 pedido_rows.append({
                     'line_number': d.line_number,
                     'clave_producto': d.clave_producto,
@@ -6662,8 +6828,28 @@ def api_contpaq_conciliacion():
                     'total_partida': d.total_partida,
                 })
 
+                row_key = (
+                    _norm_txt(d.clave_producto),
+                    _norm_num(d.cantidad),
+                    semana_norm,
+                    sucursal_norm,
+                )
+                if folio_norm.startswith('P-'):
+                    p_set.add(row_key)
+                elif folio_norm.startswith('D'):
+                    d_rows.append({
+                        'folio': p.doc_folio,
+                        'semana': p.periodo_semana,
+                        'sucursal': p.sucursal,
+                        'clave_producto': d.clave_producto,
+                        'descripcion': d.descripcion,
+                        'cantidad': d.cantidad,
+                        'key': row_key,
+                    })
+
             remisiones_rows = []
             for r in remisiones_map.get(p.document_id, []):
+                total_remisiones += 1
                 rr = {
                     'document_id': r.document_id,
                     'doc_folio': r.doc_folio,
@@ -6682,6 +6868,13 @@ def api_contpaq_conciliacion():
                     })
                 remisiones_rows.append(rr)
 
+            total_importe += pedido_total
+            sem = p.periodo_semana or 'SIN SEMANA'
+            if sem not in semana_totales:
+                semana_totales[sem] = {'pedidos': 0, 'total': 0.0}
+            semana_totales[sem]['pedidos'] += 1
+            semana_totales[sem]['total'] += pedido_total
+
             items.append({
                 'document_id': p.document_id,
                 'doc_folio': p.doc_folio,
@@ -6691,11 +6884,79 @@ def api_contpaq_conciliacion():
                 'titulo': p.titulo,
                 'periodo_semana': p.periodo_semana,
                 'fecha_documento': p.fecha_documento.isoformat() if p.fecha_documento else None,
+                'pedido_total': round(pedido_total, 2),
                 'detalles': pedido_rows,
                 'remisiones': remisiones_rows,
             })
 
-        return jsonify({'items': items, 'total': len(items)})
+        faltantes_d = []
+        for row in d_rows:
+            if row['key'] not in p_set:
+                faltantes_d.append({
+                    'folio': row['folio'],
+                    'semana': row['semana'],
+                    'sucursal': row['sucursal'],
+                    'clave_producto': row['clave_producto'],
+                    'descripcion': row['descripcion'],
+                    'cantidad': row['cantidad'],
+                })
+
+        indice_q = ContpaqSucursalIndice.query
+        if sucursal:
+            indice_q = indice_q.filter(ContpaqSucursalIndice.sucursal.ilike(f"%{sucursal}%"))
+        if titulo:
+            indice_q = indice_q.filter(ContpaqSucursalIndice.semana.ilike(f"%{titulo}%"))
+        if fecha_desde_raw or fecha_hasta_raw:
+            # El indice principal esta basado en semana; no forzamos fecha aqui.
+            pass
+
+        indice_rows = indice_q.all()
+        faltantes_indice = []
+        for idx in indice_rows:
+            row_key = (
+                _contpaq_norm_text(idx.clave_producto),
+                _contpaq_norm_qty(idx.cantidad),
+                _contpaq_norm_text(idx.semana),
+                _contpaq_norm_text(idx.sucursal),
+            )
+            if row_key in p_set:
+                continue
+
+            d_match = next((row for row in d_rows if row['key'] == row_key), None)
+            faltantes_indice.append({
+                'folio': d_match['folio'] if d_match else (idx.folio or ''),
+                'semana': idx.semana,
+                'sucursal': idx.sucursal,
+                'clave_producto': idx.clave_producto,
+                'descripcion': d_match['descripcion'] if d_match else idx.descripcion,
+                'cantidad': d_match['cantidad'] if d_match else idx.cantidad,
+                'origen': 'PEDIDO_D' if d_match else 'INDICE_SUCURSALES',
+            })
+
+        resumen = {
+            'total_pedidos': len(items),
+            'total_partidas': total_partidas,
+            'total_importe': round(total_importe, 2),
+            'total_remisiones': total_remisiones,
+            'total_faltantes_desde_d': len(faltantes_d),
+            'total_faltantes_desde_indice': len(faltantes_indice),
+            'totales_por_semana': [
+                {
+                    'semana': semana,
+                    'pedidos': vals['pedidos'],
+                    'total': round(vals['total'], 2),
+                }
+                for semana, vals in sorted(semana_totales.items(), key=lambda x: str(x[0]), reverse=True)
+            ],
+        }
+
+        return jsonify({
+            'items': items,
+            'total': len(items),
+            'resumen': resumen,
+            'faltantes_desde_d': faltantes_d[:300],
+            'faltantes_desde_indice': faltantes_indice[:500],
+        })
     except Exception as e:
         logger.error(f"Error consultando conciliacion CONTPAQ: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
