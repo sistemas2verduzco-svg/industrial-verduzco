@@ -6936,58 +6936,78 @@ def api_contpaq_conciliacion():
                 'origen': 'PEDIDO_D' if d_match else 'INDICE_SUCURSALES',
             })
 
+        faltantes_inyectados = 0
         # Inyectamos faltantes solo en la primera pagina para mantener navegacion estable.
         if page == 1:
-            faltantes_por_semana = {}
+            def _ws_key(semana_value, sucursal_value):
+                return (_norm_txt(semana_value), _norm_txt(sucursal_value))
+
+            # Mapa de destino por (semana, sucursal). Preferimos folios P- cuando existan.
+            ws_targets = {}
+            faltantes_line_counter = {}
+            for i, item in enumerate(items):
+                key = _ws_key(item.get('periodo_semana'), item.get('sucursal'))
+                folio_norm = _norm_txt(item.get('doc_folio'))
+                if key not in ws_targets:
+                    ws_targets[key] = i
+                if folio_norm.startswith('P-'):
+                    ws_targets[key] = i
+
             for f in faltantes_indice:
-                sem = str(f.get('semana') or 'SIN SEMANA').strip() or 'SIN SEMANA'
-                faltantes_por_semana.setdefault(sem, []).append(f)
+                sem_f = str(f.get('semana') or 'SIN SEMANA').strip() or 'SIN SEMANA'
+                suc_f = str(f.get('sucursal') or '').strip()
+                key = _ws_key(sem_f, suc_f)
 
-            # Replica la logica del Excel: incorporar faltantes al flujo principal por semana.
-            for semana, faltantes_semana in faltantes_por_semana.items():
-                detalles_faltantes = []
-                total_faltantes_semana = 0.0
-                sucursal_ref = ''
-
-                for i, f in enumerate(faltantes_semana, start=1):
-                    cantidad = _to_float(f.get('cantidad'))
-                    precio = _to_float(f.get('precio_unitario'))
-                    total_partida = round(cantidad * precio, 2)
-                    total_faltantes_semana += total_partida
-                    total_partidas += 1
-                    if not sucursal_ref:
-                        sucursal_ref = str(f.get('sucursal') or '').strip()
-
-                    detalles_faltantes.append({
-                        'line_number': f"F-{i}",
-                        'clave_producto': f.get('clave_producto'),
-                        'descripcion': f.get('descripcion') or 'FALTANTE DESDE INDICE',
-                        'cantidad': f.get('cantidad'),
-                        'precio_unitario': precio,
-                        'total_partida': total_partida,
-                        'origen_faltante': f.get('origen'),
+                target_idx = ws_targets.get(key)
+                if target_idx is None:
+                    # Fallback cuando no hay ningun pedido cargado para esa semana+sucursal.
+                    items.append({
+                        'document_id': None,
+                        'doc_folio': f'FALTANTE SEMANA {sem_f}',
+                        'serie': 'FALTANTE',
+                        'cliente': 'FALTANTE DESDE INDICE',
+                        'sucursal': suc_f,
+                        'titulo': f'FALTANTES SEMANA {sem_f}',
+                        'periodo_semana': sem_f,
+                        'fecha_documento': None,
+                        'pedido_total': 0.0,
+                        'detalles': [],
+                        'remisiones': [],
+                        'es_faltante': True,
                     })
+                    target_idx = len(items) - 1
+                    ws_targets[key] = target_idx
+                    if sem_f not in semana_totales:
+                        semana_totales[sem_f] = {'pedidos': 1, 'total': 0.0}
 
-                total_importe += total_faltantes_semana
-                if semana not in semana_totales:
-                    semana_totales[semana] = {'pedidos': 0, 'total': 0.0}
-                semana_totales[semana]['pedidos'] += 1
-                semana_totales[semana]['total'] += total_faltantes_semana
+                cantidad = _to_float(f.get('cantidad'))
+                precio = _to_float(f.get('precio_unitario'))
+                total_partida = round(cantidad * precio, 2)
 
-                items.append({
-                    'document_id': None,
-                    'doc_folio': f'FALTANTE SEMANA {semana}',
-                    'serie': 'FALTANTE',
-                    'cliente': 'FALTANTE DESDE INDICE',
-                    'sucursal': sucursal_ref,
-                    'titulo': f'FALTANTES SEMANA {semana}',
-                    'periodo_semana': semana,
-                    'fecha_documento': None,
-                    'pedido_total': round(total_faltantes_semana, 2),
-                    'detalles': detalles_faltantes,
-                    'remisiones': [],
-                    'es_faltante': True,
+                target_item = items[target_idx]
+                target_item.setdefault('detalles', [])
+                faltantes_line_counter[target_idx] = faltantes_line_counter.get(target_idx, 0) + 1
+                target_item['detalles'].append({
+                    'line_number': f"F-{faltantes_line_counter[target_idx]}",
+                    'clave_producto': f.get('clave_producto'),
+                    'descripcion': f.get('descripcion') or 'FALTANTE DESDE INDICE',
+                    'cantidad': f.get('cantidad'),
+                    'precio_unitario': precio,
+                    'total_partida': total_partida,
+                    'origen_faltante': f.get('origen'),
+                    'folio_origen': f.get('folio') or '',
                 })
+
+                target_item['pedido_total'] = round(_to_float(target_item.get('pedido_total')) + total_partida, 2)
+                target_item['es_faltante'] = True
+
+                total_partidas += 1
+                total_importe += total_partida
+                sem_target = target_item.get('periodo_semana') or sem_f
+                if sem_target not in semana_totales:
+                    semana_totales[sem_target] = {'pedidos': 0, 'total': 0.0}
+                semana_totales[sem_target]['total'] += total_partida
+                faltantes_inyectados += 1
 
         items.sort(
             key=lambda x: (
@@ -7004,6 +7024,7 @@ def api_contpaq_conciliacion():
             'total_importe': round(total_importe, 2),
             'total_remisiones': total_remisiones,
             'total_faltantes_desde_indice': len(faltantes_indice),
+            'faltantes_inyectados': faltantes_inyectados,
             'totales_por_semana': [
                 {
                     'semana': semana,
