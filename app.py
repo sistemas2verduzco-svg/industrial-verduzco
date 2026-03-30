@@ -6705,6 +6705,8 @@ def api_contpaq_conciliacion():
 
         limit = request.args.get('limit', default=120, type=int)
         limit = max(1, min(limit, 500))
+        page = request.args.get('page', default=1, type=int)
+        page = max(1, page)
 
         pedidos_q = ContpaqPedido.query
 
@@ -6762,9 +6764,20 @@ def api_contpaq_conciliacion():
                     )
                 )
 
-        pedidos = pedidos_q.order_by(ContpaqPedido.fecha_documento.desc(), ContpaqPedido.id.desc()).limit(limit).all()
+        total_records = pedidos_q.count()
+        offset = (page - 1) * limit
+        pedidos = pedidos_q.order_by(ContpaqPedido.fecha_documento.desc(), ContpaqPedido.id.desc()).offset(offset).limit(limit).all()
         if not pedidos:
-            return jsonify({'items': [], 'total': 0})
+            return jsonify({
+                'items': [],
+                'total': 0,
+                'page': page,
+                'limit': limit,
+                'total_records': total_records,
+                'total_pages': (total_records + limit - 1) // limit if total_records else 0,
+                'has_prev': page > 1,
+                'has_next': offset + limit < total_records,
+            })
 
         pedido_doc_ids = [p.document_id for p in pedidos]
         detalles = ContpaqPedidoDetalle.query.filter(ContpaqPedidoDetalle.document_id.in_(pedido_doc_ids)).order_by(ContpaqPedidoDetalle.document_id.asc(), ContpaqPedidoDetalle.line_number.asc()).all()
@@ -6923,56 +6936,58 @@ def api_contpaq_conciliacion():
                 'origen': 'PEDIDO_D' if d_match else 'INDICE_SUCURSALES',
             })
 
-        faltantes_por_semana = {}
-        for f in faltantes_indice:
-            sem = str(f.get('semana') or 'SIN SEMANA').strip() or 'SIN SEMANA'
-            faltantes_por_semana.setdefault(sem, []).append(f)
+        # Inyectamos faltantes solo en la primera pagina para mantener navegacion estable.
+        if page == 1:
+            faltantes_por_semana = {}
+            for f in faltantes_indice:
+                sem = str(f.get('semana') or 'SIN SEMANA').strip() or 'SIN SEMANA'
+                faltantes_por_semana.setdefault(sem, []).append(f)
 
-        # Replica la logica del Excel: incorporar faltantes al flujo principal por semana.
-        for semana, faltantes_semana in faltantes_por_semana.items():
-            detalles_faltantes = []
-            total_faltantes_semana = 0.0
-            sucursal_ref = ''
+            # Replica la logica del Excel: incorporar faltantes al flujo principal por semana.
+            for semana, faltantes_semana in faltantes_por_semana.items():
+                detalles_faltantes = []
+                total_faltantes_semana = 0.0
+                sucursal_ref = ''
 
-            for i, f in enumerate(faltantes_semana, start=1):
-                cantidad = _to_float(f.get('cantidad'))
-                precio = _to_float(f.get('precio_unitario'))
-                total_partida = round(cantidad * precio, 2)
-                total_faltantes_semana += total_partida
-                total_partidas += 1
-                if not sucursal_ref:
-                    sucursal_ref = str(f.get('sucursal') or '').strip()
+                for i, f in enumerate(faltantes_semana, start=1):
+                    cantidad = _to_float(f.get('cantidad'))
+                    precio = _to_float(f.get('precio_unitario'))
+                    total_partida = round(cantidad * precio, 2)
+                    total_faltantes_semana += total_partida
+                    total_partidas += 1
+                    if not sucursal_ref:
+                        sucursal_ref = str(f.get('sucursal') or '').strip()
 
-                detalles_faltantes.append({
-                    'line_number': f"F-{i}",
-                    'clave_producto': f.get('clave_producto'),
-                    'descripcion': f.get('descripcion') or 'FALTANTE DESDE INDICE',
-                    'cantidad': f.get('cantidad'),
-                    'precio_unitario': precio,
-                    'total_partida': total_partida,
-                    'origen_faltante': f.get('origen'),
+                    detalles_faltantes.append({
+                        'line_number': f"F-{i}",
+                        'clave_producto': f.get('clave_producto'),
+                        'descripcion': f.get('descripcion') or 'FALTANTE DESDE INDICE',
+                        'cantidad': f.get('cantidad'),
+                        'precio_unitario': precio,
+                        'total_partida': total_partida,
+                        'origen_faltante': f.get('origen'),
+                    })
+
+                total_importe += total_faltantes_semana
+                if semana not in semana_totales:
+                    semana_totales[semana] = {'pedidos': 0, 'total': 0.0}
+                semana_totales[semana]['pedidos'] += 1
+                semana_totales[semana]['total'] += total_faltantes_semana
+
+                items.append({
+                    'document_id': None,
+                    'doc_folio': f'FALTANTE SEMANA {semana}',
+                    'serie': 'FALTANTE',
+                    'cliente': 'FALTANTE DESDE INDICE',
+                    'sucursal': sucursal_ref,
+                    'titulo': f'FALTANTES SEMANA {semana}',
+                    'periodo_semana': semana,
+                    'fecha_documento': None,
+                    'pedido_total': round(total_faltantes_semana, 2),
+                    'detalles': detalles_faltantes,
+                    'remisiones': [],
+                    'es_faltante': True,
                 })
-
-            total_importe += total_faltantes_semana
-            if semana not in semana_totales:
-                semana_totales[semana] = {'pedidos': 0, 'total': 0.0}
-            semana_totales[semana]['pedidos'] += 1
-            semana_totales[semana]['total'] += total_faltantes_semana
-
-            items.append({
-                'document_id': None,
-                'doc_folio': f'FALTANTE SEMANA {semana}',
-                'serie': 'FALTANTE',
-                'cliente': 'FALTANTE DESDE INDICE',
-                'sucursal': sucursal_ref,
-                'titulo': f'FALTANTES SEMANA {semana}',
-                'periodo_semana': semana,
-                'fecha_documento': None,
-                'pedido_total': round(total_faltantes_semana, 2),
-                'detalles': detalles_faltantes,
-                'remisiones': [],
-                'es_faltante': True,
-            })
 
         items.sort(
             key=lambda x: (
@@ -7003,6 +7018,12 @@ def api_contpaq_conciliacion():
             'items': items,
             'total': len(items),
             'resumen': resumen,
+            'page': page,
+            'limit': limit,
+            'total_records': total_records,
+            'total_pages': (total_records + limit - 1) // limit if total_records else 0,
+            'has_prev': page > 1,
+            'has_next': offset + limit < total_records,
         })
     except Exception as e:
         logger.error(f"Error consultando conciliacion CONTPAQ: {e}", exc_info=True)

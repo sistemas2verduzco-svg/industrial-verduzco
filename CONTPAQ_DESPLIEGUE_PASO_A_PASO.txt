@@ -141,6 +141,28 @@ docker compose exec -T db psql -U catalogo_user -d catalogo_db -c "SELECT id, st
 docker compose exec -T db psql -U catalogo_user -d catalogo_db -c "SELECT MIN(fecha_documento) AS min_fecha_pedido, MAX(fecha_documento) AS max_fecha_pedido FROM contpaq_pedidos;"
 
 ==================================================
+SECCION 7 - SI NO VES REGISTROS VIEJOS
+==================================================
+
+CAUSA COMUN
+1. La vista carga por pagina (no todo de golpe).
+2. Si hay miles de registros, debes usar paginacion y/o filtro de fecha.
+
+QUE HACER EN LA VISTA
+1. Poner "Fecha desde" (ejemplo: 2025-01-01).
+2. Poner "Fecha hasta" vacio o fecha actual.
+3. Subir "Registros por pagina" a 240 o 500.
+4. Navegar con botones "Anterior / Siguiente".
+
+VALIDAR SI YA EXISTEN EN BD
+1. En nube ejecutar:
+docker compose exec -T db psql -U catalogo_user -d catalogo_db -c "SELECT MIN(fecha_documento) AS min_fecha_pedido, MAX(fecha_documento) AS max_fecha_pedido, COUNT(*) AS total FROM contpaq_pedidos;"
+
+SI MIN FECHA NO LLEGA A 2025-01-01
+1. Falta correr backfill en servidor interno Windows con C:\contpaq-sync\contpaq_sync_agent.py.
+2. CONTPAQ sigue SOLO LECTURA (SELECT), no se toca su base.
+
+==================================================
 URL FINAL
 ==================================================
 
