@@ -7,11 +7,16 @@ ESTADO REAL
 4. Ahora hay que desplegar la ultima version con:
 	 - filtros mejorados
 	 - indice de sucursales cargable por Excel/CSV
-	 - faltantes detectados desde indice y desde pedidos D
+	 - faltantes del indice inyectados al flujo principal de pedidos
 
 REGLA
 1. Linux: solo servidor nube por SSH.
 2. PowerShell: solo servidor interno Windows.
+
+CONTPAQ SQL SERVER (IMPORTANTE)
+1. SOLO LECTURA (SELECT).
+2. NO se ejecuta INSERT, UPDATE ni DELETE en la base de CONTPAQ.
+3. Las inserciones/actualizaciones son unicamente en la base de la plataforma (nube).
 
 ==================================================
 SECCION 1 - SUBIR A LA REPO (TU MAQUINA)
@@ -24,9 +29,12 @@ Comandos:
 git switch contpaq-mi4-integration
 git add app.py
 git add models.py
+git add scripts/contpaq_sync_agent.py
 git add templates/contpaq_conciliacion.html
+git add .env.example
+git add CONTPAQ_DESPLIEGUE_PASO_A_PASO.txt
 git status
-git commit -m "CONTPAQ: indice sucursales y conciliacion mejorada"
+git commit -m "CONTPAQ: backfill historico automatico e indice sucursales"
 git push -u origin contpaq-mi4-integration
 
 NO subir:
@@ -93,31 +101,33 @@ SECCION 5 - REFRESCAR DATOS DESDE CONTPAQ
 ==================================================
 
 Servidor interno PowerShell:
-py -3 C:\contpaq-sync\contpaq_sync_agent.py
+1. Actualizar script local con la version nueva del repo:
+	copiar scripts/contpaq_sync_agent.py a C:\contpaq-sync\contpaq_sync_agent.py
 
-Si quieres backfill historico desde 2025-01-01, usar esto:
-
+2. Configurar y ejecutar:
 $envFile = "C:\contpaq-sync\.env"
 $script = "C:\contpaq-sync\contpaq_sync_agent.py"
 
-$fechas = @(
-	"2026-03-01",
-	"2026-01-01",
-	"2025-10-01",
-	"2025-07-01",
-	"2025-04-01",
-	"2025-01-01"
-)
+Configurar UNA sola vez para traer TODO desde 2025-01-01 hasta hoy:
 
-foreach ($f in $fechas) {
-	(Get-Content $envFile) -replace '^CONTPAQ_START_DATE=.*$', "CONTPAQ_START_DATE=$f" | Set-Content $envFile -Encoding ascii
-	Write-Host "===> Backfill desde $f"
-	py -3 $script
-	Start-Sleep -Seconds 8
-}
+(Get-Content $envFile) -replace '^CONTPAQ_START_DATE=.*$', 'CONTPAQ_START_DATE=2025-01-01' | Set-Content $envFile -Encoding ascii
+if (-not (Select-String -Path $envFile -Pattern '^CONTPAQ_END_DATE=' -Quiet)) { Add-Content $envFile 'CONTPAQ_END_DATE=' }
+if (-not (Select-String -Path $envFile -Pattern '^CONTPAQ_CHUNK_DAYS=' -Quiet)) { Add-Content $envFile 'CONTPAQ_CHUNK_DAYS=31' }
+if (-not (Select-String -Path $envFile -Pattern '^CONTPAQ_REQUEST_TIMEOUT=' -Quiet)) { Add-Content $envFile 'CONTPAQ_REQUEST_TIMEOUT=300' }
+(Get-Content $envFile) -replace '^CONTPAQ_END_DATE=.*$', 'CONTPAQ_END_DATE=' | Set-Content $envFile -Encoding ascii
+(Get-Content $envFile) -replace '^CONTPAQ_CHUNK_DAYS=.*$', 'CONTPAQ_CHUNK_DAYS=31' | Set-Content $envFile -Encoding ascii
+(Get-Content $envFile) -replace '^CONTPAQ_REQUEST_TIMEOUT=.*$', 'CONTPAQ_REQUEST_TIMEOUT=300' | Set-Content $envFile -Encoding ascii
 
-Al final dejar fecha operativa:
-(Get-Content C:\contpaq-sync\.env) -replace '^CONTPAQ_START_DATE=.*$', 'CONTPAQ_START_DATE=2026-03-01' | Set-Content C:\contpaq-sync\.env -Encoding ascii
+Ejecutar historico completo:
+py -3 $script
+
+IMPORTANTE:
+1. El script ahora manda ventanas automaticas de 31 dias.
+2. Trae desde 2025-01-01 hasta la fecha actual.
+3. Ya no dejar CONTPAQ_START_DATE en 2026-03-01 si ocupas todo el historico.
+
+Si despues quieres volver a un rango operativo mas corto:
+(Get-Content $envFile) -replace '^CONTPAQ_START_DATE=.*$', 'CONTPAQ_START_DATE=2026-03-01' | Set-Content $envFile -Encoding ascii
 
 ==================================================
 SECCION 6 - VERIFICACION FINAL EN NUBE

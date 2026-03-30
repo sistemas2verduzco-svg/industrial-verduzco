@@ -48,14 +48,6 @@
             margin: 4px 0;
         }
 
-        .faltantes-box {
-            background: #fffaf5;
-            border: 1px solid #ffe3c2;
-            border-radius: 8px;
-            margin: 0 0 14px;
-            padding: 8px 10px;
-        }
-
         .upload-box {
             background: #f8fff8;
             border: 1px solid #d7ecd7;
@@ -171,7 +163,6 @@
         </div>
 
         <div id="resumen" class="summary-box" style="display:none;"></div>
-        <div id="faltantes" class="faltantes-box" style="display:none;"></div>
         <div id="status" class="status">Cargando...</div>
         <div id="result"></div>
     </div>
@@ -226,10 +217,9 @@
             `;
         }
 
-        function render(items, resumen, faltantes) {
+        function render(items, resumen) {
             const el = document.getElementById('result');
             const resumenEl = document.getElementById('resumen');
-            const faltantesEl = document.getElementById('faltantes');
 
             if (resumen) {
                 const semanas = (resumen.totales_por_semana || []).slice(0, 8)
@@ -237,48 +227,12 @@
                 resumenEl.style.display = 'block';
                 resumenEl.innerHTML = `
                     <div class="summary-line"><b>Total pedidos:</b> ${resumen.total_pedidos || 0} | <b>Total partidas:</b> ${resumen.total_partidas || 0} | <b>Total remisiones:</b> ${resumen.total_remisiones || 0}</div>
-                    <div class="summary-line"><b>Total importe pedidos:</b> ${money(resumen.total_importe || 0)} | <b>Faltantes desde D:</b> ${resumen.total_faltantes_desde_d || 0} | <b>Faltantes desde indice:</b> ${resumen.total_faltantes_desde_indice || 0}</div>
+                    <div class="summary-line"><b>Total importe pedidos:</b> ${money(resumen.total_importe || 0)} | <b>Faltantes desde indice:</b> ${resumen.total_faltantes_desde_indice || 0}</div>
                     <div class="summary-line"><b>Totales por semana:</b> ${semanas || 'Sin datos'}</div>
                 `;
             } else {
                 resumenEl.style.display = 'none';
                 resumenEl.innerHTML = '';
-            }
-
-            if (faltantes && faltantes.length) {
-                let rows = '';
-                for (const f of faltantes) {
-                    rows += `
-                        <tr>
-                            <td>${f.semana || ''}</td>
-                            <td>${f.sucursal || ''}</td>
-                            <td>${f.folio || ''}</td>
-                            <td>${f.clave_producto || ''}</td>
-                            <td>${f.descripcion || ''}</td>
-                            <td>${f.cantidad ?? ''}</td>
-                        </tr>
-                    `;
-                }
-                faltantesEl.style.display = 'block';
-                faltantesEl.innerHTML = `
-                    <div class="section-title" style="margin-top:2px;">Faltantes detectados (comparando partidas D contra P)</div>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Semana</th>
-                                <th>Sucursal</th>
-                                <th>Folio D</th>
-                                <th>Clave</th>
-                                <th>Descripcion</th>
-                                <th>Cantidad</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                `;
-            } else {
-                faltantesEl.style.display = 'none';
-                faltantesEl.innerHTML = '';
             }
 
             if (!items || !items.length) {
@@ -302,10 +256,14 @@
                     remisionesHtml = '<div class="muted">Este pedido no tiene remisiones relacionadas.</div>';
                 }
 
+                const etiquetaFaltante = pedido.es_faltante
+                    ? '<span style="background:#ffecb3;color:#5d4037;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;">FALTANTE INYECTADO</span>'
+                    : '';
+
                 html += `
                     <div class="pedido-card">
                         <div class="pedido-head">
-                            <div><b>Pedido</b>${pedido.doc_folio || ''}</div>
+                            <div><b>Pedido</b>${pedido.doc_folio || ''} ${etiquetaFaltante}</div>
                             <div><b>Cliente</b>${pedido.cliente || ''}</div>
                             <div><b>Sucursal</b>${pedido.sucursal || ''}</div>
                             <div><b>Titulo/Semana</b>${pedido.titulo || pedido.periodo_semana || ''}</div>
@@ -344,8 +302,7 @@
                 return;
             }
 
-            const faltantes = [...(data.faltantes_desde_indice || []), ...(data.faltantes_desde_d || [])];
-            render(data.items || [], data.resumen || null, faltantes);
+            render(data.items || [], data.resumen || null);
             status.textContent = `Mostrando ${data.total || 0} pedido(s).`;
         }
 

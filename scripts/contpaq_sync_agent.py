@@ -2,7 +2,7 @@ import os
 import sys
 import json
 import math
-from datetime import datetime
+from datetime import datetime, date, timedelta
 
 import pyodbc
 import requests
@@ -23,6 +23,7 @@ LEFT JOIN dbo.orgDepot depotDoc ON dxe.BusinessEntityDepotID = depotDoc.DepotID
 WHERE h.ModuleID = 967
   AND h.BusinessEntityName = ?
   AND h.DateDocument >= ?
+    AND h.DateDocument < ?
   AND (h.DocFolio LIKE 'P-%' OR h.DocFolio LIKE 'D%')
 """
 
@@ -48,6 +49,7 @@ WHERE i.DeletedOn IS NULL
   AND h.ModuleID = 967
   AND h.BusinessEntityName = ?
   AND h.DateDocument >= ?
+    AND h.DateDocument < ?
   AND (h.DocFolio LIKE 'P-%' OR h.DocFolio LIKE 'D%')
 """
 
@@ -67,6 +69,7 @@ LEFT JOIN dbo.orgDepot dep ON d.DepotID = dep.DepotID
 WHERE d.ModuleID = 157
   AND be.OfficialName = ?
   AND d.DateDocument >= ?
+    AND d.DateDocument < ?
 """
 
 CONTPAQ_REMISIONES_DETALLE_QUERY = """
@@ -86,6 +89,7 @@ WHERE i.DeletedOn IS NULL
   AND h.ModuleID = 157
   AND h.BusinessEntityName = ?
   AND h.DateDocument >= ?
+    AND h.DateDocument < ?
 """
 
 
@@ -160,44 +164,110 @@ def to_jsonable_rows(rows):
     return out
 
 
+def parse_iso_date(raw_value, env_name, default_value=None):
+    raw = str(raw_value or default_value or '').strip()
+    if not raw:
+        raise RuntimeError(f'Falta {env_name}. Usa formato YYYY-MM-DD.')
+    try:
+        return datetime.strptime(raw, '%Y-%m-%d').date()
+    except ValueError as exc:
+        raise RuntimeError(f'{env_name} invalida: {raw}. Usa formato YYYY-MM-DD.') from exc
+
+
+def iterate_windows(start_date, end_date, chunk_days):
+    current = start_date
+    span_days = max(1, int(chunk_days or 1))
+    while current <= end_date:
+        window_end = min(end_date, current + timedelta(days=span_days - 1))
+        yield current, window_end
+        current = window_end + timedelta(days=1)
+
+
+def build_payload(conn, customer, window_start, window_end):
+    end_exclusive = window_end + timedelta(days=1)
+    params = (customer, window_start.isoformat(), end_exclusive.isoformat())
+    return {
+        'pedidos': to_jsonable_rows(fetch_rows(conn, CONTPAQ_PEDIDOS_QUERY, params)),
+        'pedidos_detalle': to_jsonable_rows(fetch_rows(conn, CONTPAQ_PEDIDOS_DETALLE_QUERY, params)),
+        'remisiones': to_jsonable_rows(fetch_rows(conn, CONTPAQ_REMISIONES_QUERY, params)),
+        'remisiones_detalle': to_jsonable_rows(fetch_rows(conn, CONTPAQ_REMISIONES_DETALLE_QUERY, params)),
+    }
+
+
 def main():
     load_env_file()
 
     cloud_url = os.getenv('CONTPAQ_CLOUD_PUSH_URL', '').strip()
     api_key = os.getenv('SYNC_API_KEY', '').strip()
     customer = os.getenv('CONTPAQ_CUSTOMER_NAME', 'RUTH VERDUZCO SANTOS').strip()
-    start_date = os.getenv('CONTPAQ_START_DATE', '2025-01-01').strip()
+    start_date = parse_iso_date(os.getenv('CONTPAQ_START_DATE', '2025-01-01'), 'CONTPAQ_START_DATE')
+    end_date = parse_iso_date(os.getenv('CONTPAQ_END_DATE'), 'CONTPAQ_END_DATE', date.today().isoformat())
+    chunk_days = max(1, int(os.getenv('CONTPAQ_CHUNK_DAYS', '31') or '31'))
+    request_timeout = max(60, int(os.getenv('CONTPAQ_REQUEST_TIMEOUT', '300') or '300'))
 
     if not cloud_url:
         raise RuntimeError('Falta CONTPAQ_CLOUD_PUSH_URL.')
     if not api_key:
         raise RuntimeError('Falta SYNC_API_KEY para autenticacion con nube.')
 
-    params = (customer, start_date)
+    if end_date < start_date:
+        raise RuntimeError('CONTPAQ_END_DATE no puede ser menor que CONTPAQ_START_DATE.')
 
     conn = connect_sqlserver()
     try:
-        payload = {
-            'pedidos': to_jsonable_rows(fetch_rows(conn, CONTPAQ_PEDIDOS_QUERY, params)),
-            'pedidos_detalle': to_jsonable_rows(fetch_rows(conn, CONTPAQ_PEDIDOS_DETALLE_QUERY, params)),
-            'remisiones': to_jsonable_rows(fetch_rows(conn, CONTPAQ_REMISIONES_QUERY, params)),
-            'remisiones_detalle': to_jsonable_rows(fetch_rows(conn, CONTPAQ_REMISIONES_DETALLE_QUERY, params)),
+        total_windows = 0
+        total_sent = {
+            'pedidos': 0,
+            'pedidos_detalle': 0,
+            'remisiones': 0,
+            'remisiones_detalle': 0,
         }
+
+        for window_start, window_end in iterate_windows(start_date, end_date, chunk_days):
+            total_windows += 1
+            payload = build_payload(conn, customer, window_start, window_end)
+            counts = {key: len(value) for key, value in payload.items()}
+
+            print(
+                'Ventana',
+                f'{window_start.isoformat()} -> {window_end.isoformat()}:',
+                json.dumps(counts, ensure_ascii=False)
+            )
+
+            if not any(counts.values()):
+                print('Sin datos en esta ventana, se omite push.')
+                continue
+
+            response = requests.post(
+                cloud_url,
+                headers={'Content-Type': 'application/json', 'X-API-KEY': api_key},
+                data=json.dumps(payload),
+                timeout=request_timeout,
+            )
+
+            if response.status_code >= 400:
+                print('Error push:', response.status_code, response.text)
+                return 1
+
+            for key, value in counts.items():
+                total_sent[key] += value
+
+            print('Push exitoso ventana:', response.text)
     finally:
         conn.close()
 
-    response = requests.post(
-        cloud_url,
-        headers={'Content-Type': 'application/json', 'X-API-KEY': api_key},
-        data=json.dumps(payload),
-        timeout=120,
+    print(
+        'Sincronizacion completa:',
+        json.dumps(
+            {
+                'desde': start_date.isoformat(),
+                'hasta': end_date.isoformat(),
+                'ventanas': total_windows,
+                **total_sent,
+            },
+            ensure_ascii=False,
+        ),
     )
-
-    if response.status_code >= 400:
-        print('Error push:', response.status_code, response.text)
-        return 1
-
-    print('Push exitoso:', response.text)
     return 0
 
 
