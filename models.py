@@ -751,3 +751,154 @@ class ClaveProceso(db.Model):
             'tiempo_estimado': self.tiempo_estimado,
             'notas': self.notas,
         }
+
+
+class ContpaqSyncRun(db.Model):
+    __tablename__ = 'contpaq_sync_runs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    started_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    finished_at = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.String(20), nullable=False, default='running')
+    message = db.Column(db.Text, nullable=True)
+    pedidos_upserted = db.Column(db.Integer, nullable=False, default=0)
+    pedido_detalles_upserted = db.Column(db.Integer, nullable=False, default=0)
+    remisiones_upserted = db.Column(db.Integer, nullable=False, default=0)
+    remision_detalles_upserted = db.Column(db.Integer, nullable=False, default=0)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'started_at': self.started_at.isoformat() if self.started_at else None,
+            'finished_at': self.finished_at.isoformat() if self.finished_at else None,
+            'status': self.status,
+            'message': self.message,
+            'pedidos_upserted': self.pedidos_upserted,
+            'pedido_detalles_upserted': self.pedido_detalles_upserted,
+            'remisiones_upserted': self.remisiones_upserted,
+            'remision_detalles_upserted': self.remision_detalles_upserted,
+        }
+
+
+class ContpaqPedido(db.Model):
+    __tablename__ = 'contpaq_pedidos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    document_id = db.Column(db.BigInteger, nullable=False, unique=True, index=True)
+    doc_folio = db.Column(db.String(80), nullable=False, index=True)
+    serie = db.Column(db.String(10), nullable=True, index=True)
+    cliente = db.Column(db.String(255), nullable=True, index=True)
+    sucursal = db.Column(db.String(255), nullable=True, index=True)
+    titulo = db.Column(db.String(255), nullable=True, index=True)
+    periodo_semana = db.Column(db.String(30), nullable=True, index=True)
+    fecha_documento = db.Column(db.DateTime, nullable=True, index=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    detalles = db.relationship('ContpaqPedidoDetalle', backref='pedido', lazy=True, cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'document_id': self.document_id,
+            'doc_folio': self.doc_folio,
+            'serie': self.serie,
+            'cliente': self.cliente,
+            'sucursal': self.sucursal,
+            'titulo': self.titulo,
+            'periodo_semana': self.periodo_semana,
+            'fecha_documento': self.fecha_documento.isoformat() if self.fecha_documento else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class ContpaqPedidoDetalle(db.Model):
+    __tablename__ = 'contpaq_pedidos_detalle'
+
+    id = db.Column(db.Integer, primary_key=True)
+    pedido_id = db.Column(db.Integer, db.ForeignKey('contpaq_pedidos.id'), nullable=False, index=True)
+    document_id = db.Column(db.BigInteger, nullable=False, index=True)
+    line_number = db.Column(db.Integer, nullable=False, default=0)
+    clave_producto = db.Column(db.String(120), nullable=True, index=True)
+    descripcion = db.Column(db.Text, nullable=True)
+    cantidad = db.Column(db.Float, nullable=True)
+    precio_unitario = db.Column(db.Float, nullable=True)
+    total_partida = db.Column(db.Float, nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('document_id', 'line_number', name='uq_contpaq_pedido_linea'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'pedido_id': self.pedido_id,
+            'document_id': self.document_id,
+            'line_number': self.line_number,
+            'clave_producto': self.clave_producto,
+            'descripcion': self.descripcion,
+            'cantidad': self.cantidad,
+            'precio_unitario': self.precio_unitario,
+            'total_partida': self.total_partida,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class ContpaqRemision(db.Model):
+    __tablename__ = 'contpaq_remisiones'
+
+    id = db.Column(db.Integer, primary_key=True)
+    document_id = db.Column(db.BigInteger, nullable=False, unique=True, index=True)
+    source_document_id = db.Column(db.BigInteger, nullable=True, index=True)
+    doc_folio = db.Column(db.String(80), nullable=False, index=True)
+    cliente = db.Column(db.String(255), nullable=True, index=True)
+    sucursal = db.Column(db.String(255), nullable=True, index=True)
+    fecha_documento = db.Column(db.DateTime, nullable=True, index=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    detalles = db.relationship('ContpaqRemisionDetalle', backref='remision', lazy=True, cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'document_id': self.document_id,
+            'source_document_id': self.source_document_id,
+            'doc_folio': self.doc_folio,
+            'cliente': self.cliente,
+            'sucursal': self.sucursal,
+            'fecha_documento': self.fecha_documento.isoformat() if self.fecha_documento else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class ContpaqRemisionDetalle(db.Model):
+    __tablename__ = 'contpaq_remisiones_detalle'
+
+    id = db.Column(db.Integer, primary_key=True)
+    remision_id = db.Column(db.Integer, db.ForeignKey('contpaq_remisiones.id'), nullable=False, index=True)
+    document_id = db.Column(db.BigInteger, nullable=False, index=True)
+    line_number = db.Column(db.Integer, nullable=False, default=0)
+    clave_producto = db.Column(db.String(120), nullable=True, index=True)
+    descripcion = db.Column(db.Text, nullable=True)
+    cantidad = db.Column(db.Float, nullable=True)
+    precio_unitario = db.Column(db.Float, nullable=True)
+    total_partida = db.Column(db.Float, nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('document_id', 'line_number', name='uq_contpaq_remision_linea'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'remision_id': self.remision_id,
+            'document_id': self.document_id,
+            'line_number': self.line_number,
+            'clave_producto': self.clave_producto,
+            'descripcion': self.descripcion,
+            'cantidad': self.cantidad,
+            'precio_unitario': self.precio_unitario,
+            'total_partida': self.total_partida,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }

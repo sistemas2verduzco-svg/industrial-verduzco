@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conciliacion CONTPAQi</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .conciliacion-wrap {
+            max-width: 1300px;
+            margin: 24px auto;
+            padding: 0 16px 24px;
+        }
+
+        .toolbar {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .toolbar input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #cfd8dc;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .status {
+            font-size: 12px;
+            color: #455a64;
+            margin-bottom: 12px;
+        }
+
+        .pedido-card {
+            background: #fff;
+            border: 1px solid #dce3e8;
+            border-radius: 10px;
+            margin-bottom: 14px;
+            overflow: hidden;
+        }
+
+        .pedido-head {
+            background: #eef6ff;
+            padding: 12px;
+            border-bottom: 1px solid #dce3e8;
+            display: grid;
+            grid-template-columns: repeat(4, minmax(120px, 1fr));
+            gap: 8px;
+            font-size: 13px;
+        }
+
+        .pedido-head div b {
+            display: block;
+            font-size: 11px;
+            color: #607d8b;
+            margin-bottom: 2px;
+        }
+
+        .section-title {
+            font-size: 13px;
+            color: #263238;
+            font-weight: 700;
+            margin: 10px 12px 4px;
+        }
+
+        table {
+            width: calc(100% - 24px);
+            margin: 0 12px 12px;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        th, td {
+            border: 1px solid #e0e0e0;
+            padding: 6px;
+            text-align: left;
+        }
+
+        thead th {
+            background: #fafafa;
+            color: #455a64;
+            font-weight: 700;
+        }
+
+        .remision-block {
+            border-top: 1px dashed #d0d7de;
+            margin-top: 8px;
+            padding-top: 8px;
+        }
+
+        .muted {
+            color: #78909c;
+            font-size: 12px;
+            margin: 10px 12px 12px;
+        }
+
+        @media (max-width: 980px) {
+            .toolbar {
+                grid-template-columns: 1fr;
+            }
+
+            .pedido-head {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            table {
+                font-size: 11px;
+            }
+        }
+    </style>
+</head>
+<body>
+    {% include '_sidebar.html' %}
+
+    <div class="conciliacion-wrap">
+        <h2>Conciliacion CONTPAQi</h2>
+        <p class="muted">Modulo oculto por URL. Consulta pedidos serie P-/D y sus remisiones relacionadas.</p>
+
+        <div class="toolbar">
+            <input id="q" type="text" placeholder="Buscar por titulo/semana, folio o sucursal">
+            <button class="btn btn-primary" id="btnBuscar">Buscar</button>
+            <button class="btn btn-secondary" id="btnSync">Sincronizar ahora</button>
+        </div>
+
+        <div id="status" class="status">Cargando...</div>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        function money(v) {
+            const n = Number(v || 0);
+            if (!Number.isFinite(n)) return '';
+            return n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function fmtDate(v) {
+            if (!v) return '';
+            const d = new Date(v);
+            if (Number.isNaN(d.getTime())) return String(v);
+            return d.toLocaleDateString('es-MX');
+        }
+
+        function renderTablaDetalles(detalles) {
+            if (!detalles || !detalles.length) {
+                return '<div class="muted">Sin partidas.</div>';
+            }
+
+            let rows = '';
+            for (const d of detalles) {
+                rows += `
+                    <tr>
+                        <td>${d.line_number ?? ''}</td>
+                        <td>${d.clave_producto || ''}</td>
+                        <td>${d.descripcion || ''}</td>
+                        <td>${d.cantidad ?? ''}</td>
+                        <td>${money(d.precio_unitario)}</td>
+                        <td>${money(d.total_partida)}</td>
+                    </tr>
+                `;
+            }
+
+            return `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Partida</th>
+                            <th>Clave</th>
+                            <th>Descripcion</th>
+                            <th>Cantidad</th>
+                            <th>Precio Unitario</th>
+                            <th>Total Partida</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        }
+
+        function render(items) {
+            const el = document.getElementById('result');
+            if (!items || !items.length) {
+                el.innerHTML = '<div class="muted">Sin resultados para esta consulta.</div>';
+                return;
+            }
+
+            let html = '';
+            for (const pedido of items) {
+                let remisionesHtml = '';
+                if (pedido.remisiones && pedido.remisiones.length) {
+                    for (const rem of pedido.remisiones) {
+                        remisionesHtml += `
+                            <div class="remision-block">
+                                <div class="muted"><b>Remision:</b> ${rem.doc_folio || ''} | <b>Sucursal:</b> ${rem.sucursal || ''} | <b>Fecha:</b> ${fmtDate(rem.fecha_documento)}</div>
+                                ${renderTablaDetalles(rem.detalles || [])}
+                            </div>
+                        `;
+                    }
+                } else {
+                    remisionesHtml = '<div class="muted">Este pedido no tiene remisiones relacionadas.</div>';
+                }
+
+                html += `
+                    <div class="pedido-card">
+                        <div class="pedido-head">
+                            <div><b>Pedido</b>${pedido.doc_folio || ''}</div>
+                            <div><b>Cliente</b>${pedido.cliente || ''}</div>
+                            <div><b>Sucursal</b>${pedido.sucursal || ''}</div>
+                            <div><b>Titulo/Semana</b>${pedido.titulo || pedido.periodo_semana || ''}</div>
+                        </div>
+                        <div class="section-title">Partidas del pedido</div>
+                        ${renderTablaDetalles(pedido.detalles || [])}
+                        <div class="section-title">Remisiones relacionadas</div>
+                        ${remisionesHtml}
+                    </div>
+                `;
+            }
+            el.innerHTML = html;
+        }
+
+        async function cargar() {
+            const q = document.getElementById('q').value.trim();
+            const status = document.getElementById('status');
+            status.textContent = 'Consultando...';
+
+            const params = new URLSearchParams();
+            if (q) params.set('q', q);
+            params.set('limit', '60');
+
+            const resp = await fetch(`/api/contpaq/conciliacion?${params.toString()}`);
+            const data = await resp.json();
+            if (!resp.ok) {
+                status.textContent = data.error || 'Error en consulta';
+                return;
+            }
+
+            render(data.items || []);
+            status.textContent = `Mostrando ${data.total || 0} pedido(s).`;
+        }
+
+        async function syncNow() {
+            const status = document.getElementById('status');
+            status.textContent = 'Sincronizando...';
+            const resp = await fetch('/api/contpaq/sync', { method: 'POST' });
+            const data = await resp.json();
+            if (!resp.ok) {
+                status.textContent = data.error || 'Error al sincronizar';
+                return;
+            }
+
+            status.textContent = `Sincronizacion completa. Run #${data.run_id || ''}`;
+            await cargar();
+        }
+
+        document.getElementById('btnBuscar').addEventListener('click', cargar);
+        document.getElementById('btnSync').addEventListener('click', syncNow);
+        document.getElementById('q').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                cargar();
+            }
+        });
+
+        cargar();
+    </script>
+</body>
+</html>

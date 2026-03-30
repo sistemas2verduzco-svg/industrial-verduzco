@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRuta, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRuta, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -10,13 +10,14 @@ from functools import wraps
 import secrets
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
-from time import time
+from time import time, sleep
 import logging
 from openpyxl import Workbook
 from io import BytesIO
 import uuid
 import math
 import re
+import threading
 
 # Configurar logging
 logging.basicConfig(
@@ -304,6 +305,18 @@ LOCKOUT_SECONDS = int(os.getenv('LOCKOUT_SECONDS', '300'))  # default 5 minutes
 # API key for plant sync
 SYNC_API_KEY = os.getenv('SYNC_API_KEY', '').strip()
 
+# CONTPAQi sync settings
+CONTPAQ_SYNC_ENABLED = os.getenv('CONTPAQ_SYNC_ENABLED', '0').strip().lower() in ('1', 'true', 'yes', 'on')
+CONTPAQ_SYNC_INTERVAL_MINUTES = max(5, int(os.getenv('CONTPAQ_SYNC_INTERVAL_MINUTES', '60') or 60))
+CONTPAQ_SYNC_STARTUP_DELAY_SECONDS = max(5, int(os.getenv('CONTPAQ_SYNC_STARTUP_DELAY_SECONDS', '30') or 30))
+CONTPAQ_CUSTOMER_NAME = os.getenv('CONTPAQ_CUSTOMER_NAME', 'RUTH VERDUZCO SANTOS').strip()
+CONTPAQ_START_DATE = os.getenv('CONTPAQ_START_DATE', '2025-01-01').strip()
+
+_CONTPAQ_SYNC_LOCK = threading.Lock()
+_CONTPAQ_SYNC_THREAD = None
+_CONTPAQ_SYNC_STOP = threading.Event()
+_CONTPAQ_SCHEDULER_INIT = False
+
 load_dotenv()
 
 app = Flask(__name__)
@@ -390,10 +403,399 @@ def _parse_date(value):
     return None
 
 
+def _parse_datetime(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%Y/%m/%d %H:%M:%S', '%Y/%m/%d'):
+            try:
+                return datetime.strptime(raw, fmt)
+            except ValueError:
+                continue
+        try:
+            return datetime.fromisoformat(raw.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+    return None
+
+
+def _to_float(value):
+    if value is None:
+        return 0.0
+    try:
+        n = float(str(value).replace(',', '').strip())
+        return n if math.isfinite(n) else 0.0
+    except Exception:
+        return 0.0
+
+
+def _serie_from_folio(doc_folio):
+    folio = (doc_folio or '').strip().upper()
+    if folio.startswith('P-'):
+        return 'P'
+    if folio.startswith('D'):
+        return 'D'
+    if '-' in folio:
+        return folio.split('-', 1)[0][:10]
+    return folio[:10] or None
+
+
+def _contpaq_connection():
+    try:
+        import pyodbc
+    except Exception as exc:
+        raise RuntimeError('pyodbc no esta instalado. Agrega pyodbc al entorno.') from exc
+
+    host = os.getenv('CONTPAQ_SQLSERVER_HOST', '').strip()
+    port = os.getenv('CONTPAQ_SQLSERVER_PORT', '1433').strip()
+    database = os.getenv('CONTPAQ_SQLSERVER_DATABASE', '').strip()
+    user = os.getenv('CONTPAQ_SQLSERVER_USER', '').strip()
+    password = os.getenv('CONTPAQ_SQLSERVER_PASSWORD', '').strip()
+    driver = os.getenv('CONTPAQ_SQLSERVER_DRIVER', 'ODBC Driver 17 for SQL Server').strip()
+    trust_cert = os.getenv('CONTPAQ_SQLSERVER_TRUST_CERT', 'yes').strip().lower()
+    trusted_connection = os.getenv('CONTPAQ_SQLSERVER_TRUSTED_CONNECTION', '0').strip().lower() in ('1', 'true', 'yes', 'on')
+
+    if not host or not database:
+        raise RuntimeError('Faltan variables CONTPAQ_SQLSERVER_HOST o CONTPAQ_SQLSERVER_DATABASE.')
+
+    server = f"{host},{port}" if port else host
+    parts = [
+        f"DRIVER={{{driver}}}",
+        f"SERVER={server}",
+        f"DATABASE={database}",
+        f"TrustServerCertificate={'yes' if trust_cert in ('1', 'true', 'yes', 'on') else 'no'}",
+    ]
+    if trusted_connection:
+        parts.append('Trusted_Connection=yes')
+    else:
+        if not user or not password:
+            raise RuntimeError('Faltan credenciales CONTPAQ_SQLSERVER_USER o CONTPAQ_SQLSERVER_PASSWORD.')
+        parts.append(f"UID={user}")
+        parts.append(f"PWD={password}")
+
+    conn_str = ';'.join(parts)
+    return pyodbc.connect(conn_str, timeout=30)
+
+
+def _contpaq_fetch_rows(query, params):
+    conn = _contpaq_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        cols = [d[0] for d in cursor.description]
+        rows = []
+        for item in cursor.fetchall():
+            rows.append(dict(zip(cols, item)))
+        return rows
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+CONTPAQ_PEDIDOS_QUERY = """
+SELECT
+    h.DocumentID,
+    h.DocFolio,
+    h.BusinessEntityName,
+    h.Title,
+    h.PeriodWeek,
+    h.DateDocument,
+    COALESCE(depotDoc.DepotName, h.DepotName, '') AS Sucursal
+FROM dbo.vwLBSDocCustomerOrderAllModules h
+LEFT JOIN dbo.docDocumentExtra dxe ON h.DocumentID = dxe.DocumentID
+LEFT JOIN dbo.orgDepot depotDoc ON dxe.BusinessEntityDepotID = depotDoc.DepotID
+WHERE h.ModuleID = 967
+  AND h.BusinessEntityName = ?
+  AND h.DateDocument >= ?
+  AND (h.DocFolio LIKE 'P-%' OR h.DocFolio LIKE 'D%')
+"""
+
+
+CONTPAQ_PEDIDOS_DETALLE_QUERY = """
+SELECT
+    h.DocumentID,
+    h.DocFolio,
+    h.BusinessEntityName,
+    h.Title,
+    h.PeriodWeek,
+    h.DateDocument,
+    COALESCE(depotDoc.DepotName, h.DepotName, '') AS Sucursal,
+    i.LineNumber,
+    i.ProductKey,
+    i.Description,
+    i.Quantity,
+    i.UnitPrice
+FROM dbo.vwLBSDocCustomerOrderAllModules h
+INNER JOIN dbo.docDocumentItem i ON h.DocumentID = i.DocumentID
+LEFT JOIN dbo.docDocumentExtra dxe ON h.DocumentID = dxe.DocumentID
+LEFT JOIN dbo.orgDepot depotDoc ON dxe.BusinessEntityDepotID = depotDoc.DepotID
+WHERE i.DeletedOn IS NULL
+  AND h.ModuleID = 967
+  AND h.BusinessEntityName = ?
+  AND h.DateDocument >= ?
+  AND (h.DocFolio LIKE 'P-%' OR h.DocFolio LIKE 'D%')
+"""
+
+
+CONTPAQ_REMISIONES_QUERY = """
+SELECT
+    d.DocumentID,
+    ISNULL(d.FolioPrefix, '') + ISNULL(d.Folio, '') AS DocFolio,
+    be.OfficialName AS BusinessEntityName,
+    COALESCE(depotDoc.DepotName, dep.DepotName, '') AS Sucursal,
+    d.DateDocument,
+    d.SourceDocumentID
+FROM dbo.docDocument d
+LEFT JOIN dbo.vwLBSBusinessEntityList be ON d.BusinessEntityID = be.BusinessEntityID
+LEFT JOIN dbo.docDocumentExtra dxe ON d.DocumentID = dxe.DocumentID
+LEFT JOIN dbo.orgDepot depotDoc ON dxe.BusinessEntityDepotID = depotDoc.DepotID
+LEFT JOIN dbo.orgDepot dep ON d.DepotID = dep.DepotID
+WHERE d.ModuleID = 157
+  AND be.OfficialName = ?
+  AND d.DateDocument >= ?
+"""
+
+
+CONTPAQ_REMISIONES_DETALLE_QUERY = """
+SELECT
+    h.DocumentID,
+    h.DocFolio,
+    h.BusinessEntityName,
+    h.DateDocument,
+    i.LineNumber,
+    i.ProductKey,
+    i.Description,
+    i.Quantity,
+    i.CostPrice
+FROM dbo.vwLBSDocCustomerDeliveryAllModules h
+INNER JOIN dbo.docDocumentItem i ON h.DocumentID = i.DocumentID
+WHERE i.DeletedOn IS NULL
+  AND h.ModuleID = 157
+  AND h.BusinessEntityName = ?
+  AND h.DateDocument >= ?
+"""
+
+
+def _upsert_contpaq_data(payload):
+    pedidos = payload.get('pedidos') or []
+    pedidos_detalle = payload.get('pedidos_detalle') or []
+    remisiones = payload.get('remisiones') or []
+    remisiones_detalle = payload.get('remisiones_detalle') or []
+
+    stats = {
+        'pedidos_upserted': 0,
+        'pedido_detalles_upserted': 0,
+        'remisiones_upserted': 0,
+        'remision_detalles_upserted': 0,
+    }
+
+    pedidos_map = {}
+    for row in pedidos:
+        doc_id = int(row.get('DocumentID') or 0)
+        if doc_id <= 0:
+            continue
+        pedido = ContpaqPedido.query.filter_by(document_id=doc_id).first()
+        if not pedido:
+            pedido = ContpaqPedido(document_id=doc_id)
+            db.session.add(pedido)
+        pedido.doc_folio = str(row.get('DocFolio') or '').strip()
+        pedido.serie = _serie_from_folio(pedido.doc_folio)
+        pedido.cliente = str(row.get('BusinessEntityName') or '').strip()
+        pedido.sucursal = str(row.get('Sucursal') or '').strip()
+        pedido.titulo = str(row.get('Title') or '').strip()
+        pedido.periodo_semana = str(row.get('PeriodWeek') or '').strip()
+        pedido.fecha_documento = _parse_datetime(row.get('DateDocument'))
+        pedido.updated_at = datetime.utcnow()
+        pedidos_map[doc_id] = pedido
+        stats['pedidos_upserted'] += 1
+
+    db.session.flush()
+
+    for row in pedidos_detalle:
+        doc_id = int(row.get('DocumentID') or 0)
+        if doc_id <= 0 or doc_id not in pedidos_map:
+            continue
+        line_number = int(row.get('LineNumber') or 0)
+        item = ContpaqPedidoDetalle.query.filter_by(document_id=doc_id, line_number=line_number).first()
+        if not item:
+            item = ContpaqPedidoDetalle(document_id=doc_id, line_number=line_number)
+            db.session.add(item)
+        cantidad = _to_float(row.get('Quantity'))
+        precio = _to_float(row.get('UnitPrice'))
+        item.pedido_id = pedidos_map[doc_id].id
+        item.clave_producto = str(row.get('ProductKey') or '').strip().upper()[:120]
+        item.descripcion = str(row.get('Description') or '').strip()
+        item.cantidad = cantidad
+        item.precio_unitario = precio
+        item.total_partida = round(cantidad * precio, 2)
+        item.updated_at = datetime.utcnow()
+        stats['pedido_detalles_upserted'] += 1
+
+    remisiones_map = {}
+    for row in remisiones:
+        doc_id = int(row.get('DocumentID') or 0)
+        if doc_id <= 0:
+            continue
+        remision = ContpaqRemision.query.filter_by(document_id=doc_id).first()
+        if not remision:
+            remision = ContpaqRemision(document_id=doc_id)
+            db.session.add(remision)
+        remision.doc_folio = str(row.get('DocFolio') or '').strip()
+        remision.cliente = str(row.get('BusinessEntityName') or '').strip()
+        remision.sucursal = str(row.get('Sucursal') or '').strip()
+        remision.fecha_documento = _parse_datetime(row.get('DateDocument'))
+        source_id = row.get('SourceDocumentID')
+        try:
+            remision.source_document_id = int(source_id) if source_id is not None else None
+        except Exception:
+            remision.source_document_id = None
+        remision.updated_at = datetime.utcnow()
+        remisiones_map[doc_id] = remision
+        stats['remisiones_upserted'] += 1
+
+    db.session.flush()
+
+    for row in remisiones_detalle:
+        doc_id = int(row.get('DocumentID') or 0)
+        if doc_id <= 0 or doc_id not in remisiones_map:
+            continue
+        line_number = int(row.get('LineNumber') or 0)
+        item = ContpaqRemisionDetalle.query.filter_by(document_id=doc_id, line_number=line_number).first()
+        if not item:
+            item = ContpaqRemisionDetalle(document_id=doc_id, line_number=line_number)
+            db.session.add(item)
+        cantidad = _to_float(row.get('Quantity'))
+        precio = _to_float(row.get('CostPrice'))
+        item.remision_id = remisiones_map[doc_id].id
+        item.clave_producto = str(row.get('ProductKey') or '').strip().upper()[:120]
+        item.descripcion = str(row.get('Description') or '').strip()
+        item.cantidad = cantidad
+        item.precio_unitario = precio
+        item.total_partida = round(cantidad * precio, 2)
+        item.updated_at = datetime.utcnow()
+        stats['remision_detalles_upserted'] += 1
+
+    return stats
+
+
+def run_contpaq_sync(trigger='manual'):
+    sync_run = ContpaqSyncRun(
+        status='running',
+        started_at=datetime.utcnow(),
+        message=f'started_by={trigger}'
+    )
+    db.session.add(sync_run)
+    db.session.commit()
+
+    if not _CONTPAQ_SYNC_LOCK.acquire(blocking=False):
+        sync_run.status = 'skipped'
+        sync_run.message = 'Sincronizacion en curso; se omitio ejecucion paralela.'
+        sync_run.finished_at = datetime.utcnow()
+        db.session.commit()
+        return {'ok': True, 'skipped': True, 'run_id': sync_run.id}
+
+    try:
+        logger.info('[CONTPAQ] Iniciando sincronizacion hacia nube...')
+        if not CONTPAQ_CUSTOMER_NAME:
+            raise RuntimeError('CONTPAQ_CUSTOMER_NAME vacio.')
+
+        start_date = _parse_date(CONTPAQ_START_DATE)
+        if not start_date:
+            raise RuntimeError('CONTPAQ_START_DATE invalida. Usa formato YYYY-MM-DD.')
+
+        params = (CONTPAQ_CUSTOMER_NAME, start_date)
+        payload = {
+            'pedidos': _contpaq_fetch_rows(CONTPAQ_PEDIDOS_QUERY, params),
+            'pedidos_detalle': _contpaq_fetch_rows(CONTPAQ_PEDIDOS_DETALLE_QUERY, params),
+            'remisiones': _contpaq_fetch_rows(CONTPAQ_REMISIONES_QUERY, params),
+            'remisiones_detalle': _contpaq_fetch_rows(CONTPAQ_REMISIONES_DETALLE_QUERY, params),
+        }
+
+        stats = _upsert_contpaq_data(payload)
+        sync_run.status = 'success'
+        sync_run.finished_at = datetime.utcnow()
+        sync_run.message = (
+            f"cliente={CONTPAQ_CUSTOMER_NAME} desde={start_date.isoformat()} "
+            f"pedidos={len(payload['pedidos'])} detalle_pedidos={len(payload['pedidos_detalle'])} "
+            f"remisiones={len(payload['remisiones'])} detalle_remisiones={len(payload['remisiones_detalle'])}"
+        )
+        sync_run.pedidos_upserted = stats['pedidos_upserted']
+        sync_run.pedido_detalles_upserted = stats['pedido_detalles_upserted']
+        sync_run.remisiones_upserted = stats['remisiones_upserted']
+        sync_run.remision_detalles_upserted = stats['remision_detalles_upserted']
+        db.session.commit()
+
+        logger.info(f"[CONTPAQ] Sincronizacion OK run={sync_run.id} stats={stats}")
+        return {'ok': True, 'run_id': sync_run.id, 'stats': stats}
+    except Exception as exc:
+        db.session.rollback()
+        logger.error(f'[CONTPAQ] Error de sincronizacion: {exc}', exc_info=True)
+        run = ContpaqSyncRun.query.get(sync_run.id)
+        if run:
+            run.status = 'error'
+            run.finished_at = datetime.utcnow()
+            run.message = str(exc)
+            db.session.add(run)
+            db.session.commit()
+        return {'ok': False, 'error': str(exc), 'run_id': sync_run.id}
+    finally:
+        _CONTPAQ_SYNC_LOCK.release()
+
+
+def _contpaq_scheduler_loop():
+    logger.info(
+        f"[CONTPAQ] Scheduler activo cada {CONTPAQ_SYNC_INTERVAL_MINUTES} min "
+        f"(delay inicial {CONTPAQ_SYNC_STARTUP_DELAY_SECONDS}s)"
+    )
+    waited = 0
+    while waited < CONTPAQ_SYNC_STARTUP_DELAY_SECONDS and not _CONTPAQ_SYNC_STOP.is_set():
+        sleep(1)
+        waited += 1
+
+    while not _CONTPAQ_SYNC_STOP.is_set():
+        with app.app_context():
+            run_contpaq_sync(trigger='scheduler')
+
+        total_wait = CONTPAQ_SYNC_INTERVAL_MINUTES * 60
+        waited = 0
+        while waited < total_wait and not _CONTPAQ_SYNC_STOP.is_set():
+            sleep(1)
+            waited += 1
+
+
+def _start_contpaq_scheduler_once():
+    global _CONTPAQ_SYNC_THREAD
+    global _CONTPAQ_SCHEDULER_INIT
+
+    if _CONTPAQ_SCHEDULER_INIT:
+        return
+    _CONTPAQ_SCHEDULER_INIT = True
+
+    if not CONTPAQ_SYNC_ENABLED:
+        logger.info('[CONTPAQ] Scheduler deshabilitado por CONTPAQ_SYNC_ENABLED=0')
+        return
+
+    _CONTPAQ_SYNC_THREAD = threading.Thread(
+        target=_contpaq_scheduler_loop,
+        name='contpaq-sync-scheduler',
+        daemon=True,
+    )
+    _CONTPAQ_SYNC_THREAD.start()
+
+
 # Registrar accesos (IP, UA, path) en cada petición - evita estáticos
 @app.before_request
 def log_access_y_cierre_por_hora():
     try:
+        _start_contpaq_scheduler_once()
+
         path = request.path
         # skip static files and health checks
         if path.startswith('/static') or path.startswith('/favicon'):
@@ -4547,6 +4949,180 @@ def procesos_base_delete(proc_id):
         return redirect(url_for('procesos_panel'))
 
 
+# ==================== CONTPAQI CONCILIACION (URL PRIVADA) ====================
+
+@app.route('/contpaq/conciliacion')
+@login_required
+@requires_permission('catalog', 'view')
+def contpaq_conciliacion_page():
+    """Vista privada para consultar pedidos y su relacion con remisiones (sin menu)."""
+    return render_template('contpaq_conciliacion.html')
+
+
+@app.route('/api/contpaq/conciliacion', methods=['GET'])
+@login_required
+@requires_permission('catalog', 'view')
+def api_contpaq_conciliacion():
+    """Devuelve pedidos P-/D con detalle y remisiones relacionadas para consulta en UI."""
+    try:
+        q = (request.args.get('q') or '').strip()
+        limit = request.args.get('limit', default=40, type=int)
+        limit = max(1, min(limit, 200))
+
+        pedidos_q = ContpaqPedido.query
+
+        # Mantener foco por cliente principal para evitar ruido.
+        if CONTPAQ_CUSTOMER_NAME:
+            pedidos_q = pedidos_q.filter(ContpaqPedido.cliente == CONTPAQ_CUSTOMER_NAME)
+
+        if q:
+            like = f"%{q}%"
+            pedidos_q = pedidos_q.filter(
+                db.or_(
+                    ContpaqPedido.titulo.ilike(like),
+                    ContpaqPedido.periodo_semana.ilike(like),
+                    ContpaqPedido.doc_folio.ilike(like),
+                    ContpaqPedido.sucursal.ilike(like),
+                )
+            )
+
+        pedidos = pedidos_q.order_by(ContpaqPedido.fecha_documento.desc(), ContpaqPedido.id.desc()).limit(limit).all()
+        if not pedidos:
+            return jsonify({'items': [], 'total': 0})
+
+        pedido_doc_ids = [p.document_id for p in pedidos]
+        detalles = ContpaqPedidoDetalle.query.filter(ContpaqPedidoDetalle.document_id.in_(pedido_doc_ids)).order_by(ContpaqPedidoDetalle.document_id.asc(), ContpaqPedidoDetalle.line_number.asc()).all()
+
+        detalles_map = {}
+        for d in detalles:
+            detalles_map.setdefault(d.document_id, []).append(d)
+
+        remisiones = ContpaqRemision.query.filter(ContpaqRemision.source_document_id.in_(pedido_doc_ids)).order_by(ContpaqRemision.fecha_documento.asc(), ContpaqRemision.id.asc()).all()
+        remision_doc_ids = [r.document_id for r in remisiones]
+
+        remision_detalles_map = {}
+        if remision_doc_ids:
+            rem_details = ContpaqRemisionDetalle.query.filter(ContpaqRemisionDetalle.document_id.in_(remision_doc_ids)).order_by(ContpaqRemisionDetalle.document_id.asc(), ContpaqRemisionDetalle.line_number.asc()).all()
+            for d in rem_details:
+                remision_detalles_map.setdefault(d.document_id, []).append(d)
+
+        remisiones_map = {}
+        for r in remisiones:
+            remisiones_map.setdefault(r.source_document_id, []).append(r)
+
+        items = []
+        for p in pedidos:
+            pedido_rows = []
+            for d in detalles_map.get(p.document_id, []):
+                pedido_rows.append({
+                    'line_number': d.line_number,
+                    'clave_producto': d.clave_producto,
+                    'descripcion': d.descripcion,
+                    'cantidad': d.cantidad,
+                    'precio_unitario': d.precio_unitario,
+                    'total_partida': d.total_partida,
+                })
+
+            remisiones_rows = []
+            for r in remisiones_map.get(p.document_id, []):
+                rr = {
+                    'document_id': r.document_id,
+                    'doc_folio': r.doc_folio,
+                    'sucursal': r.sucursal,
+                    'fecha_documento': r.fecha_documento.isoformat() if r.fecha_documento else None,
+                    'detalles': [],
+                }
+                for d in remision_detalles_map.get(r.document_id, []):
+                    rr['detalles'].append({
+                        'line_number': d.line_number,
+                        'clave_producto': d.clave_producto,
+                        'descripcion': d.descripcion,
+                        'cantidad': d.cantidad,
+                        'precio_unitario': d.precio_unitario,
+                        'total_partida': d.total_partida,
+                    })
+                remisiones_rows.append(rr)
+
+            items.append({
+                'document_id': p.document_id,
+                'doc_folio': p.doc_folio,
+                'serie': p.serie,
+                'cliente': p.cliente,
+                'sucursal': p.sucursal,
+                'titulo': p.titulo,
+                'periodo_semana': p.periodo_semana,
+                'fecha_documento': p.fecha_documento.isoformat() if p.fecha_documento else None,
+                'detalles': pedido_rows,
+                'remisiones': remisiones_rows,
+            })
+
+        return jsonify({'items': items, 'total': len(items)})
+    except Exception as e:
+        logger.error(f"Error consultando conciliacion CONTPAQ: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/contpaq/sync', methods=['POST'])
+@login_required
+@requires_permission('catalog', 'edit')
+def api_contpaq_sync():
+    """Ejecuta sincronizacion manual de CONTPAQi hacia la BD de la nube."""
+    result = run_contpaq_sync(trigger=f"manual:{session.get('user')}")
+    status = 200 if result.get('ok') else 500
+    return jsonify(result), status
+
+
+@app.route('/api/contpaq/sync/push', methods=['POST'])
+def api_contpaq_sync_push():
+    """Recibe payload desde un agente local (inhouse) y actualiza la BD nube."""
+    ok, err = _require_sync_key()
+    if not ok:
+        return err
+
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify({'error': 'Payload invalido'}), 400
+
+    sync_run = ContpaqSyncRun(
+        status='running',
+        started_at=datetime.utcnow(),
+        message='started_by=push_api'
+    )
+    db.session.add(sync_run)
+    db.session.commit()
+
+    try:
+        stats = _upsert_contpaq_data(payload)
+        sync_run.status = 'success'
+        sync_run.finished_at = datetime.utcnow()
+        sync_run.message = 'push_api completed'
+        sync_run.pedidos_upserted = stats['pedidos_upserted']
+        sync_run.pedido_detalles_upserted = stats['pedido_detalles_upserted']
+        sync_run.remisiones_upserted = stats['remisiones_upserted']
+        sync_run.remision_detalles_upserted = stats['remision_detalles_upserted']
+        db.session.commit()
+        return jsonify({'ok': True, 'run_id': sync_run.id, 'stats': stats}), 200
+    except Exception as exc:
+        db.session.rollback()
+        run = ContpaqSyncRun.query.get(sync_run.id)
+        if run:
+            run.status = 'error'
+            run.finished_at = datetime.utcnow()
+            run.message = str(exc)
+            db.session.add(run)
+            db.session.commit()
+        return jsonify({'ok': False, 'error': str(exc), 'run_id': sync_run.id}), 500
+
+
+@app.route('/api/contpaq/sync/last', methods=['GET'])
+@login_required
+@requires_permission('catalog', 'view')
+def api_contpaq_sync_last():
+    """Devuelve estado de la ultima sincronizacion para mostrar en la vista."""
+    run = ContpaqSyncRun.query.order_by(ContpaqSyncRun.id.desc()).first()
+    return jsonify({'last_sync': run.to_dict() if run else None})
+
+
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({'error': 'Recurso no encontrado'}), 404
@@ -4556,4 +5132,5 @@ def internal_error(error):
     return jsonify({'error': 'Error interno del servidor'}), 500
 
 if __name__ == '__main__':
+    _start_contpaq_scheduler_once()
     app.run(host='0.0.0.0', port=5000, debug=False)
