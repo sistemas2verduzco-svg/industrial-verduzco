@@ -89,6 +89,25 @@ WHERE i.DeletedOn IS NULL
 """
 
 
+def load_env_file():
+    # Soporta .env junto al script para ejecucion por tarea programada.
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    env_path = os.path.join(script_dir, '.env')
+    if not os.path.exists(env_path):
+        return
+
+    with open(env_path, 'r', encoding='utf-8') as f:
+        for raw_line in f:
+            line = raw_line.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+            key, value = line.split('=', 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+
+
 def connect_sqlserver():
     host = os.getenv('CONTPAQ_SQLSERVER_HOST', '').strip()
     port = os.getenv('CONTPAQ_SQLSERVER_PORT', '1433').strip()
@@ -143,6 +162,8 @@ def to_jsonable_rows(rows):
 
 
 def main():
+    load_env_file()
+
     cloud_url = os.getenv('CONTPAQ_CLOUD_PUSH_URL', '').strip()
     api_key = os.getenv('SYNC_API_KEY', '').strip()
     customer = os.getenv('CONTPAQ_CUSTOMER_NAME', 'RUTH VERDUZCO SANTOS').strip()
