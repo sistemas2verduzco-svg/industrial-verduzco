@@ -1,0 +1,178 @@
+PEDIDOS CONTPAQ MAQUINARIA - GUIA DE EJECUCION
+=============================================
+
+OBJETIVO
+--------
+Sincronizar en la nube los pedidos de maquinaria desde CONTPAQ con estos filtros:
+- Serie: E
+- Estatus: NO ENTREGADO
+- Fecha: desde 2025-06-01 en adelante
+
+CAMBIOS YA SUBIDOS A GIT
+------------------------
+- Branch: contpaq-mi4-integration
+- Commit: 09ab219
+
+ARCHIVOS IMPORTANTES
+--------------------
+EN LA NUBE:
+- app.py
+- models.py
+- create_maquinaria_ensamble_tables.py
+- templates/maquinaria_pedidos.html
+
+EN EL SERVIDOR WINDOWS CON CONTPAQ:
+- scripts/contpaq_maquinaria_sync_agent.py
+- scripts/contpaq_maquinaria_sync_agent.env
+
+============================================================
+PARTE 1 - EN LA NUBE
+============================================================
+
+1. Entrar al proyecto
+---------------------
+cd /ruta/de/tu/proyecto
+
+2. Traer cambios
+----------------
+git pull
+
+3. Reiniciar la aplicacion para cargar endpoint y modelos nuevos
+---------------------------------------------------------------
+docker compose restart app
+
+4. Crear tablas nuevas de maquinaria CONTPAQ
+--------------------------------------------
+docker compose exec app python create_maquinaria_ensamble_tables.py
+
+5. Verificar que el contenedor responda
+--------------------------------------
+docker compose ps
+
+6. Validar que la vista exista
+------------------------------
+Abrir en navegador:
+https://controlcalidad360.site/maquinaria/pedidos
+
+NOTA:
+Si el sistema usa proxy nginx, no hace falta cambiar nada por este modulo.
+Este modulo es independiente de conciliacion.
+
+============================================================
+PARTE 2 - EN EL SERVIDOR WINDOWS CON CONTPAQ
+============================================================
+
+1. Copiar archivos al servidor
+------------------------------
+Copiar estos 2 archivos a una carpeta local, por ejemplo:
+C:\Scripts\
+
+Archivos:
+- contpaq_maquinaria_sync_agent.py
+- contpaq_maquinaria_sync_agent.env
+
+2. Validar Python
+-----------------
+En PowerShell:
+python --version
+
+3. Instalar dependencias si hacen falta
+---------------------------------------
+pip install pyodbc requests
+
+4. Revisar el archivo .env
+--------------------------
+El archivo contpaq_maquinaria_sync_agent.env debe contener estos datos:
+
+CONTPAQ_MAQUINARIA_CLOUD_PUSH_URL=https://controlcalidad360.site/api/contpaq/maquinaria/sync/push
+SYNC_API_KEY=Nirvana.120934.
+CONTPAQ_MAQUINARIA_START_DATE=2025-06-01
+CONTPAQ_END_DATE=2026-12-31
+CONTPAQ_SQLSERVER_HOST=192.168.0.102
+CONTPAQ_SQLSERVER_PORT=1433
+CONTPAQ_SQLSERVER_DATABASE=GIV
+CONTPAQ_SQLSERVER_USER=sa
+CONTPAQ_SQLSERVER_PASSWORD=Limac00
+
+5. Probar ejecucion manual
+--------------------------
+cd C:\Scripts
+python contpaq_maquinaria_sync_agent.py
+
+RESULTADO ESPERADO:
+Debe conectarse a SQL Server, leer pedidos serie E no entregados, enviarlos a la nube
+y mostrar un mensaje de sincronizacion completada.
+
+============================================================
+PARTE 3 - CREAR LA TAREA PROGRAMADA EN WINDOWS
+============================================================
+
+OPCION A - DESDE POWERHELL COMO ADMIN
+-------------------------------------
+Pegar este bloque completo:
+
+$action = New-ScheduledTaskAction -Execute "python" -Argument "C:\Scripts\contpaq_maquinaria_sync_agent.py"
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Hours 2) -RepetitionDuration (New-TimeSpan -Days 9999)
+Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "CONTPAQ_Maquinaria_Sync" -Description "Sincroniza pedidos de maquinaria desde CONTPAQ a la nube cada 2 horas"
+
+OPCION B - CMD CON SCHTASKS
+---------------------------
+schtasks /Create /SC HOURLY /MO 2 /TN "CONTPAQ_Maquinaria_Sync" /TR "python C:\Scripts\contpaq_maquinaria_sync_agent.py" /F
+
+COMANDO PARA EJECUTARLA MANUALMENTE
+-----------------------------------
+schtasks /Run /TN "CONTPAQ_Maquinaria_Sync"
+
+COMANDO PARA VALIDAR QUE EXISTE
+-------------------------------
+schtasks /Query /TN "CONTPAQ_Maquinaria_Sync"
+
+============================================================
+PARTE 4 - VALIDACION FINAL
+============================================================
+
+1. Ejecutar la tarea manualmente una vez
+----------------------------------------
+schtasks /Run /TN "CONTPAQ_Maquinaria_Sync"
+
+2. Esperar unos segundos y abrir
+--------------------------------
+https://controlcalidad360.site/maquinaria/pedidos
+
+3. Confirmar que se muestren:
+-----------------------------
+- pedidos con serie E
+- estatus NO ENTREGADO
+- fechas desde junio 2025
+- partidas debajo de cada pedido
+
+============================================================
+PARTE 5 - SI ALGO FALLA
+============================================================
+
+SI FALLA EN WINDOWS:
+- Revisar acceso del servidor a 192.168.0.102 puerto 1433
+- Revisar usuario y password de SQL Server
+- Revisar que pyodbc este instalado
+- Revisar que python exista en PATH
+
+SI FALLA EN LA NUBE:
+- Revisar docker compose ps
+- Revisar logs:
+  docker compose logs app --tail=200
+- Revisar que las tablas se hayan creado correctamente
+
+SI LA VISTA SALE VACIA:
+- Ejecutar manualmente el script en Windows
+- Confirmar que el endpoint responde
+- Confirmar que existan registros en la base de datos
+
+RESUMEN RAPIDO
+--------------
+1. En nube: git pull
+2. En nube: docker compose restart app
+3. En nube: docker compose exec app python create_maquinaria_ensamble_tables.py
+4. En Windows: copiar contpaq_maquinaria_sync_agent.py y contpaq_maquinaria_sync_agent.env a C:\Scripts
+5. En Windows: python C:\Scripts\contpaq_maquinaria_sync_agent.py
+6. En Windows: crear tarea programada cada 2 horas
+7. Validar en: https://controlcalidad360.site/maquinaria/pedidos
