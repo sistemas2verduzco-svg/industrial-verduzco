@@ -6869,11 +6869,26 @@ def api_contpaq_conciliacion():
                 'has_next': offset + limit < total_records,
             })
 
+        def _query_in_chunks(model_class, id_column, id_list, order_by_cols, chunk_size=500):
+            """Evita IN(...) gigantes que saturan el temp space de PostgreSQL."""
+            results = []
+            for i in range(0, len(id_list), chunk_size):
+                chunk = id_list[i:i + chunk_size]
+                rows = model_class.query.filter(id_column.in_(chunk)).order_by(*order_by_cols).all()
+                results.extend(rows)
+            return results
+
         pedido_doc_ids = [p.document_id for p in pedidos]
-        detalles = ContpaqPedidoDetalle.query.filter(ContpaqPedidoDetalle.document_id.in_(pedido_doc_ids)).order_by(ContpaqPedidoDetalle.document_id.asc(), ContpaqPedidoDetalle.line_number.asc()).all()
+        detalles = _query_in_chunks(
+            ContpaqPedidoDetalle, ContpaqPedidoDetalle.document_id, pedido_doc_ids,
+            [ContpaqPedidoDetalle.document_id.asc(), ContpaqPedidoDetalle.line_number.asc()]
+        )
         compare_detalles = []
         if compare_doc_ids:
-            compare_detalles = ContpaqPedidoDetalle.query.filter(ContpaqPedidoDetalle.document_id.in_(compare_doc_ids)).order_by(ContpaqPedidoDetalle.document_id.asc(), ContpaqPedidoDetalle.line_number.asc()).all()
+            compare_detalles = _query_in_chunks(
+                ContpaqPedidoDetalle, ContpaqPedidoDetalle.document_id, compare_doc_ids,
+                [ContpaqPedidoDetalle.document_id.asc(), ContpaqPedidoDetalle.line_number.asc()]
+            )
 
         detalles_map = {}
         for d in detalles:
@@ -6884,7 +6899,10 @@ def api_contpaq_conciliacion():
 
         remision_detalles_map = {}
         if remision_doc_ids:
-            rem_details = ContpaqRemisionDetalle.query.filter(ContpaqRemisionDetalle.document_id.in_(remision_doc_ids)).order_by(ContpaqRemisionDetalle.document_id.asc(), ContpaqRemisionDetalle.line_number.asc()).all()
+            rem_details = _query_in_chunks(
+                ContpaqRemisionDetalle, ContpaqRemisionDetalle.document_id, remision_doc_ids,
+                [ContpaqRemisionDetalle.document_id.asc(), ContpaqRemisionDetalle.line_number.asc()]
+            )
             for d in rem_details:
                 remision_detalles_map.setdefault(d.document_id, []).append(d)
 
