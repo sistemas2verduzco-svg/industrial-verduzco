@@ -1,98 +1,49 @@
-CONTPAQ - QUE HACER AHORA (PASO A PASO)
+CONTPAQ - GUIA ULTRA SIMPLE ANTI RENDER
 
-IMPORTANTE
-1. Base SQL de CONTPAQ: SOLO LECTURA (SELECT).
-2. NO se hace INSERT, UPDATE, DELETE en CONTPAQ.
-3. Las escrituras son solo en la BD de la plataforma (nube PostgreSQL).
+COPIAR Y PEGAR UNO POR UNO
 
-ORDEN OBLIGATORIO
-1. Primero NUBE (deploy).
-2. Luego SERVIDOR INTERNO WINDOWS (backfill/push).
-3. Al final validar en la vista.
+LOCAL WINDOWS
+cd C:\Users\Jose\industrial-verduzco
+git add app.py templates/admin_users.html templates/_sidebar.html CONTPAQ_DESPLIEGUE_PASO_A_PASO.txt
+git commit -m "feat: control de permisos por usuario en modulo usuarios"
+git push origin contpaq-mi4-integration
 
-==================================================
-PASO 1 - NUBE (SSH LINUX)
-==================================================
-
-Entrar:
-ssh root@209.97.188.176
-
-Dentro de nube ejecutar EXACTO:
+SERVIDOR LINUX
 cd ~/industrial-verduzco
-git fetch origin --prune
-git checkout origin/contpaq-mi4-integration -- app.py templates/contpaq_conciliacion.html CONTPAQ_DESPLIEGUE_PASO_A_PASO.txt
-if ! grep -q '^CONTPAQ_D_FALLBACK_DAYS=' .env; then echo 'CONTPAQ_D_FALLBACK_DAYS=31' >> .env; else sed -i 's/^CONTPAQ_D_FALLBACK_DAYS=.*/CONTPAQ_D_FALLBACK_DAYS=31/' .env; fi
+git pull origin contpaq-mi4-integration
 docker compose up -d --no-deps --build app
-docker compose exec app python create_db.py
-docker compose logs --tail=60 app
-curl -s -o /dev/null -w "%{http_code}\n" https://controlcalidad360.site/contpaq/conciliacion
+docker compose logs --tail=40 app
+curl -I http://localhost:5000/admin/users
 
-Esperado:
-302 o 200
+SI SIGUE VIEJO EN NAVEGADOR
+Ctrl+F5
 
-==================================================
-PASO 2 - SERVIDOR INTERNO WINDOWS (POWERSHELL)
-==================================================
+PRUEBA NUEVA DE PERMISOS POR USUARIO
+1. Entrar como admin a /admin/users
+2. En cada usuario no admin usar botones del modulo usuarios
+3. Botones disponibles
+Solo ver
+Ver + Editar
+Bloquear
+4. Cerrar sesion y entrar con ese usuario para validar
 
-En servidor interno, primero actualiza script local:
-Copiar scripts/contpaq_sync_agent.py (repo) a C:\contpaq-sync\contpaq_sync_agent.py
+REGLA RAPIDA
+admin ve todo
+usuario normal se controla por permisos
 
-ANTI-RENDER (EJECUTAR LINEA POR LINEA SI SE TRABA EL PEGADO)
-Ctrl+C
+AUTOMATIZAR AGENTE WINDOWS 06:30
+where.exe python
 New-Item -ItemType Directory -Path C:\contpaq-sync -Force | Out-Null
-$srcPy = @("C:\Users\Administrador\industrial-verduzco\scripts\contpaq_sync_agent.py","C:\Users\Jose\industrial-verduzco\scripts\contpaq_sync_agent.py") | Where-Object { Test-Path $_ } | Select-Object -First 1
-$srcEnv = @("C:\Users\Administrador\industrial-verduzco\scripts\contpaq_sync_agent.env","C:\Users\Jose\industrial-verduzco\scripts\contpaq_sync_agent.env") | Where-Object { Test-Path $_ } | Select-Object -First 1
-Copy-Item $srcPy C:\contpaq-sync\contpaq_sync_agent.py -Force
-Copy-Item $srcEnv C:\contpaq-sync\.env -Force
-$envFile = "C:\contpaq-sync\.env"
-(Get-Content $envFile) -replace '^CONTPAQ_START_DATE=.*$', 'CONTPAQ_START_DATE=2025-01-01' | Set-Content $envFile -Encoding ascii
-if (-not (Select-String -Path $envFile -Pattern '^CONTPAQ_END_DATE=' -Quiet)) { Add-Content $envFile 'CONTPAQ_END_DATE=' }
-if (-not (Select-String -Path $envFile -Pattern '^CONTPAQ_CHUNK_DAYS=' -Quiet)) { Add-Content $envFile 'CONTPAQ_CHUNK_DAYS=31' }
-if (-not (Select-String -Path $envFile -Pattern '^CONTPAQ_REQUEST_TIMEOUT=' -Quiet)) { Add-Content $envFile 'CONTPAQ_REQUEST_TIMEOUT=300' }
-(Get-Content $envFile) -replace '^CONTPAQ_END_DATE=.*$', 'CONTPAQ_END_DATE=' | Set-Content $envFile -Encoding ascii
-(Get-Content $envFile) -replace '^CONTPAQ_CHUNK_DAYS=.*$', 'CONTPAQ_CHUNK_DAYS=31' | Set-Content $envFile -Encoding ascii
-(Get-Content $envFile) -replace '^CONTPAQ_REQUEST_TIMEOUT=.*$', 'CONTPAQ_REQUEST_TIMEOUT=300' | Set-Content $envFile -Encoding ascii
-py -3 -m pip install pyodbc requests
-py -3 -u C:\contpaq-sync\contpaq_sync_agent.py 2>&1 | Tee-Object C:\contpaq-sync\run_sync.log
+Set-Content C:\contpaq-sync\run_agent.bat '@echo off' -Encoding ascii
+Add-Content C:\contpaq-sync\run_agent.bat 'cd /d C:\contpaq-sync'
+Add-Content C:\contpaq-sync\run_agent.bat '"C:\Python311\python.exe" -u C:\contpaq-sync\contpaq_sync_agent.py >> C:\contpaq-sync\run_sync.log 2>&1'
+schtasks /Create /TN "CONTPAQ Sync Agent Diario 0630" /SC DAILY /ST 06:30 /TR "C:\contpaq-sync\run_agent.bat" /RU "SYSTEM" /RL HIGHEST /F
+if (Test-Path C:\contpaq-sync\run_sync.log) { Clear-Content C:\contpaq-sync\run_sync.log }
+schtasks /Run /TN "CONTPAQ Sync Agent Diario 0630"
+Start-Sleep -Seconds 10
+Get-Content C:\contpaq-sync\run_sync.log -Tail 60
+schtasks /Query /TN "CONTPAQ Sync Agent Diario 0630" /V /FO LIST
 
-Luego ejecutar:
-$envFile = "C:\contpaq-sync\.env"
-$script = "C:\contpaq-sync\contpaq_sync_agent.py"
-
-(Get-Content $envFile) -replace '^CONTPAQ_START_DATE=.*$', 'CONTPAQ_START_DATE=2025-01-01' | Set-Content $envFile -Encoding ascii
-if (-not (Select-String -Path $envFile -Pattern '^CONTPAQ_END_DATE=' -Quiet)) { Add-Content $envFile 'CONTPAQ_END_DATE=' }
-if (-not (Select-String -Path $envFile -Pattern '^CONTPAQ_CHUNK_DAYS=' -Quiet)) { Add-Content $envFile 'CONTPAQ_CHUNK_DAYS=31' }
-if (-not (Select-String -Path $envFile -Pattern '^CONTPAQ_REQUEST_TIMEOUT=' -Quiet)) { Add-Content $envFile 'CONTPAQ_REQUEST_TIMEOUT=300' }
-(Get-Content $envFile) -replace '^CONTPAQ_END_DATE=.*$', 'CONTPAQ_END_DATE=' | Set-Content $envFile -Encoding ascii
-(Get-Content $envFile) -replace '^CONTPAQ_CHUNK_DAYS=.*$', 'CONTPAQ_CHUNK_DAYS=31' | Set-Content $envFile -Encoding ascii
-(Get-Content $envFile) -replace '^CONTPAQ_REQUEST_TIMEOUT=.*$', 'CONTPAQ_REQUEST_TIMEOUT=300' | Set-Content $envFile -Encoding ascii
-
-Ejecutar historico completo:
-py -3 $script
-
-==================================================
-PASO 3 - VALIDAR EN NUBE (SSH LINUX)
-==================================================
-
-cd ~/industrial-verduzco
-docker compose exec -T db psql -U catalogo_user -d catalogo_db -c "SELECT MIN(fecha_documento) AS min_fecha_pedido, MAX(fecha_documento) AS max_fecha_pedido, COUNT(*) AS total FROM contpaq_pedidos;"
-docker compose exec -T db psql -U catalogo_user -d catalogo_db -c "SELECT id, status, started_at, finished_at, pedidos_upserted, remisiones_upserted FROM contpaq_sync_runs ORDER BY id DESC LIMIT 10;"
-
-Esperado:
-1. min_fecha_pedido cercano o igual a 2025-01-01
-2. corridas recientes en status success
-
-==================================================
-PASO 4 - VALIDAR EN LA PANTALLA
-==================================================
-
-URL:
-https://controlcalidad360.site/contpaq/conciliacion
-
-Si no ves todo:
-1. Fecha desde = 2025-01-01
-2. Fecha hasta = vacio
-3. Registros por pagina = 240 o 500
-4. Usar botones Anterior/Siguiente
-
-FIN
+RESULTADO ESPERADO
+Ultimo resultado: 0
+Proxima ejecucion: 06:30 AM

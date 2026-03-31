@@ -1699,6 +1699,44 @@ def _get_or_create_permission(module, action):
     return perm
 
 
+def _ensure_personal_role_for_user(target_user):
+    """Ensure permission edits apply to one user only by cloning shared roles."""
+    if not target_user:
+        return None
+
+    if not target_user.role:
+        base_name = f'perfil_{target_user.username}_{target_user.id}'
+        role_name = base_name
+        suffix = 1
+        while Role.query.filter_by(name=role_name).first():
+            suffix += 1
+            role_name = f'{base_name}_{suffix}'
+        role = Role(name=role_name, descripcion=f'Perfil individual de {target_user.username}')
+        db.session.add(role)
+        db.session.flush()
+        target_user.role = role
+        return role
+
+    role = target_user.role
+    users_in_role = Usuario.query.filter_by(role_id=role.id).count()
+    if users_in_role <= 1:
+        return role
+
+    base_name = f'{role.name}_{target_user.username}_{target_user.id}'
+    role_name = base_name
+    suffix = 1
+    while Role.query.filter_by(name=role_name).first():
+        suffix += 1
+        role_name = f'{base_name}_{suffix}'
+
+    cloned = Role(name=role_name, descripcion=(role.descripcion or f'Clonado para {target_user.username}'))
+    cloned.permissions = list(role.permissions or [])
+    db.session.add(cloned)
+    db.session.flush()
+    target_user.role = cloned
+    return cloned
+
+
 def _ensure_default_permissions():
     """Create baseline permissions so admin UI can assign fine-grained access."""
     created_any = False
@@ -4605,6 +4643,9 @@ def api_list_users():
     users = Usuario.query.order_by(Usuario.id.asc()).all()
     data = []
     for u in users:
+        user_permissions = []
+        if u.role and u.role.permissions:
+            user_permissions = [{'module': p.module, 'action': p.action} for p in u.role.permissions]
         data.append({
             'id': u.id,
             'username': u.username,
@@ -4612,6 +4653,7 @@ def api_list_users():
             'activo': u.activo,
             'es_admin': u.es_admin,
             'role': u.role.name if u.role else None,
+            'permissions': user_permissions,
             'fecha_creacion': u.fecha_creacion.isoformat() if u.fecha_creacion else None
         })
     return jsonify({'users': data})
@@ -4876,6 +4918,61 @@ def api_update_user(user_id):
     db.session.add(u)
     db.session.commit()
     return jsonify({'ok': True, 'user': u.to_dict()})
+
+
+@app.route('/api/users/<int:user_id>/module_permissions', methods=['PUT'])
+@login_required
+def api_set_user_module_permissions(user_id):
+    """Set allowed actions for one module for a single user (non-admin included)."""
+    user = get_current_user()
+    if not _can_edit_users_module(user):
+        return jsonify({'error': 'Permiso denegado'}), 403
+
+    target = Usuario.query.get_or_404(user_id)
+    if target.es_admin:
+        return jsonify({'error': 'No se modifican permisos de usuarios admin desde este endpoint'}), 400
+
+    payload = request.get_json() or {}
+    module = (payload.get('module') or '').strip()
+    allowed_actions = payload.get('allowed_actions', []) or []
+
+    if not module:
+        return jsonify({'error': 'module requerido'}), 400
+
+    normalized = []
+    for action in allowed_actions:
+        a = str(action or '').strip().lower()
+        if not a:
+            continue
+        if a not in normalized:
+            normalized.append(a)
+
+    # Cualquier accion operativa requiere view para poder entrar al modulo.
+    if any(a != 'view' for a in normalized) and 'view' not in normalized:
+        normalized.insert(0, 'view')
+
+    role = _ensure_personal_role_for_user(target)
+    if not role:
+        return jsonify({'error': 'No se pudo preparar role para el usuario'}), 500
+
+    updated_permissions = [p for p in (role.permissions or []) if p.module != module]
+    for action in normalized:
+        perm = _get_or_create_permission(module, action)
+        updated_permissions.append(perm)
+
+    role.permissions = updated_permissions
+    db.session.add(role)
+    db.session.add(target)
+    db.session.commit()
+
+    return jsonify({
+        'ok': True,
+        'user_id': target.id,
+        'username': target.username,
+        'role': target.role.name if target.role else None,
+        'module': module,
+        'allowed_actions': normalized,
+    })
 
 
 @app.route('/delete_nonadmin_users', methods=['POST'])
