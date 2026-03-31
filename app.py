@@ -6913,7 +6913,12 @@ def api_contpaq_conciliacion():
         for d in detalles:
             detalles_map.setdefault(d.document_id, []).append(d)
 
-        remisiones = ContpaqRemision.query.filter(ContpaqRemision.source_document_id.in_(pedido_doc_ids)).order_by(ContpaqRemision.fecha_documento.asc(), ContpaqRemision.id.asc()).all()
+        remisiones = []
+        if compare_doc_ids:
+            remisiones = _query_in_chunks(
+                ContpaqRemision, ContpaqRemision.source_document_id, compare_doc_ids,
+                [ContpaqRemision.fecha_documento.asc(), ContpaqRemision.id.asc()]
+            )
         remision_doc_ids = [r.document_id for r in remisiones]
 
         remision_detalles_map = {}
@@ -6981,6 +6986,7 @@ def api_contpaq_conciliacion():
 
             if folio_cmp_norm.startswith('D'):
                 d_rows.append({
+                    'source_document_id': p_cmp.document_id,
                     'folio': p_cmp.doc_folio,
                     'semana': p_cmp.periodo_semana,
                     'semana_norm': semana_cmp_norm,
@@ -7143,6 +7149,7 @@ def api_contpaq_conciliacion():
             })
 
         faltantes_inyectados = 0
+    injected_remision_detail_keys = set()
         # Inyectamos faltantes solo en la primera pagina para mantener navegacion estable.
         if page == 1:
             # Mapa de destino por (semana_sin_año, sucursal). Preferimos folios P- cuando existan.
@@ -7191,6 +7198,42 @@ def api_contpaq_conciliacion():
 
                 target_item['pedido_total'] = round(_to_float(target_item.get('pedido_total')) + total_partida, 2)
                 target_item['es_faltante'] = True
+
+                # Si el faltante vino de un pedido D, inyectar solo las partidas de remision
+                # que correspondan a esa partida, no la remision completa.
+                source_doc_id = d_match.get('source_document_id') if d_match else None
+                if source_doc_id:
+                    target_item.setdefault('remisiones', [])
+                    for r in remisiones_map.get(source_doc_id, []):
+                        matched_details = []
+                        for rd in remision_detalles_map.get(r.document_id, []):
+                            if (
+                                _norm_txt(rd.clave_producto) == d_match.get('clave_norm')
+                                and _norm_num(rd.cantidad) == d_match.get('cantidad_norm')
+                            ):
+                                detail_key = (target_idx, r.document_id, rd.line_number)
+                                if detail_key in injected_remision_detail_keys:
+                                    continue
+                                injected_remision_detail_keys.add(detail_key)
+                                matched_details.append({
+                                    'line_number': rd.line_number,
+                                    'clave_producto': rd.clave_producto,
+                                    'descripcion': rd.descripcion,
+                                    'cantidad': rd.cantidad,
+                                    'precio_unitario': rd.precio_unitario,
+                                    'total_partida': rd.total_partida,
+                                    'es_inyectado': True,
+                                })
+
+                        if matched_details:
+                            target_item['remisiones'].append({
+                                'document_id': r.document_id,
+                                'doc_folio': r.doc_folio,
+                                'sucursal': r.sucursal,
+                                'fecha_documento': r.fecha_documento.isoformat() if r.fecha_documento else None,
+                                'detalles': matched_details,
+                                'es_inyectado': True,
+                            })
 
                 total_partidas += 1
                 total_importe += total_partida
