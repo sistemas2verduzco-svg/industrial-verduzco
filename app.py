@@ -1781,30 +1781,71 @@ def _can_view_admin_panel(user):
     return user.has_permission('admin', 'view') or user.has_permission('catalog', 'edit')
 
 
-def _can_view_user_admin(user):
+def _can_view_users_module(user):
     if not user:
         return False
     if user.es_admin:
         return True
+    return user.has_permission('users', 'view') or user.has_permission('users', 'edit')
+
+
+def _can_edit_users_module(user):
+    if not user:
+        return False
+    if user.es_admin:
+        return True
+    return user.has_permission('users', 'edit')
+
+
+def _can_view_roles_module(user):
+    if not user:
+        return False
+    if user.es_admin:
+        return True
+    return user.has_permission('roles', 'view') or user.has_permission('roles', 'edit')
+
+
+def _can_edit_roles_module(user):
+    if not user:
+        return False
+    if user.es_admin:
+        return True
+    return user.has_permission('roles', 'edit')
+
+
+def _can_view_permissions_module(user):
+    if not user:
+        return False
+    if user.es_admin:
+        return True
+    return user.has_permission('permissions', 'view') or user.has_permission('permissions', 'edit')
+
+
+def _can_edit_permissions_module(user):
+    if not user:
+        return False
+    if user.es_admin:
+        return True
+    return user.has_permission('permissions', 'edit')
+
+
+def _can_view_user_admin(user):
+    if not user:
+        return False
     return (
-        user.has_permission('users', 'view')
-        or user.has_permission('users', 'edit')
-        or user.has_permission('roles', 'view')
-        or user.has_permission('roles', 'edit')
-        or user.has_permission('permissions', 'view')
-        or user.has_permission('permissions', 'edit')
+        _can_view_users_module(user)
+        or _can_view_roles_module(user)
+        or _can_view_permissions_module(user)
     )
 
 
 def _can_edit_user_admin(user):
     if not user:
         return False
-    if user.es_admin:
-        return True
     return (
-        user.has_permission('users', 'edit')
-        or user.has_permission('roles', 'edit')
-        or user.has_permission('permissions', 'edit')
+        _can_edit_users_module(user)
+        or _can_edit_roles_module(user)
+        or _can_edit_permissions_module(user)
     )
 
 # ==================== DASHBOARD / HOME CENTRAL ====================
@@ -4532,7 +4573,26 @@ def admin_users_page():
     user = get_current_user()
     if not _can_view_user_admin(user):
         return render_template('403.html'), 403
-    return render_template('admin_users.html')
+    can_view_users = _can_view_users_module(user)
+    can_edit_users = _can_edit_users_module(user)
+    can_view_roles = _can_view_roles_module(user)
+    can_edit_roles = _can_edit_roles_module(user)
+    can_view_permissions = _can_view_permissions_module(user)
+    can_edit_permissions = _can_edit_permissions_module(user)
+    can_manage_roles_permissions = (
+        can_view_roles or can_edit_roles or can_view_permissions or can_edit_permissions
+    )
+
+    return render_template(
+        'admin_users.html',
+        can_view_users=can_view_users,
+        can_edit_users=can_edit_users,
+        can_view_roles=can_view_roles,
+        can_edit_roles=can_edit_roles,
+        can_view_permissions=can_view_permissions,
+        can_edit_permissions=can_edit_permissions,
+        can_manage_roles_permissions=can_manage_roles_permissions,
+    )
 
 
 # ======= API: Usuarios (admin only) ======
@@ -4540,7 +4600,7 @@ def admin_users_page():
 @login_required
 def api_list_users():
     user = get_current_user()
-    if not _can_view_user_admin(user):
+    if not _can_view_users_module(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     users = Usuario.query.order_by(Usuario.id.asc()).all()
     data = []
@@ -4561,7 +4621,7 @@ def api_list_users():
 @login_required
 def api_list_permissions():
     user = get_current_user()
-    if not _can_view_user_admin(user):
+    if not _can_view_permissions_module(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     _ensure_default_permissions()
     perms = Permission.query.order_by(Permission.module, Permission.action).all()
@@ -4572,7 +4632,7 @@ def api_list_permissions():
 @login_required
 def api_list_roles():
     user = get_current_user()
-    if not _can_view_user_admin(user):
+    if not _can_view_roles_module(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     _ensure_default_permissions()
     roles = Role.query.order_by(Role.name).all()
@@ -4589,7 +4649,7 @@ def api_list_roles():
 @login_required
 def api_create_role():
     user = get_current_user()
-    if not _can_edit_user_admin(user):
+    if not _can_edit_roles_module(user):
         return jsonify({'error': 'Permiso denegado'}), 403
 
     _ensure_default_permissions()
@@ -4622,7 +4682,7 @@ def api_create_role():
 @login_required
 def api_set_role_permissions(role_id):
     user = get_current_user()
-    if not _can_edit_user_admin(user):
+    if not _can_edit_permissions_module(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     payload = request.get_json() or {}
     perm_ids = payload.get('permission_ids', [])
@@ -4639,7 +4699,7 @@ def api_set_role_permissions(role_id):
 @login_required
 def api_set_role_modules(role_id):
     user = get_current_user()
-    if not _can_edit_user_admin(user):
+    if not (_can_edit_roles_module(user) or _can_edit_permissions_module(user)):
         return jsonify({'error': 'Permiso denegado'}), 403
     _ensure_default_permissions()
     payload = request.get_json() or {}
@@ -4665,7 +4725,7 @@ def api_set_role_modules(role_id):
 @login_required
 def api_create_user():
     user = get_current_user()
-    if not _can_edit_user_admin(user):
+    if not _can_edit_users_module(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     data = request.get_json() or {}
     username = data.get('username')
@@ -4713,7 +4773,7 @@ def api_create_user():
 @login_required
 def api_toggle_active(user_id):
     user = get_current_user()
-    if not _can_edit_user_admin(user):
+    if not _can_edit_users_module(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     u = Usuario.query.get_or_404(user_id)
     if u.username == 'admin':
@@ -4728,7 +4788,7 @@ def api_toggle_active(user_id):
 @login_required
 def api_set_role(user_id):
     user = get_current_user()
-    if not _can_edit_user_admin(user):
+    if not _can_edit_users_module(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     payload = request.get_json() or {}
     role_name = payload.get('role')
@@ -4751,7 +4811,7 @@ def api_set_role(user_id):
 @login_required
 def api_delete_user(user_id):
     user = get_current_user()
-    if not _can_edit_user_admin(user):
+    if not _can_edit_users_module(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     u = Usuario.query.get_or_404(user_id)
     if u.username == 'admin':
@@ -4765,7 +4825,7 @@ def api_delete_user(user_id):
 @login_required
 def api_get_user(user_id):
     user = get_current_user()
-    if not _can_view_user_admin(user):
+    if not _can_view_users_module(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     u = Usuario.query.get_or_404(user_id)
     data = {
@@ -4777,11 +4837,13 @@ def api_get_user(user_id):
         'role': u.role.name if u.role else None,
         'fecha_creacion': u.fecha_creacion.isoformat() if u.fecha_creacion else None
     }
-    try:
-        # devolver contraseña desencriptada SOLO para admin
-        data['password'] = u.decrypt_password()
-    except Exception:
-        data['password'] = None
+    data['password'] = None
+    if user and user.es_admin:
+        try:
+            # devolver contraseña desencriptada solo a administradores.
+            data['password'] = u.decrypt_password()
+        except Exception:
+            data['password'] = None
     return jsonify({'user': data})
 
 
@@ -4789,7 +4851,7 @@ def api_get_user(user_id):
 @login_required
 def api_update_user(user_id):
     user = get_current_user()
-    if not _can_edit_user_admin(user):
+    if not _can_edit_users_module(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     u = Usuario.query.get_or_404(user_id)
     data = request.get_json() or {}

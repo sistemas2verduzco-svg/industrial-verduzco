@@ -11,15 +11,26 @@
 
     <div class="container" style="padding:40px 24px;">
         <h1>Gestión de Usuarios</h1>
-        <p>Panel exclusivo para el usuario administrador. Desde aquí puedes administrar usuarios, roles y acceso.</p>
+        <p>
+            {% if can_manage_roles_permissions %}
+            Desde aquí puedes administrar usuarios, roles y permisos según tus accesos.
+            {% else %}
+            Desde aquí puedes administrar usuarios según tus permisos asignados.
+            {% endif %}
+        </p>
 
         <div style="margin-top:20px;">
             <button id="btn-refresh" class="btn btn-secondary">🔄 Refrescar</button>
+            {% if current_user and current_user.es_admin %}
             <button id="btn-delete-nonadmin" class="btn btn-danger" style="margin-left:10px;">🗑️ Borrar todos excepto admin</button>
+            {% endif %}
+            {% if can_manage_roles_permissions %}
             <button id="btn-manage-roles" class="btn btn-primary" style="margin-left:10px;">⚙️ Gestionar Roles/Permisos</button>
+            {% endif %}
             <span id="mensaje" style="margin-left:12px; color:#333;"></span>
         </div>
 
+        {% if can_edit_users %}
         <!-- Crear usuario -->
         <div style="margin-top:18px; padding:12px; background:#f8fafc; border:1px solid #e6eef8; border-radius:6px;">
             <h3 style="margin:0 0 8px 0; font-size:15px;">Crear nuevo usuario</h3>
@@ -27,18 +38,28 @@
                 <input id="new-username" placeholder="username" style="padding:8px;" />
                 <input id="new-correo" placeholder="correo" style="padding:8px;" />
                 <input id="new-password" placeholder="password" type="password" style="padding:8px;" />
+                {% if can_view_roles %}
                 <select id="new-role" style="padding:8px;"><option value="">-- Role (opcional) --</option></select>
+                {% endif %}
+                {% if can_manage_roles_permissions %}
                 <input id="new-custom-role-name" placeholder="Nuevo role (opcional)" style="padding:8px; min-width:200px;" />
+                {% endif %}
+                {% if current_user and current_user.es_admin %}
                 <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input id="new-es-admin" type="checkbox" /> Es Admin</label>
+                {% endif %}
                 <button id="btn-create-user" class="btn btn-success">➕ Crear</button>
             </div>
+            {% if can_manage_roles_permissions %}
             <div style="margin-top:10px; padding:10px; border:1px dashed #d0dae8; border-radius:6px; background:#fff;">
                 <div style="font-weight:600; margin-bottom:6px;">Perfil personalizado (opcional)</div>
                 <div style="font-size:12px; color:#555; margin-bottom:8px;">Si marcas módulos aquí, se crea un role nuevo para este usuario.</div>
                 <div id="new-user-modules" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:6px;"></div>
             </div>
+            {% endif %}
         </div>
+        {% endif %}
 
+        {% if can_edit_roles %}
         <div style="margin-top:12px; padding:12px; background:#fffaf1; border:1px solid #f2deb3; border-radius:6px;">
             <h3 style="margin:0 0 8px 0; font-size:15px;">Crear Role</h3>
             <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
@@ -48,6 +69,7 @@
             </div>
             <div style="font-size:12px; color:#666; margin-top:8px;">Los módulos/permisos se configuran en "Gestionar Roles/Permisos".</div>
         </div>
+        {% endif %}
 
         <table id="users-table" style="width:100%; margin-top:20px; border-collapse:collapse;">
             <thead>
@@ -66,6 +88,7 @@
         </table>
     </div>
 
+    {% if can_manage_roles_permissions %}
     <!-- Modal Roles / Módulos -->
     <div id="roles-modal" style="display:none; position:fixed; left:0; top:0; right:0; bottom:0; background:rgba(0,0,0,0.4); z-index:9999;">
         <div style="width:800px; max-width:95%; margin:60px auto; background:#fff; border-radius:6px; padding:18px; box-shadow:0 6px 24px rgba(0,0,0,0.2);">
@@ -86,8 +109,16 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
 <script>
+const CAN_VIEW_USERS = {{ 'true' if can_view_users else 'false' }};
+const CAN_EDIT_USERS = {{ 'true' if can_edit_users else 'false' }};
+const CAN_VIEW_ROLES = {{ 'true' if can_view_roles else 'false' }};
+const CAN_EDIT_ROLES = {{ 'true' if can_edit_roles else 'false' }};
+const CAN_MANAGE_ROLES_PERMISSIONS = {{ 'true' if can_manage_roles_permissions else 'false' }};
+const IS_ADMIN = {{ 'true' if (current_user and current_user.es_admin) else 'false' }};
+
 async function fetchJson(url, opts){
     const res = await fetch(url, opts);
     if(!res.ok){
@@ -98,12 +129,30 @@ async function fetchJson(url, opts){
 }
 
 async function loadUsers(){
+    if(!CAN_VIEW_USERS){
+        document.getElementById('users-body').innerHTML = '<tr><td colspan="6">Sin permiso para ver usuarios</td></tr>';
+        return;
+    }
     try{
         const data = await fetchJson('/api/users');
         const tbody = document.getElementById('users-body');
         tbody.innerHTML = '';
         data.users.forEach(u=>{
             const tr = document.createElement('tr');
+            const actionButtons = [];
+            if(CAN_EDIT_USERS){
+                actionButtons.push(`<button class="btn btn-secondary" onclick="toggleActive(${u.id})">Toggle</button>`);
+                if(CAN_VIEW_ROLES){
+                    actionButtons.push(`<button class="btn btn-primary" onclick="showRolePrompt(${u.id}, '${u.role||''}')">Role</button>`);
+                }
+                if(IS_ADMIN && u.username!=='admin'){
+                    actionButtons.push(`<button class="btn btn-info" onclick="viewPassword(${u.id})">Ver contraseña</button>`);
+                }
+                actionButtons.push(`<button class="btn btn-warning" onclick="editUser(${u.id})">Editar</button>`);
+                if(u.username!=='admin'){
+                    actionButtons.push(`<button class="btn btn-danger" onclick="deleteUser(${u.id})">Borrar</button>`);
+                }
+            }
             tr.innerHTML = `
                 <td>${u.id}</td>
                 <td>${u.username}${u.es_admin? ' <strong>(admin)</strong>':''}</td>
@@ -111,11 +160,7 @@ async function loadUsers(){
                 <td>${u.role || ''}</td>
                 <td>${u.activo? 'Sí':'No'}</td>
                 <td>
-                    <button class="btn btn-secondary" onclick="toggleActive(${u.id})">Toggle</button>
-                    <button class="btn btn-primary" onclick="showRolePrompt(${u.id}, '${u.role||''}')">Role</button>
-                    ${u.username!=='admin'? `<button class="btn btn-info" onclick="viewPassword(${u.id})">Ver contraseña</button>`: ''}
-                    <button class="btn btn-warning" onclick="editUser(${u.id})">Editar</button>
-                    ${u.username!=='admin'? `<button class="btn btn-danger" onclick="deleteUser(${u.id})">Borrar</button>`: ''}
+                    ${actionButtons.join(' ')}
                 </td>
             `;
             tbody.appendChild(tr);
@@ -162,16 +207,21 @@ async function editUser(id){
 }
 
 // Create user
-document.getElementById('btn-create-user').addEventListener('click', async ()=>{
+const btnCreateUser = document.getElementById('btn-create-user');
+if(btnCreateUser){
+btnCreateUser.addEventListener('click', async ()=>{
     try{
         const username = document.getElementById('new-username').value.trim();
         const correo = document.getElementById('new-correo').value.trim();
         const password = document.getElementById('new-password').value;
-        const role = document.getElementById('new-role').value || null;
-        const custom_role_name = document.getElementById('new-custom-role-name').value.trim();
-        const modules = getCheckedModules('new-user');
-        const permission_ids = getCheckedPermissions('new-user');
-        const es_admin = document.getElementById('new-es-admin').checked;
+        const roleSelect = document.getElementById('new-role');
+        const role = roleSelect ? (roleSelect.value || null) : null;
+        const customRoleNameInput = document.getElementById('new-custom-role-name');
+        const custom_role_name = customRoleNameInput ? customRoleNameInput.value.trim() : '';
+        const modules = CAN_MANAGE_ROLES_PERMISSIONS ? getCheckedModules('new-user') : [];
+        const permission_ids = CAN_MANAGE_ROLES_PERMISSIONS ? getCheckedPermissions('new-user') : [];
+        const adminCheckbox = document.getElementById('new-es-admin');
+        const es_admin = adminCheckbox ? adminCheckbox.checked : false;
         if(!username || !password){ alert('username y password son requeridos'); return; }
 
         const hasCustomProfile = modules.length > 0 || permission_ids.length > 0 || !!custom_role_name;
@@ -193,16 +243,19 @@ document.getElementById('btn-create-user').addEventListener('click', async ()=>{
         document.getElementById('new-username').value='';
         document.getElementById('new-correo').value='';
         document.getElementById('new-password').value='';
-        document.getElementById('new-custom-role-name').value='';
+        if(customRoleNameInput) customRoleNameInput.value='';
+        if(adminCheckbox) adminCheckbox.checked = false;
         Array.from(document.querySelectorAll('input[data-scope="new-user"]')).forEach(i=>{ i.checked = false; });
         await loadUsers();
         await loadRolesIntoCreate();
         alert('Usuario creado');
     }catch(e){ alert('Error: '+e.message); }
 });
+    }
 
 // populate roles into create select
 async function loadRolesIntoCreate(){
+    if(!CAN_VIEW_ROLES) return;
     try{
         const r = await fetch('/api/roles');
         if(!r.ok) return;
@@ -246,16 +299,19 @@ async function deleteUser(id){
 document.getElementById('btn-refresh').addEventListener('click', loadUsers);
 
 // Delete non-admins action
-document.getElementById('btn-delete-nonadmin').addEventListener('click', async ()=>{
-    if(!confirm('Esto borrará todos los usuarios excepto "admin". Continuar?')) return;
-    try{
-        const res = await fetch('/delete_nonadmin_users', {method:'POST'});
-        if(!res.ok) throw new Error(await res.text());
-        const txt = await res.text();
-        document.getElementById('mensaje').textContent = txt;
-        await loadUsers();
-    }catch(e){ alert('Error: '+e.message); }
-});
+const btnDeleteNonAdmin = document.getElementById('btn-delete-nonadmin');
+if(btnDeleteNonAdmin){
+    btnDeleteNonAdmin.addEventListener('click', async ()=>{
+        if(!confirm('Esto borrará todos los usuarios excepto "admin". Continuar?')) return;
+        try{
+            const res = await fetch('/delete_nonadmin_users', {method:'POST'});
+            if(!res.ok) throw new Error(await res.text());
+            const txt = await res.text();
+            document.getElementById('mensaje').textContent = txt;
+            await loadUsers();
+        }catch(e){ alert('Error: '+e.message); }
+    });
+}
 
 // Roles / Módulos modal wiring (selección simple por módulo)
 const SIMPLE_MODULES = [
@@ -405,9 +461,13 @@ async function loadPermissions(){
     }
 }
 
-makeModuleCheckboxes('new-user-modules', 'new-user');
+if(CAN_MANAGE_ROLES_PERMISSIONS){
+    makeModuleCheckboxes('new-user-modules', 'new-user');
+}
 
-document.getElementById('btn-create-role').addEventListener('click', async ()=>{
+const btnCreateRole = document.getElementById('btn-create-role');
+if(btnCreateRole){
+btnCreateRole.addEventListener('click', async ()=>{
     try{
         const name = document.getElementById('role-new-name').value.trim();
         const description = document.getElementById('role-new-description').value.trim();
@@ -427,17 +487,25 @@ document.getElementById('btn-create-role').addEventListener('click', async ()=>{
         alert('Role creado');
     }catch(e){ alert('Error creando role: '+e.message); }
 });
+}
 
-document.getElementById('btn-manage-roles').addEventListener('click', async ()=>{
+const btnManageRoles = document.getElementById('btn-manage-roles');
+if(btnManageRoles){
+btnManageRoles.addEventListener('click', async ()=>{
     try{
         await openRolesModal();
     }catch(e){ alert('Error: '+e.message); }
 });
+}
 
 let ALL_ROLES = [];
 
 async function openRolesModal(){
+    if(!CAN_MANAGE_ROLES_PERMISSIONS){
+        return;
+    }
     const modal = document.getElementById('roles-modal');
+    if(!modal) return;
     modal.style.display = 'block';
     const rolesResp = await fetchJson('/api/roles');
     ALL_ROLES = rolesResp.roles || rolesResp;
@@ -484,6 +552,7 @@ async function openRolesModal(){
 
 function closeRolesModal(){
     const modal = document.getElementById('roles-modal');
+    if(!modal) return;
     modal.style.display = 'none';
 }
 
@@ -505,7 +574,9 @@ function renderRoleModules(roleId){
 }
 
 // Inicial
-loadPermissions();
+if(CAN_MANAGE_ROLES_PERMISSIONS){
+    loadPermissions();
+}
 loadUsers();
 </script>
 </body>
