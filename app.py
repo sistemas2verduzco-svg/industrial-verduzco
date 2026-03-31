@@ -7137,6 +7137,7 @@ def api_contpaq_conciliacion():
                 )
 
             faltantes_indice.append({
+                'source_document_id': d_match['source_document_id'] if d_match else None,
                 'folio': d_match['folio'] if d_match else (idx.folio or ''),
                 'semana': idx.semana,
                 'sucursal': idx.sucursal,
@@ -7149,7 +7150,7 @@ def api_contpaq_conciliacion():
             })
 
         faltantes_inyectados = 0
-    injected_remision_detail_keys = set()
+        injected_remision_detail_keys = set()
         # Inyectamos faltantes solo en la primera pagina para mantener navegacion estable.
         if page == 1:
             # Mapa de destino por (semana_sin_año, sucursal). Preferimos folios P- cuando existan.
@@ -7201,7 +7202,7 @@ def api_contpaq_conciliacion():
 
                 # Si el faltante vino de un pedido D, inyectar solo las partidas de remision
                 # que correspondan a esa partida, no la remision completa.
-                source_doc_id = d_match.get('source_document_id') if d_match else None
+                source_doc_id = f.get('source_document_id')
                 if source_doc_id:
                     target_item.setdefault('remisiones', [])
                     for r in remisiones_map.get(source_doc_id, []):
