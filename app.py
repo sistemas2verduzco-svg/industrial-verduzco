@@ -986,6 +986,13 @@ def _contpaq_week_match_key(semana_value=None, fecha_value=None):
     return semana_norm
 
 
+def _contpaq_title_week_key(title_value=None, semana_value=None, fecha_value=None):
+    title_norm = _contpaq_norm_text(title_value)
+    if ' AL ' in title_norm and ' DE ' in title_norm:
+        return title_norm
+    return _contpaq_week_match_key(semana_value, fecha_value)
+
+
 def _contpaq_detect_import_column(columns, aliases):
     normalized = [(col, col.strip().lower().replace('-', '').replace('_', '').replace(' ', '')) for col in columns]
     for alias in aliases:
@@ -6814,8 +6821,19 @@ def api_contpaq_conciliacion():
                 p for p in compare_pedidos
                 if titulo_norm in _contpaq_norm_text(p.titulo)
                 or titulo_norm in _contpaq_norm_text(p.periodo_semana)
-                or titulo_norm in _contpaq_week_match_key(p.periodo_semana, p.fecha_documento)
+                or titulo_norm in _contpaq_title_week_key(p.titulo, p.periodo_semana, p.fecha_documento)
             ]
+
+        semana_options = sorted({
+            _contpaq_title_week_key(p.titulo, p.periodo_semana, p.fecha_documento)
+            for p in compare_pedidos
+            if _contpaq_title_week_key(p.titulo, p.periodo_semana, p.fecha_documento)
+        })
+        sucursal_options = sorted({
+            str(p.sucursal or '').strip()
+            for p in compare_pedidos
+            if str(p.sucursal or '').strip()
+        })
 
         total_records = len(compare_pedidos)
         compare_map = {p.document_id: p for p in compare_pedidos}
@@ -6883,7 +6901,7 @@ def api_contpaq_conciliacion():
             if not p_cmp:
                 continue
 
-            semana_cmp_norm = _contpaq_week_match_key(p_cmp.periodo_semana, p_cmp.fecha_documento)
+            semana_cmp_norm = _contpaq_title_week_key(p_cmp.titulo, p_cmp.periodo_semana, p_cmp.fecha_documento)
             sucursal_cmp_norm = _norm_txt(p_cmp.sucursal)
             folio_cmp_norm = _norm_txt(p_cmp.doc_folio)
 
@@ -6916,7 +6934,7 @@ def api_contpaq_conciliacion():
         for p in pedidos:
             pedido_rows = []
             pedido_total = 0.0
-            semana_norm = _contpaq_week_match_key(p.periodo_semana, p.fecha_documento)
+            semana_norm = _contpaq_title_week_key(p.titulo, p.periodo_semana, p.fecha_documento)
             sucursal_norm = _norm_txt(p.sucursal)
             folio_norm = _norm_txt(p.doc_folio)
 
@@ -6996,7 +7014,7 @@ def api_contpaq_conciliacion():
             row_key = (
                 _contpaq_norm_text(idx.clave_producto),
                 _contpaq_norm_qty(idx.cantidad),
-                _contpaq_week_match_key(idx.semana, idx.fecha_documento),
+                _contpaq_norm_text(idx.semana),
                 _contpaq_norm_text(idx.sucursal),
             )
             if row_key in p_set:
@@ -7148,6 +7166,10 @@ def api_contpaq_conciliacion():
             'items': items,
             'total': len(items),
             'resumen': resumen,
+            'filter_options': {
+                'semanas': semana_options,
+                'sucursales': sucursal_options,
+            },
             'page': page,
             'limit': limit,
             'total_records': total_records,

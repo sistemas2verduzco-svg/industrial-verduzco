@@ -28,29 +28,14 @@
             flex-wrap: wrap;
         }
 
-        .combo-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr auto;
-            gap: 10px;
-            margin: 0 0 14px;
-            align-items: center;
-        }
-
-        .combo-row select {
+        .toolbar input,
+        .toolbar select {
             width: 100%;
             padding: 10px 12px;
             border: 1px solid #cfd8dc;
             border-radius: 8px;
             font-size: 14px;
             background: #fff;
-        }
-
-        .toolbar input {
-            width: 100%;
-            padding: 10px 12px;
-            border: 1px solid #cfd8dc;
-            border-radius: 8px;
-            font-size: 14px;
         }
 
         .status {
@@ -176,8 +161,12 @@
             <input id="q" type="text" placeholder="Busqueda global (varios terminos)">
             <input id="folio" type="text" placeholder="Folio pedido/remision">
             <input id="cliente" type="text" placeholder="Cliente">
-            <input id="sucursal" type="text" placeholder="Sucursal">
-            <input id="titulo" type="text" placeholder="Titulo o semana">
+            <select id="sucursal">
+                <option value="">Sucursal (todas)</option>
+            </select>
+            <select id="titulo">
+                <option value="">Semana desde titulo (todas)</option>
+            </select>
             <input id="fecha_desde" type="date" title="Fecha desde">
             <input id="fecha_hasta" type="date" title="Fecha hasta">
             <button class="btn btn-primary" id="btnBuscar">Aplicar filtros</button>
@@ -197,11 +186,6 @@
         </div>
 
         <div id="resumen" class="summary-box" style="display:none;"></div>
-        <div class="combo-row">
-            <select id="semanaCombo"><option value="">Semana (todas)</option></select>
-            <select id="sucursalCombo"><option value="">Sucursal (todas)</option></select>
-            <button class="btn btn-secondary" id="btnToggleRemisiones" style="background:#e8f2ff;border-color:#bfd7ff;color:#0b4b9c;">Mostrar/Ocultar remisiones</button>
-        </div>
         <div class="pager">
             <label for="limit" style="font-size:12px;color:#455a64;">Registros por pagina</label>
             <select id="limit" style="padding:6px 8px;border:1px solid #cfd8dc;border-radius:6px;">
@@ -210,6 +194,7 @@
                 <option value="240">240</option>
                 <option value="500">500</option>
             </select>
+            <button class="btn btn-secondary" id="btnToggleRemisiones" style="background:#e8f2ff;border-color:#bfd7ff;color:#0b4b9c;">Mostrar/Ocultar remisiones</button>
             <button class="btn btn-secondary" id="btnPrev">Anterior</button>
             <button class="btn btn-secondary" id="btnNext">Siguiente</button>
             <span id="pageInfo" class="status" style="margin:0;"></span>
@@ -230,6 +215,32 @@
             const d = new Date(v);
             if (Number.isNaN(d.getTime())) return String(v);
             return d.toLocaleDateString('es-MX');
+        }
+
+        function esc(v) {
+            return String(v || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function syncTopCombos(filterOptions = {}) {
+            const semanaSelect = document.getElementById('titulo');
+            const sucursalSelect = document.getElementById('sucursal');
+            const semanaValue = semanaSelect.value;
+            const sucursalValue = sucursalSelect.value;
+            const semanas = Array.isArray(filterOptions.semanas) ? filterOptions.semanas : [];
+            const sucursales = Array.isArray(filterOptions.sucursales) ? filterOptions.sucursales : [];
+
+            semanaSelect.innerHTML = '<option value="">Semana desde titulo (todas)</option>'
+                + semanas.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+            sucursalSelect.innerHTML = '<option value="">Sucursal (todas)</option>'
+                + sucursales.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+
+            semanaSelect.value = semanas.includes(semanaValue) ? semanaValue : '';
+            sucursalSelect.value = sucursales.includes(sucursalValue) ? sucursalValue : '';
         }
 
         function render(items, resumen) {
@@ -261,7 +272,7 @@
             for (const pedido of items) {
                 for (const d of (pedido.detalles || [])) {
                     pedidoRows.push({
-                        semana: pedido.periodo_semana || '',
+                        semana: pedido.semana_match_key || pedido.titulo || pedido.periodo_semana || '',
                         fecha: d.fecha_documento || pedido.fecha_documento || '',
                         folio: d.folio || pedido.doc_folio || '',
                         serie: d.serie || pedido.serie || '',
@@ -279,7 +290,7 @@
                 for (const r of (pedido.remisiones || [])) {
                     for (const rd of (r.detalles || [])) {
                         remisionRows.push({
-                            semana: pedido.periodo_semana || '',
+                            semana: pedido.semana_match_key || pedido.titulo || pedido.periodo_semana || '',
                             folio_pedido: pedido.doc_folio || '',
                             folio_remision: r.doc_folio || '',
                             fecha: r.fecha_documento || '',
@@ -359,16 +370,6 @@
                 </div>
             `;
 
-            const semanas = [...new Set(pedidoRows.map(x => x.semana).filter(Boolean))].sort();
-            const sucursales = [...new Set(pedidoRows.map(x => x.sucursal).filter(Boolean))].sort();
-            const semCombo = document.getElementById('semanaCombo');
-            const sucCombo = document.getElementById('sucursalCombo');
-            const semVal = semCombo.value;
-            const sucVal = sucCombo.value;
-            semCombo.innerHTML = '<option value="">Semana (todas)</option>' + semanas.map(s => `<option value="${s}">${s}</option>`).join('');
-            sucCombo.innerHTML = '<option value="">Sucursal (todas)</option>' + sucursales.map(s => `<option value="${s}">${s}</option>`).join('');
-            semCombo.value = semanas.includes(semVal) ? semVal : '';
-            sucCombo.value = sucursales.includes(sucVal) ? sucVal : '';
         }
 
         let currentPage = 1;
@@ -399,11 +400,6 @@
                 if (val) params.set(campo, val);
             }
 
-            const semanaComboVal = (document.getElementById('semanaCombo')?.value || '').trim();
-            const sucursalComboVal = (document.getElementById('sucursalCombo')?.value || '').trim();
-            if (semanaComboVal) params.set('titulo', semanaComboVal);
-            if (sucursalComboVal) params.set('sucursal', sucursalComboVal);
-
             params.set('limit', (document.getElementById('limit')?.value || '120'));
             params.set('page', String(page));
 
@@ -415,6 +411,7 @@
             }
 
             updatePager(data);
+            syncTopCombos(data.filter_options || {});
             render(data.items || [], data.resumen || null);
             status.textContent = `Mostrando ${data.total || 0} registro(s) en pagina ${currentPage}.`;
         }
@@ -487,14 +484,6 @@
             if (!wrap) return;
             wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
         });
-        document.getElementById('semanaCombo').addEventListener('change', () => {
-            currentPage = 1;
-            cargar(1);
-        });
-        document.getElementById('sucursalCombo').addEventListener('change', () => {
-            currentPage = 1;
-            cargar(1);
-        });
         document.getElementById('limit').addEventListener('change', () => {
             currentPage = 1;
             cargar(1);
@@ -525,7 +514,7 @@
             cargar(1);
         });
 
-        for (const id of ['q', 'folio', 'cliente', 'sucursal', 'titulo']) {
+        for (const id of ['q', 'folio', 'cliente']) {
             document.getElementById(id).addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
                     e.preventDefault();
@@ -534,6 +523,15 @@
                 }
             });
         }
+
+        document.getElementById('sucursal').addEventListener('change', () => {
+            currentPage = 1;
+            cargar(1);
+        });
+        document.getElementById('titulo').addEventListener('change', () => {
+            currentPage = 1;
+            cargar(1);
+        });
 
         cargar(1);
     </script>
