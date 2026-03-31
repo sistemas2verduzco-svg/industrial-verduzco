@@ -1,114 +1,63 @@
-CONTPAQ - GUIA OPERATIVA ANTI-RENDER
+CONTPAQ - QUE HACER AHORA (PASO A PASO)
 
-ESTADO REAL
-1. La nube ya funciona.
-2. El push desde servidor interno ya fue validado.
-3. La vista privada ya existe.
-4. Ahora hay que desplegar la ultima version con:
-	 - filtros mejorados
-	 - indice de sucursales cargable por Excel/CSV
-	 - faltantes del indice inyectados al flujo principal de pedidos
+IMPORTANTE
+1. Base SQL de CONTPAQ: SOLO LECTURA (SELECT).
+2. NO se hace INSERT, UPDATE, DELETE en CONTPAQ.
+3. Las escrituras son solo en la BD de la plataforma (nube PostgreSQL).
 
-REGLA
-1. Linux: solo servidor nube por SSH.
-2. PowerShell: solo servidor interno Windows.
-
-CONTPAQ SQL SERVER (IMPORTANTE)
-1. SOLO LECTURA (SELECT).
-2. NO se ejecuta INSERT, UPDATE ni DELETE en la base de CONTPAQ.
-3. Las inserciones/actualizaciones son unicamente en la base de la plataforma (nube).
+ORDEN OBLIGATORIO
+1. Primero NUBE (deploy).
+2. Luego SERVIDOR INTERNO WINDOWS (backfill/push).
+3. Al final validar en la vista.
 
 ==================================================
-SECCION 1 - SUBIR A LA REPO (TU MAQUINA)
+PASO 1 - NUBE (SSH LINUX)
 ==================================================
 
-Rama correcta:
-contpaq-mi4-integration
-
-Comandos:
-git switch contpaq-mi4-integration
-git add app.py
-git add models.py
-git add scripts/contpaq_sync_agent.py
-git add templates/contpaq_conciliacion.html
-git add .env.example
-git add CONTPAQ_DESPLIEGUE_PASO_A_PASO.txt
-git status
-git commit -m "CONTPAQ: backfill historico automatico e indice sucursales"
-git push -u origin contpaq-mi4-integration
-
-NO subir:
-backups/
-scripts/contpaq_sync_agent.env
-
-==================================================
-SECCION 2 - DEPLOY EN NUBE
-==================================================
-
-Entrar por SSH:
+Entrar:
 ssh root@209.97.188.176
 
-Ya dentro del servidor nube:
+Dentro de nube ejecutar EXACTO:
 cd ~/industrial-verduzco
 git fetch origin --prune
-git checkout origin/contpaq-mi4-integration -- app.py
-git checkout origin/contpaq-mi4-integration -- models.py
-git checkout origin/contpaq-mi4-integration -- templates/contpaq_conciliacion.html
+git checkout origin/contpaq-mi4-integration -- app.py templates/contpaq_conciliacion.html CONTPAQ_DESPLIEGUE_PASO_A_PASO.txt
+if ! grep -q '^CONTPAQ_D_FALLBACK_DAYS=' .env; then echo 'CONTPAQ_D_FALLBACK_DAYS=31' >> .env; else sed -i 's/^CONTPAQ_D_FALLBACK_DAYS=.*/CONTPAQ_D_FALLBACK_DAYS=31/' .env; fi
 docker compose up -d --no-deps --build app
 docker compose exec app python create_db.py
-docker compose logs --tail=40 app
+docker compose logs --tail=60 app
 curl -s -o /dev/null -w "%{http_code}\n" https://controlcalidad360.site/contpaq/conciliacion
 
 Esperado:
 302 o 200
 
 ==================================================
-SECCION 3 - VERIFICAR TABLA NUEVA DEL INDICE
+PASO 2 - SERVIDOR INTERNO WINDOWS (POWERSHELL)
 ==================================================
 
-En la nube:
-cd ~/industrial-verduzco
-docker compose exec -T db psql -U catalogo_user -d catalogo_db -c "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('contpaq_sucursales_indice','contpaq_pedidos','contpaq_pedidos_detalle','contpaq_remisiones','contpaq_remisiones_detalle','contpaq_sync_runs') ORDER BY 1;"
+En servidor interno, primero actualiza script local:
+Copiar scripts/contpaq_sync_agent.py (repo) a C:\contpaq-sync\contpaq_sync_agent.py
 
-Debe aparecer:
-contpaq_sucursales_indice
+ANTI-RENDER (EJECUTAR LINEA POR LINEA SI SE TRABA EL PEGADO)
+Ctrl+C
+New-Item -ItemType Directory -Path C:\contpaq-sync -Force | Out-Null
+$srcPy = @("C:\Users\Administrador\industrial-verduzco\scripts\contpaq_sync_agent.py","C:\Users\Jose\industrial-verduzco\scripts\contpaq_sync_agent.py") | Where-Object { Test-Path $_ } | Select-Object -First 1
+$srcEnv = @("C:\Users\Administrador\industrial-verduzco\scripts\contpaq_sync_agent.env","C:\Users\Jose\industrial-verduzco\scripts\contpaq_sync_agent.env") | Where-Object { Test-Path $_ } | Select-Object -First 1
+Copy-Item $srcPy C:\contpaq-sync\contpaq_sync_agent.py -Force
+Copy-Item $srcEnv C:\contpaq-sync\.env -Force
+$envFile = "C:\contpaq-sync\.env"
+(Get-Content $envFile) -replace '^CONTPAQ_START_DATE=.*$', 'CONTPAQ_START_DATE=2025-01-01' | Set-Content $envFile -Encoding ascii
+if (-not (Select-String -Path $envFile -Pattern '^CONTPAQ_END_DATE=' -Quiet)) { Add-Content $envFile 'CONTPAQ_END_DATE=' }
+if (-not (Select-String -Path $envFile -Pattern '^CONTPAQ_CHUNK_DAYS=' -Quiet)) { Add-Content $envFile 'CONTPAQ_CHUNK_DAYS=31' }
+if (-not (Select-String -Path $envFile -Pattern '^CONTPAQ_REQUEST_TIMEOUT=' -Quiet)) { Add-Content $envFile 'CONTPAQ_REQUEST_TIMEOUT=300' }
+(Get-Content $envFile) -replace '^CONTPAQ_END_DATE=.*$', 'CONTPAQ_END_DATE=' | Set-Content $envFile -Encoding ascii
+(Get-Content $envFile) -replace '^CONTPAQ_CHUNK_DAYS=.*$', 'CONTPAQ_CHUNK_DAYS=31' | Set-Content $envFile -Encoding ascii
+(Get-Content $envFile) -replace '^CONTPAQ_REQUEST_TIMEOUT=.*$', 'CONTPAQ_REQUEST_TIMEOUT=300' | Set-Content $envFile -Encoding ascii
+py -3 -m pip install pyodbc requests
+py -3 -u C:\contpaq-sync\contpaq_sync_agent.py 2>&1 | Tee-Object C:\contpaq-sync\run_sync.log
 
-==================================================
-SECCION 4 - CARGAR ARCHIVO DE SUCURSALES
-==================================================
-
-Abre la plataforma:
-https://controlcalidad360.site/contpaq/conciliacion
-
-En esa vista:
-1. Busca el bloque "Indice principal de sucursales".
-2. Selecciona tu archivo .xlsx, .xls o .csv.
-3. Pulsa "Subir indice".
-
-Columnas obligatorias del archivo:
-SEMANA
-CLAVE
-CANTIDAD
-SUCURSAL
-
-Columnas opcionales:
-FOLIO
-FECHA
-DESCRIPCION
-
-==================================================
-SECCION 5 - REFRESCAR DATOS DESDE CONTPAQ
-==================================================
-
-Servidor interno PowerShell:
-1. Actualizar script local con la version nueva del repo:
-	copiar scripts/contpaq_sync_agent.py a C:\contpaq-sync\contpaq_sync_agent.py
-
-2. Configurar y ejecutar:
+Luego ejecutar:
 $envFile = "C:\contpaq-sync\.env"
 $script = "C:\contpaq-sync\contpaq_sync_agent.py"
-
-Configurar UNA sola vez para traer TODO desde 2025-01-01 hasta hoy:
 
 (Get-Content $envFile) -replace '^CONTPAQ_START_DATE=.*$', 'CONTPAQ_START_DATE=2025-01-01' | Set-Content $envFile -Encoding ascii
 if (-not (Select-String -Path $envFile -Pattern '^CONTPAQ_END_DATE=' -Quiet)) { Add-Content $envFile 'CONTPAQ_END_DATE=' }
@@ -121,51 +70,29 @@ if (-not (Select-String -Path $envFile -Pattern '^CONTPAQ_REQUEST_TIMEOUT=' -Qui
 Ejecutar historico completo:
 py -3 $script
 
-IMPORTANTE:
-1. El script ahora manda ventanas automaticas de 31 dias.
-2. Trae desde 2025-01-01 hasta la fecha actual.
-3. Ya no dejar CONTPAQ_START_DATE en 2026-03-01 si ocupas todo el historico.
-
-Si despues quieres volver a un rango operativo mas corto:
-(Get-Content $envFile) -replace '^CONTPAQ_START_DATE=.*$', 'CONTPAQ_START_DATE=2026-03-01' | Set-Content $envFile -Encoding ascii
-
 ==================================================
-SECCION 6 - VERIFICACION FINAL EN NUBE
+PASO 3 - VALIDAR EN NUBE (SSH LINUX)
 ==================================================
 
 cd ~/industrial-verduzco
-docker compose exec -T db psql -U catalogo_user -d catalogo_db -c "SELECT COUNT(*) AS pedidos FROM contpaq_pedidos;"
-docker compose exec -T db psql -U catalogo_user -d catalogo_db -c "SELECT COUNT(*) AS remisiones FROM contpaq_remisiones;"
-docker compose exec -T db psql -U catalogo_user -d catalogo_db -c "SELECT COUNT(*) AS indice_sucursales FROM contpaq_sucursales_indice;"
-docker compose exec -T db psql -U catalogo_user -d catalogo_db -c "SELECT id, status, started_at, finished_at, pedidos_upserted, remisiones_upserted FROM contpaq_sync_runs ORDER BY id DESC LIMIT 10;"
-docker compose exec -T db psql -U catalogo_user -d catalogo_db -c "SELECT MIN(fecha_documento) AS min_fecha_pedido, MAX(fecha_documento) AS max_fecha_pedido FROM contpaq_pedidos;"
-
-==================================================
-SECCION 7 - SI NO VES REGISTROS VIEJOS
-==================================================
-
-CAUSA COMUN
-1. La vista carga por pagina (no todo de golpe).
-2. Si hay miles de registros, debes usar paginacion y/o filtro de fecha.
-
-QUE HACER EN LA VISTA
-1. Poner "Fecha desde" (ejemplo: 2025-01-01).
-2. Poner "Fecha hasta" vacio o fecha actual.
-3. Subir "Registros por pagina" a 240 o 500.
-4. Navegar con botones "Anterior / Siguiente".
-
-VALIDAR SI YA EXISTEN EN BD
-1. En nube ejecutar:
 docker compose exec -T db psql -U catalogo_user -d catalogo_db -c "SELECT MIN(fecha_documento) AS min_fecha_pedido, MAX(fecha_documento) AS max_fecha_pedido, COUNT(*) AS total FROM contpaq_pedidos;"
+docker compose exec -T db psql -U catalogo_user -d catalogo_db -c "SELECT id, status, started_at, finished_at, pedidos_upserted, remisiones_upserted FROM contpaq_sync_runs ORDER BY id DESC LIMIT 10;"
 
-SI MIN FECHA NO LLEGA A 2025-01-01
-1. Falta correr backfill en servidor interno Windows con C:\contpaq-sync\contpaq_sync_agent.py.
-2. CONTPAQ sigue SOLO LECTURA (SELECT), no se toca su base.
+Esperado:
+1. min_fecha_pedido cercano o igual a 2025-01-01
+2. corridas recientes en status success
 
 ==================================================
-URL FINAL
+PASO 4 - VALIDAR EN LA PANTALLA
 ==================================================
 
+URL:
 https://controlcalidad360.site/contpaq/conciliacion
+
+Si no ves todo:
+1. Fecha desde = 2025-01-01
+2. Fecha hasta = vacio
+3. Registros por pagina = 240 o 500
+4. Usar botones Anterior/Siguiente
 
 FIN

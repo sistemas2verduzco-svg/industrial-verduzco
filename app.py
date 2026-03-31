@@ -6702,6 +6702,7 @@ def api_contpaq_conciliacion():
         titulo = (request.args.get('titulo') or '').strip()
         fecha_desde_raw = (request.args.get('fecha_desde') or '').strip()
         fecha_hasta_raw = (request.args.get('fecha_hasta') or '').strip()
+        d_fallback_days = max(1, min(int(os.getenv('CONTPAQ_D_FALLBACK_DAYS', '14') or '14'), 31))
 
         limit = request.args.get('limit', default=120, type=int)
         limit = max(1, min(limit, 500))
@@ -6847,9 +6848,12 @@ def api_contpaq_conciliacion():
                     semana_norm,
                     sucursal_norm,
                 )
-                if folio_norm.startswith('P-'):
-                    p_set.add(row_key)
-                elif folio_norm.startswith('D'):
+                # Regla del script original: existencia en el conjunto de pedidos
+                # de la semana/sucursal sin distinguir serie.
+                p_set.add(row_key)
+
+                # Las partidas de serie D se conservan para enriquecer faltantes reales.
+                if folio_norm.startswith('D'):
                     d_rows.append({
                         'folio': p.doc_folio,
                         'semana': p.periodo_semana,
@@ -6858,6 +6862,11 @@ def api_contpaq_conciliacion():
                         'descripcion': d.descripcion,
                         'cantidad': d.cantidad,
                         'precio_unitario': d.precio_unitario,
+                        'line_number': d.line_number,
+                        'fecha_documento': p.fecha_documento.date() if p.fecha_documento else None,
+                        'clave_norm': _norm_txt(d.clave_producto),
+                        'cantidad_norm': _norm_num(d.cantidad),
+                        'sucursal_norm': sucursal_norm,
                         'key': row_key,
                     })
 
@@ -6925,6 +6934,34 @@ def api_contpaq_conciliacion():
                 continue
 
             d_match = next((row for row in d_rows if row['key'] == row_key), None)
+
+            # Si no hay match exacto por semana, buscar en serie D por fecha dentro de rango
+            # con misma clave, cantidad y sucursal.
+            if d_match is None:
+                idx_fecha = None
+                if idx.fecha_documento:
+                    try:
+                        idx_fecha = idx.fecha_documento.date() if hasattr(idx.fecha_documento, 'date') else idx.fecha_documento
+                    except Exception:
+                        idx_fecha = None
+
+                if idx_fecha is not None:
+                    clave_norm = _contpaq_norm_text(idx.clave_producto)
+                    cantidad_norm = _contpaq_norm_qty(idx.cantidad)
+                    sucursal_norm = _contpaq_norm_text(idx.sucursal)
+
+                    d_match = next(
+                        (
+                            row for row in d_rows
+                            if row.get('fecha_documento')
+                            and row.get('clave_norm') == clave_norm
+                            and row.get('cantidad_norm') == cantidad_norm
+                            and row.get('sucursal_norm') == sucursal_norm
+                            and abs((row['fecha_documento'] - idx_fecha).days) <= d_fallback_days
+                        ),
+                        None,
+                    )
+
             faltantes_indice.append({
                 'folio': d_match['folio'] if d_match else (idx.folio or ''),
                 'semana': idx.semana,
@@ -6934,6 +6971,7 @@ def api_contpaq_conciliacion():
                 'cantidad': d_match['cantidad'] if d_match else idx.cantidad,
                 'precio_unitario': d_match['precio_unitario'] if d_match else None,
                 'origen': 'PEDIDO_D' if d_match else 'INDICE_SUCURSALES',
+                'line_number_origen': d_match['line_number'] if d_match else None,
             })
 
         faltantes_inyectados = 0

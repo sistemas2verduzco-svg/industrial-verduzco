@@ -261,8 +261,12 @@
             }
 
             let html = '';
+            let remisionesUid = 0;
             for (const pedido of items) {
+                remisionesUid += 1;
                 let remisionesHtml = '';
+                const remisionesCount = (pedido.remisiones || []).length;
+                const remisionesPanelId = `rem-${pedido.document_id || remisionesUid}`;
                 if (pedido.remisiones && pedido.remisiones.length) {
                     for (const rem of pedido.remisiones) {
                         remisionesHtml += `
@@ -290,12 +294,29 @@
                         </div>
                         <div class="section-title">Partidas del pedido</div>
                         ${renderTablaDetalles(pedido.detalles || [])}
-                        <div class="section-title">Remisiones relacionadas</div>
-                        ${remisionesHtml}
+                        <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                            <span>Remisiones relacionadas</span>
+                            <button class="btn btn-secondary btn-toggle-remisiones" data-target="${remisionesPanelId}">
+                                Mostrar/Ocultar (${remisionesCount})
+                            </button>
+                        </div>
+                        <div id="${remisionesPanelId}" style="display:none;">
+                            ${remisionesHtml}
+                        </div>
                     </div>
                 `;
             }
             el.innerHTML = html;
+
+            for (const btn of el.querySelectorAll('.btn-toggle-remisiones')) {
+                btn.addEventListener('click', () => {
+                    const targetId = btn.getAttribute('data-target');
+                    if (!targetId) return;
+                    const panel = el.querySelector(`#${CSS.escape(targetId)}`);
+                    if (!panel) return;
+                    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+                });
+            }
         }
 
         let currentPage = 1;
