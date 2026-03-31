@@ -7379,35 +7379,47 @@ def api_contpaq_conciliacion():
                 # que correspondan a esa partida, no la remision completa.
                 source_doc_id = f.get('source_document_id')
                 if source_doc_id:
+                    faltante_clave_norm = _norm_txt(f.get('clave_producto'))
+                    faltante_cantidad_norm = _norm_num(f.get('cantidad'))
                     target_item.setdefault('remisiones', [])
                     for r in remisiones_map.get(source_doc_id, []):
-                        matched_details = []
+                        exact_qty_details = []
+                        clave_only_details = []
                         for rd in remision_detalles_map.get(r.document_id, []):
-                            if (
-                                _norm_txt(rd.clave_producto) == d_match.get('clave_norm')
-                                and _norm_num(rd.cantidad) == d_match.get('cantidad_norm')
-                            ):
-                                detail_key = (target_idx, r.document_id, rd.line_number)
-                                if detail_key in injected_remision_detail_keys:
-                                    continue
-                                injected_remision_detail_keys.add(detail_key)
-                                matched_details.append({
-                                    'line_number': rd.line_number,
-                                    'clave_producto': rd.clave_producto,
-                                    'descripcion': rd.descripcion,
-                                    'cantidad': rd.cantidad,
-                                    'precio_unitario': rd.precio_unitario,
-                                    'total_partida': rd.total_partida,
-                                    'es_inyectado': True,
-                                })
+                            if _norm_txt(rd.clave_producto) != faltante_clave_norm:
+                                continue
 
-                        if matched_details:
+                            detail_payload = {
+                                'line_number': rd.line_number,
+                                'clave_producto': rd.clave_producto,
+                                'descripcion': rd.descripcion,
+                                'cantidad': rd.cantidad,
+                                'precio_unitario': rd.precio_unitario,
+                                'total_partida': rd.total_partida,
+                                'es_inyectado': True,
+                            }
+
+                            if _norm_num(rd.cantidad) == faltante_cantidad_norm:
+                                exact_qty_details.append(detail_payload)
+                            else:
+                                clave_only_details.append(detail_payload)
+
+                        matched_details = exact_qty_details or clave_only_details
+                        filtered_details = []
+                        for md in matched_details:
+                            detail_key = (target_idx, r.document_id, md.get('line_number'))
+                            if detail_key in injected_remision_detail_keys:
+                                continue
+                            injected_remision_detail_keys.add(detail_key)
+                            filtered_details.append(md)
+
+                        if filtered_details:
                             target_item['remisiones'].append({
                                 'document_id': r.document_id,
                                 'doc_folio': r.doc_folio,
                                 'sucursal': r.sucursal,
                                 'fecha_documento': r.fecha_documento.isoformat() if r.fecha_documento else None,
-                                'detalles': matched_details,
+                                'detalles': filtered_details,
                                 'es_inyectado': True,
                             })
 
