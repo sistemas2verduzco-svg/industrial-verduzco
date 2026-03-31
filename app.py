@@ -1027,6 +1027,17 @@ def run_contpaq_sync(trigger='manual'):
     db.session.add(sync_run)
     db.session.commit()
 
+    # En la nube no hay conexion directa a SQL Server; el agente Windows hace el push.
+    try:
+        import pyodbc  # noqa: F401
+    except ImportError:
+        sync_run.status = 'skipped'
+        sync_run.message = 'pyodbc no disponible en este servidor. Usa el agente Windows para sincronizar.'
+        sync_run.finished_at = datetime.utcnow()
+        db.session.commit()
+        return {'ok': True, 'skipped': True, 'run_id': sync_run.id,
+                'message': 'Sincronizacion no disponible en la nube. Ejecuta el agente Windows para enviar datos.'}
+
     if not _CONTPAQ_SYNC_LOCK.acquire(blocking=False):
         sync_run.status = 'skipped'
         sync_run.message = 'Sincronizacion en curso; se omitio ejecucion paralela.'
@@ -6926,7 +6937,10 @@ def api_contpaq_conciliacion():
                 semana_cmp_norm,
                 sucursal_cmp_norm,
             )
-            p_set.add(row_key_cmp)
+
+            # Solo los pedidos P confirman existencia; D solo sirven como fuente de inyeccion.
+            if not folio_cmp_norm.startswith('D'):
+                p_set.add(row_key_cmp)
 
             if folio_cmp_norm.startswith('D'):
                 d_rows.append({
