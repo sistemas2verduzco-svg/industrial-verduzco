@@ -4736,7 +4736,7 @@ def api_create_user():
         return jsonify({'error': 'Permiso denegado'}), 403
     data = request.get_json() or {}
     username = data.get('username')
-    correo = data.get('correo')
+    correo = data.get('correo') or None  # empty string -> None to avoid unique constraint
     password = data.get('password')
     role_name = data.get('role')
     custom_role_name = (data.get('custom_role_name') or '').strip()
@@ -4748,6 +4748,8 @@ def api_create_user():
         return jsonify({'error': 'username y password requeridos'}), 400
     if Usuario.query.filter_by(username=username).first():
         return jsonify({'error': 'username ya existe'}), 409
+    if correo and Usuario.query.filter_by(correo=correo).first():
+        return jsonify({'error': 'correo ya está registrado'}), 409
     u = Usuario(username=username, correo=correo, es_admin=es_admin, activo=True)
     u.set_password(password)
 
@@ -4868,7 +4870,7 @@ def api_update_user(user_id):
     role_name = data.get('role')
 
     if correo is not None:
-        u.correo = correo
+        u.correo = correo or None  # empty string -> None
     if password:
         u.set_password(password)
     if es_admin is not None:
