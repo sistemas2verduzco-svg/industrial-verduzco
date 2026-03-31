@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maquinaria y Ensamble - Calidad</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    {% include '_sidebar.html' %}
+    <div class="container" style="padding-top:20px;">
+        <h2 style="margin:0 0 6px 0;">Maquinaria y Ensamble - Calidad</h2>
+        <div style="color:#64748b; font-size:13px; margin-bottom:14px;">Evaluacion robusta de funcionalidad, seguridad y acabado para maquinaria.</div>
+
+        {% if setup_required %}
+        <div style="background:#fff3cd; border:1px solid #ffe69c; color:#664d03; border-radius:8px; padding:10px; margin-bottom:12px;">
+            Faltan tablas nuevas para este modulo. Ejecuta create_maquinaria_ensamble_tables.py.
+        </div>
+        {% endif %}
+
+        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px; margin-bottom:12px;">
+            <h3 style="margin:0 0 8px 0; font-size:16px;">Nuevo registro de calidad</h3>
+            <form method="post" action="/maquinaria/calidad/create" style="display:grid; gap:8px; max-width:560px;">
+                <input type="text" name="folio_ot" placeholder="Folio OT" required style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                <label style="display:flex; gap:8px;"><input type="checkbox" name="funcionalidad_ok"> Funcionalidad OK</label>
+                <label style="display:flex; gap:8px;"><input type="checkbox" name="seguridad_ok"> Seguridad OK</label>
+                <label style="display:flex; gap:8px;"><input type="checkbox" name="acabado_ok"> Acabado OK</label>
+                <textarea name="observaciones" rows="3" placeholder="Observaciones" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;"></textarea>
+                {% if has_permission('maquinaria_calidad', 'create') or has_permission('maquinaria_calidad', 'edit') or current_user.es_admin %}
+                <button type="submit" style="border:0; background:#0f766e; color:#fff; border-radius:6px; padding:8px 10px; font-weight:700;">Guardar evaluacion</button>
+                {% endif %}
+            </form>
+        </div>
+
+        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px;">
+            <h3 style="margin:0 0 8px 0; font-size:16px;">Historial</h3>
+            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead>
+                    <tr style="background:#f8fafc; text-align:left;">
+                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">OT</th>
+                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Func</th>
+                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Seg</th>
+                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Acab</th>
+                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Evaluado por</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in registros %}
+                    <tr>
+                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ r.folio_ot }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ 'SI' if r.funcionalidad_ok else 'NO' }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ 'SI' if r.seguridad_ok else 'NO' }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ 'SI' if r.acabado_ok else 'NO' }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ r.evaluado_por or '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" style="padding:8px; color:#64748b;">Sin registros.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

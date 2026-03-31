@@ -1187,3 +1187,205 @@ class ContpaqPrecioPublico(db.Model):
             'source_sheet': self.source_sheet,
             'imported_at': self.imported_at.isoformat() if self.imported_at else None,
         }
+
+
+class MaquinariaPedido(db.Model):
+    __tablename__ = 'maquinaria_pedidos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    folio_interno = db.Column(db.String(80), nullable=False, unique=True, index=True)
+    contpaq_document_id = db.Column(db.BigInteger, nullable=True, index=True)
+    cliente = db.Column(db.String(255), nullable=True, index=True)
+    clave_maquina = db.Column(db.String(120), nullable=False, index=True)
+    descripcion_maquina = db.Column(db.String(255), nullable=True)
+    cantidad = db.Column(db.Integer, nullable=False, default=1)
+    estado = db.Column(db.String(40), nullable=False, default='abierto', index=True)
+    fecha_pedido = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    notas = db.Column(db.Text, nullable=True)
+    created_by = db.Column(db.String(100), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'folio_interno': self.folio_interno,
+            'contpaq_document_id': self.contpaq_document_id,
+            'cliente': self.cliente,
+            'clave_maquina': self.clave_maquina,
+            'descripcion_maquina': self.descripcion_maquina,
+            'cantidad': self.cantidad,
+            'estado': self.estado,
+            'fecha_pedido': self.fecha_pedido.isoformat() if self.fecha_pedido else None,
+            'notas': self.notas,
+            'created_by': self.created_by,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class MaquinariaBOM(db.Model):
+    __tablename__ = 'maquinaria_boms'
+
+    id = db.Column(db.Integer, primary_key=True)
+    clave_maquina = db.Column(db.String(120), nullable=False, unique=True, index=True)
+    nombre_maquina = db.Column(db.String(255), nullable=False)
+    version = db.Column(db.String(40), nullable=True)
+    estado = db.Column(db.String(30), nullable=False, default='activo', index=True)
+    notas = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    componentes = db.relationship('MaquinariaBOMComponente', backref='bom', lazy=True, cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'clave_maquina': self.clave_maquina,
+            'nombre_maquina': self.nombre_maquina,
+            'version': self.version,
+            'estado': self.estado,
+            'notas': self.notas,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class MaquinariaBOMComponente(db.Model):
+    __tablename__ = 'maquinaria_bom_componentes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    bom_id = db.Column(db.Integer, db.ForeignKey('maquinaria_boms.id'), nullable=False, index=True)
+    codigo_componente = db.Column(db.String(120), nullable=False, index=True)
+    nombre_componente = db.Column(db.String(255), nullable=False)
+    cantidad = db.Column(db.Float, nullable=False, default=1)
+    unidad = db.Column(db.String(30), nullable=True)
+    proceso_base = db.Column(db.String(120), nullable=True)
+    notas = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'bom_id': self.bom_id,
+            'codigo_componente': self.codigo_componente,
+            'nombre_componente': self.nombre_componente,
+            'cantidad': self.cantidad,
+            'unidad': self.unidad,
+            'proceso_base': self.proceso_base,
+            'notas': self.notas,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class MaquinariaOrdenTrabajo(db.Model):
+    __tablename__ = 'maquinaria_ordenes_trabajo'
+
+    id = db.Column(db.Integer, primary_key=True)
+    folio_ot = db.Column(db.String(80), nullable=False, unique=True, index=True)
+    pedido_id = db.Column(db.Integer, db.ForeignKey('maquinaria_pedidos.id'), nullable=True, index=True)
+    clave_maquina = db.Column(db.String(120), nullable=False, index=True)
+    cantidad = db.Column(db.Integer, nullable=False, default=1)
+    estado = db.Column(db.String(40), nullable=False, default='planeacion', index=True)
+    fecha_objetivo = db.Column(db.DateTime, nullable=True)
+    notas = db.Column(db.Text, nullable=True)
+    created_by = db.Column(db.String(100), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    pedido = db.relationship('MaquinariaPedido', backref='ordenes_trabajo')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'folio_ot': self.folio_ot,
+            'pedido_id': self.pedido_id,
+            'clave_maquina': self.clave_maquina,
+            'cantidad': self.cantidad,
+            'estado': self.estado,
+            'fecha_objetivo': self.fecha_objetivo.isoformat() if self.fecha_objetivo else None,
+            'notas': self.notas,
+            'created_by': self.created_by,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class MaquinariaCalidadRegistro(db.Model):
+    __tablename__ = 'maquinaria_calidad_registros'
+
+    id = db.Column(db.Integer, primary_key=True)
+    folio_ot = db.Column(db.String(80), nullable=False, index=True)
+    funcionalidad_ok = db.Column(db.Boolean, nullable=False, default=False)
+    seguridad_ok = db.Column(db.Boolean, nullable=False, default=False)
+    acabado_ok = db.Column(db.Boolean, nullable=False, default=False)
+    observaciones = db.Column(db.Text, nullable=True)
+    evaluado_por = db.Column(db.String(120), nullable=True)
+    fecha_evaluacion = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'folio_ot': self.folio_ot,
+            'funcionalidad_ok': self.funcionalidad_ok,
+            'seguridad_ok': self.seguridad_ok,
+            'acabado_ok': self.acabado_ok,
+            'observaciones': self.observaciones,
+            'evaluado_por': self.evaluado_por,
+            'fecha_evaluacion': self.fecha_evaluacion.isoformat() if self.fecha_evaluacion else None,
+        }
+
+
+class MaquinariaSerie(db.Model):
+    __tablename__ = 'maquinaria_series'
+
+    id = db.Column(db.Integer, primary_key=True)
+    serie = db.Column(db.String(120), nullable=False, unique=True, index=True)
+    clave_maquina = db.Column(db.String(120), nullable=False, index=True)
+    anio = db.Column(db.Integer, nullable=True, index=True)
+    pedido_id = db.Column(db.Integer, db.ForeignKey('maquinaria_pedidos.id'), nullable=True, index=True)
+    orden_trabajo_id = db.Column(db.Integer, db.ForeignKey('maquinaria_ordenes_trabajo.id'), nullable=True, index=True)
+    estado = db.Column(db.String(40), nullable=False, default='ensamble', index=True)
+    notas = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    pedido = db.relationship('MaquinariaPedido', backref='series')
+    orden_trabajo = db.relationship('MaquinariaOrdenTrabajo', backref='series')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'serie': self.serie,
+            'clave_maquina': self.clave_maquina,
+            'anio': self.anio,
+            'pedido_id': self.pedido_id,
+            'orden_trabajo_id': self.orden_trabajo_id,
+            'estado': self.estado,
+            'notas': self.notas,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class MaquinariaAlmacenResguardo(db.Model):
+    __tablename__ = 'maquinaria_almacen_resguardos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    serie_id = db.Column(db.Integer, db.ForeignKey('maquinaria_series.id'), nullable=False, index=True)
+    ubicacion = db.Column(db.String(120), nullable=False)
+    estatus = db.Column(db.String(40), nullable=False, default='resguardo', index=True)
+    fecha_ingreso = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    fecha_salida = db.Column(db.DateTime, nullable=True, index=True)
+    observaciones = db.Column(db.Text, nullable=True)
+
+    serie_rel = db.relationship('MaquinariaSerie', backref='resguardos')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'serie_id': self.serie_id,
+            'ubicacion': self.ubicacion,
+            'estatus': self.estatus,
+            'fecha_ingreso': self.fecha_ingreso.isoformat() if self.fecha_ingreso else None,
+            'fecha_salida': self.fecha_salida.isoformat() if self.fecha_salida else None,
+            'observaciones': self.observaciones,
+        }

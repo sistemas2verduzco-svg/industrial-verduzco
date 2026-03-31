@@ -1,11 +1,11 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice, ContpaqPrecioPublico
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice, ContpaqPrecioPublico, MaquinariaPedido, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo
 from auth import AuthManager
 from email_manager import EmailManager
 import os
 import json
 from dotenv import load_dotenv
-from sqlalchemy import text, func
+from sqlalchemy import text, func, inspect
 from functools import wraps
 import secrets
 from werkzeug.utils import secure_filename
@@ -1388,6 +1388,23 @@ def _resolve_post_login_endpoint(user):
     if user.es_admin:
         return 'admin'
 
+    if user.has_permission('maquinaria_pedidos', 'view'):
+        return 'maquinaria_pedidos_page'
+    if user.has_permission('maquinaria_ordenes', 'view'):
+        return 'maquinaria_ordenes_page'
+    if user.has_permission('maquinaria_boms', 'view'):
+        return 'maquinaria_boms_page'
+    if user.has_permission('maquinaria_claves_procesos', 'view'):
+        return 'maquinaria_claves_procesos_page'
+    if user.has_permission('maquinaria_estaciones', 'view'):
+        return 'maquinaria_estaciones_page'
+    if user.has_permission('maquinaria_calidad', 'view'):
+        return 'maquinaria_calidad_page'
+    if user.has_permission('maquinaria_seriado', 'view'):
+        return 'maquinaria_seriado_page'
+    if user.has_permission('maquinaria_almacen', 'view'):
+        return 'maquinaria_almacen_page'
+
     if user.has_permission('catalog', 'view'):
         return 'index'
     if user.has_permission('estaciones', 'view'):
@@ -1596,6 +1613,14 @@ SIMPLE_PERMISSION_MODULES = [
     ('procesos', 'Procesos y claves'),
     ('proveedores', 'Proveedores'),
     ('tickets', 'Tickets'),
+    ('maquinaria_pedidos', 'Maquinaria y ensamble - Pedidos'),
+    ('maquinaria_ordenes', 'Maquinaria y ensamble - Ordenes de trabajo'),
+    ('maquinaria_boms', 'Maquinaria y ensamble - BOMs'),
+    ('maquinaria_claves_procesos', 'Maquinaria y ensamble - Claves y procesos'),
+    ('maquinaria_estaciones', 'Maquinaria y ensamble - Estaciones de trabajo'),
+    ('maquinaria_calidad', 'Maquinaria y ensamble - Calidad'),
+    ('maquinaria_seriado', 'Maquinaria y ensamble - Seriado'),
+    ('maquinaria_almacen', 'Maquinaria y ensamble - Almacen'),
 ]
 
 SIMPLE_PERMISSION_ACTIONS = [
@@ -7607,6 +7632,317 @@ def api_contpaq_sync_last():
     """Devuelve estado de la ultima sincronizacion para mostrar en la vista."""
     run = ContpaqSyncRun.query.order_by(ContpaqSyncRun.id.desc()).first()
     return jsonify({'last_sync': run.to_dict() if run else None})
+
+
+MAQUINARIA_TABLES = [
+    'maquinaria_pedidos',
+    'maquinaria_boms',
+    'maquinaria_bom_componentes',
+    'maquinaria_ordenes_trabajo',
+    'maquinaria_calidad_registros',
+    'maquinaria_series',
+    'maquinaria_almacen_resguardos',
+]
+
+
+def _maquinaria_tables_status():
+    try:
+        inspector = inspect(db.engine)
+        missing = [table for table in MAQUINARIA_TABLES if not inspector.has_table(table)]
+        return len(missing) == 0, missing
+    except Exception:
+        return False, MAQUINARIA_TABLES
+
+
+@app.route('/maquinaria/pedidos')
+@login_required
+@requires_any_permission([('maquinaria_pedidos', 'view'), ('maquinaria_pedidos', 'edit'), ('maquinaria_pedidos', 'create'), ('maquinaria_pedidos', 'update'), ('maquinaria_pedidos', 'delete')])
+def maquinaria_pedidos_page():
+    ready, missing = _maquinaria_tables_status()
+    pedidos_locales = []
+    if ready:
+        pedidos_locales = MaquinariaPedido.query.order_by(MaquinariaPedido.id.desc()).limit(50).all()
+    pedidos_contpaq = ContpaqPedido.query.order_by(ContpaqPedido.fecha_documento.desc()).limit(50).all()
+    boms = MaquinariaBOM.query.order_by(MaquinariaBOM.clave_maquina.asc()).all() if ready else []
+    return render_template(
+        'maquinaria_pedidos.html',
+        setup_required=not ready,
+        missing_tables=missing,
+        pedidos_locales=pedidos_locales,
+        pedidos_contpaq=pedidos_contpaq,
+        boms=boms,
+    )
+
+
+@app.route('/maquinaria/pedidos/create', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_pedidos', 'create'), ('maquinaria_pedidos', 'edit'), ('maquinaria_pedidos', 'update')])
+def maquinaria_pedidos_create():
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return redirect(url_for('maquinaria_pedidos_page'))
+
+    folio = _clean_nullable_text(request.form.get('folio_interno', ''))
+    if not folio:
+        folio = f"MEP-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}"
+
+    pedido = MaquinariaPedido(
+        folio_interno=folio,
+        contpaq_document_id=request.form.get('contpaq_document_id', type=int),
+        cliente=_clean_nullable_text(request.form.get('cliente', '')),
+        clave_maquina=_clean_nullable_text(request.form.get('clave_maquina', '')),
+        descripcion_maquina=_clean_nullable_text(request.form.get('descripcion_maquina', '')),
+        cantidad=max(1, request.form.get('cantidad', type=int) or 1),
+        estado=_clean_nullable_text(request.form.get('estado', 'abierto')) or 'abierto',
+        notas=_clean_nullable_text(request.form.get('notas', '')),
+        created_by=session.get('user'),
+    )
+    if not pedido.clave_maquina:
+        return redirect(url_for('maquinaria_pedidos_page'))
+
+    db.session.add(pedido)
+    db.session.commit()
+    return redirect(url_for('maquinaria_pedidos_page'))
+
+
+@app.route('/maquinaria/ordenes-trabajo')
+@login_required
+@requires_any_permission([('maquinaria_ordenes', 'view'), ('maquinaria_ordenes', 'edit'), ('maquinaria_ordenes', 'create'), ('maquinaria_ordenes', 'update'), ('maquinaria_ordenes', 'delete')])
+def maquinaria_ordenes_page():
+    ready, missing = _maquinaria_tables_status()
+    ordenes = MaquinariaOrdenTrabajo.query.order_by(MaquinariaOrdenTrabajo.id.desc()).limit(60).all() if ready else []
+    pedidos = MaquinariaPedido.query.order_by(MaquinariaPedido.id.desc()).limit(80).all() if ready else []
+    claves = ClaveProducto.query.filter_by(activo=True).order_by(ClaveProducto.clave.asc()).limit(120).all()
+    procesos = ProcesoCatalogo.query.filter_by(activo=True).order_by(ProcesoCatalogo.nombre.asc()).limit(120).all()
+    return render_template(
+        'maquinaria_ordenes_trabajo.html',
+        setup_required=not ready,
+        missing_tables=missing,
+        ordenes=ordenes,
+        pedidos=pedidos,
+        claves=claves,
+        procesos=procesos,
+    )
+
+
+@app.route('/maquinaria/ordenes-trabajo/create', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_ordenes', 'create'), ('maquinaria_ordenes', 'edit'), ('maquinaria_ordenes', 'update')])
+def maquinaria_ordenes_create():
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return redirect(url_for('maquinaria_ordenes_page'))
+
+    folio_ot = _clean_nullable_text(request.form.get('folio_ot', ''))
+    if not folio_ot:
+        folio_ot = f"MOT-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}"
+
+    fecha_objetivo = _parse_datetime(request.form.get('fecha_objetivo'))
+    orden = MaquinariaOrdenTrabajo(
+        folio_ot=folio_ot,
+        pedido_id=request.form.get('pedido_id', type=int),
+        clave_maquina=_clean_nullable_text(request.form.get('clave_maquina', '')),
+        cantidad=max(1, request.form.get('cantidad', type=int) or 1),
+        estado=_clean_nullable_text(request.form.get('estado', 'planeacion')) or 'planeacion',
+        fecha_objetivo=fecha_objetivo,
+        notas=_clean_nullable_text(request.form.get('notas', '')),
+        created_by=session.get('user'),
+    )
+    if not orden.clave_maquina:
+        return redirect(url_for('maquinaria_ordenes_page'))
+
+    db.session.add(orden)
+    db.session.commit()
+    return redirect(url_for('maquinaria_ordenes_page'))
+
+
+@app.route('/maquinaria/boms')
+@login_required
+@requires_any_permission([('maquinaria_boms', 'view'), ('maquinaria_boms', 'edit'), ('maquinaria_boms', 'create'), ('maquinaria_boms', 'update'), ('maquinaria_boms', 'delete')])
+def maquinaria_boms_page():
+    ready, missing = _maquinaria_tables_status()
+    boms = MaquinariaBOM.query.order_by(MaquinariaBOM.clave_maquina.asc()).all() if ready else []
+    return render_template('maquinaria_boms.html', setup_required=not ready, missing_tables=missing, boms=boms)
+
+
+@app.route('/maquinaria/boms/create', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_boms', 'create'), ('maquinaria_boms', 'edit'), ('maquinaria_boms', 'update')])
+def maquinaria_boms_create():
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return redirect(url_for('maquinaria_boms_page'))
+
+    clave_maquina = _clean_nullable_text(request.form.get('clave_maquina', ''))
+    nombre_maquina = _clean_nullable_text(request.form.get('nombre_maquina', ''))
+    if not clave_maquina or not nombre_maquina:
+        return redirect(url_for('maquinaria_boms_page'))
+
+    bom = MaquinariaBOM(
+        clave_maquina=clave_maquina,
+        nombre_maquina=nombre_maquina,
+        version=_clean_nullable_text(request.form.get('version', '')),
+        notas=_clean_nullable_text(request.form.get('notas', '')),
+    )
+    db.session.add(bom)
+    db.session.commit()
+    return redirect(url_for('maquinaria_boms_page'))
+
+
+@app.route('/maquinaria/boms/<int:bom_id>/componentes/create', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_boms', 'create'), ('maquinaria_boms', 'edit'), ('maquinaria_boms', 'update')])
+def maquinaria_boms_componentes_create(bom_id):
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return redirect(url_for('maquinaria_boms_page'))
+
+    bom = MaquinariaBOM.query.get_or_404(bom_id)
+    comp = MaquinariaBOMComponente(
+        bom_id=bom.id,
+        codigo_componente=_clean_nullable_text(request.form.get('codigo_componente', '')),
+        nombre_componente=_clean_nullable_text(request.form.get('nombre_componente', '')),
+        cantidad=max(0.01, request.form.get('cantidad', type=float) or 1.0),
+        unidad=_clean_nullable_text(request.form.get('unidad', '')),
+        proceso_base=_clean_nullable_text(request.form.get('proceso_base', '')),
+        notas=_clean_nullable_text(request.form.get('notas', '')),
+    )
+    if not comp.codigo_componente or not comp.nombre_componente:
+        return redirect(url_for('maquinaria_boms_page'))
+
+    db.session.add(comp)
+    db.session.commit()
+    return redirect(url_for('maquinaria_boms_page'))
+
+
+@app.route('/maquinaria/claves-procesos')
+@login_required
+@requires_any_permission([('maquinaria_claves_procesos', 'view'), ('maquinaria_claves_procesos', 'edit'), ('maquinaria_claves_procesos', 'create'), ('maquinaria_claves_procesos', 'update'), ('maquinaria_claves_procesos', 'delete')])
+def maquinaria_claves_procesos_page():
+    claves = ClaveProducto.query.order_by(ClaveProducto.clave.asc()).limit(250).all()
+    procesos = ProcesoCatalogo.query.order_by(ProcesoCatalogo.nombre.asc()).limit(250).all()
+    return render_template('maquinaria_claves_procesos.html', claves=claves, procesos=procesos)
+
+
+@app.route('/maquinaria/estaciones')
+@login_required
+@requires_any_permission([('maquinaria_estaciones', 'view'), ('maquinaria_estaciones', 'edit'), ('maquinaria_estaciones', 'create'), ('maquinaria_estaciones', 'update'), ('maquinaria_estaciones', 'delete')])
+def maquinaria_estaciones_page():
+    estaciones_ref = EstacionPlantilla.query.order_by(EstacionPlantilla.orden.asc()).all()
+    return render_template('maquinaria_estaciones.html', estaciones_ref=estaciones_ref)
+
+
+@app.route('/maquinaria/calidad')
+@login_required
+@requires_any_permission([('maquinaria_calidad', 'view'), ('maquinaria_calidad', 'edit'), ('maquinaria_calidad', 'create'), ('maquinaria_calidad', 'update'), ('maquinaria_calidad', 'delete')])
+def maquinaria_calidad_page():
+    ready, missing = _maquinaria_tables_status()
+    registros = MaquinariaCalidadRegistro.query.order_by(MaquinariaCalidadRegistro.id.desc()).limit(100).all() if ready else []
+    return render_template('maquinaria_calidad.html', setup_required=not ready, missing_tables=missing, registros=registros)
+
+
+@app.route('/maquinaria/calidad/create', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_calidad', 'create'), ('maquinaria_calidad', 'edit'), ('maquinaria_calidad', 'update')])
+def maquinaria_calidad_create():
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return redirect(url_for('maquinaria_calidad_page'))
+
+    folio_ot = _clean_nullable_text(request.form.get('folio_ot', ''))
+    if not folio_ot:
+        return redirect(url_for('maquinaria_calidad_page'))
+
+    registro = MaquinariaCalidadRegistro(
+        folio_ot=folio_ot,
+        funcionalidad_ok=request.form.get('funcionalidad_ok') == 'on',
+        seguridad_ok=request.form.get('seguridad_ok') == 'on',
+        acabado_ok=request.form.get('acabado_ok') == 'on',
+        observaciones=_clean_nullable_text(request.form.get('observaciones', '')),
+        evaluado_por=session.get('user'),
+    )
+    db.session.add(registro)
+    db.session.commit()
+    return redirect(url_for('maquinaria_calidad_page'))
+
+
+@app.route('/maquinaria/seriado')
+@login_required
+@requires_any_permission([('maquinaria_seriado', 'view'), ('maquinaria_seriado', 'edit'), ('maquinaria_seriado', 'create'), ('maquinaria_seriado', 'update'), ('maquinaria_seriado', 'delete')])
+def maquinaria_seriado_page():
+    ready, missing = _maquinaria_tables_status()
+    series = MaquinariaSerie.query.order_by(MaquinariaSerie.id.desc()).limit(120).all() if ready else []
+    pedidos = MaquinariaPedido.query.order_by(MaquinariaPedido.id.desc()).limit(120).all() if ready else []
+    ordenes = MaquinariaOrdenTrabajo.query.order_by(MaquinariaOrdenTrabajo.id.desc()).limit(120).all() if ready else []
+    return render_template(
+        'maquinaria_seriado.html',
+        setup_required=not ready,
+        missing_tables=missing,
+        series=series,
+        pedidos=pedidos,
+        ordenes=ordenes,
+    )
+
+
+@app.route('/maquinaria/seriado/create', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_seriado', 'create'), ('maquinaria_seriado', 'edit'), ('maquinaria_seriado', 'update')])
+def maquinaria_seriado_create():
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return redirect(url_for('maquinaria_seriado_page'))
+
+    serie_txt = _clean_nullable_text(request.form.get('serie', ''))
+    clave_maquina = _clean_nullable_text(request.form.get('clave_maquina', ''))
+    if not serie_txt or not clave_maquina:
+        return redirect(url_for('maquinaria_seriado_page'))
+
+    serie_obj = MaquinariaSerie(
+        serie=serie_txt,
+        clave_maquina=clave_maquina,
+        anio=request.form.get('anio', type=int),
+        pedido_id=request.form.get('pedido_id', type=int),
+        orden_trabajo_id=request.form.get('orden_trabajo_id', type=int),
+        estado=_clean_nullable_text(request.form.get('estado', 'ensamble')) or 'ensamble',
+        notas=_clean_nullable_text(request.form.get('notas', '')),
+    )
+    db.session.add(serie_obj)
+    db.session.commit()
+    return redirect(url_for('maquinaria_seriado_page'))
+
+
+@app.route('/maquinaria/almacen')
+@login_required
+@requires_any_permission([('maquinaria_almacen', 'view'), ('maquinaria_almacen', 'edit'), ('maquinaria_almacen', 'create'), ('maquinaria_almacen', 'update'), ('maquinaria_almacen', 'delete')])
+def maquinaria_almacen_page():
+    ready, missing = _maquinaria_tables_status()
+    series = MaquinariaSerie.query.order_by(MaquinariaSerie.id.desc()).limit(120).all() if ready else []
+    resguardos = MaquinariaAlmacenResguardo.query.order_by(MaquinariaAlmacenResguardo.id.desc()).limit(120).all() if ready else []
+    return render_template('maquinaria_almacen.html', setup_required=not ready, missing_tables=missing, series=series, resguardos=resguardos)
+
+
+@app.route('/maquinaria/almacen/create', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_almacen', 'create'), ('maquinaria_almacen', 'edit'), ('maquinaria_almacen', 'update')])
+def maquinaria_almacen_create():
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return redirect(url_for('maquinaria_almacen_page'))
+
+    serie_id = request.form.get('serie_id', type=int)
+    ubicacion = _clean_nullable_text(request.form.get('ubicacion', ''))
+    if not serie_id or not ubicacion:
+        return redirect(url_for('maquinaria_almacen_page'))
+
+    reg = MaquinariaAlmacenResguardo(
+        serie_id=serie_id,
+        ubicacion=ubicacion,
+        estatus=_clean_nullable_text(request.form.get('estatus', 'resguardo')) or 'resguardo',
+        observaciones=_clean_nullable_text(request.form.get('observaciones', '')),
+    )
+    db.session.add(reg)
+    db.session.commit()
+    return redirect(url_for('maquinaria_almacen_page'))
 
 
 @app.errorhandler(404)

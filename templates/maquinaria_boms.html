@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maquinaria y Ensamble - BOMs</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    {% include '_sidebar.html' %}
+    <div class="container" style="padding-top:20px;">
+        <h2 style="margin:0 0 6px 0;">Maquinaria y Ensamble - BOMs</h2>
+        <div style="color:#64748b; font-size:13px; margin-bottom:14px;">Carga de componentes (cabezales, transportadoras, armado, etc.) por clave de maquina.</div>
+
+        {% if setup_required %}
+        <div style="background:#fff3cd; border:1px solid #ffe69c; color:#664d03; border-radius:8px; padding:10px; margin-bottom:12px;">
+            Faltan tablas nuevas para este modulo. Ejecuta create_maquinaria_ensamble_tables.py.
+        </div>
+        {% endif %}
+
+        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px; margin-bottom:12px;">
+            <h3 style="margin:0 0 8px 0; font-size:16px;">Nuevo BOM</h3>
+            <form method="post" action="/maquinaria/boms/create" style="display:grid; grid-template-columns:1fr 1fr 140px 1fr auto; gap:8px;">
+                <input type="text" name="clave_maquina" placeholder="Clave maquina" required style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                <input type="text" name="nombre_maquina" placeholder="Nombre maquina" required style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                <input type="text" name="version" placeholder="Version" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                <input type="text" name="notas" placeholder="Notas" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                {% if has_permission('maquinaria_boms', 'create') or has_permission('maquinaria_boms', 'edit') or current_user.es_admin %}
+                <button type="submit" style="border:0; background:#1d4ed8; color:#fff; border-radius:6px; padding:8px 10px; font-weight:700;">Guardar BOM</button>
+                {% endif %}
+            </form>
+        </div>
+
+        {% for bom in boms %}
+        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px; margin-bottom:10px;">
+            <div><strong>{{ bom.clave_maquina }}</strong> - {{ bom.nombre_maquina }} {% if bom.version %}(v{{ bom.version }}){% endif %}</div>
+            <div style="font-size:12px; color:#64748b; margin:4px 0 10px 0;">{{ bom.notas or '-' }}</div>
+
+            <form method="post" action="/maquinaria/boms/{{ bom.id }}/componentes/create" style="display:grid; grid-template-columns:1fr 1.2fr 100px 100px 1fr auto; gap:8px; margin-bottom:10px;">
+                <input type="text" name="codigo_componente" placeholder="Codigo" required style="padding:7px; border:1px solid #d1d5db; border-radius:6px;">
+                <input type="text" name="nombre_componente" placeholder="Componente" required style="padding:7px; border:1px solid #d1d5db; border-radius:6px;">
+                <input type="number" step="0.01" min="0.01" name="cantidad" value="1" style="padding:7px; border:1px solid #d1d5db; border-radius:6px;">
+                <input type="text" name="unidad" placeholder="Unidad" style="padding:7px; border:1px solid #d1d5db; border-radius:6px;">
+                <input type="text" name="proceso_base" placeholder="Proceso base" style="padding:7px; border:1px solid #d1d5db; border-radius:6px;">
+                {% if has_permission('maquinaria_boms', 'create') or has_permission('maquinaria_boms', 'edit') or current_user.es_admin %}
+                <button type="submit" style="border:0; background:#0f766e; color:#fff; border-radius:6px; padding:7px 10px; font-weight:700;">Agregar</button>
+                {% endif %}
+            </form>
+
+            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead>
+                    <tr style="background:#f8fafc; text-align:left;">
+                        <th style="padding:7px; border-bottom:1px solid #e5e7eb;">Codigo</th>
+                        <th style="padding:7px; border-bottom:1px solid #e5e7eb;">Nombre</th>
+                        <th style="padding:7px; border-bottom:1px solid #e5e7eb;">Cantidad</th>
+                        <th style="padding:7px; border-bottom:1px solid #e5e7eb;">Unidad</th>
+                        <th style="padding:7px; border-bottom:1px solid #e5e7eb;">Proceso</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in bom.componentes %}
+                    <tr>
+                        <td style="padding:7px; border-bottom:1px solid #eef2f7;">{{ c.codigo_componente }}</td>
+                        <td style="padding:7px; border-bottom:1px solid #eef2f7;">{{ c.nombre_componente }}</td>
+                        <td style="padding:7px; border-bottom:1px solid #eef2f7;">{{ c.cantidad }}</td>
+                        <td style="padding:7px; border-bottom:1px solid #eef2f7;">{{ c.unidad or '-' }}</td>
+                        <td style="padding:7px; border-bottom:1px solid #eef2f7;">{{ c.proceso_base or '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" style="padding:7px; color:#64748b;">Sin componentes cargados.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px; color:#64748b;">Sin BOMs registrados.</div>
+        {% endfor %}
+    </div>
+</body>
+</html>

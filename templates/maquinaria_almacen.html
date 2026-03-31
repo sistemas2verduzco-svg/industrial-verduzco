@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maquinaria y Ensamble - Almacen</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    {% include '_sidebar.html' %}
+    <div class="container" style="padding-top:20px;">
+        <h2 style="margin:0 0 6px 0;">Maquinaria y Ensamble - Almacen</h2>
+        <div style="color:#64748b; font-size:13px; margin-bottom:14px;">Resguardo de series, ubicacion y rastreo por pedido/OT.</div>
+
+        {% if setup_required %}
+        <div style="background:#fff3cd; border:1px solid #ffe69c; color:#664d03; border-radius:8px; padding:10px; margin-bottom:12px;">
+            Faltan tablas nuevas para este modulo. Ejecuta create_maquinaria_ensamble_tables.py.
+        </div>
+        {% endif %}
+
+        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px; margin-bottom:12px;">
+            <h3 style="margin:0 0 8px 0; font-size:16px;">Registrar resguardo</h3>
+            <form method="post" action="/maquinaria/almacen/create" style="display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:8px;">
+                <select name="serie_id" required style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                    <option value="">Selecciona serie</option>
+                    {% for s in series %}<option value="{{ s.id }}">{{ s.serie }} - {{ s.clave_maquina }}</option>{% endfor %}
+                </select>
+                <input type="text" name="ubicacion" placeholder="Ubicacion" required style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                <input type="text" name="estatus" placeholder="Estatus" value="resguardo" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                {% if has_permission('maquinaria_almacen', 'create') or has_permission('maquinaria_almacen', 'edit') or current_user.es_admin %}
+                <button type="submit" style="border:0; background:#0f766e; color:#fff; border-radius:6px; padding:8px 10px; font-weight:700;">Guardar</button>
+                {% endif %}
+            </form>
+        </div>
+
+        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px;">
+            <h3 style="margin:0 0 8px 0; font-size:16px;">Historial de resguardos</h3>
+            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead>
+                    <tr style="background:#f8fafc; text-align:left;">
+                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Serie</th>
+                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Ubicacion</th>
+                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Estatus</th>
+                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Ingreso</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in resguardos %}
+                    <tr>
+                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ r.serie_rel.serie if r.serie_rel else '-' }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ r.ubicacion }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ r.estatus }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ r.fecha_ingreso.strftime('%Y-%m-%d %H:%M') if r.fecha_ingreso else '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" style="padding:8px; color:#64748b;">Sin resguardos.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

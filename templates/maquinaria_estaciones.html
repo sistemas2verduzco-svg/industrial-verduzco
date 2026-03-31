@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maquinaria y Ensamble - Estaciones de Trabajo</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    {% include '_sidebar.html' %}
+    <div class="container" style="padding-top:20px;">
+        <h2 style="margin:0 0 6px 0;">Maquinaria y Ensamble - Estaciones de Trabajo</h2>
+        <div style="color:#64748b; font-size:13px; margin-bottom:14px;">Replica base de estaciones T para trabajo de cableado, arnes, cabezales, soldadura y laminado.</div>
+
+        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px;">
+            <h3 style="margin:0 0 8px 0; font-size:16px;">Estaciones de referencia</h3>
+            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead>
+                    <tr style="background:#f8fafc; text-align:left;">
+                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Orden</th>
+                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Centro de trabajo</th>
+                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Operacion</th>
+                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Tiempo estimado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for e in estaciones_ref %}
+                    <tr>
+                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ e.orden }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ e.centro_trabajo or '-' }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ e.operacion or '-' }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ e.tiempo_estimado or '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" style="padding:8px; color:#64748b;">Sin estaciones base.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

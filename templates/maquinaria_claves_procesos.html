@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maquinaria y Ensamble - Claves y Procesos</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    {% include '_sidebar.html' %}
+    <div class="container" style="padding-top:20px;">
+        <h2 style="margin:0 0 6px 0;">Maquinaria y Ensamble - Claves y Procesos</h2>
+        <div style="color:#64748b; font-size:13px; margin-bottom:14px;">Consulta catalogos actuales de produccion y entra al editor para alta/cambio.</div>
+
+        <div style="background:#eef6ff; border:1px solid #bfdbfe; border-radius:10px; padding:10px; margin-bottom:12px;">
+            <strong>Editor completo:</strong> <a href="/procesos">Abrir panel de edicion de procesos y claves</a>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px;">
+                <h3 style="margin:0 0 8px 0; font-size:16px;">Claves</h3>
+                <div style="max-height:520px; overflow:auto; font-size:13px;">
+                    {% for c in claves %}
+                    <div style="padding:7px 0; border-bottom:1px solid #eef2f7;">{{ c.clave }} - {{ c.nombre or '-' }}</div>
+                    {% else %}
+                    <div style="color:#64748b;">Sin claves.</div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px;">
+                <h3 style="margin:0 0 8px 0; font-size:16px;">Procesos</h3>
+                <div style="max-height:520px; overflow:auto; font-size:13px;">
+                    {% for p in procesos %}
+                    <div style="padding:7px 0; border-bottom:1px solid #eef2f7;">{{ p.nombre }}</div>
+                    {% else %}
+                    <div style="color:#64748b;">Sin procesos.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

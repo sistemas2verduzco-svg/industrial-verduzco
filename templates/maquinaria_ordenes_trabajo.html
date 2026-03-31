@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maquinaria y Ensamble - Ordenes de Trabajo</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    {% include '_sidebar.html' %}
+    <div class="container" style="padding-top:20px;">
+        <h2 style="margin:0 0 6px 0;">Maquinaria y Ensamble - Orden de Trabajo</h2>
+        <div style="color:#64748b; font-size:13px; margin-bottom:14px;">Se genera a partir de pedido y puede consultar claves/procesos de Produccion.</div>
+
+        {% if setup_required %}
+        <div style="background:#fff3cd; border:1px solid #ffe69c; color:#664d03; border-radius:8px; padding:10px; margin-bottom:12px;">
+            Faltan tablas nuevas para este modulo. Ejecuta create_maquinaria_ensamble_tables.py.
+        </div>
+        {% endif %}
+
+        <div style="display:grid; grid-template-columns:1.1fr 1fr; gap:12px;">
+            <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px;">
+                <h3 style="margin:0 0 8px 0; font-size:16px;">Crear orden de trabajo</h3>
+                <form method="post" action="/maquinaria/ordenes-trabajo/create" style="display:grid; gap:8px;">
+                    <input type="text" name="folio_ot" placeholder="Folio OT (opcional)" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                    <select name="pedido_id" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                        <option value="">Pedido relacionado (opcional)</option>
+                        {% for p in pedidos %}
+                        <option value="{{ p.id }}">{{ p.folio_interno }} - {{ p.clave_maquina }}</option>
+                        {% endfor %}
+                    </select>
+                    <input type="text" name="clave_maquina" placeholder="Clave de maquina" required style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                    <input type="number" name="cantidad" min="1" value="1" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                    <input type="datetime-local" name="fecha_objetivo" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                    <textarea name="notas" placeholder="Refacciones y piezas planeadas" rows="3" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;"></textarea>
+                    {% if has_permission('maquinaria_ordenes', 'create') or has_permission('maquinaria_ordenes', 'edit') or current_user.es_admin %}
+                    <button type="submit" style="border:0; background:#0f766e; color:#fff; font-weight:700; border-radius:6px; padding:9px;">Guardar OT</button>
+                    {% endif %}
+                </form>
+            </div>
+            <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px;">
+                <h3 style="margin:0 0 8px 0; font-size:16px;">Claves de Produccion (consulta)</h3>
+                <div style="max-height:180px; overflow:auto; font-size:13px;">
+                    {% for c in claves %}
+                    <div style="padding:6px 0; border-bottom:1px solid #eef2f7;">{{ c.clave }} - {{ c.nombre or '-' }}</div>
+                    {% else %}
+                    <div style="color:#64748b;">Sin claves.</div>
+                    {% endfor %}
+                </div>
+                <h3 style="margin:10px 0 8px 0; font-size:16px;">Procesos de Produccion (consulta)</h3>
+                <div style="max-height:180px; overflow:auto; font-size:13px;">
+                    {% for p in procesos %}
+                    <div style="padding:6px 0; border-bottom:1px solid #eef2f7;">{{ p.nombre }}</div>
+                    {% else %}
+                    <div style="color:#64748b;">Sin procesos.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top:12px; background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px;">
+            <h3 style="margin:0 0 8px 0; font-size:16px;">Ordenes de trabajo recientes</h3>
+            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead>
+                    <tr style="background:#f8fafc; text-align:left;">
+                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Folio OT</th>
+                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Clave</th>
+                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Cantidad</th>
+                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for o in ordenes %}
+                    <tr>
+                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ o.folio_ot }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ o.clave_maquina }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ o.cantidad }}</td>
+                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ o.estado }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" style="padding:8px; color:#64748b;">Sin ordenes registradas.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
