@@ -183,6 +183,15 @@
                 <button class="btn btn-secondary" id="btnLimpiarIndice" style="background:#ffe9e6;border-color:#ffc9bf;color:#8a1f11;">Limpiar indice</button>
                 <div id="indiceStatus" class="status" style="margin:0;"></div>
             </div>
+
+            <div class="section-title">Lista de precios publicos</div>
+            <div class="muted">Sube el Excel activo de precios. Formato configurado: hoja Productos, clave en columna D, precio publico en columna S, desde fila 3.</div>
+            <div class="toolbar" style="grid-template-columns: 1fr auto auto auto; margin-bottom:0;">
+                <input id="precioFile" type="file" accept=".xlsx,.xls">
+                <button class="btn btn-secondary" id="btnSubirPrecios">Subir precios publicos</button>
+                <button class="btn btn-secondary" id="btnLimpiarPrecios" style="background:#fff7e8;border-color:#ffd08a;color:#8a5600;">Limpiar precios</button>
+                <div id="precioStatus" class="status" style="margin:0;"></div>
+            </div>
         </div>
 
         <div id="resumen" class="summary-box" style="display:none;"></div>
@@ -283,6 +292,9 @@
                         cantidad: d.cantidad ?? '',
                         precio: d.precio_unitario,
                         total: d.total_partida,
+                        precioPublico: d.precio_publico_unitario,
+                        totalPublico: d.total_partida_precio_publico,
+                        diferencia: d.diferencia_precio_publico,
                         inyectado: d.es_inyectado ? 'SI' : '',
                     });
                 }
@@ -306,6 +318,10 @@
                 }
             }
 
+            const pedidoTotalSucursal = pedidoRows.reduce((acc, r) => acc + (Number(r.total) || 0), 0);
+            const pedidoTotalPublico = pedidoRows.reduce((acc, r) => acc + (Number(r.totalPublico) || 0), 0);
+            const pedidoTotalDiferencia = pedidoRows.reduce((acc, r) => acc + (Number(r.diferencia) || 0), 0);
+
             let pedidoRowsHtml = '';
             for (const r of pedidoRows) {
                 pedidoRowsHtml += `
@@ -321,6 +337,9 @@
                         <td>${r.cantidad}</td>
                         <td>${money(r.precio)}</td>
                         <td>${money(r.total)}</td>
+                        <td>${money(r.precioPublico)}</td>
+                        <td>${money(r.totalPublico)}</td>
+                        <td>${money(r.diferencia)}</td>
                         <td>${r.inyectado}</td>
                     </tr>
                 `;
@@ -351,11 +370,16 @@
                     <table>
                         <thead>
                             <tr>
-                                <th>Semana</th><th>Fecha</th><th>Folio</th><th>Serie</th><th>Sucursal</th><th>Partida</th><th>Clave</th><th>Descripcion</th><th>Cantidad</th><th>Precio Unitario</th><th>Total Partida</th><th>Inyectado</th>
+                                <th>Semana</th><th>Fecha</th><th>Folio</th><th>Serie</th><th>Sucursal</th><th>Partida</th><th>Clave</th><th>Descripcion</th><th>Cantidad</th><th>Precio Unitario</th><th>Total Partida</th><th>Precio Publico</th><th>Total Partida Precio Publico</th><th>Diferencia</th><th>Inyectado</th>
                             </tr>
                         </thead>
-                        <tbody>${pedidoRowsHtml || '<tr><td colspan="12">Sin partidas</td></tr>'}</tbody>
+                        <tbody>${pedidoRowsHtml || '<tr><td colspan="15">Sin partidas</td></tr>'}</tbody>
                     </table>
+                </div>
+                <div class="summary-box">
+                    <div class="summary-line"><b>Total Partida:</b> ${money(pedidoTotalSucursal)}</div>
+                    <div class="summary-line"><b>Total Partida Precio Publico:</b> ${money(pedidoTotalPublico)}</div>
+                    <div class="summary-line"><b>Diferencia:</b> ${money(pedidoTotalDiferencia)}</div>
                 </div>
                 <div id="remisionesTableWrap" class="section-table" style="display:block;">
                     <div class="section-title">Remisiones (tabla inferior)</div>
@@ -443,6 +467,37 @@
             await cargar(1);
         }
 
+        async function subirPrecios() {
+            const fileInput = document.getElementById('precioFile');
+            const status = document.getElementById('precioStatus');
+            if (!fileInput.files || !fileInput.files[0]) {
+                status.textContent = 'Selecciona un archivo .xlsx o .xls';
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('sheet', 'Productos');
+            formData.append('start_row', '3');
+            formData.append('clave_col', 'D');
+            formData.append('precio_col', 'S');
+            status.textContent = 'Subiendo lista de precios...';
+
+            const resp = await fetch('/api/contpaq/precio-publico/upload', {
+                method: 'POST',
+                body: formData,
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                status.textContent = data.error || 'Error al subir precios';
+                return;
+            }
+
+            status.textContent = `Lista cargada: ${data.imported || 0} clave(s)`;
+            currentPage = 1;
+            await cargar(1);
+        }
+
         async function syncNow() {
             const status = document.getElementById('status');
             status.textContent = 'Sincronizando...';
@@ -464,6 +519,7 @@
         });
         document.getElementById('btnSync').addEventListener('click', syncNow);
         document.getElementById('btnSubirIndice').addEventListener('click', subirIndice);
+        document.getElementById('btnSubirPrecios').addEventListener('click', subirPrecios);
         document.getElementById('btnLimpiarIndice').addEventListener('click', async () => {
             const ok = window.confirm('Se borrara todo el indice cargado. Deseas continuar?');
             if (!ok) return;
@@ -476,6 +532,21 @@
                 return;
             }
             status.textContent = `Indice limpiado: ${data.deleted || 0} fila(s)`;
+            currentPage = 1;
+            cargar(1);
+        });
+        document.getElementById('btnLimpiarPrecios').addEventListener('click', async () => {
+            const ok = window.confirm('Se borrara toda la lista de precios publicos cargada. Deseas continuar?');
+            if (!ok) return;
+            const status = document.getElementById('precioStatus');
+            status.textContent = 'Limpiando precios...';
+            const resp = await fetch('/api/contpaq/precio-publico/clear', { method: 'POST' });
+            const data = await resp.json();
+            if (!resp.ok) {
+                status.textContent = data.error || 'Error al limpiar precios';
+                return;
+            }
+            status.textContent = `Lista limpiada: ${data.deleted || 0} clave(s)`;
             currentPage = 1;
             cargar(1);
         });

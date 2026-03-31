@@ -1165,3 +1165,25 @@ class ContpaqSucursalIndice(db.Model):
             'source_filename': self.source_filename,
             'imported_at': self.imported_at.isoformat() if self.imported_at else None,
         }
+
+
+class ContpaqPrecioPublico(db.Model):
+    __tablename__ = 'contpaq_precios_publicos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    clave_producto = db.Column(db.String(120), nullable=False, index=True, unique=True)
+    precio_publico = db.Column(db.Float, nullable=True)
+    source_filename = db.Column(db.String(255), nullable=True)
+    source_sheet = db.Column(db.String(120), nullable=True)
+    imported_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    raw_payload = db.Column(db.Text, nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'clave_producto': self.clave_producto,
+            'precio_publico': self.precio_publico,
+            'source_filename': self.source_filename,
+            'source_sheet': self.source_sheet,
+            'imported_at': self.imported_at.isoformat() if self.imported_at else None,
+        }

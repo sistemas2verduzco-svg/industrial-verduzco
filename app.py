@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice, ContpaqPrecioPublico
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -1016,6 +1016,66 @@ def _contpaq_read_indice_dataframe(file_storage, filename, ext, sheet_name=''):
             return first_sheet.fillna('')
         return data.fillna('')
     raise ValueError(f'Formato no soportado: {filename}')
+
+
+def _excel_col_to_index(column_ref):
+    value = str(column_ref or '').strip().upper()
+    if not value:
+        raise ValueError('Columna Excel vacia')
+
+    idx = 0
+    for ch in value:
+        if not ('A' <= ch <= 'Z'):
+            raise ValueError(f'Columna Excel invalida: {column_ref}')
+        idx = (idx * 26) + (ord(ch) - ord('A') + 1)
+    return idx - 1
+
+
+def _contpaq_read_precio_publico_rows(file_storage, filename, ext, sheet_name='Productos', start_row=3, clave_col='D', precio_col='S'):
+    if ext not in ('.xlsx', '.xls'):
+        raise ValueError('Formato no soportado. Usa .xlsx o .xls')
+
+    try:
+        file_storage.stream.seek(0)
+    except Exception:
+        pass
+
+    data = pd.read_excel(file_storage, sheet_name=sheet_name, header=None, dtype=object)
+    if isinstance(data, dict):
+        data = next(iter(data.values()))
+    df = data.fillna('')
+
+    clave_idx = _excel_col_to_index(clave_col)
+    precio_idx = _excel_col_to_index(precio_col)
+    start_idx = max(int(start_row) - 1, 0)
+
+    rows = []
+    for excel_row_num in range(start_idx, len(df.index)):
+        row = df.iloc[excel_row_num]
+        clave = str(row.iloc[clave_idx] if clave_idx < len(row) else '').strip().upper()
+        precio_raw = row.iloc[precio_idx] if precio_idx < len(row) else ''
+
+        if not clave and (precio_raw is None or str(precio_raw).strip() == ''):
+            continue
+        if not clave:
+            continue
+
+        try:
+            precio_publico = float(str(precio_raw).replace(',', '').strip())
+        except Exception:
+            continue
+
+        rows.append({
+            'clave_producto': clave,
+            'precio_publico': precio_publico,
+            'row_number': excel_row_num + 1,
+            'raw_payload': {
+                'clave': clave,
+                'precio_publico': precio_raw,
+            },
+        })
+
+    return rows
 
 
 def run_contpaq_sync(trigger='manual'):
@@ -5468,6 +5528,95 @@ def contpaq_indice_clear():
         return jsonify({'error': str(exc)}), 500
 
 
+@app.route('/api/contpaq/precio-publico/upload', methods=['POST'])
+@login_required
+@requires_permission('catalog', 'edit')
+def contpaq_precio_publico_upload():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No se encontró archivo'}), 400
+
+    file = request.files['file']
+    if not file or file.filename == '':
+        return jsonify({'error': 'Archivo vacío'}), 400
+
+    filename = secure_filename(file.filename)
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in ('.xlsx', '.xls'):
+        return jsonify({'error': 'Formato no soportado. Usa .xlsx o .xls'}), 400
+
+    sheet_name = (request.form.get('sheet') or 'Productos').strip() or 'Productos'
+    clave_col = (request.form.get('clave_col') or 'D').strip() or 'D'
+    precio_col = (request.form.get('precio_col') or 'S').strip() or 'S'
+    start_row = request.form.get('start_row', default=3, type=int) or 3
+
+    try:
+        rows = _contpaq_read_precio_publico_rows(
+            file, filename, ext,
+            sheet_name=sheet_name,
+            start_row=start_row,
+            clave_col=clave_col,
+            precio_col=precio_col,
+        )
+    except Exception as exc:
+        return jsonify({'error': f'No se pudo leer archivo: {exc}'}), 400
+
+    if not rows:
+        return jsonify({'error': 'No se encontraron claves/precios válidos en el archivo'}), 400
+
+    imported = 0
+    db.session.query(ContpaqPrecioPublico).delete()
+
+    for row in rows:
+        item = ContpaqPrecioPublico(
+            clave_producto=row['clave_producto'],
+            precio_publico=row['precio_publico'],
+            source_filename=filename,
+            source_sheet=sheet_name,
+            raw_payload=json.dumps(row['raw_payload'], ensure_ascii=False),
+        )
+        db.session.add(item)
+        imported += 1
+
+    db.session.commit()
+    return jsonify({
+        'ok': True,
+        'imported': imported,
+        'filename': filename,
+        'config': {
+            'sheet': sheet_name,
+            'start_row': start_row,
+            'clave_col': clave_col,
+            'precio_col': precio_col,
+        }
+    }), 200
+
+
+@app.route('/api/contpaq/precio-publico/summary', methods=['GET'])
+@login_required
+@requires_permission('catalog', 'view')
+def contpaq_precio_publico_summary():
+    total = ContpaqPrecioPublico.query.count()
+    latest = ContpaqPrecioPublico.query.order_by(ContpaqPrecioPublico.imported_at.desc()).first()
+    return jsonify({
+        'total': total,
+        'latest': latest.to_dict() if latest else None,
+    }), 200
+
+
+@app.route('/api/contpaq/precio-publico/clear', methods=['POST'])
+@login_required
+@requires_permission('catalog', 'edit')
+def contpaq_precio_publico_clear():
+    try:
+        deleted = ContpaqPrecioPublico.query.delete(synchronize_session=False)
+        db.session.commit()
+        return jsonify({'ok': True, 'deleted': int(deleted)}), 200
+    except Exception as exc:
+        db.session.rollback()
+        logger.error(f"Error limpiando precios publicos CONTPAQ: {exc}", exc_info=True)
+        return jsonify({'error': str(exc)}), 500
+
+
 @app.route('/api/productos/bajo-stock', methods=['GET'])
 @login_required
 def bajo_stock():
@@ -6934,6 +7083,22 @@ def api_contpaq_conciliacion():
         for r in remisiones:
             remisiones_map.setdefault(r.source_document_id, []).append(r)
 
+        visible_claves = {
+            _norm_txt(d.clave_producto)
+            for d in detalles
+            if _norm_txt(d.clave_producto)
+        }
+        visible_claves.update({
+            _norm_txt(row.get('clave_producto'))
+            for row in d_rows
+            if _norm_txt(row.get('clave_producto'))
+        })
+        public_price_map = {
+            _norm_txt(row.clave_producto): float(row.precio_publico)
+            for row in ContpaqPrecioPublico.query.filter(ContpaqPrecioPublico.clave_producto.in_(list(visible_claves))).all()
+            if row.clave_producto is not None and row.precio_publico is not None
+        }
+
         items = []
         total_partidas = 0
         total_importe = 0.0
@@ -7012,6 +7177,10 @@ def api_contpaq_conciliacion():
 
             for d in detalles_map.get(p.document_id, []):
                 partida_total = float(d.total_partida or 0)
+                cantidad_num = _to_float(d.cantidad)
+                precio_publico = public_price_map.get(_norm_txt(d.clave_producto))
+                total_publico = round(cantidad_num * precio_publico, 2) if precio_publico is not None else None
+                diferencia_publico = round(total_publico - partida_total, 2) if total_publico is not None else None
                 pedido_total += partida_total
                 total_partidas += 1
 
@@ -7022,6 +7191,9 @@ def api_contpaq_conciliacion():
                     'cantidad': d.cantidad,
                     'precio_unitario': d.precio_unitario,
                     'total_partida': d.total_partida,
+                    'precio_publico_unitario': precio_publico,
+                    'total_partida_precio_publico': total_publico,
+                    'diferencia_precio_publico': diferencia_publico,
                     'serie': p.serie,
                     'folio': p.doc_folio,
                     'fecha_documento': p.fecha_documento.isoformat() if p.fecha_documento else None,
@@ -7178,6 +7350,9 @@ def api_contpaq_conciliacion():
                 cantidad = _to_float(f.get('cantidad'))
                 precio = _to_float(f.get('precio_unitario'))
                 total_partida = round(cantidad * precio, 2)
+                precio_publico = public_price_map.get(_norm_txt(f.get('clave_producto')))
+                total_publico = round(cantidad * precio_publico, 2) if precio_publico is not None else None
+                diferencia_publico = round(total_publico - total_partida, 2) if total_publico is not None else None
 
                 target_item = items[target_idx]
                 target_item.setdefault('detalles', [])
@@ -7189,6 +7364,9 @@ def api_contpaq_conciliacion():
                     'cantidad': f.get('cantidad'),
                     'precio_unitario': precio,
                     'total_partida': total_partida,
+                    'precio_publico_unitario': precio_publico,
+                    'total_partida_precio_publico': total_publico,
+                    'diferencia_precio_publico': diferencia_publico,
                     'origen_faltante': f.get('origen'),
                     'folio_origen': f.get('folio') or '',
                     'serie': 'D' if f.get('origen') == 'PEDIDO_D' else '',
