@@ -1404,6 +1404,8 @@ def _resolve_post_login_endpoint(user):
         return 'almacen_module'
     if user.has_permission('facturacion', 'view'):
         return 'facturacion_module'
+    if user.has_permission('contpaq', 'view'):
+        return 'contpaq_conciliacion_page'
     if user.has_permission('tickets', 'view'):
         return 'soporte_tecnico'
     if user.has_permission('users', 'view') or user.has_permission('roles', 'view') or user.has_permission('permissions', 'view'):
@@ -1507,6 +1509,8 @@ ROLE_MODULE_BUNDLES = {
     'almacen_edit': [('catalog', 'view'), ('almacen', 'view'), ('almacen', 'edit')],
     'facturacion_view': [('catalog', 'view'), ('facturacion', 'view')],
     'facturacion_edit': [('catalog', 'view'), ('facturacion', 'view'), ('facturacion', 'edit')],
+    'contpaq_view': [('contpaq', 'view')],
+    'contpaq_edit': [('contpaq', 'view'), ('contpaq', 'edit')],
     'procesos_view': [('catalog', 'view'), ('procesos', 'view')],
     'proveedores_view': [('catalog', 'view'), ('proveedores', 'view')],
     'proveedores_edit': [('catalog', 'view'), ('proveedores', 'view'), ('proveedores', 'edit')],
@@ -1563,6 +1567,8 @@ DEFAULT_PERMISSION_CATALOG = [
     ('almacen', 'edit', 'Operar módulo de almacén'),
     ('facturacion', 'view', 'Ver módulo de facturación'),
     ('facturacion', 'edit', 'Operar módulo de facturación'),
+    ('contpaq', 'view', 'Ver módulo de conciliación CONTPAQ'),
+    ('contpaq', 'edit', 'Operar conciliación CONTPAQ'),
     ('procesos', 'view', 'Ver procesos y claves'),
     ('proveedores', 'view', 'Ver proveedores'),
     ('proveedores', 'edit', 'Editar proveedores'),
@@ -1586,6 +1592,7 @@ SIMPLE_PERMISSION_MODULES = [
     ('entregas', 'Entregas'),
     ('almacen', 'Almacen'),
     ('facturacion', 'Facturacion'),
+    ('contpaq', 'CONTPAQ Conciliacion'),
     ('procesos', 'Procesos y claves'),
     ('proveedores', 'Proveedores'),
     ('tickets', 'Tickets'),
@@ -1697,44 +1704,6 @@ def _get_or_create_permission(module, action):
     db.session.add(perm)
     db.session.flush()
     return perm
-
-
-def _ensure_personal_role_for_user(target_user):
-    """Ensure permission edits apply to one user only by cloning shared roles."""
-    if not target_user:
-        return None
-
-    if not target_user.role:
-        base_name = f'perfil_{target_user.username}_{target_user.id}'
-        role_name = base_name
-        suffix = 1
-        while Role.query.filter_by(name=role_name).first():
-            suffix += 1
-            role_name = f'{base_name}_{suffix}'
-        role = Role(name=role_name, descripcion=f'Perfil individual de {target_user.username}')
-        db.session.add(role)
-        db.session.flush()
-        target_user.role = role
-        return role
-
-    role = target_user.role
-    users_in_role = Usuario.query.filter_by(role_id=role.id).count()
-    if users_in_role <= 1:
-        return role
-
-    base_name = f'{role.name}_{target_user.username}_{target_user.id}'
-    role_name = base_name
-    suffix = 1
-    while Role.query.filter_by(name=role_name).first():
-        suffix += 1
-        role_name = f'{base_name}_{suffix}'
-
-    cloned = Role(name=role_name, descripcion=(role.descripcion or f'Clonado para {target_user.username}'))
-    cloned.permissions = list(role.permissions or [])
-    db.session.add(cloned)
-    db.session.flush()
-    target_user.role = cloned
-    return cloned
 
 
 def _ensure_default_permissions():
@@ -4643,9 +4612,6 @@ def api_list_users():
     users = Usuario.query.order_by(Usuario.id.asc()).all()
     data = []
     for u in users:
-        user_permissions = []
-        if u.role and u.role.permissions:
-            user_permissions = [{'module': p.module, 'action': p.action} for p in u.role.permissions]
         data.append({
             'id': u.id,
             'username': u.username,
@@ -4653,7 +4619,6 @@ def api_list_users():
             'activo': u.activo,
             'es_admin': u.es_admin,
             'role': u.role.name if u.role else None,
-            'permissions': user_permissions,
             'fecha_creacion': u.fecha_creacion.isoformat() if u.fecha_creacion else None
         })
     return jsonify({'users': data})
@@ -4918,61 +4883,6 @@ def api_update_user(user_id):
     db.session.add(u)
     db.session.commit()
     return jsonify({'ok': True, 'user': u.to_dict()})
-
-
-@app.route('/api/users/<int:user_id>/module_permissions', methods=['PUT'])
-@login_required
-def api_set_user_module_permissions(user_id):
-    """Set allowed actions for one module for a single user (non-admin included)."""
-    user = get_current_user()
-    if not _can_edit_users_module(user):
-        return jsonify({'error': 'Permiso denegado'}), 403
-
-    target = Usuario.query.get_or_404(user_id)
-    if target.es_admin:
-        return jsonify({'error': 'No se modifican permisos de usuarios admin desde este endpoint'}), 400
-
-    payload = request.get_json() or {}
-    module = (payload.get('module') or '').strip()
-    allowed_actions = payload.get('allowed_actions', []) or []
-
-    if not module:
-        return jsonify({'error': 'module requerido'}), 400
-
-    normalized = []
-    for action in allowed_actions:
-        a = str(action or '').strip().lower()
-        if not a:
-            continue
-        if a not in normalized:
-            normalized.append(a)
-
-    # Cualquier accion operativa requiere view para poder entrar al modulo.
-    if any(a != 'view' for a in normalized) and 'view' not in normalized:
-        normalized.insert(0, 'view')
-
-    role = _ensure_personal_role_for_user(target)
-    if not role:
-        return jsonify({'error': 'No se pudo preparar role para el usuario'}), 500
-
-    updated_permissions = [p for p in (role.permissions or []) if p.module != module]
-    for action in normalized:
-        perm = _get_or_create_permission(module, action)
-        updated_permissions.append(perm)
-
-    role.permissions = updated_permissions
-    db.session.add(role)
-    db.session.add(target)
-    db.session.commit()
-
-    return jsonify({
-        'ok': True,
-        'user_id': target.id,
-        'username': target.username,
-        'role': target.role.name if target.role else None,
-        'module': module,
-        'allowed_actions': normalized,
-    })
 
 
 @app.route('/delete_nonadmin_users', methods=['POST'])
@@ -5576,7 +5486,7 @@ def importar_procesos_excel_status(job_id):
 
 @app.route('/api/contpaq/indice/upload', methods=['POST'])
 @login_required
-@requires_permission('catalog', 'edit')
+@requires_permission('contpaq', 'edit')
 def contpaq_indice_upload():
     if 'file' not in request.files:
         return jsonify({'error': 'No se encontró archivo'}), 400
@@ -5663,7 +5573,7 @@ def contpaq_indice_upload():
 
 @app.route('/api/contpaq/indice/summary', methods=['GET'])
 @login_required
-@requires_permission('catalog', 'view')
+@requires_permission('contpaq', 'view')
 def contpaq_indice_summary():
     total = ContpaqSucursalIndice.query.count()
     latest = ContpaqSucursalIndice.query.order_by(ContpaqSucursalIndice.imported_at.desc()).first()
@@ -5675,7 +5585,7 @@ def contpaq_indice_summary():
 
 @app.route('/api/contpaq/indice/clear', methods=['POST'])
 @login_required
-@requires_permission('catalog', 'edit')
+@requires_permission('contpaq', 'edit')
 def contpaq_indice_clear():
     try:
         deleted = ContpaqSucursalIndice.query.delete(synchronize_session=False)
@@ -5689,7 +5599,7 @@ def contpaq_indice_clear():
 
 @app.route('/api/contpaq/precio-publico/upload', methods=['POST'])
 @login_required
-@requires_permission('catalog', 'edit')
+@requires_permission('contpaq', 'edit')
 def contpaq_precio_publico_upload():
     if 'file' not in request.files:
         return jsonify({'error': 'No se encontró archivo'}), 400
@@ -5752,7 +5662,7 @@ def contpaq_precio_publico_upload():
 
 @app.route('/api/contpaq/precio-publico/summary', methods=['GET'])
 @login_required
-@requires_permission('catalog', 'view')
+@requires_permission('contpaq', 'view')
 def contpaq_precio_publico_summary():
     total = ContpaqPrecioPublico.query.count()
     latest = ContpaqPrecioPublico.query.order_by(ContpaqPrecioPublico.imported_at.desc()).first()
@@ -5764,7 +5674,7 @@ def contpaq_precio_publico_summary():
 
 @app.route('/api/contpaq/precio-publico/clear', methods=['POST'])
 @login_required
-@requires_permission('catalog', 'edit')
+@requires_permission('contpaq', 'edit')
 def contpaq_precio_publico_clear():
     try:
         deleted = ContpaqPrecioPublico.query.delete(synchronize_session=False)
@@ -7077,7 +6987,7 @@ def procesos_base_delete(proc_id):
 
 @app.route('/contpaq/conciliacion')
 @login_required
-@requires_permission('catalog', 'view')
+@requires_permission('contpaq', 'view')
 def contpaq_conciliacion_page():
     """Vista privada para consultar pedidos y su relacion con remisiones (sin menu)."""
     return render_template('contpaq_conciliacion.html')
@@ -7085,7 +6995,7 @@ def contpaq_conciliacion_page():
 
 @app.route('/api/contpaq/conciliacion', methods=['GET'])
 @login_required
-@requires_permission('catalog', 'view')
+@requires_permission('contpaq', 'view')
 def api_contpaq_conciliacion():
     """Devuelve pedidos P-/D con detalle y remisiones relacionadas para consulta en UI."""
     try:
@@ -7638,7 +7548,7 @@ def api_contpaq_conciliacion():
 
 @app.route('/api/contpaq/sync', methods=['POST'])
 @login_required
-@requires_permission('catalog', 'edit')
+@requires_permission('contpaq', 'edit')
 def api_contpaq_sync():
     """Ejecuta sincronizacion manual de CONTPAQi hacia la BD de la nube."""
     result = run_contpaq_sync(trigger=f"manual:{session.get('user')}")
@@ -7690,7 +7600,7 @@ def api_contpaq_sync_push():
 
 @app.route('/api/contpaq/sync/last', methods=['GET'])
 @login_required
-@requires_permission('catalog', 'view')
+@requires_permission('contpaq', 'view')
 def api_contpaq_sync_last():
     """Devuelve estado de la ultima sincronizacion para mostrar en la vista."""
     run = ContpaqSyncRun.query.order_by(ContpaqSyncRun.id.desc()).first()

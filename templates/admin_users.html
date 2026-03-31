@@ -78,13 +78,12 @@
                     <th>Usuario</th>
                     <th>Correo</th>
                     <th>Role</th>
-                    <th>Modulo Usuarios</th>
                     <th>Activo</th>
                     <th>Acciones</th>
                 </tr>
             </thead>
             <tbody id="users-body">
-                <tr><td colspan="7">Cargando...</td></tr>
+                <tr><td colspan="6">Cargando...</td></tr>
             </tbody>
         </table>
     </div>
@@ -131,7 +130,7 @@ async function fetchJson(url, opts){
 
 async function loadUsers(){
     if(!CAN_VIEW_USERS){
-        document.getElementById('users-body').innerHTML = '<tr><td colspan="7">Sin permiso para ver usuarios</td></tr>';
+        document.getElementById('users-body').innerHTML = '<tr><td colspan="6">Sin permiso para ver usuarios</td></tr>';
         return;
     }
     try{
@@ -140,32 +139,6 @@ async function loadUsers(){
         tbody.innerHTML = '';
         data.users.forEach(u=>{
             const tr = document.createElement('tr');
-            const userModuleActions = (u.permissions || [])
-                .filter((p) => p.module === 'users')
-                .map((p) => String(p.action || '').toLowerCase());
-            const actionsSet = new Set(userModuleActions);
-            const hasView = actionsSet.has('view');
-            const hasEdit = actionsSet.has('edit');
-
-            const usersModuleInfo = u.es_admin
-                ? '<span style="display:inline-block; padding:2px 8px; border-radius:12px; background:#e8f5e9; color:#1b5e20; font-weight:600; font-size:12px;">ADMIN (TODO)</span>'
-                : `
-                    <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px;">
-                        <span style="display:inline-block; padding:2px 8px; border-radius:12px; background:${hasView ? '#e3f2fd' : '#ffebee'}; color:${hasView ? '#0d47a1' : '#b71c1c'}; font-size:12px; font-weight:600;">VER: ${hasView ? 'SI' : 'NO'}</span>
-                        <span style="display:inline-block; padding:2px 8px; border-radius:12px; background:${hasEdit ? '#e8f5e9' : '#fff3e0'}; color:${hasEdit ? '#1b5e20' : '#e65100'}; font-size:12px; font-weight:600;">EDITAR: ${hasEdit ? 'SI' : 'NO'}</span>
-                    </div>
-                `;
-
-            const usersModuleButtons = (!u.es_admin && CAN_EDIT_USERS)
-                ? `
-                    <div style="display:flex; flex-wrap:wrap; gap:6px;">
-                        <button class="btn btn-secondary" onclick="setUsersModuleAccess(${u.id}, 'view_only')">Solo ver</button>
-                        <button class="btn btn-success" onclick="setUsersModuleAccess(${u.id}, 'view_edit')">Ver + Editar</button>
-                        <button class="btn btn-danger" onclick="setUsersModuleAccess(${u.id}, 'blocked')">Bloquear</button>
-                    </div>
-                `
-                : '';
-
             const actionButtons = [];
             if(CAN_EDIT_USERS){
                 actionButtons.push(`<button class="btn btn-secondary" onclick="toggleActive(${u.id})">Toggle</button>`);
@@ -185,10 +158,6 @@ async function loadUsers(){
                 <td>${u.username}${u.es_admin? ' <strong>(admin)</strong>':''}</td>
                 <td>${u.correo||''}</td>
                 <td>${u.role || ''}</td>
-                <td>
-                    ${usersModuleInfo}
-                    ${usersModuleButtons}
-                </td>
                 <td>${u.activo? 'Sí':'No'}</td>
                 <td>
                     ${actionButtons.join(' ')}
@@ -197,32 +166,8 @@ async function loadUsers(){
             tbody.appendChild(tr);
         });
     }catch(e){
-        document.getElementById('users-body').innerHTML = '<tr><td colspan="7">Error cargando usuarios</td></tr>';
+        document.getElementById('users-body').innerHTML = '<tr><td colspan="6">Error cargando usuarios</td></tr>';
         console.error(e);
-    }
-}
-
-async function setUsersModuleAccess(userId, mode){
-    if(!CAN_EDIT_USERS){
-        alert('No tienes permiso para editar usuarios.');
-        return;
-    }
-
-    let allowed_actions = [];
-    if(mode === 'view_only') allowed_actions = ['view'];
-    if(mode === 'view_edit') allowed_actions = ['view', 'edit'];
-    if(mode === 'blocked') allowed_actions = [];
-
-    try{
-        const res = await fetch(`/api/users/${userId}/module_permissions`, {
-            method:'PUT',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({module:'users', allowed_actions})
-        });
-        if(!res.ok) throw new Error(await res.text());
-        await loadUsers();
-    }catch(e){
-        alert('Error actualizando permisos del módulo: ' + e.message);
     }
 }
 
@@ -383,6 +328,7 @@ const SIMPLE_MODULES = [
     {id: 'entregas', label: 'ENTREGAS', icon: '📤'},
     {id: 'almacen', label: 'ALMACÉN', icon: '🏬'},
     {id: 'facturacion', label: 'FACTURACIÓN', icon: '🧾'},
+    {id: 'contpaq', label: 'CONTPAQ CONCILIACIÓN', icon: '🔄'},
     {id: 'procesos', label: 'PROCESOS Y CLAVES', icon: '🧩'},
     {id: 'proveedores', label: 'PROVEEDORES', icon: '🏢'},
     {id: 'tickets', label: 'TICKETS', icon: '🎫'}

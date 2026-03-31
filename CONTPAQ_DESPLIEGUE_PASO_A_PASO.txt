@@ -1,11 +1,7 @@
-CONTPAQ - GUIA ULTRA SIMPLE ANTI RENDER
-
-COPIAR Y PEGAR UNO POR UNO
+COMANDOS EXACTOS
 
 LOCAL WINDOWS
 cd C:\Users\Jose\industrial-verduzco
-git add app.py templates/admin_users.html templates/_sidebar.html CONTPAQ_DESPLIEGUE_PASO_A_PASO.txt
-git commit -m "feat: control de permisos por usuario en modulo usuarios"
 git push origin contpaq-mi4-integration
 
 SERVIDOR LINUX
@@ -14,24 +10,19 @@ git pull origin contpaq-mi4-integration
 docker compose up -d --no-deps --build app
 docker compose logs --tail=40 app
 curl -I http://localhost:5000/admin/users
+git log --oneline -1
 
-SI SIGUE VIEJO EN NAVEGADOR
+NAVEGADOR
 Ctrl+F5
 
-PRUEBA NUEVA DE PERMISOS POR USUARIO
-1. Entrar como admin a /admin/users
-2. En cada usuario no admin usar botones del modulo usuarios
-3. Botones disponibles
-Solo ver
-Ver + Editar
-Bloquear
-4. Cerrar sesion y entrar con ese usuario para validar
+VALIDAR NUEVO UI
+Entrar a /admin/users
+Buscar columna: Modulo Usuarios
+Buscar botones: Solo ver
+Buscar botones: Ver + Editar
+Buscar botones: Bloquear
 
-REGLA RAPIDA
-admin ve todo
-usuario normal se controla por permisos
-
-AUTOMATIZAR AGENTE WINDOWS 06:30
+AUTOMATIZAR AGENTE WINDOWS
 where.exe python
 New-Item -ItemType Directory -Path C:\contpaq-sync -Force | Out-Null
 Set-Content C:\contpaq-sync\run_agent.bat '@echo off' -Encoding ascii
@@ -43,7 +34,3 @@ schtasks /Run /TN "CONTPAQ Sync Agent Diario 0630"
 Start-Sleep -Seconds 10
 Get-Content C:\contpaq-sync\run_sync.log -Tail 60
 schtasks /Query /TN "CONTPAQ Sync Agent Diario 0630" /V /FO LIST
-
-RESULTADO ESPERADO
-Ultimo resultado: 0
-Proxima ejecucion: 06:30 AM

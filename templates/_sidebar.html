@@ -59,6 +59,11 @@
         {% endif %}
         {% endif %}
 
+        {% if has_permission('contpaq', 'view') or current_user and current_user.es_admin %}
+        <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">CONTPAQ</div>
+        <a href="/contpaq/conciliacion" class="sb-link" data-base="/contpaq/conciliacion"><span>🔄</span> <span>Conciliacion</span></a>
+        {% endif %}
+
         {% if has_permission('tickets', 'view') or current_user and current_user.es_admin %}
         <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">SOPORTE</div>
         <a href="/soporte" class="sb-link" data-base="/soporte"><span>🔧</span> <span>Sistema de Tickets</span></a>

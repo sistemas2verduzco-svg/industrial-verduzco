@@ -205,9 +205,12 @@
             <input id="fecha_hasta" type="date" title="Fecha hasta">
             <button class="btn btn-primary" id="btnBuscar">Aplicar filtros</button>
             <button class="btn btn-secondary" id="btnLimpiar">Limpiar</button>
+            {% if has_permission('contpaq', 'edit') %}
             <button class="btn btn-secondary" id="btnSync">Sincronizar ahora</button>
+            {% endif %}
         </div>
 
+        {% if has_permission('contpaq', 'edit') %}
         <div class="upload-box">
             <div class="section-title" style="margin-top:0;">Indice principal de sucursales</div>
             <div class="muted">Puedes cargar Excel o CSV para no capturar partida por partida.</div>
@@ -227,6 +230,12 @@
                 <div id="precioStatus" class="status" style="margin:0;"></div>
             </div>
         </div>
+        {% else %}
+        <div class="upload-box">
+            <div class="section-title" style="margin-top:0;">Modo consulta</div>
+            <div class="muted">Tu usuario puede ver la conciliación CONTPAQ, pero no subir archivos ni ejecutar sincronización manual.</div>
+        </div>
+        {% endif %}
 
         <div id="resumen" class="summary-box" style="display:none;"></div>
         <div class="pager">
@@ -247,6 +256,8 @@
     </div>
 
     <script>
+        const CAN_EDIT_CONTPAQ = {{ 'true' if has_permission('contpaq', 'edit') else 'false' }};
+
         function money(v) {
             const n = Number(v || 0);
             if (!Number.isFinite(n)) return '';
@@ -551,39 +562,41 @@
             currentPage = 1;
             cargar(1);
         });
-        document.getElementById('btnSync').addEventListener('click', syncNow);
-        document.getElementById('btnSubirIndice').addEventListener('click', subirIndice);
-        document.getElementById('btnSubirPrecios').addEventListener('click', subirPrecios);
-        document.getElementById('btnLimpiarIndice').addEventListener('click', async () => {
-            const ok = window.confirm('Se borrara todo el indice cargado. Deseas continuar?');
-            if (!ok) return;
-            const status = document.getElementById('indiceStatus');
-            status.textContent = 'Limpiando indice...';
-            const resp = await fetch('/api/contpaq/indice/clear', { method: 'POST' });
-            const data = await resp.json();
-            if (!resp.ok) {
-                status.textContent = data.error || 'Error al limpiar indice';
-                return;
-            }
-            status.textContent = `Indice limpiado: ${data.deleted || 0} fila(s)`;
-            currentPage = 1;
-            cargar(1);
-        });
-        document.getElementById('btnLimpiarPrecios').addEventListener('click', async () => {
-            const ok = window.confirm('Se borrara toda la lista de precios publicos cargada. Deseas continuar?');
-            if (!ok) return;
-            const status = document.getElementById('precioStatus');
-            status.textContent = 'Limpiando precios...';
-            const resp = await fetch('/api/contpaq/precio-publico/clear', { method: 'POST' });
-            const data = await resp.json();
-            if (!resp.ok) {
-                status.textContent = data.error || 'Error al limpiar precios';
-                return;
-            }
-            status.textContent = `Lista limpiada: ${data.deleted || 0} clave(s)`;
-            currentPage = 1;
-            cargar(1);
-        });
+        if (CAN_EDIT_CONTPAQ) {
+            document.getElementById('btnSync').addEventListener('click', syncNow);
+            document.getElementById('btnSubirIndice').addEventListener('click', subirIndice);
+            document.getElementById('btnSubirPrecios').addEventListener('click', subirPrecios);
+            document.getElementById('btnLimpiarIndice').addEventListener('click', async () => {
+                const ok = window.confirm('Se borrara todo el indice cargado. Deseas continuar?');
+                if (!ok) return;
+                const status = document.getElementById('indiceStatus');
+                status.textContent = 'Limpiando indice...';
+                const resp = await fetch('/api/contpaq/indice/clear', { method: 'POST' });
+                const data = await resp.json();
+                if (!resp.ok) {
+                    status.textContent = data.error || 'Error al limpiar indice';
+                    return;
+                }
+                status.textContent = `Indice limpiado: ${data.deleted || 0} fila(s)`;
+                currentPage = 1;
+                cargar(1);
+            });
+            document.getElementById('btnLimpiarPrecios').addEventListener('click', async () => {
+                const ok = window.confirm('Se borrara toda la lista de precios publicos cargada. Deseas continuar?');
+                if (!ok) return;
+                const status = document.getElementById('precioStatus');
+                status.textContent = 'Limpiando precios...';
+                const resp = await fetch('/api/contpaq/precio-publico/clear', { method: 'POST' });
+                const data = await resp.json();
+                if (!resp.ok) {
+                    status.textContent = data.error || 'Error al limpiar precios';
+                    return;
+                }
+                status.textContent = `Lista limpiada: ${data.deleted || 0} clave(s)`;
+                currentPage = 1;
+                cargar(1);
+            });
+        }
         document.getElementById('btnToggleRemisiones').addEventListener('click', () => {
             const wrap = document.getElementById('remisionesTableWrap');
             if (!wrap) return;
