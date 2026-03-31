@@ -6899,6 +6899,13 @@ def api_contpaq_conciliacion():
             except Exception:
                 return _norm_txt(v)
 
+        import re as _re_sem
+
+        def _sem_year_strip(s):
+            """Quita el anno de 4 digitos al final: '13 AL 19 DE ENERO DE 2026' -> '13 AL 19 DE ENERO'."""
+            v = _contpaq_norm_text(str(s or ''))
+            return _re_sem.sub(r'\s+DE\s+\d{4}\s*$', '', v).strip()
+
         p_set = set()
         d_rows = []
 
@@ -6907,7 +6914,9 @@ def api_contpaq_conciliacion():
             if not p_cmp:
                 continue
 
-            semana_cmp_norm = _contpaq_title_week_key(p_cmp.titulo, p_cmp.periodo_semana, p_cmp.fecha_documento)
+            semana_cmp_norm = _sem_year_strip(
+                _contpaq_title_week_key(p_cmp.titulo, p_cmp.periodo_semana, p_cmp.fecha_documento)
+            )
             sucursal_cmp_norm = _norm_txt(p_cmp.sucursal)
             folio_cmp_norm = _norm_txt(p_cmp.doc_folio)
 
@@ -7020,7 +7029,7 @@ def api_contpaq_conciliacion():
             row_key = (
                 _contpaq_norm_text(idx.clave_producto),
                 _contpaq_norm_qty(idx.cantidad),
-                _contpaq_norm_text(idx.semana),
+                _sem_year_strip(idx.semana),
                 _contpaq_norm_text(idx.sucursal),
             )
             if row_key in p_set:
@@ -7085,14 +7094,12 @@ def api_contpaq_conciliacion():
         faltantes_inyectados = 0
         # Inyectamos faltantes solo en la primera pagina para mantener navegacion estable.
         if page == 1:
-            def _ws_key(semana_value, sucursal_value):
-                return (_contpaq_week_match_key(semana_value, None), _norm_txt(sucursal_value))
-
-            # Mapa de destino por (semana, sucursal). Preferimos folios P- cuando existan.
+            # Mapa de destino por (semana_sin_año, sucursal). Preferimos folios P- cuando existan.
             ws_targets = {}
             faltantes_line_counter = {}
             for i, item in enumerate(items):
-                key = (_contpaq_norm_text(item.get('semana_match_key') or item.get('periodo_semana')), _norm_txt(item.get('sucursal')))
+                sem_k = _sem_year_strip(item.get('semana_match_key') or item.get('periodo_semana') or '')
+                key = (sem_k, _norm_txt(item.get('sucursal')))
                 folio_norm = _norm_txt(item.get('doc_folio'))
                 if key not in ws_targets:
                     ws_targets[key] = i
@@ -7100,9 +7107,9 @@ def api_contpaq_conciliacion():
                     ws_targets[key] = i
 
             for f in faltantes_indice:
-                sem_f = str(f.get('semana') or 'SIN SEMANA').strip() or 'SIN SEMANA'
+                sem_f = _sem_year_strip(str(f.get('semana') or '').strip())
                 suc_f = str(f.get('sucursal') or '').strip()
-                key = (_contpaq_week_match_key(sem_f, None), _norm_txt(suc_f))
+                key = (sem_f, _norm_txt(suc_f))
 
                 target_idx = ws_targets.get(key)
                 if target_idx is None:
