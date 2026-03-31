@@ -28,6 +28,23 @@
             flex-wrap: wrap;
         }
 
+        .combo-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 10px;
+            margin: 0 0 14px;
+            align-items: center;
+        }
+
+        .combo-row select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #cfd8dc;
+            border-radius: 8px;
+            font-size: 14px;
+            background: #fff;
+        }
+
         .toolbar input {
             width: 100%;
             padding: 10px 12px;
@@ -121,6 +138,14 @@
             padding-top: 8px;
         }
 
+        .section-table {
+            background: #fff;
+            border: 1px solid #dce3e8;
+            border-radius: 10px;
+            padding: 10px 0;
+            margin-bottom: 14px;
+        }
+
         .muted {
             color: #78909c;
             font-size: 12px;
@@ -163,14 +188,20 @@
         <div class="upload-box">
             <div class="section-title" style="margin-top:0;">Indice principal de sucursales</div>
             <div class="muted">Puedes cargar Excel o CSV para no capturar partida por partida.</div>
-            <div class="toolbar" style="grid-template-columns: 1fr auto auto; margin-bottom:0;">
+            <div class="toolbar" style="grid-template-columns: 1fr auto auto auto; margin-bottom:0;">
                 <input id="indiceFile" type="file" accept=".xlsx,.xls,.csv">
                 <button class="btn btn-secondary" id="btnSubirIndice">Subir indice</button>
+                <button class="btn btn-secondary" id="btnLimpiarIndice" style="background:#ffe9e6;border-color:#ffc9bf;color:#8a1f11;">Limpiar indice</button>
                 <div id="indiceStatus" class="status" style="margin:0;"></div>
             </div>
         </div>
 
         <div id="resumen" class="summary-box" style="display:none;"></div>
+        <div class="combo-row">
+            <select id="semanaCombo"><option value="">Semana (todas)</option></select>
+            <select id="sucursalCombo"><option value="">Sucursal (todas)</option></select>
+            <button class="btn btn-secondary" id="btnToggleRemisiones" style="background:#e8f2ff;border-color:#bfd7ff;color:#0b4b9c;">Mostrar/Ocultar remisiones</button>
+        </div>
         <div class="pager">
             <label for="limit" style="font-size:12px;color:#455a64;">Registros por pagina</label>
             <select id="limit" style="padding:6px 8px;border:1px solid #cfd8dc;border-radius:6px;">
@@ -201,42 +232,6 @@
             return d.toLocaleDateString('es-MX');
         }
 
-        function renderTablaDetalles(detalles) {
-            if (!detalles || !detalles.length) {
-                return '<div class="muted">Sin partidas.</div>';
-            }
-
-            let rows = '';
-            for (const d of detalles) {
-                rows += `
-                    <tr>
-                        <td>${d.line_number ?? ''}</td>
-                        <td>${d.clave_producto || ''}</td>
-                        <td>${d.descripcion || ''}</td>
-                        <td>${d.cantidad ?? ''}</td>
-                        <td>${money(d.precio_unitario)}</td>
-                        <td>${money(d.total_partida)}</td>
-                    </tr>
-                `;
-            }
-
-            return `
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Partida</th>
-                            <th>Clave</th>
-                            <th>Descripcion</th>
-                            <th>Cantidad</th>
-                            <th>Precio Unitario</th>
-                            <th>Total Partida</th>
-                        </tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            `;
-        }
-
         function render(items, resumen) {
             const el = document.getElementById('result');
             const resumenEl = document.getElementById('resumen');
@@ -260,63 +255,120 @@
                 return;
             }
 
-            let html = '';
-            let remisionesUid = 0;
+            const pedidoRows = [];
+            const remisionRows = [];
+
             for (const pedido of items) {
-                remisionesUid += 1;
-                let remisionesHtml = '';
-                const remisionesCount = (pedido.remisiones || []).length;
-                const remisionesPanelId = `rem-${pedido.document_id || remisionesUid}`;
-                if (pedido.remisiones && pedido.remisiones.length) {
-                    for (const rem of pedido.remisiones) {
-                        remisionesHtml += `
-                            <div class="remision-block">
-                                <div class="muted"><b>Remision:</b> ${rem.doc_folio || ''} | <b>Sucursal:</b> ${rem.sucursal || ''} | <b>Fecha:</b> ${fmtDate(rem.fecha_documento)}</div>
-                                ${renderTablaDetalles(rem.detalles || [])}
-                            </div>
-                        `;
-                    }
-                } else {
-                    remisionesHtml = '<div class="muted">Este pedido no tiene remisiones relacionadas.</div>';
+                for (const d of (pedido.detalles || [])) {
+                    pedidoRows.push({
+                        semana: pedido.periodo_semana || '',
+                        fecha: d.fecha_documento || pedido.fecha_documento || '',
+                        folio: d.folio || pedido.doc_folio || '',
+                        serie: d.serie || pedido.serie || '',
+                        sucursal: pedido.sucursal || '',
+                        partida: d.line_number || '',
+                        clave: d.clave_producto || '',
+                        descripcion: d.descripcion || '',
+                        cantidad: d.cantidad ?? '',
+                        precio: d.precio_unitario,
+                        total: d.total_partida,
+                        inyectado: d.es_inyectado ? 'SI' : '',
+                    });
                 }
 
-                const etiquetaFaltante = pedido.es_faltante
-                    ? '<span style="background:#ffecb3;color:#5d4037;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;">FALTANTE INYECTADO</span>'
-                    : '';
+                for (const r of (pedido.remisiones || [])) {
+                    for (const rd of (r.detalles || [])) {
+                        remisionRows.push({
+                            semana: pedido.periodo_semana || '',
+                            folio_pedido: pedido.doc_folio || '',
+                            folio_remision: r.doc_folio || '',
+                            fecha: r.fecha_documento || '',
+                            sucursal: r.sucursal || pedido.sucursal || '',
+                            partida: rd.line_number || '',
+                            clave: rd.clave_producto || '',
+                            descripcion: rd.descripcion || '',
+                            cantidad: rd.cantidad ?? '',
+                            precio: rd.precio_unitario,
+                            total: rd.total_partida,
+                        });
+                    }
+                }
+            }
 
-                html += `
-                    <div class="pedido-card">
-                        <div class="pedido-head">
-                            <div><b>Pedido</b>${pedido.doc_folio || ''} ${etiquetaFaltante}</div>
-                            <div><b>Cliente</b>${pedido.cliente || ''}</div>
-                            <div><b>Sucursal</b>${pedido.sucursal || ''}</div>
-                            <div><b>Titulo/Semana</b>${pedido.titulo || pedido.periodo_semana || ''}</div>
-                        </div>
-                        <div class="section-title">Partidas del pedido</div>
-                        ${renderTablaDetalles(pedido.detalles || [])}
-                        <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-                            <span>Remisiones relacionadas</span>
-                            <button class="btn btn-secondary btn-toggle-remisiones" data-target="${remisionesPanelId}">
-                                Mostrar/Ocultar (${remisionesCount})
-                            </button>
-                        </div>
-                        <div id="${remisionesPanelId}" style="display:none;">
-                            ${remisionesHtml}
-                        </div>
-                    </div>
+            let pedidoRowsHtml = '';
+            for (const r of pedidoRows) {
+                pedidoRowsHtml += `
+                    <tr>
+                        <td>${r.semana}</td>
+                        <td>${fmtDate(r.fecha)}</td>
+                        <td>${r.folio}</td>
+                        <td>${r.serie}</td>
+                        <td>${r.sucursal}</td>
+                        <td>${r.partida}</td>
+                        <td>${r.clave}</td>
+                        <td>${r.descripcion}</td>
+                        <td>${r.cantidad}</td>
+                        <td>${money(r.precio)}</td>
+                        <td>${money(r.total)}</td>
+                        <td>${r.inyectado}</td>
+                    </tr>
                 `;
             }
-            el.innerHTML = html;
 
-            for (const btn of el.querySelectorAll('.btn-toggle-remisiones')) {
-                btn.addEventListener('click', () => {
-                    const targetId = btn.getAttribute('data-target');
-                    if (!targetId) return;
-                    const panel = el.querySelector(`#${CSS.escape(targetId)}`);
-                    if (!panel) return;
-                    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-                });
+            let remRowsHtml = '';
+            for (const r of remisionRows) {
+                remRowsHtml += `
+                    <tr>
+                        <td>${r.semana}</td>
+                        <td>${r.folio_pedido}</td>
+                        <td>${r.folio_remision}</td>
+                        <td>${fmtDate(r.fecha)}</td>
+                        <td>${r.sucursal}</td>
+                        <td>${r.partida}</td>
+                        <td>${r.clave}</td>
+                        <td>${r.descripcion}</td>
+                        <td>${r.cantidad}</td>
+                        <td>${money(r.precio)}</td>
+                        <td>${money(r.total)}</td>
+                    </tr>
+                `;
             }
+
+            el.innerHTML = `
+                <div class="section-table">
+                    <div class="section-title">Pedidos / Partidas (tabla superior)</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Semana</th><th>Fecha</th><th>Folio</th><th>Serie</th><th>Sucursal</th><th>Partida</th><th>Clave</th><th>Descripcion</th><th>Cantidad</th><th>Precio Unitario</th><th>Total Partida</th><th>Inyectado</th>
+                            </tr>
+                        </thead>
+                        <tbody>${pedidoRowsHtml || '<tr><td colspan="12">Sin partidas</td></tr>'}</tbody>
+                    </table>
+                </div>
+                <div id="remisionesTableWrap" class="section-table" style="display:block;">
+                    <div class="section-title">Remisiones (tabla inferior)</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Semana</th><th>Folio Pedido</th><th>Folio Remision</th><th>Fecha</th><th>Sucursal</th><th>Partida</th><th>Clave</th><th>Descripcion</th><th>Cantidad</th><th>Precio Unitario</th><th>Total Partida</th>
+                            </tr>
+                        </thead>
+                        <tbody>${remRowsHtml || '<tr><td colspan="11">Sin remisiones</td></tr>'}</tbody>
+                    </table>
+                </div>
+            `;
+
+            const semanas = [...new Set(pedidoRows.map(x => x.semana).filter(Boolean))].sort();
+            const sucursales = [...new Set(pedidoRows.map(x => x.sucursal).filter(Boolean))].sort();
+            const semCombo = document.getElementById('semanaCombo');
+            const sucCombo = document.getElementById('sucursalCombo');
+            const semVal = semCombo.value;
+            const sucVal = sucCombo.value;
+            semCombo.innerHTML = '<option value="">Semana (todas)</option>' + semanas.map(s => `<option value="${s}">${s}</option>`).join('');
+            sucCombo.innerHTML = '<option value="">Sucursal (todas)</option>' + sucursales.map(s => `<option value="${s}">${s}</option>`).join('');
+            semCombo.value = semanas.includes(semVal) ? semVal : '';
+            sucCombo.value = sucursales.includes(sucVal) ? sucVal : '';
         }
 
         let currentPage = 1;
@@ -346,6 +398,11 @@
                 const val = (document.getElementById(campo)?.value || '').trim();
                 if (val) params.set(campo, val);
             }
+
+            const semanaComboVal = (document.getElementById('semanaCombo')?.value || '').trim();
+            const sucursalComboVal = (document.getElementById('sucursalCombo')?.value || '').trim();
+            if (semanaComboVal) params.set('titulo', semanaComboVal);
+            if (sucursalComboVal) params.set('sucursal', sucursalComboVal);
 
             params.set('limit', (document.getElementById('limit')?.value || '120'));
             params.set('page', String(page));
@@ -410,6 +467,34 @@
         });
         document.getElementById('btnSync').addEventListener('click', syncNow);
         document.getElementById('btnSubirIndice').addEventListener('click', subirIndice);
+        document.getElementById('btnLimpiarIndice').addEventListener('click', async () => {
+            const ok = window.confirm('Se borrara todo el indice cargado. Deseas continuar?');
+            if (!ok) return;
+            const status = document.getElementById('indiceStatus');
+            status.textContent = 'Limpiando indice...';
+            const resp = await fetch('/api/contpaq/indice/clear', { method: 'POST' });
+            const data = await resp.json();
+            if (!resp.ok) {
+                status.textContent = data.error || 'Error al limpiar indice';
+                return;
+            }
+            status.textContent = `Indice limpiado: ${data.deleted || 0} fila(s)`;
+            currentPage = 1;
+            cargar(1);
+        });
+        document.getElementById('btnToggleRemisiones').addEventListener('click', () => {
+            const wrap = document.getElementById('remisionesTableWrap');
+            if (!wrap) return;
+            wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
+        });
+        document.getElementById('semanaCombo').addEventListener('change', () => {
+            currentPage = 1;
+            cargar(1);
+        });
+        document.getElementById('sucursalCombo').addEventListener('change', () => {
+            currentPage = 1;
+            cargar(1);
+        });
         document.getElementById('limit').addEventListener('change', () => {
             currentPage = 1;
             cargar(1);

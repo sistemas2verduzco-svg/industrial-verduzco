@@ -5382,6 +5382,20 @@ def contpaq_indice_summary():
     }), 200
 
 
+@app.route('/api/contpaq/indice/clear', methods=['POST'])
+@login_required
+@requires_permission('catalog', 'edit')
+def contpaq_indice_clear():
+    try:
+        deleted = ContpaqSucursalIndice.query.delete(synchronize_session=False)
+        db.session.commit()
+        return jsonify({'ok': True, 'deleted': int(deleted)}), 200
+    except Exception as exc:
+        db.session.rollback()
+        logger.error(f"Error limpiando indice CONTPAQ: {exc}", exc_info=True)
+        return jsonify({'error': str(exc)}), 500
+
+
 @app.route('/api/productos/bajo-stock', methods=['GET'])
 @login_required
 def bajo_stock():
@@ -6766,6 +6780,9 @@ def api_contpaq_conciliacion():
                 )
 
         total_records = pedidos_q.count()
+        compare_pedidos = pedidos_q.all()
+        compare_map = {p.document_id: p for p in compare_pedidos}
+        compare_doc_ids = [p.document_id for p in compare_pedidos]
         offset = (page - 1) * limit
         pedidos = pedidos_q.order_by(ContpaqPedido.fecha_documento.desc(), ContpaqPedido.id.desc()).offset(offset).limit(limit).all()
         if not pedidos:
@@ -6782,6 +6799,9 @@ def api_contpaq_conciliacion():
 
         pedido_doc_ids = [p.document_id for p in pedidos]
         detalles = ContpaqPedidoDetalle.query.filter(ContpaqPedidoDetalle.document_id.in_(pedido_doc_ids)).order_by(ContpaqPedidoDetalle.document_id.asc(), ContpaqPedidoDetalle.line_number.asc()).all()
+        compare_detalles = []
+        if compare_doc_ids:
+            compare_detalles = ContpaqPedidoDetalle.query.filter(ContpaqPedidoDetalle.document_id.in_(compare_doc_ids)).order_by(ContpaqPedidoDetalle.document_id.asc(), ContpaqPedidoDetalle.line_number.asc()).all()
 
         detalles_map = {}
         for d in detalles:
@@ -6821,6 +6841,41 @@ def api_contpaq_conciliacion():
         p_set = set()
         d_rows = []
 
+        for d in compare_detalles:
+            p_cmp = compare_map.get(d.document_id)
+            if not p_cmp:
+                continue
+
+            semana_cmp_norm = _norm_txt(p_cmp.periodo_semana)
+            sucursal_cmp_norm = _norm_txt(p_cmp.sucursal)
+            folio_cmp_norm = _norm_txt(p_cmp.doc_folio)
+
+            row_key_cmp = (
+                _norm_txt(d.clave_producto),
+                _norm_num(d.cantidad),
+                semana_cmp_norm,
+                sucursal_cmp_norm,
+            )
+            p_set.add(row_key_cmp)
+
+            if folio_cmp_norm.startswith('D'):
+                d_rows.append({
+                    'folio': p_cmp.doc_folio,
+                    'semana': p_cmp.periodo_semana,
+                    'semana_norm': semana_cmp_norm,
+                    'sucursal': p_cmp.sucursal,
+                    'clave_producto': d.clave_producto,
+                    'descripcion': d.descripcion,
+                    'cantidad': d.cantidad,
+                    'precio_unitario': d.precio_unitario,
+                    'line_number': d.line_number,
+                    'fecha_documento': p_cmp.fecha_documento.date() if p_cmp.fecha_documento else None,
+                    'clave_norm': _norm_txt(d.clave_producto),
+                    'cantidad_norm': _norm_num(d.cantidad),
+                    'sucursal_norm': sucursal_cmp_norm,
+                    'key': row_key_cmp,
+                })
+
         for p in pedidos:
             pedido_rows = []
             pedido_total = 0.0
@@ -6840,35 +6895,11 @@ def api_contpaq_conciliacion():
                     'cantidad': d.cantidad,
                     'precio_unitario': d.precio_unitario,
                     'total_partida': d.total_partida,
+                    'serie': p.serie,
+                    'folio': p.doc_folio,
+                    'fecha_documento': p.fecha_documento.isoformat() if p.fecha_documento else None,
+                    'es_inyectado': False,
                 })
-
-                row_key = (
-                    _norm_txt(d.clave_producto),
-                    _norm_num(d.cantidad),
-                    semana_norm,
-                    sucursal_norm,
-                )
-                # Regla del script original: existencia en el conjunto de pedidos
-                # de la semana/sucursal sin distinguir serie.
-                p_set.add(row_key)
-
-                # Las partidas de serie D se conservan para enriquecer faltantes reales.
-                if folio_norm.startswith('D'):
-                    d_rows.append({
-                        'folio': p.doc_folio,
-                        'semana': p.periodo_semana,
-                        'sucursal': p.sucursal,
-                        'clave_producto': d.clave_producto,
-                        'descripcion': d.descripcion,
-                        'cantidad': d.cantidad,
-                        'precio_unitario': d.precio_unitario,
-                        'line_number': d.line_number,
-                        'fecha_documento': p.fecha_documento.date() if p.fecha_documento else None,
-                        'clave_norm': _norm_txt(d.clave_producto),
-                        'cantidad_norm': _norm_num(d.cantidad),
-                        'sucursal_norm': sucursal_norm,
-                        'key': row_key,
-                    })
 
             remisiones_rows = []
             for r in remisiones_map.get(p.document_id, []):
@@ -6962,6 +6993,21 @@ def api_contpaq_conciliacion():
                         None,
                     )
 
+            if d_match is None:
+                clave_norm = _contpaq_norm_text(idx.clave_producto)
+                cantidad_norm = _contpaq_norm_qty(idx.cantidad)
+                sucursal_norm = _contpaq_norm_text(idx.sucursal)
+                d_match = next(
+                    (
+                        row for row in d_rows
+                        if row.get('clave_norm') == clave_norm
+                        and row.get('cantidad_norm') == cantidad_norm
+                        and row.get('sucursal_norm') == sucursal_norm
+                        and not (row.get('semana_norm') or '').strip()
+                    ),
+                    None,
+                )
+
             faltantes_indice.append({
                 'folio': d_match['folio'] if d_match else (idx.folio or ''),
                 'semana': idx.semana,
@@ -6998,25 +7044,8 @@ def api_contpaq_conciliacion():
 
                 target_idx = ws_targets.get(key)
                 if target_idx is None:
-                    # Fallback cuando no hay ningun pedido cargado para esa semana+sucursal.
-                    items.append({
-                        'document_id': None,
-                        'doc_folio': f'FALTANTE SEMANA {sem_f}',
-                        'serie': 'FALTANTE',
-                        'cliente': 'FALTANTE DESDE INDICE',
-                        'sucursal': suc_f,
-                        'titulo': f'FALTANTES SEMANA {sem_f}',
-                        'periodo_semana': sem_f,
-                        'fecha_documento': None,
-                        'pedido_total': 0.0,
-                        'detalles': [],
-                        'remisiones': [],
-                        'es_faltante': True,
-                    })
-                    target_idx = len(items) - 1
-                    ws_targets[key] = target_idx
-                    if sem_f not in semana_totales:
-                        semana_totales[sem_f] = {'pedidos': 1, 'total': 0.0}
+                    # No crear tarjetas artificiales; solo inyectar en pedidos visibles.
+                    continue
 
                 cantidad = _to_float(f.get('cantidad'))
                 precio = _to_float(f.get('precio_unitario'))
@@ -7034,6 +7063,10 @@ def api_contpaq_conciliacion():
                     'total_partida': total_partida,
                     'origen_faltante': f.get('origen'),
                     'folio_origen': f.get('folio') or '',
+                    'serie': 'D' if f.get('origen') == 'PEDIDO_D' else '',
+                    'folio': f.get('folio') or '',
+                    'fecha_documento': None,
+                    'es_inyectado': True,
                 })
 
                 target_item['pedido_total'] = round(_to_float(target_item.get('pedido_total')) + total_partida, 2)
