@@ -6777,15 +6777,6 @@ def api_contpaq_conciliacion():
         if sucursal:
             pedidos_q = pedidos_q.filter(ContpaqPedido.sucursal.ilike(f"%{sucursal}%"))
 
-        if titulo:
-            lt = f"%{titulo}%"
-            pedidos_q = pedidos_q.filter(
-                db.or_(
-                    ContpaqPedido.titulo.ilike(lt),
-                    ContpaqPedido.periodo_semana.ilike(lt),
-                )
-            )
-
         if fecha_desde_raw:
             fecha_desde = _parse_date(fecha_desde_raw)
             if not fecha_desde:
@@ -6814,12 +6805,23 @@ def api_contpaq_conciliacion():
                     )
                 )
 
-        total_records = pedidos_q.count()
-        compare_pedidos = pedidos_q.all()
+        ordered_q = pedidos_q.order_by(ContpaqPedido.fecha_documento.desc(), ContpaqPedido.id.desc())
+        compare_pedidos = ordered_q.all()
+
+        if titulo:
+            titulo_norm = _contpaq_norm_text(titulo)
+            compare_pedidos = [
+                p for p in compare_pedidos
+                if titulo_norm in _contpaq_norm_text(p.titulo)
+                or titulo_norm in _contpaq_norm_text(p.periodo_semana)
+                or titulo_norm in _contpaq_week_match_key(p.periodo_semana, p.fecha_documento)
+            ]
+
+        total_records = len(compare_pedidos)
         compare_map = {p.document_id: p for p in compare_pedidos}
         compare_doc_ids = [p.document_id for p in compare_pedidos]
         offset = (page - 1) * limit
-        pedidos = pedidos_q.order_by(ContpaqPedido.fecha_documento.desc(), ContpaqPedido.id.desc()).offset(offset).limit(limit).all()
+        pedidos = compare_pedidos[offset:offset + limit]
         if not pedidos:
             return jsonify({
                 'items': [],
