@@ -951,6 +951,41 @@ def _contpaq_norm_qty(value):
         return _contpaq_norm_text(value)
 
 
+def _contpaq_week_label_from_date(value):
+    dt_value = None
+    if isinstance(value, datetime):
+        dt_value = value.date()
+    else:
+        parsed = _parse_date(value)
+        if parsed:
+            dt_value = parsed
+
+    if not dt_value:
+        return ''
+
+    # Semana de negocio observada en archivos del usuario: martes a lunes.
+    days_since_tuesday = (dt_value.weekday() - 1) % 7
+    start_date = dt_value - timedelta(days=days_since_tuesday)
+    end_date = start_date + timedelta(days=6)
+    months = {
+        1: 'ENERO', 2: 'FEBRERO', 3: 'MARZO', 4: 'ABRIL', 5: 'MAYO', 6: 'JUNIO',
+        7: 'JULIO', 8: 'AGOSTO', 9: 'SEPTIEMBRE', 10: 'OCTUBRE', 11: 'NOVIEMBRE', 12: 'DICIEMBRE'
+    }
+    return f"{start_date.day} AL {end_date.day} DE {months.get(end_date.month, '')}".strip()
+
+
+def _contpaq_week_match_key(semana_value=None, fecha_value=None):
+    semana_norm = _contpaq_norm_text(semana_value)
+    if ' AL ' in semana_norm and ' DE ' in semana_norm:
+        return semana_norm
+
+    label_from_date = _contpaq_week_label_from_date(fecha_value)
+    if label_from_date:
+        return _contpaq_norm_text(label_from_date)
+
+    return semana_norm
+
+
 def _contpaq_detect_import_column(columns, aliases):
     normalized = [(col, col.strip().lower().replace('-', '').replace('_', '').replace(' ', '')) for col in columns]
     for alias in aliases:
@@ -6846,7 +6881,7 @@ def api_contpaq_conciliacion():
             if not p_cmp:
                 continue
 
-            semana_cmp_norm = _norm_txt(p_cmp.periodo_semana)
+            semana_cmp_norm = _contpaq_week_match_key(p_cmp.periodo_semana, p_cmp.fecha_documento)
             sucursal_cmp_norm = _norm_txt(p_cmp.sucursal)
             folio_cmp_norm = _norm_txt(p_cmp.doc_folio)
 
@@ -6879,7 +6914,7 @@ def api_contpaq_conciliacion():
         for p in pedidos:
             pedido_rows = []
             pedido_total = 0.0
-            semana_norm = _norm_txt(p.periodo_semana)
+            semana_norm = _contpaq_week_match_key(p.periodo_semana, p.fecha_documento)
             sucursal_norm = _norm_txt(p.sucursal)
             folio_norm = _norm_txt(p.doc_folio)
 
@@ -6937,6 +6972,7 @@ def api_contpaq_conciliacion():
                 'sucursal': p.sucursal,
                 'titulo': p.titulo,
                 'periodo_semana': p.periodo_semana,
+                'semana_match_key': semana_norm,
                 'fecha_documento': p.fecha_documento.isoformat() if p.fecha_documento else None,
                 'pedido_total': round(pedido_total, 2),
                 'detalles': pedido_rows,
@@ -6958,7 +6994,7 @@ def api_contpaq_conciliacion():
             row_key = (
                 _contpaq_norm_text(idx.clave_producto),
                 _contpaq_norm_qty(idx.cantidad),
-                _contpaq_norm_text(idx.semana),
+                _contpaq_week_match_key(idx.semana, idx.fecha_documento),
                 _contpaq_norm_text(idx.sucursal),
             )
             if row_key in p_set:
@@ -7024,13 +7060,13 @@ def api_contpaq_conciliacion():
         # Inyectamos faltantes solo en la primera pagina para mantener navegacion estable.
         if page == 1:
             def _ws_key(semana_value, sucursal_value):
-                return (_norm_txt(semana_value), _norm_txt(sucursal_value))
+                return (_contpaq_week_match_key(semana_value, None), _norm_txt(sucursal_value))
 
             # Mapa de destino por (semana, sucursal). Preferimos folios P- cuando existan.
             ws_targets = {}
             faltantes_line_counter = {}
             for i, item in enumerate(items):
-                key = _ws_key(item.get('periodo_semana'), item.get('sucursal'))
+                key = (_contpaq_norm_text(item.get('semana_match_key') or item.get('periodo_semana')), _norm_txt(item.get('sucursal')))
                 folio_norm = _norm_txt(item.get('doc_folio'))
                 if key not in ws_targets:
                     ws_targets[key] = i
@@ -7040,7 +7076,7 @@ def api_contpaq_conciliacion():
             for f in faltantes_indice:
                 sem_f = str(f.get('semana') or 'SIN SEMANA').strip() or 'SIN SEMANA'
                 suc_f = str(f.get('sucursal') or '').strip()
-                key = _ws_key(sem_f, suc_f)
+                key = (_contpaq_week_match_key(sem_f, None), _norm_txt(suc_f))
 
                 target_idx = ws_targets.get(key)
                 if target_idx is None:
