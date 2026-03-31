@@ -1,0 +1,29 @@
+DISCO LLENO - RECUPERACION DE EMERGENCIA - 31 MARZO 2026
+Los bots (Bingbot) llenaron el disco con access_logs. Ejecuta en SSH en orden:
+
+=== PASO 1: VER CUANTO ESPACIO QUEDA ===
+df -h
+
+=== PASO 2: LIMPIAR LOGS DE DOCKER (libera varios GB) ===
+find /var/lib/docker/containers -name "*.log" -exec truncate -s 0 {} \;
+
+=== PASO 3: LIMPIAR IMAGENES/CAPAS DOCKER INUTILIZADAS ===
+docker system prune -f
+
+=== PASO 4: VER CUANTO SE LIBERO ===
+df -h
+
+=== PASO 5: LEVANTAR LA BASE DE DATOS ===
+docker compose up -d db
+
+=== PASO 6: ESPERAR 10 SEGUNDOS Y VERIFICAR ===
+docker compose ps
+
+=== PASO 7: TRUNCAR access_logs (borrar todos los logs de bots) ===
+docker compose exec db psql -U catalogo_user -d catalogo_db -c "TRUNCATE TABLE access_logs;"
+
+=== PASO 8: DESPLEGAR APP CON FIX DE BOTS (filtro ya incluido en codigo) ===
+./deploy.sh
+
+=== SI EL DB SIGUE FALLANDO - VER LOGS ===
+docker compose logs db --tail=30

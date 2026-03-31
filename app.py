@@ -1151,9 +1151,15 @@ def log_access_y_cierre_por_hora():
         else:
             client_ip = request.remote_addr
 
-        ua = request.headers.get('User-Agent')
+        ua = request.headers.get('User-Agent') or ''
         referer = request.headers.get('Referer')
         username = session.get('user') if 'user' in session else None
+
+        # Skip bots/crawlers — they flood access_logs and fill the disk
+        _BOT_KEYWORDS = ('bot', 'crawl', 'spider', 'slurp', 'mediapartners',
+                         'facebookexternalhit', 'scan', 'check', 'monitoring')
+        if any(kw in ua.lower() for kw in _BOT_KEYWORDS):
+            return
 
         # Create log entry
         from models import AccessLog
@@ -1167,6 +1173,19 @@ def log_access_y_cierre_por_hora():
         )
         db.session.add(entry)
         db.session.commit()
+
+        # Periodic cleanup: keep only last 50,000 rows (runs ~1% of requests)
+        import random
+        if random.random() < 0.01:
+            try:
+                db.session.execute(db.text(
+                    "DELETE FROM access_logs WHERE id NOT IN ("
+                    "  SELECT id FROM access_logs ORDER BY timestamp DESC LIMIT 50000"
+                    ")"
+                ))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
     except Exception:
         try:
             db.session.rollback()
