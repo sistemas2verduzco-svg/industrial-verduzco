@@ -6824,22 +6824,28 @@ def api_contpaq_conciliacion():
                 or titulo_norm in _contpaq_title_week_key(p.titulo, p.periodo_semana, p.fecha_documento)
             ]
 
+        # Serie D solo para comparar y como fuente de faltantes; NO se muestra como fila propia.
+        display_pedidos = [
+            p for p in compare_pedidos
+            if not str(p.doc_folio or '').strip().upper().startswith('D')
+        ]
+
         semana_options = sorted({
             _contpaq_title_week_key(p.titulo, p.periodo_semana, p.fecha_documento)
-            for p in compare_pedidos
+            for p in display_pedidos
             if _contpaq_title_week_key(p.titulo, p.periodo_semana, p.fecha_documento)
         })
         sucursal_options = sorted({
             str(p.sucursal or '').strip()
-            for p in compare_pedidos
+            for p in display_pedidos
             if str(p.sucursal or '').strip()
         })
 
-        total_records = len(compare_pedidos)
+        total_records = len(display_pedidos)
         compare_map = {p.document_id: p for p in compare_pedidos}
         compare_doc_ids = [p.document_id for p in compare_pedidos]
         offset = (page - 1) * limit
-        pedidos = compare_pedidos[offset:offset + limit]
+        pedidos = display_pedidos[offset:offset + limit]
         if not pedidos:
             return jsonify({
                 'items': [],
