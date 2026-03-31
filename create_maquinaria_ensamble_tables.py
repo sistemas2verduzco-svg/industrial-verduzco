@@ -30,6 +30,86 @@ CREATE TABLE IF NOT EXISTS maquinaria_pedidos (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS maquinaria_contpaq_pedidos (
+    id SERIAL PRIMARY KEY,
+    document_id BIGINT NOT NULL UNIQUE,
+    owned_business_entity_id BIGINT,
+    folio VARCHAR(120) NOT NULL,
+    serie VARCHAR(20),
+    business_entity_name VARCHAR(255),
+    depot_name VARCHAR(255),
+    date_document TIMESTAMP,
+    date_doc_delivery TIMESTAMP,
+    title VARCHAR(255),
+    sales_rep VARCHAR(255),
+    currency VARCHAR(40),
+    rate DOUBLE PRECISION,
+    subtotal DOUBLE PRECISION,
+    total DOUBLE PRECISION,
+    total_tax DOUBLE PRECISION,
+    total_discount DOUBLE PRECISION,
+    total_retention DOUBLE PRECISION,
+    total_cost DOUBLE PRECISION,
+    comments TEXT,
+    payment_term_name VARCHAR(255),
+    language_name VARCHAR(255),
+    cost_center_name VARCHAR(255),
+    cost_center_category VARCHAR(255),
+    period_month VARCHAR(30),
+    period_week VARCHAR(30),
+    period_year VARCHAR(10),
+    period_quarter VARCHAR(30),
+    campaign_name VARCHAR(255),
+    campaign_id BIGINT,
+    intl_symbol VARCHAR(20),
+    total_invoiced DOUBLE PRECISION,
+    total_invoice_paid DOUBLE PRECISION,
+    total_invoice_balance DOUBLE PRECISION,
+    invoiced INTEGER,
+    status_delivery_id BIGINT,
+    status_delivery VARCHAR(120),
+    total_paid DOUBLE PRECISION,
+    balance DOUBLE PRECISION,
+    globalizado BOOLEAN DEFAULT FALSE,
+    rfc_cliente VARCHAR(40),
+    metodo_pago VARCHAR(20),
+    forma_pago VARCHAR(20),
+    tipo_facturacion VARCHAR(120),
+    invoice_document_id BIGINT,
+    sucursal VARCHAR(255),
+    printed BOOLEAN NOT NULL DEFAULT FALSE,
+    validated BOOLEAN NOT NULL DEFAULT FALSE,
+    cancelled BOOLEAN NOT NULL DEFAULT FALSE,
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    in_use BOOLEAN NOT NULL DEFAULT FALSE,
+    auth1 BOOLEAN NOT NULL DEFAULT FALSE,
+    auth2 BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS maquinaria_contpaq_pedidos_detalle (
+    id SERIAL PRIMARY KEY,
+    pedido_id INTEGER NOT NULL REFERENCES maquinaria_contpaq_pedidos(id) ON DELETE CASCADE,
+    document_id BIGINT NOT NULL,
+    line_number INTEGER NOT NULL DEFAULT 0,
+    quantity DOUBLE PRECISION,
+    product_id BIGINT,
+    product_key VARCHAR(120),
+    description TEXT,
+    discount_perc DOUBLE PRECISION,
+    tax_perc DOUBLE PRECISION,
+    tax_type_name VARCHAR(120),
+    unit_price DOUBLE PRECISION,
+    total_item DOUBLE PRECISION,
+    unit VARCHAR(40),
+    clave_unidad VARCHAR(40),
+    coef_unit DOUBLE PRECISION,
+    period_week VARCHAR(30),
+    period_month VARCHAR(30),
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_maquinaria_contpaq_pedido_linea UNIQUE (document_id, line_number)
+);
+
 CREATE TABLE IF NOT EXISTS maquinaria_boms (
     id SERIAL PRIMARY KEY,
     clave_maquina VARCHAR(120) NOT NULL UNIQUE,
@@ -101,6 +181,10 @@ CREATE TABLE IF NOT EXISTS maquinaria_almacen_resguardos (
 );
 
 CREATE INDEX IF NOT EXISTS idx_maq_pedidos_clave ON maquinaria_pedidos(clave_maquina);
+CREATE INDEX IF NOT EXISTS idx_maq_contpaq_folio ON maquinaria_contpaq_pedidos(folio);
+CREATE INDEX IF NOT EXISTS idx_maq_contpaq_fecha ON maquinaria_contpaq_pedidos(date_document);
+CREATE INDEX IF NOT EXISTS idx_maq_contpaq_status ON maquinaria_contpaq_pedidos(status_delivery);
+CREATE INDEX IF NOT EXISTS idx_maq_contpaq_det_doc ON maquinaria_contpaq_pedidos_detalle(document_id);
 CREATE INDEX IF NOT EXISTS idx_maq_ot_clave ON maquinaria_ordenes_trabajo(clave_maquina);
 CREATE INDEX IF NOT EXISTS idx_maq_series_clave ON maquinaria_series(clave_maquina);
 '''

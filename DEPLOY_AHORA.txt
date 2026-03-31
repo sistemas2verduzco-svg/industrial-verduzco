@@ -1,29 +1,25 @@
-DISCO LLENO - RECUPERACION DE EMERGENCIA - 31 MARZO 2026
-Los bots (Bingbot) llenaron el disco con access_logs. Ejecuta en SSH en orden:
+CONCILIADOR - HACER AHORA
 
-=== PASO 1: VER CUANTO ESPACIO QUEDA ===
-df -h
+YA ESTA VALIDADO:
+- Rama correcta: contpaq-mi4-integration
+- Commit correcto: 764796d
+- Backend correcto: app.py ya trae _query_in_chunks
+- Plantilla correcta: contpaq_conciliacion.html ya trae syncTopCombos y select id="titulo"
 
-=== PASO 2: LIMPIAR LOGS DE DOCKER (libera varios GB) ===
-find /var/lib/docker/containers -name "*.log" -exec truncate -s 0 {} \;
+1) REINICIAR LA APP
+cd ~/industrial-verduzco
+docker compose restart app
 
-=== PASO 3: LIMPIAR IMAGENES/CAPAS DOCKER INUTILIZADAS ===
-docker system prune -f
-
-=== PASO 4: VER CUANTO SE LIBERO ===
-df -h
-
-=== PASO 5: LEVANTAR LA BASE DE DATOS ===
-docker compose up -d db
-
-=== PASO 6: ESPERAR 10 SEGUNDOS Y VERIFICAR ===
+2) VALIDAR QUE SUBIO BIEN
 docker compose ps
+docker compose logs --tail=60 app
 
-=== PASO 7: TRUNCAR access_logs (borrar todos los logs de bots) ===
-docker compose exec db psql -U catalogo_user -d catalogo_db -c "TRUNCATE TABLE access_logs;"
+3) PROBAR EL CONCILIADOR DESDE EL SERVIDOR
+curl -I http://localhost:5000/contpaq/conciliacion
 
-=== PASO 8: DESPLEGAR APP CON FIX DE BOTS (filtro ya incluido en codigo) ===
-./deploy.sh
+4) SI EL curl RESPONDE 200 O 302, ABRIR LA PAGINA EN EL NAVEGADOR Y HACER RECARGA DURA
+Ctrl + F5
 
-=== SI EL DB SIGUE FALLANDO - VER LOGS ===
-docker compose logs db --tail=30
+5) SI SIGUE MAL, PEGAR ESTAS SALIDAS
+docker compose logs --tail=120 app
+curl -s http://localhost:5000/contpaq/conciliacion | head -n 20

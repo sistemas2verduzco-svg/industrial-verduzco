@@ -1224,6 +1224,135 @@ class MaquinariaPedido(db.Model):
         }
 
 
+class MaquinariaContpaqPedido(db.Model):
+    __tablename__ = 'maquinaria_contpaq_pedidos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    document_id = db.Column(db.BigInteger, nullable=False, unique=True, index=True)
+    owned_business_entity_id = db.Column(db.BigInteger, nullable=True, index=True)
+    folio = db.Column(db.String(120), nullable=False, index=True)
+    serie = db.Column(db.String(20), nullable=True, index=True)
+    business_entity_name = db.Column(db.String(255), nullable=True, index=True)
+    depot_name = db.Column(db.String(255), nullable=True, index=True)
+    date_document = db.Column(db.DateTime, nullable=True, index=True)
+    date_doc_delivery = db.Column(db.DateTime, nullable=True, index=True)
+    title = db.Column(db.String(255), nullable=True, index=True)
+    sales_rep = db.Column(db.String(255), nullable=True)
+    currency = db.Column(db.String(40), nullable=True)
+    rate = db.Column(db.Float, nullable=True)
+    subtotal = db.Column(db.Float, nullable=True)
+    total = db.Column(db.Float, nullable=True)
+    total_tax = db.Column(db.Float, nullable=True)
+    total_discount = db.Column(db.Float, nullable=True)
+    total_retention = db.Column(db.Float, nullable=True)
+    total_cost = db.Column(db.Float, nullable=True)
+    comments = db.Column(db.Text, nullable=True)
+    payment_term_name = db.Column(db.String(255), nullable=True)
+    language_name = db.Column(db.String(255), nullable=True)
+    cost_center_name = db.Column(db.String(255), nullable=True)
+    cost_center_category = db.Column(db.String(255), nullable=True)
+    period_month = db.Column(db.String(30), nullable=True, index=True)
+    period_week = db.Column(db.String(30), nullable=True, index=True)
+    period_year = db.Column(db.String(10), nullable=True, index=True)
+    period_quarter = db.Column(db.String(30), nullable=True)
+    campaign_name = db.Column(db.String(255), nullable=True)
+    campaign_id = db.Column(db.BigInteger, nullable=True)
+    intl_symbol = db.Column(db.String(20), nullable=True)
+    total_invoiced = db.Column(db.Float, nullable=True)
+    total_invoice_paid = db.Column(db.Float, nullable=True)
+    total_invoice_balance = db.Column(db.Float, nullable=True)
+    invoiced = db.Column(db.Integer, nullable=True)
+    status_delivery_id = db.Column(db.BigInteger, nullable=True)
+    status_delivery = db.Column(db.String(120), nullable=True, index=True)
+    total_paid = db.Column(db.Float, nullable=True)
+    balance = db.Column(db.Float, nullable=True)
+    globalizado = db.Column(db.Boolean, nullable=True)
+    rfc_cliente = db.Column(db.String(40), nullable=True)
+    metodo_pago = db.Column(db.String(20), nullable=True)
+    forma_pago = db.Column(db.String(20), nullable=True)
+    tipo_facturacion = db.Column(db.String(120), nullable=True)
+    invoice_document_id = db.Column(db.BigInteger, nullable=True)
+    sucursal = db.Column(db.String(255), nullable=True, index=True)
+    printed = db.Column(db.Boolean, nullable=False, default=False)
+    validated = db.Column(db.Boolean, nullable=False, default=False)
+    cancelled = db.Column(db.Boolean, nullable=False, default=False)
+    deleted = db.Column(db.Boolean, nullable=False, default=False)
+    in_use = db.Column(db.Boolean, nullable=False, default=False)
+    auth1 = db.Column(db.Boolean, nullable=False, default=False)
+    auth2 = db.Column(db.Boolean, nullable=False, default=False)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    detalles = db.relationship('MaquinariaContpaqPedidoDetalle', backref='pedido', lazy=True, cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'document_id': self.document_id,
+            'folio': self.folio,
+            'serie': self.serie,
+            'business_entity_name': self.business_entity_name,
+            'sucursal': self.sucursal,
+            'date_document': self.date_document.isoformat() if self.date_document else None,
+            'date_doc_delivery': self.date_doc_delivery.isoformat() if self.date_doc_delivery else None,
+            'title': self.title,
+            'subtotal': self.subtotal,
+            'total': self.total,
+            'status_delivery': self.status_delivery,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class MaquinariaContpaqPedidoDetalle(db.Model):
+    __tablename__ = 'maquinaria_contpaq_pedidos_detalle'
+
+    id = db.Column(db.Integer, primary_key=True)
+    pedido_id = db.Column(db.Integer, db.ForeignKey('maquinaria_contpaq_pedidos.id'), nullable=False, index=True)
+    document_id = db.Column(db.BigInteger, nullable=False, index=True)
+    line_number = db.Column(db.Integer, nullable=False, default=0)
+    quantity = db.Column(db.Float, nullable=True)
+    product_id = db.Column(db.BigInteger, nullable=True)
+    product_key = db.Column(db.String(120), nullable=True, index=True)
+    description = db.Column(db.Text, nullable=True)
+    discount_perc = db.Column(db.Float, nullable=True)
+    tax_perc = db.Column(db.Float, nullable=True)
+    tax_type_name = db.Column(db.String(120), nullable=True)
+    unit_price = db.Column(db.Float, nullable=True)
+    total_item = db.Column(db.Float, nullable=True)
+    unit = db.Column(db.String(40), nullable=True)
+    clave_unidad = db.Column(db.String(40), nullable=True)
+    coef_unit = db.Column(db.Float, nullable=True)
+    period_week = db.Column(db.String(30), nullable=True, index=True)
+    period_month = db.Column(db.String(30), nullable=True, index=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('document_id', 'line_number', name='uq_maquinaria_contpaq_pedido_linea'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'pedido_id': self.pedido_id,
+            'document_id': self.document_id,
+            'line_number': self.line_number,
+            'quantity': self.quantity,
+            'product_id': self.product_id,
+            'product_key': self.product_key,
+            'description': self.description,
+            'discount_perc': self.discount_perc,
+            'tax_perc': self.tax_perc,
+            'tax_type_name': self.tax_type_name,
+            'unit_price': self.unit_price,
+            'total_item': self.total_item,
+            'unit': self.unit,
+            'clave_unidad': self.clave_unidad,
+            'coef_unit': self.coef_unit,
+            'period_week': self.period_week,
+            'period_month': self.period_month,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class MaquinariaBOM(db.Model):
     __tablename__ = 'maquinaria_boms'
 

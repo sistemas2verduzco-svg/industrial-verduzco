@@ -10,7 +10,7 @@
     {% include '_sidebar.html' %}
     <div class="container" style="padding-top:20px;">
         <h2 style="margin:0 0 6px 0;">Maquinaria y Ensamble - Pedidos</h2>
-        <div style="color:#64748b; font-size:13px; margin-bottom:14px;">Consulta pedidos CONTPAQ y genera pedidos internos para maquinaria.</div>
+        <div style="color:#64748b; font-size:13px; margin-bottom:14px;">Consulta pedidos de maquinaria CONTPAQ serie E no entregados desde junio 2025 y genera pedidos internos para maquinaria.</div>
 
         {% if setup_required %}
         <div style="background:#fff3cd; border:1px solid #ffe69c; color:#664d03; border-radius:8px; padding:10px; margin-bottom:12px;">
@@ -19,7 +19,7 @@
         </div>
         {% endif %}
 
-        <div style="display:grid; grid-template-columns:1.2fr 1fr; gap:12px;">
+        <div style="display:grid; grid-template-columns:0.95fr 1.35fr; gap:12px; align-items:start;">
             <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px;">
                 <h3 style="margin:0 0 8px 0; font-size:16px;">Nuevo pedido interno</h3>
                 <form method="post" action="/maquinaria/pedidos/create" style="display:grid; gap:8px;">
@@ -37,16 +37,74 @@
                 <div style="margin-top:10px; font-size:12px; color:#64748b;">BOMs cargados: {{ boms|length }}</div>
             </div>
 
-            <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px;">
-                <h3 style="margin:0 0 8px 0; font-size:16px;">Consulta pedidos CONTPAQ</h3>
-                <div style="max-height:420px; overflow:auto;">
+            <div style="display:grid; gap:12px;">
+                <div style="background:linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%); border:1px solid #bfdbfe; border-radius:14px; padding:14px;">
+                    <div style="font-size:12px; color:#1d4ed8; font-weight:800; letter-spacing:.06em;">CONTPAQ MAQUINARIA</div>
+                    <div style="font-size:24px; font-weight:800; color:#0f172a; margin-top:4px;">{{ pedidos_contpaq|length }} pedidos activos</div>
+                    <div style="font-size:12px; color:#475569; margin-top:6px;">Filtrados por serie E, estatus NO ENTREGADO y fecha desde 2025-06-01.</div>
+                </div>
+                <div style="max-height:720px; overflow:auto; display:grid; gap:12px;">
                     {% for p in pedidos_contpaq %}
-                    <div style="padding:8px; border-bottom:1px solid #eef2f7;">
-                        <div><strong>{{ p.doc_folio }}</strong> - {{ p.cliente or '-' }}</div>
-                        <div style="font-size:12px; color:#64748b;">ID: {{ p.document_id }} | {{ p.titulo or '-' }} | {{ p.fecha_documento.strftime('%Y-%m-%d') if p.fecha_documento else '-' }}</div>
-                    </div>
+                    <section style="background:#ffffff; border:1px solid #dbe4f0; border-radius:16px; overflow:hidden; box-shadow:0 8px 28px rgba(15,23,42,0.06);">
+                        <div style="padding:14px 16px; background:linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%); color:#fff;">
+                            <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start; flex-wrap:wrap;">
+                                <div>
+                                    <div style="font-size:12px; opacity:0.85; font-weight:700;">PEDIDO {{ p.serie or 'E' }}</div>
+                                    <div style="font-size:24px; font-weight:800; line-height:1.1; margin-top:2px;">{{ p.folio }}</div>
+                                    <div style="font-size:13px; opacity:0.9; margin-top:6px;">{{ p.business_entity_name or '-' }}</div>
+                                </div>
+                                <div style="text-align:right; min-width:200px;">
+                                    <div style="display:inline-block; background:rgba(255,255,255,0.14); padding:6px 10px; border-radius:999px; font-size:12px; font-weight:800;">{{ p.status_delivery or 'NO ENTREGADO' }}</div>
+                                    <div style="font-size:12px; margin-top:10px; opacity:0.9;">{{ p.date_document.strftime('%Y-%m-%d') if p.date_document else '-' }}</div>
+                                    <div style="font-size:12px; opacity:0.9;">Sucursal: {{ p.sucursal or p.depot_name or '-' }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="padding:14px 16px; display:grid; grid-template-columns:repeat(4, minmax(120px, 1fr)); gap:10px; background:#f8fafc; border-bottom:1px solid #e2e8f0;">
+                            <div><div style="font-size:11px; color:#64748b; font-weight:700;">TOTAL</div><div style="font-size:18px; font-weight:800; color:#0f172a;">{{ '%.2f'|format(p.total or 0) }}</div></div>
+                            <div><div style="font-size:11px; color:#64748b; font-weight:700;">SUBTOTAL</div><div style="font-size:18px; font-weight:800; color:#0f172a;">{{ '%.2f'|format(p.subtotal or 0) }}</div></div>
+                            <div><div style="font-size:11px; color:#64748b; font-weight:700;">SEMANA</div><div style="font-size:15px; font-weight:800; color:#0f172a;">{{ p.period_week or '-' }}</div></div>
+                            <div><div style="font-size:11px; color:#64748b; font-weight:700;">VENDEDOR</div><div style="font-size:15px; font-weight:800; color:#0f172a;">{{ p.sales_rep or '-' }}</div></div>
+                        </div>
+
+                        <div style="padding:14px 16px;">
+                            <div style="font-size:14px; font-weight:800; color:#0f172a; margin-bottom:10px;">{{ p.title or 'Sin titulo' }}</div>
+                            {% if p.comments %}
+                            <div style="font-size:12px; color:#475569; margin-bottom:12px;">{{ p.comments }}</div>
+                            {% endif %}
+                            <div style="border:1px solid #e2e8f0; border-radius:12px; overflow:hidden;">
+                                <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                                    <thead>
+                                        <tr style="background:#f8fafc; text-align:left;">
+                                            <th style="padding:9px; border-bottom:1px solid #e2e8f0;">Partida</th>
+                                            <th style="padding:9px; border-bottom:1px solid #e2e8f0;">Clave</th>
+                                            <th style="padding:9px; border-bottom:1px solid #e2e8f0;">Descripcion</th>
+                                            <th style="padding:9px; border-bottom:1px solid #e2e8f0;">Cant.</th>
+                                            <th style="padding:9px; border-bottom:1px solid #e2e8f0;">P. Unit</th>
+                                            <th style="padding:9px; border-bottom:1px solid #e2e8f0;">Importe</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for d in p.detalles %}
+                                        <tr>
+                                            <td style="padding:9px; border-bottom:1px solid #eef2f7; font-weight:700;">{{ d.line_number }}</td>
+                                            <td style="padding:9px; border-bottom:1px solid #eef2f7;">{{ d.product_key or '-' }}</td>
+                                            <td style="padding:9px; border-bottom:1px solid #eef2f7;">{{ d.description or '-' }}</td>
+                                            <td style="padding:9px; border-bottom:1px solid #eef2f7;">{{ d.quantity or 0 }}</td>
+                                            <td style="padding:9px; border-bottom:1px solid #eef2f7;">{{ '%.2f'|format(d.unit_price or 0) }}</td>
+                                            <td style="padding:9px; border-bottom:1px solid #eef2f7; font-weight:700;">{{ '%.2f'|format(d.total_item or 0) }}</td>
+                                        </tr>
+                                        {% else %}
+                                        <tr><td colspan="6" style="padding:9px; color:#64748b;">Sin partidas sincronizadas.</td></tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </section>
                     {% else %}
-                    <div style="font-size:12px; color:#64748b;">Sin pedidos CONTPAQ sincronizados.</div>
+                    <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; color:#64748b;">Sin pedidos de maquinaria sincronizados.</div>
                     {% endfor %}
                 </div>
             </div>

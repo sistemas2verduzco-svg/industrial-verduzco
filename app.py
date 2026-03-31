@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice, ContpaqPrecioPublico, MaquinariaPedido, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice, ContpaqPrecioPublico, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -563,6 +563,7 @@ CONTPAQ_SYNC_INTERVAL_MINUTES = max(5, int(os.getenv('CONTPAQ_SYNC_INTERVAL_MINU
 CONTPAQ_SYNC_STARTUP_DELAY_SECONDS = max(5, int(os.getenv('CONTPAQ_SYNC_STARTUP_DELAY_SECONDS', '30') or 30))
 CONTPAQ_CUSTOMER_NAME = os.getenv('CONTPAQ_CUSTOMER_NAME', 'RUTH VERDUZCO SANTOS').strip()
 CONTPAQ_START_DATE = os.getenv('CONTPAQ_START_DATE', '2025-01-01').strip()
+CONTPAQ_MAQUINARIA_START_DATE = os.getenv('CONTPAQ_MAQUINARIA_START_DATE', '2025-06-01').strip()
 
 _CONTPAQ_SYNC_LOCK = threading.Lock()
 _CONTPAQ_SYNC_THREAD = None
@@ -933,6 +934,111 @@ def _upsert_contpaq_data(payload):
         item.total_partida = round(cantidad * precio, 2)
         item.updated_at = datetime.utcnow()
         stats['remision_detalles_upserted'] += 1
+
+    return stats
+
+
+def _upsert_maquinaria_contpaq_data(payload):
+    maquinaria_pedidos = payload.get('maquinaria_pedidos') or []
+    maquinaria_pedidos_detalle = payload.get('maquinaria_pedidos_detalle') or []
+
+    stats = {
+        'maquinaria_pedidos_upserted': 0,
+        'maquinaria_pedido_detalles_upserted': 0,
+    }
+
+    maquinaria_map = {}
+    for row in maquinaria_pedidos:
+        doc_id = int(row.get('DocumentID') or 0)
+        if doc_id <= 0:
+            continue
+        pedido = MaquinariaContpaqPedido.query.filter_by(document_id=doc_id).first()
+        if not pedido:
+            pedido = MaquinariaContpaqPedido(document_id=doc_id)
+            db.session.add(pedido)
+        pedido.owned_business_entity_id = int(row.get('OwnedBusinessEntityID') or 0) or None
+        pedido.folio = str(row.get('DocFolio') or '').strip()
+        pedido.serie = _serie_from_folio(pedido.folio)
+        pedido.business_entity_name = str(row.get('BusinessEntityName') or '').strip()
+        pedido.depot_name = str(row.get('DepotName') or '').strip()
+        pedido.date_document = _parse_datetime(row.get('DateDocument'))
+        pedido.date_doc_delivery = _parse_datetime(row.get('DateDocDelivery'))
+        pedido.title = str(row.get('Title') or '').strip()
+        pedido.sales_rep = str(row.get('SalesRep') or '').strip()
+        pedido.currency = str(row.get('Currency') or '').strip()
+        pedido.rate = _to_float(row.get('Rate'))
+        pedido.subtotal = _to_float(row.get('SubTotal'))
+        pedido.total = _to_float(row.get('Total'))
+        pedido.total_tax = _to_float(row.get('TotalTax'))
+        pedido.total_discount = _to_float(row.get('TotalDiscount'))
+        pedido.total_retention = _to_float(row.get('TotalRetention'))
+        pedido.total_cost = _to_float(row.get('TotalCost'))
+        pedido.comments = str(row.get('Comments') or '').strip()
+        pedido.payment_term_name = str(row.get('PaymentTermName') or '').strip()
+        pedido.language_name = str(row.get('LanguageName') or '').strip()
+        pedido.cost_center_name = str(row.get('CostCenterName') or '').strip()
+        pedido.cost_center_category = str(row.get('CostCenterCategory') or '').strip()
+        pedido.period_month = str(row.get('PeriodMonth') or '').strip()
+        pedido.period_week = str(row.get('PeriodWeek') or '').strip()
+        pedido.period_year = str(row.get('PeriodYear') or '').strip()
+        pedido.period_quarter = str(row.get('PeriodQuarter') or '').strip()
+        pedido.campaign_name = str(row.get('CampaignName') or '').strip()
+        pedido.campaign_id = int(row.get('CampaignID') or 0) or None
+        pedido.intl_symbol = str(row.get('IntlSymbol') or '').strip()
+        pedido.total_invoiced = _to_float(row.get('TotalInvoiced'))
+        pedido.total_invoice_paid = _to_float(row.get('TotalInvoicePaid'))
+        pedido.total_invoice_balance = _to_float(row.get('TotalInvoiceBalance'))
+        pedido.invoiced = int(row.get('Invoiced') or 0)
+        pedido.status_delivery_id = int(row.get('StatusDeliveryID') or 0) or None
+        pedido.status_delivery = str(row.get('StatusDelivery') or '').strip()
+        pedido.total_paid = _to_float(row.get('TotalPaid'))
+        pedido.balance = _to_float(row.get('Balance'))
+        pedido.globalizado = bool(row.get('Globalizado')) if row.get('Globalizado') is not None else False
+        pedido.rfc_cliente = str(row.get('RFC_Cliente') or '').strip()
+        pedido.metodo_pago = str(row.get('MetodoPago') or '').strip()
+        pedido.forma_pago = str(row.get('FormaPago') or '').strip()
+        pedido.tipo_facturacion = str(row.get('TipoFacturacion') or '').strip()
+        pedido.invoice_document_id = int(row.get('InvoiceDocumentID') or 0) or None
+        pedido.sucursal = str(row.get('Sucursal') or '').strip()
+        pedido.printed = bool(row.get('Printed'))
+        pedido.validated = bool(row.get('Validated'))
+        pedido.cancelled = bool(row.get('Cancelled'))
+        pedido.deleted = bool(row.get('Deleted'))
+        pedido.in_use = bool(row.get('InUse'))
+        pedido.auth1 = bool(row.get('Auth1'))
+        pedido.auth2 = bool(row.get('Auth2'))
+        pedido.updated_at = datetime.utcnow()
+        maquinaria_map[doc_id] = pedido
+        stats['maquinaria_pedidos_upserted'] += 1
+
+    db.session.flush()
+
+    for row in maquinaria_pedidos_detalle:
+        doc_id = int(row.get('DocumentID') or 0)
+        if doc_id <= 0 or doc_id not in maquinaria_map:
+            continue
+        line_number = int(row.get('LineNumber') or 0)
+        item = MaquinariaContpaqPedidoDetalle.query.filter_by(document_id=doc_id, line_number=line_number).first()
+        if not item:
+            item = MaquinariaContpaqPedidoDetalle(document_id=doc_id, line_number=line_number)
+            db.session.add(item)
+        item.pedido_id = maquinaria_map[doc_id].id
+        item.quantity = _to_float(row.get('Quantity'))
+        item.product_id = int(row.get('ProductID') or 0) or None
+        item.product_key = str(row.get('ProductKey') or '').strip().upper()[:120]
+        item.description = str(row.get('Description') or '').strip()
+        item.discount_perc = _to_float(row.get('DiscountPerc'))
+        item.tax_perc = _to_float(row.get('TaxPerc'))
+        item.tax_type_name = str(row.get('TaxTypeName') or '').strip()
+        item.unit_price = _to_float(row.get('UnitPrice'))
+        item.total_item = _to_float(row.get('TotalItem'))
+        item.unit = str(row.get('Unit') or '').strip()
+        item.clave_unidad = str(row.get('ClaveUnidad') or '').strip()
+        item.coef_unit = _to_float(row.get('CoefUnit'))
+        item.period_week = str(row.get('PeriodWeek') or '').strip()
+        item.period_month = str(row.get('PeriodMonth') or '').strip()
+        item.updated_at = datetime.utcnow()
+        stats['maquinaria_pedido_detalles_upserted'] += 1
 
     return stats
 
@@ -7625,6 +7731,27 @@ def api_contpaq_sync_push():
         return jsonify({'ok': False, 'error': str(exc), 'run_id': sync_run.id}), 500
 
 
+@app.route('/api/contpaq/maquinaria/sync/push', methods=['POST'])
+def api_contpaq_maquinaria_sync_push():
+    """Recibe solo pedidos de maquinaria desde el agente local, separado de conciliacion."""
+    ok, err = _require_sync_key()
+    if not ok:
+        return err
+
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify({'error': 'Payload invalido'}), 400
+
+    try:
+        stats = _upsert_maquinaria_contpaq_data(payload)
+        db.session.commit()
+        return jsonify({'ok': True, 'stats': stats}), 200
+    except Exception as exc:
+        db.session.rollback()
+        logger.error(f'[CONTPAQ-MAQUINARIA] Error de sincronizacion: {exc}', exc_info=True)
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
 @app.route('/api/contpaq/sync/last', methods=['GET'])
 @login_required
 @requires_permission('contpaq', 'view')
@@ -7636,6 +7763,8 @@ def api_contpaq_sync_last():
 
 MAQUINARIA_TABLES = [
     'maquinaria_pedidos',
+    'maquinaria_contpaq_pedidos',
+    'maquinaria_contpaq_pedidos_detalle',
     'maquinaria_boms',
     'maquinaria_bom_componentes',
     'maquinaria_ordenes_trabajo',
@@ -7662,7 +7791,12 @@ def maquinaria_pedidos_page():
     pedidos_locales = []
     if ready:
         pedidos_locales = MaquinariaPedido.query.order_by(MaquinariaPedido.id.desc()).limit(50).all()
-    pedidos_contpaq = ContpaqPedido.query.order_by(ContpaqPedido.fecha_documento.desc()).limit(50).all()
+    pedidos_contpaq = []
+    if ready:
+        pedidos_contpaq = MaquinariaContpaqPedido.query.filter(
+            MaquinariaContpaqPedido.cancelled.is_(False),
+            MaquinariaContpaqPedido.deleted.is_(False),
+        ).order_by(MaquinariaContpaqPedido.date_document.desc(), MaquinariaContpaqPedido.id.desc()).limit(80).all()
     boms = MaquinariaBOM.query.order_by(MaquinariaBOM.clave_maquina.asc()).all() if ready else []
     return render_template(
         'maquinaria_pedidos.html',
