@@ -7084,20 +7084,17 @@ def api_contpaq_conciliacion():
             remisiones_map.setdefault(r.source_document_id, []).append(r)
 
         visible_claves = {
-            _norm_txt(d.clave_producto)
-            for d in detalles
-            if _norm_txt(d.clave_producto)
+            _contpaq_norm_text(d.clave_producto)
+            for d in (detalles + compare_detalles)
+            if _contpaq_norm_text(d.clave_producto)
         }
-        visible_claves.update({
-            _norm_txt(row.get('clave_producto'))
-            for row in d_rows
-            if _norm_txt(row.get('clave_producto'))
-        })
-        public_price_map = {
-            _norm_txt(row.clave_producto): float(row.precio_publico)
-            for row in ContpaqPrecioPublico.query.filter(ContpaqPrecioPublico.clave_producto.in_(list(visible_claves))).all()
-            if row.clave_producto is not None and row.precio_publico is not None
-        }
+        public_price_map = {}
+        if visible_claves:
+            public_price_map = {
+                _contpaq_norm_text(row.clave_producto): float(row.precio_publico)
+                for row in ContpaqPrecioPublico.query.filter(ContpaqPrecioPublico.clave_producto.in_(list(visible_claves))).all()
+                if row.clave_producto is not None and row.precio_publico is not None
+            }
 
         items = []
         total_partidas = 0
