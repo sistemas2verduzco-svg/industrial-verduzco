@@ -3146,14 +3146,15 @@ def hojas_ruta_entregas_list():
             )
 
         estacion_actual = 'Sin produccion'
-        tiempo_real = None
+        tiempo_real = '00:00:00'
 
         if hoja_activa:
-            tiempo_real = hoja_activa.total_tiempo or _compute_mp_total_time_preview_by_pn(
-                hoja_activa.pn,
-                hoja_activa.cantidad_piezas,
-                hoja_activa.total_tiempo,
-            )
+            # elapsed time since hoja was started (for countdown clock in template)
+            if hoja_activa.fecha_salida:
+                elapsed_sec = max(0, int((datetime.utcnow() - hoja_activa.fecha_salida).total_seconds()))
+                tiempo_real = _format_seconds_to_hms(elapsed_sec)
+            else:
+                tiempo_real = '00:00:00'
 
         maquinas_data.append({
             'id': maq.id,
@@ -3236,6 +3237,20 @@ def api_mapa_maquinas():
         elif existing.estado != 'activa' and h.estado == 'activa':
             hoja_activa_por_maquina[h.maquina_id] = h
 
+    # Tambien incluir HojaRutaNueva activas (modulo MP) para maquinas no cubiertas
+    hojas_activas_mp = HojaRutaNueva.query.filter(
+        HojaRutaNueva.maquina_id.isnot(None),
+        HojaRutaNueva.estado.in_(['activa', 'pausada'])
+    ).order_by(HojaRutaNueva.fecha_creacion.desc()).all()
+    for h in hojas_activas_mp:
+        existing = hoja_activa_por_maquina.get(h.maquina_id)
+        if existing is None:
+            hoja_activa_por_maquina[h.maquina_id] = h
+        elif isinstance(existing, HojaRutaEntrega):
+            pass  # entregas tiene prioridad visual en el mapa
+        elif existing.estado != 'activa' and h.estado == 'activa':
+            hoja_activa_por_maquina[h.maquina_id] = h
+
     # Tambien considerar maquinas con HojaRutaNueva activa (modulo MP)
     maquinas_con_hoja_nueva = set(
         h.maquina_id for h in HojaRutaNueva.query.filter(
@@ -3291,53 +3306,70 @@ def api_mapa_maquinas():
         progreso_pct = 0
         tiempo_proceso_pieza = None
         if hoja_activa:
-            estacion_actual = EstacionTrabajo.query.filter_by(
-                hoja_ruta_id=hoja_activa.id,
-                estado='en_curso'
-            ).order_by(EstacionTrabajo.orden).first()
+            is_mp_hoja = isinstance(hoja_activa, HojaRutaNueva)
+            if is_mp_hoja:
+                # MP: proceso actual viene de ClaveProceso virtual, no de EstacionTrabajo
+                completed_ids = _mp_parse_completed_process_ids(hoja_activa.materia_prima)
+                virtual_ests = _build_mp_virtual_estaciones_by_pn(hoja_activa.pn, completed_ids)
+                est_mp = next((e for e in virtual_ests if e.get('estado') == 'en_curso'), None)
+                if est_mp:
+                    estacion_actual = SimpleNamespace(
+                        id=est_mp['id'],
+                        nombre=est_mp.get('operacion') or est_mp.get('nombre') or 'Proceso',
+                    )
+                    inicio = hoja_activa.fecha_salida
+                    if inicio:
+                        transcurrido_sec = max(0, int((datetime.utcnow() - inicio).total_seconds()))
+                        tiempo_transcurrido = _format_seconds_to_hms(transcurrido_sec)
+                # Eficiencia planta: MP no tiene EstacionTrabajo, no se computa
+            else:
+                estacion_actual = EstacionTrabajo.query.filter_by(
+                    hoja_ruta_id=hoja_activa.id,
+                    estado='en_curso'
+                ).order_by(EstacionTrabajo.orden).first()
 
-            if estacion_actual:
-                cantidad = max(1, int(hoja_activa.cantidad_piezas or 0))
-                sec_por_pieza = _station_seconds(estacion_actual)
-                objetivo_sec = max(0, sec_por_pieza * cantidad)
+                if estacion_actual:
+                    cantidad = max(1, int(hoja_activa.cantidad_piezas or 0))
+                    sec_por_pieza = _station_seconds(estacion_actual)
+                    objetivo_sec = max(0, sec_por_pieza * cantidad)
 
-                inicio = estacion_actual.fecha_inicio or hoja_activa.fecha_salida
-                transcurrido_sec = _working_seconds_between(inicio, datetime.utcnow()) if inicio else 0
-                restante_sec = max(0, objetivo_sec - transcurrido_sec)
+                    inicio = estacion_actual.fecha_inicio or hoja_activa.fecha_salida
+                    transcurrido_sec = _working_seconds_between(inicio, datetime.utcnow()) if inicio else 0
+                    restante_sec = max(0, objetivo_sec - transcurrido_sec)
 
-                if sec_por_pieza > 0:
-                    tiempo_proceso_pieza = _format_seconds_to_hms(sec_por_pieza)
-                if objetivo_sec > 0:
-                    tiempo_objetivo = _format_seconds_to_hms(objetivo_sec)
-                    tiempo_transcurrido = _format_seconds_to_hms(transcurrido_sec)
-                    tiempo_restante = _format_seconds_to_hms(restante_sec)
-                    proceso_culminado = restante_sec <= 0
-                    progreso_pct = min(100, int((transcurrido_sec * 100) / objetivo_sec))
+                    if sec_por_pieza > 0:
+                        tiempo_proceso_pieza = _format_seconds_to_hms(sec_por_pieza)
+                    if objetivo_sec > 0:
+                        tiempo_objetivo = _format_seconds_to_hms(objetivo_sec)
+                        tiempo_transcurrido = _format_seconds_to_hms(transcurrido_sec)
+                        tiempo_restante = _format_seconds_to_hms(restante_sec)
+                        proceso_culminado = restante_sec <= 0
+                        progreso_pct = min(100, int((transcurrido_sec * 100) / objetivo_sec))
 
-            # Eficiencia planta: sumar tiempo productivo real por estaciones de la hoja activa.
-            estaciones_hoja = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja_activa.id).all()
-            for est in estaciones_hoja:
-                start_ref = est.fecha_inicio
-                if not start_ref and (est.estado or '').lower() == 'en_curso':
-                    start_ref = hoja_activa.fecha_salida
-                if not start_ref:
-                    continue
+                # Eficiencia planta: sumar tiempo productivo real por estaciones de la hoja activa.
+                estaciones_hoja = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja_activa.id).all()
+                for est in estaciones_hoja:
+                    start_ref = est.fecha_inicio
+                    if not start_ref and (est.estado or '').lower() == 'en_curso':
+                        start_ref = hoja_activa.fecha_salida
+                    if not start_ref:
+                        continue
 
-                estado_est = (est.estado or '').lower()
-                if estado_est == 'en_curso':
-                    interval_end = now_dt
-                elif estado_est == 'completada' and est.fecha_finalizacion:
-                    interval_end = est.fecha_finalizacion
-                else:
-                    continue
+                    estado_est = (est.estado or '').lower()
+                    if estado_est == 'en_curso':
+                        interval_end = now_dt
+                    elif estado_est == 'completada' and est.fecha_finalizacion:
+                        interval_end = est.fecha_finalizacion
+                    else:
+                        continue
 
-                if interval_end <= start_ref:
-                    continue
+                    if interval_end <= start_ref:
+                        continue
 
-                # KPI de eficiencia en tiempo real: usar ventana continua para evitar 0 artificial por cortes de horario.
-                productive_hour += _bounded_seconds(start_ref, interval_end, window_hour_start, now_dt)
-                productive_day += _bounded_seconds(start_ref, interval_end, window_day_start, now_dt)
-                productive_week += _bounded_seconds(start_ref, interval_end, window_week_start, now_dt)
+                    # KPI de eficiencia en tiempo real: usar ventana continua para evitar 0 artificial por cortes de horario.
+                    productive_hour += _bounded_seconds(start_ref, interval_end, window_hour_start, now_dt)
+                    productive_day += _bounded_seconds(start_ref, interval_end, window_day_start, now_dt)
+                    productive_week += _bounded_seconds(start_ref, interval_end, window_week_start, now_dt)
 
         if hoja_activa:
             if estacion_actual:
