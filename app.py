@@ -21,6 +21,7 @@ import re
 import subprocess
 import sys
 import threading
+from types import SimpleNamespace
 
 # Configurar logging
 logging.basicConfig(
@@ -543,6 +544,65 @@ def _build_mp_virtual_estaciones_by_pn(pn_value, completed_process_ids=None):
             break
 
     return virtual
+
+
+def _build_mp_time_estaciones_by_clave_id(clave_id):
+    """Construye estaciones temporales para estimar tiempos de hojas MP."""
+    procesos = ClaveProceso.query.filter_by(clave_id=clave_id).order_by(ClaveProceso.orden.asc()).all()
+    estaciones = []
+    for idx, cp in enumerate(procesos, start=1):
+        estaciones.append(SimpleNamespace(
+            orden=cp.orden or idx,
+            t_e=cp.t_e or (cp.proceso.tiempo_estimado if getattr(cp, 'proceso', None) else None) or '',
+            t_tct=cp.t_tct or '',
+            t_tco=cp.t_tco or '',
+            t_to=cp.t_to or '',
+            nombre=(cp.operacion or (cp.proceso.operacion if getattr(cp, 'proceso', None) else '') or ''),
+            operacion=(cp.operacion or (cp.proceso.operacion if getattr(cp, 'proceso', None) else '') or ''),
+            centro_trabajo=cp.centro_trabajo or (cp.proceso.centro_trabajo if getattr(cp, 'proceso', None) else '') or '',
+        ))
+    return estaciones
+
+
+def _compute_mp_total_time_preview_by_pn(pn_value, cantidad_piezas, fallback_total_time=None):
+    """Calcula HH:MM:SS de hoja MP en memoria para mostrar en listados."""
+    pn = (pn_value or '').strip()
+    if not pn:
+        return fallback_total_time
+
+    clave = ClaveProducto.query.filter(func.upper(func.trim(ClaveProducto.clave)) == pn.upper()).first()
+    if not clave:
+        return fallback_total_time
+
+    estaciones = _build_mp_time_estaciones_by_clave_id(clave.id)
+    if not estaciones:
+        return fallback_total_time
+
+    hoja_tmp = SimpleNamespace(
+        cantidad_piezas=max(1, int(cantidad_piezas or 1)),
+        total_tiempo=fallback_total_time,
+        dias_a_laborar=None,
+        fecha_termino=None,
+        fecha_salida=datetime.utcnow(),
+    )
+    _apply_hoja_time_plan(hoja_tmp, estaciones, maquina_tipo=None, fallback_total_time=fallback_total_time)
+    return hoja_tmp.total_tiempo or fallback_total_time
+
+
+def _recompute_mp_time_plan(hoja):
+    """Recalcula tiempos persistidos en una hoja MP usando su clave/procesos."""
+    if not hoja or not (hoja.pn or '').strip():
+        return
+
+    clave = ClaveProducto.query.filter(func.upper(func.trim(ClaveProducto.clave)) == hoja.pn.upper().strip()).first()
+    if not clave:
+        return
+
+    estaciones = _build_mp_time_estaciones_by_clave_id(clave.id)
+    if not estaciones:
+        return
+
+    _apply_hoja_time_plan(hoja, estaciones, maquina_tipo=None, fallback_total_time=hoja.total_tiempo)
 
 
 def _sync_hoja_estado_with_checks(hoja, estaciones=None, now_dt=None):
@@ -3089,7 +3149,11 @@ def hojas_ruta_entregas_list():
         tiempo_real = None
 
         if hoja_activa:
-            tiempo_real = hoja_activa.total_tiempo
+            tiempo_real = hoja_activa.total_tiempo or _compute_mp_total_time_preview_by_pn(
+                hoja_activa.pn,
+                hoja_activa.cantidad_piezas,
+                hoja_activa.total_tiempo,
+            )
 
         maquinas_data.append({
             'id': maq.id,
@@ -3117,7 +3181,11 @@ def hojas_ruta_entregas_list():
             'clave': hoja.pn,
             'estado': hoja.estado,
             'cantidad_piezas': hoja.cantidad_piezas,
-            'tiempo_total': hoja.total_tiempo,
+            'tiempo_total': hoja.total_tiempo or _compute_mp_total_time_preview_by_pn(
+                hoja.pn,
+                hoja.cantidad_piezas,
+                hoja.total_tiempo,
+            ),
             'fecha_creacion': hoja.fecha_creacion.isoformat() if hoja.fecha_creacion else None,
             'estaciones': _build_mp_virtual_estaciones_by_pn(hoja.pn, _mp_parse_completed_process_ids(hoja.materia_prima)),
         })
@@ -4336,6 +4404,8 @@ def api_crear_hoja_ruta_nuevo():
         clave_segura = ''.join(ch for ch in (clave.clave or '') if ch.isalnum())[:10] or 'CLAVE'
         hoja.nombre = f"HRN-{fecha_actual.strftime('%Y%m%d')}-{clave_segura}-{hoja.id:04d}"
 
+        _recompute_mp_time_plan(hoja)
+
         db.session.commit()
         result = hoja.to_dict()
         result['estaciones'] = _build_mp_virtual_estaciones_by_pn(hoja.pn)
@@ -4381,6 +4451,8 @@ def api_actualizar_hoja_ruta_nuevo(hoja_id):
             hoja.materia_prima = _mp_upsert_process_state_block(comentarios_usuario, _mp_parse_completed_process_ids(hoja.materia_prima))
         else:
             hoja.materia_prima = comentarios_usuario or None
+
+    _recompute_mp_time_plan(hoja)
 
     try:
         db.session.commit()
