@@ -4293,9 +4293,12 @@ def api_asignar_hoja_maquina(maquina_id):
     if hoja.maquina_id and hoja.maquina_id != maq.id:
         return jsonify({'error': 'La hoja ya está asignada a otra máquina'}), 409
 
-    activa_actual = HojaRutaEntrega.query.filter_by(maquina_id=maq.id, estado='activa').first()
+    activa_actual = HojaRutaEntrega.query.filter(
+        HojaRutaEntrega.maquina_id == maq.id,
+        HojaRutaEntrega.estado.in_(['activa', 'pausada'])
+    ).first()
     if activa_actual and activa_actual.id != hoja.id:
-        return jsonify({'error': 'La máquina ya tiene una hoja activa asignada'}), 409
+        return jsonify({'error': 'La máquina ya tiene una hoja activa o pausada asignada'}), 409
 
     try:
         hoja.maquina_id = maq.id
@@ -4393,9 +4396,12 @@ def api_retirar_hoja_maquina(maquina_id):
         if hoja.maquina_id != maq.id:
             return jsonify({'error': 'La hoja no pertenece a esta máquina'}), 409
     else:
-        hoja = HojaRutaEntrega.query.filter_by(maquina_id=maq.id, estado='activa').order_by(HojaRutaEntrega.fecha_creacion.desc()).first()
+        hoja = HojaRutaEntrega.query.filter(
+            HojaRutaEntrega.maquina_id == maq.id,
+            HojaRutaEntrega.estado.in_(['activa', 'pausada'])
+        ).order_by(HojaRutaEntrega.fecha_creacion.desc()).first()
         if not hoja:
-            return jsonify({'error': 'No hay hoja activa asignada a esta máquina'}), 404
+            return jsonify({'error': 'No hay hoja activa o pausada asignada a esta máquina'}), 404
 
     try:
         hoja.estado = 'activa'
@@ -4783,9 +4789,12 @@ def api_asignar_hoja_maquina_nuevo(maquina_id):
     if hoja.maquina_id and hoja.maquina_id != maq.id:
         return jsonify({'error': 'La hoja ya está asignada a otra máquina'}), 409
 
-    activa_actual = HojaRutaNueva.query.filter_by(maquina_id=maq.id, estado='activa').first()
+    activa_actual = HojaRutaNueva.query.filter(
+        HojaRutaNueva.maquina_id == maq.id,
+        HojaRutaNueva.estado.in_(['activa', 'pausada'])
+    ).first()
     if activa_actual and activa_actual.id != hoja.id:
-        return jsonify({'error': 'La máquina ya tiene una hoja activa asignada'}), 409
+        return jsonify({'error': 'La máquina ya tiene una hoja activa o pausada asignada'}), 409
 
     hoja.maquina_id = maq.id
     hoja.estado = 'activa'
@@ -4809,9 +4818,12 @@ def api_retirar_hoja_maquina_nuevo(maquina_id):
         if hoja.maquina_id != maq.id:
             return jsonify({'error': 'La hoja no pertenece a esta máquina'}), 409
     else:
-        hoja = HojaRutaNueva.query.filter_by(maquina_id=maq.id, estado='activa').order_by(HojaRutaNueva.fecha_creacion.desc()).first()
+        hoja = HojaRutaNueva.query.filter(
+            HojaRutaNueva.maquina_id == maq.id,
+            HojaRutaNueva.estado.in_(['activa', 'pausada'])
+        ).order_by(HojaRutaNueva.fecha_creacion.desc()).first()
         if not hoja:
-            return jsonify({'error': 'No hay hoja activa asignada a esta máquina'}), 404
+            return jsonify({'error': 'No hay hoja activa o pausada asignada a esta máquina'}), 404
 
     hoja.maquina_id = None
     hoja.estado = 'activa'
