@@ -1023,12 +1023,13 @@
             state.forEach(item => {
                 if (!item.remainingSpan) return;
 
+                const elapsedNow = item.elapsedBase + (item.isRunning ? tick : 0);
                 if (item.totalSeconds > 0) {
-                    const elapsedNow = item.elapsedBase + (item.isRunning ? tick : 0);
                     const remaining = Math.max(0, item.totalSeconds - elapsedNow);
                     item.remainingSpan.textContent = formatSecondsToHms(remaining);
                 } else {
-                    item.remainingSpan.textContent = '00:00:00';
+                    // Si no hay tiempo objetivo configurado, mostrar transcurrido en vivo.
+                    item.remainingSpan.textContent = formatSecondsToHms(elapsedNow);
                 }
             });
         };
