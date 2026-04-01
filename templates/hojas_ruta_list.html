@@ -796,7 +796,7 @@
                                     </div>
                                      <div class="time-real js-tiempo-reloj"
                                          data-elapsed-base="{{ maq.tiempo_real or '00:00:00' }}"
-                                         data-total="{{ maq.hoja_activa.total_tiempo or '' }}">
+                                         data-total="{{ maq.tiempo_objetivo_proceso or maq.hoja_activa.total_tiempo or '' }}">
                                          Tiempo proceso: <span class="js-tiempo-restante">00:00:00</span>
                                      </div>
                                     <div class="process-box">

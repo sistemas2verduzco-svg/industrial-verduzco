@@ -3191,6 +3191,9 @@ def hojas_ruta_entregas_list():
     for maq in maquinas:
         hoja_activa = hoja_activa_por_maquina.get(maq.id)
         hoja_activa_dict = hoja_activa.to_dict() if hoja_activa else None
+        tiempo_objetivo_proceso = None
+        tiempo_transcurrido_proceso = None
+        
         if hoja_activa_dict is not None:
             hoja_activa_dict['estaciones'] = _build_mp_virtual_estaciones_by_pn(
                 hoja_activa.pn,
@@ -3198,28 +3201,34 @@ def hojas_ruta_entregas_list():
             )
             # Para hojas MP, calcular tiempo objetivo del proceso actual (no total de hoja)
             if isinstance(hoja_activa, HojaRutaNueva):
-                tiempo_objetivo = _get_mp_current_process_objective_time(
+                tiempo_objetivo_proceso = _get_mp_current_process_objective_time(
                     hoja_activa.pn,
                     hoja_activa.cantidad_piezas,
                     _mp_parse_completed_process_ids(hoja_activa.materia_prima),
                 )
-                if tiempo_objetivo:
-                    hoja_activa_dict['tiempo_objetivo_proceso'] = tiempo_objetivo
+                if tiempo_objetivo_proceso:
+                    hoja_activa_dict['tiempo_objetivo_proceso'] = tiempo_objetivo_proceso
+                
+                # Calcular tiempo transcurrido considerando paros
+                if hoja_activa.fecha_salida:
+                    start_dt = hoja_activa.fecha_salida
+                    if hoja_activa.estado == 'pausada' and hoja_activa.fecha_actualizacion:
+                        end_dt = hoja_activa.fecha_actualizacion
+                    else:
+                        end_dt = datetime.utcnow()
+                    transcurrido_sec = max(0, int((end_dt - start_dt).total_seconds()))
+                    tiempo_transcurrido_proceso = _format_seconds_to_hms(transcurrido_sec)
 
         estacion_actual = 'Sin produccion'
         tiempo_real = '00:00:00'
 
         if hoja_activa:
             # Calcular tiempo transcurrido considerando paros/desactivaciones
-            # Si está pausada: contar hasta la última actualización (momento del pauso)
-            # Si está activa: contar hasta ahora
             if hoja_activa.fecha_salida:
                 start_dt = hoja_activa.fecha_salida
                 if hoja_activa.estado == 'pausada' and hoja_activa.fecha_actualizacion:
-                    # Pausada: contar hasta que se pausó (fecha_actualizacion)
                     end_dt = hoja_activa.fecha_actualizacion
                 else:
-                    # Activa: contar hasta ahora
                     end_dt = datetime.utcnow()
                 
                 elapsed_sec = max(0, int((end_dt - start_dt).total_seconds()))
@@ -3236,6 +3245,8 @@ def hojas_ruta_entregas_list():
             'activo': getattr(maq, 'activo', False),
             'estacion_actual': estacion_actual,
             'tiempo_real': tiempo_real,
+            'tiempo_objetivo_proceso': tiempo_objetivo_proceso,
+            'tiempo_transcurrido_proceso': tiempo_transcurrido_proceso,
             'tipo': getattr(maq, 'tipo', None),
             'plantilla_default': getattr(maq, 'plantilla_default', None),
         })
