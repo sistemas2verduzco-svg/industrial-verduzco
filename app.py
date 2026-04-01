@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice, ContpaqPrecioPublico, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice, ContpaqPrecioPublico, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -717,6 +717,27 @@ def _ensure_hoja_cargas_historial_table():
             pass
         return False
 
+
+_HOJA_IMPRESIONES_PARCIALES_TABLE_READY = False
+
+
+def _ensure_hoja_impresiones_parciales_table():
+    global _HOJA_IMPRESIONES_PARCIALES_TABLE_READY
+
+    if _HOJA_IMPRESIONES_PARCIALES_TABLE_READY:
+        return True
+
+    try:
+        HojaRutaImpresionParcial.__table__.create(bind=db.engine, checkfirst=True)
+        _HOJA_IMPRESIONES_PARCIALES_TABLE_READY = True
+        return True
+    except Exception as exc:
+        logger.warning(f"No se pudo asegurar la tabla de impresiones parciales de hojas: {exc}")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return False
 
 def _current_username_for_audit(user=None):
     username = getattr(user, 'username', None) if user else None
@@ -3603,6 +3624,22 @@ def hojas_ruta_entregas_form():
         for item in historial_cargas:
             historial_cargas_por_hoja.setdefault(item.hoja_ruta_id, []).append(_serialize_hoja_carga_historial(item))
 
+    impresion_parcial_totales = {}
+    if hoja_ids and _ensure_hoja_impresiones_parciales_table():
+        resumen_impresiones = db.session.query(
+            HojaRutaImpresionParcial.hoja_ruta_id,
+            func.coalesce(func.sum(HojaRutaImpresionParcial.cantidad_impresa), 0).label('total_impreso'),
+            func.count(HojaRutaImpresionParcial.id).label('movimientos')
+        ).filter(
+            HojaRutaImpresionParcial.hoja_ruta_id.in_(hoja_ids)
+        ).group_by(HojaRutaImpresionParcial.hoja_ruta_id).all()
+
+        for fila in resumen_impresiones:
+            impresion_parcial_totales[int(fila.hoja_ruta_id)] = {
+                'total_impreso': int(fila.total_impreso or 0),
+                'movimientos': int(fila.movimientos or 0),
+            }
+
     claves_all = ClaveProducto.query.all()
     claves_idx = {
         (str(c.clave or '').strip().upper()): c
@@ -3650,6 +3687,8 @@ def hojas_ruta_entregas_form():
             ),
             'facturacion_registro_notas': registro_fact.notas if registro_fact else None,
             'cantidad_piezas': h.cantidad_piezas,
+            'impresion_parcial_total': (impresion_parcial_totales.get(h.id, {}).get('total_impreso', 0)),
+            'impresion_parcial_movs': (impresion_parcial_totales.get(h.id, {}).get('movimientos', 0)),
             'historial_cargas': historial_cargas_por_hoja.get(h.id, []),
             'fecha_salida': h.fecha_salida.isoformat() if h.fecha_salida else None,
             'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None,
@@ -3689,6 +3728,10 @@ def hoja_ruta_entregas_ver(hoja_id):
     """Vista independiente para ver una hoja por ID, sin requerir máquina."""
     hoja = HojaRutaEntrega.query.get_or_404(hoja_id)
     h = hoja.to_dict()
+    print_qty = request.args.get('print_qty', type=int)
+    h['es_impresion_parcial'] = bool(print_qty and print_qty > 0)
+    h['cantidad_piezas_impresion'] = int(print_qty) if (print_qty and print_qty > 0) else (h.get('cantidad_piezas') or 0)
+    h['auto_print'] = request.args.get('auto_print') == '1'
     comentarios_bruto = _clean_nullable_text(h.get('materia_prima'))
     h['comentarios_usuario'] = _qc_strip_scrap_summary(comentarios_bruto)
     h['scrap_qc'] = _qc_parse_scrap_summary(comentarios_bruto)
@@ -3699,6 +3742,64 @@ def hoja_ruta_entregas_ver(hoja_id):
     h['estaciones'] = [e.to_dict() for e in estaciones]
     return render_template('hoja_ruta_ver.html', hoja=h)
 
+
+
+@app.route('/api/hojas_ruta/<int:hoja_id>/impresion_parcial', methods=['POST'])
+@login_required
+@requires_any_permission([('hojas_entregas', 'edit'), ('hojas', 'edit'), ('catalog', 'edit')])
+def api_hoja_ruta_impresion_parcial(hoja_id):
+    """Registra una impresion parcial solo para fines de impresion (sin alterar lotes/hoja base)."""
+    hoja = HojaRutaEntrega.query.get_or_404(hoja_id)
+    data = request.get_json() or {}
+
+    cantidad_impresion = data.get('cantidad_impresion')
+    try:
+        cantidad_impresion = int(cantidad_impresion)
+    except Exception:
+        return jsonify({'error': 'cantidad_impresion invalida'}), 400
+
+    if cantidad_impresion <= 0:
+        return jsonify({'error': 'La cantidad a imprimir debe ser mayor a cero'}), 400
+
+    if not _ensure_hoja_impresiones_parciales_table():
+        return jsonify({'error': 'No se pudo preparar tabla de impresiones parciales'}), 500
+
+    usuario = _current_username_for_audit(get_current_user())
+    movimiento = HojaRutaImpresionParcial(
+        hoja_ruta_id=hoja.id,
+        cantidad_impresa=cantidad_impresion,
+        usuario=usuario,
+    )
+    db.session.add(movimiento)
+
+    try:
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        logger.error(f"Error registrando impresion parcial de hoja {hoja.id}: {exc}", exc_info=True)
+        return jsonify({'error': 'No se pudo registrar la impresion parcial'}), 500
+
+    total_impreso = db.session.query(
+        func.coalesce(func.sum(HojaRutaImpresionParcial.cantidad_impresa), 0)
+    ).filter(HojaRutaImpresionParcial.hoja_ruta_id == hoja.id).scalar() or 0
+
+    print_url = url_for(
+        'hoja_ruta_entregas_ver',
+        hoja_id=hoja.id,
+        print_qty=cantidad_impresion,
+        auto_print=1,
+        _external=False,
+    )
+
+    return jsonify({
+        'ok': True,
+        'hoja_id': hoja.id,
+        'serie': hoja.nombre,
+        'cantidad_impresion': cantidad_impresion,
+        'impresion_parcial_total': int(total_impreso),
+        'impresion_parcial_movs': HojaRutaImpresionParcial.query.filter_by(hoja_ruta_id=hoja.id).count(),
+        'print_url': print_url,
+    }), 200
 
 @app.route('/api/hojas_ruta/resolver_codigo', methods=['POST'])
 @login_required

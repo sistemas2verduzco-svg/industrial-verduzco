@@ -196,6 +196,27 @@ class EntregaParcial(db.Model):
             'fecha_entrega': self.fecha_entrega.isoformat() if self.fecha_entrega else None,
             'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,
         }
+
+class HojaRutaImpresionParcial(db.Model):
+    """Registro de impresiones parciales (solo para fines de impresion) de hojas ENTREGAS."""
+    __tablename__ = 'hojas_ruta_impresiones_parciales'
+
+    id = db.Column(db.Integer, primary_key=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_entrega.id'), nullable=False, index=True)
+    cantidad_impresa = db.Column(db.Integer, nullable=False)
+    usuario = db.Column(db.String(120), nullable=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    hoja_ruta = db.relationship('HojaRutaEntrega', backref='impresiones_parciales')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'hoja_ruta_id': self.hoja_ruta_id,
+            'cantidad_impresa': self.cantidad_impresa,
+            'usuario': self.usuario,
+            'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,
+        }
 # Role / Permission models
 role_permissions = db.Table('role_permissions',
     db.Column('role_id', db.Integer, db.ForeignKey('roles.id'), primary_key=True),

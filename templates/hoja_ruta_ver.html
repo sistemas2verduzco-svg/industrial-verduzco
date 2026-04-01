@@ -483,7 +483,7 @@
           </div>
           <div class="field">
             <div class="k">Cantidad De Piezas</div>
-            <div class="v">{{ hoja.cantidad_piezas or '' }}</div>
+            <div class="v">{{ hoja.cantidad_piezas_impresion if hoja.es_impresion_parcial else (hoja.cantidad_piezas or '') }}</div>{% if hoja.es_impresion_parcial %}<div style="margin-top:4px; font-size:11px; color:#0b74de; font-weight:700;">Impresion parcial</div>{% endif %}
           </div>
           <div class="field">
             <div class="k">Almacen</div>
@@ -600,6 +600,12 @@ Fecha: {{ hoja.scrap_qc.fecha or 'N/A' }}</div>
         colorLight: '#ffffff',
         correctLevel: QRCode.CorrectLevel.M
       });
+    })();
+
+    (function() {
+      var autoPrint = {{ 'true' if hoja.auto_print else 'false' }};
+      if (!autoPrint) return;
+      setTimeout(function() { window.print(); }, 450);
     })();
   </script>
 </body>
