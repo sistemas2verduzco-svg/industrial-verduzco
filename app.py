@@ -504,56 +504,72 @@ def _resolve_clave_descripcion_by_pn(pn_value):
     return _clean_nullable_text(getattr(clave, 'clave', None)) or pn
 
 
-def _get_mp_current_process_objective_time(pn_value, cantidad_piezas, completed_process_ids=None):
-    """Calcula tiempo objetivo del proceso actual en hoja MP: tiempo_proceso * cantidad_piezas.
-    Retorna HH:MM:SS o None si no hay proceso actual."""
+def _mp_process_seconds(cp):
+    """Retorna segundos base del proceso MP tomando la primera columna de tiempo disponible."""
+    if not cp:
+        return 0
+    for raw in (
+        getattr(cp, 't_e', None),
+        getattr(cp, 't_tct', None),
+        getattr(cp, 't_tco', None),
+        getattr(cp, 't_to', None),
+        getattr(getattr(cp, 'proceso', None), 'tiempo_estimado', None),
+    ):
+        sec = _parse_time_to_seconds(raw)
+        if sec > 0:
+            return sec
+    return 0
+
+
+def _get_mp_current_process_projection(pn_value, cantidad_piezas, completed_process_ids=None, elapsed_total_seconds=0):
+    """Calcula tiempos del proceso actual MP considerando procesos completados previos.
+    Devuelve dict con objetivo/transcurrido/restante en segundos y HH:MM:SS.
+    """
     pn = (pn_value or '').strip()
     if not pn:
         return None
 
-    # Obtener procesos virtuales
-    virtual_ests = _build_mp_virtual_estaciones_by_pn(pn, completed_process_ids)
-
-    # Encontrar proceso en_curso
+    completed = {int(x) for x in (completed_process_ids or set())}
+    virtual_ests = _build_mp_virtual_estaciones_by_pn(pn, completed)
     current = next((e for e in virtual_ests if e.get('estado') == 'en_curso'), None)
     if not current:
         return None
 
-    # Obtener ClaveProceso para leer tiempo
-    cp = ClaveProceso.query.get(current['id'])
-    if not cp:
-        return None
-
-    # Buscar tiempo (intentar varios campos)
-    tiempo_proceso_raw = (
-        cp.t_e
-        or cp.t_tct
-        or (getattr(cp.proceso, 'tiempo_estimado', None) if getattr(cp, 'proceso', None) else None)
-        or 0
-    )
-
-    if not tiempo_proceso_raw:
-        return None
-
-    # Convertir a segundos
-    try:
-        if isinstance(tiempo_proceso_raw, str):
-            parts = tiempo_proceso_raw.split(':')
-            if len(parts) == 3:
-                h, m, s = parts
-                tiempo_sec = int(h) * 3600 + int(m) * 60 + int(s)
-            else:
-                tiempo_sec = int(float(tiempo_proceso_raw))
-        else:
-            tiempo_sec = int(tiempo_proceso_raw)
-    except (ValueError, TypeError):
-        return None
-
-    # Multiplicar por cantidad de piezas
     cantidad = max(1, int(cantidad_piezas or 1))
-    objetivo_sec = tiempo_sec * cantidad
+    completed_total_sec = 0
+    for est in virtual_ests:
+        if est.get('id') in completed:
+            cp_done = ClaveProceso.query.get(est.get('id'))
+            completed_total_sec += (_mp_process_seconds(cp_done) * cantidad)
 
-    return _format_seconds_to_hms(objetivo_sec)
+    cp_current = ClaveProceso.query.get(current.get('id'))
+    current_base_sec = _mp_process_seconds(cp_current)
+    if current_base_sec <= 0:
+        return None
+
+    objetivo_sec = current_base_sec * cantidad
+    transcurrido_actual_sec = max(0, int(elapsed_total_seconds or 0) - completed_total_sec)
+    restante_sec = max(0, objetivo_sec - transcurrido_actual_sec)
+
+    return {
+        'objetivo_sec': objetivo_sec,
+        'transcurrido_sec': transcurrido_actual_sec,
+        'restante_sec': restante_sec,
+        'objetivo_hms': _format_seconds_to_hms(objetivo_sec),
+        'transcurrido_hms': _format_seconds_to_hms(transcurrido_actual_sec),
+        'restante_hms': _format_seconds_to_hms(restante_sec),
+        'proceso_culminado': restante_sec <= 0,
+    }
+
+
+def _get_mp_current_process_objective_time(pn_value, cantidad_piezas, completed_process_ids=None):
+    projection = _get_mp_current_process_projection(
+        pn_value,
+        cantidad_piezas,
+        completed_process_ids,
+        elapsed_total_seconds=0,
+    )
+    return projection['objetivo_hms'] if projection else None
 
 
 def _build_mp_virtual_estaciones_by_pn(pn_value, completed_process_ids=None):
@@ -3139,7 +3155,14 @@ def hojas_ruta_nuevo_detalle(maquina_id):
     """Detalle de hojas de ruta nuevas para una máquina específica."""
     maquina = Máquina.query.get_or_404(maquina_id)
     hojas = HojaRutaNueva.query.filter_by(maquina_id=maquina_id).order_by(HojaRutaNueva.fecha_creacion.desc()).all()
-    hojas_data = [h.to_dict() for h in hojas]
+    hojas_data = []
+    for hoja in hojas:
+        h = hoja.to_dict()
+        h['estaciones'] = _build_mp_virtual_estaciones_by_pn(
+            hoja.pn,
+            _mp_parse_completed_process_ids(hoja.materia_prima),
+        )
+        hojas_data.append(h)
     facturadas_info = {}
     return render_template(
         'hojas_ruta_detalle.html',
@@ -3199,25 +3222,6 @@ def hojas_ruta_entregas_list():
                 hoja_activa.pn,
                 _mp_parse_completed_process_ids(hoja_activa.materia_prima),
             )
-            # Para hojas MP, calcular tiempo objetivo del proceso actual (no total de hoja)
-            if isinstance(hoja_activa, HojaRutaNueva):
-                tiempo_objetivo_proceso = _get_mp_current_process_objective_time(
-                    hoja_activa.pn,
-                    hoja_activa.cantidad_piezas,
-                    _mp_parse_completed_process_ids(hoja_activa.materia_prima),
-                )
-                if tiempo_objetivo_proceso:
-                    hoja_activa_dict['tiempo_objetivo_proceso'] = tiempo_objetivo_proceso
-                
-                # Calcular tiempo transcurrido considerando paros
-                if hoja_activa.fecha_salida:
-                    start_dt = hoja_activa.fecha_salida
-                    if hoja_activa.estado == 'pausada' and hoja_activa.fecha_actualizacion:
-                        end_dt = hoja_activa.fecha_actualizacion
-                    else:
-                        end_dt = datetime.utcnow()
-                    transcurrido_sec = max(0, int((end_dt - start_dt).total_seconds()))
-                    tiempo_transcurrido_proceso = _format_seconds_to_hms(transcurrido_sec)
 
         estacion_actual = 'Sin produccion'
         tiempo_real = '00:00:00'
@@ -3235,6 +3239,20 @@ def hojas_ruta_entregas_list():
                 tiempo_real = _format_seconds_to_hms(elapsed_sec)
             else:
                 tiempo_real = '00:00:00'
+
+            if isinstance(hoja_activa, HojaRutaNueva):
+                completed_ids = _mp_parse_completed_process_ids(hoja_activa.materia_prima)
+                projection = _get_mp_current_process_projection(
+                    hoja_activa.pn,
+                    hoja_activa.cantidad_piezas,
+                    completed_ids,
+                    elapsed_total_seconds=elapsed_sec if hoja_activa.fecha_salida else 0,
+                )
+                if projection:
+                    tiempo_objetivo_proceso = projection['objetivo_hms']
+                    tiempo_transcurrido_proceso = projection['transcurrido_hms']
+                    # Para el reloj countdown en UI de Estaciones T, elapsed base debe ser del proceso actual
+                    tiempo_real = projection['transcurrido_hms']
 
         maquinas_data.append({
             'id': maq.id,
@@ -3406,40 +3424,20 @@ def api_mapa_maquinas():
                             end_dt = hoja_activa.fecha_actualizacion
                         else:
                             end_dt = now_dt
-                        transcurrido_sec = max(0, int((end_dt - inicio).total_seconds()))
-                        tiempo_transcurrido = _format_seconds_to_hms(transcurrido_sec)
-                        
-                        # Calcular tiempo objetivo del proceso actual (tiempo * cantidad_piezas)
-                        cp = ClaveProceso.query.get(est_mp['id'])
-                        if cp:
-                            tiempo_proceso_raw = (
-                                cp.t_e or cp.t_tct
-                                or (getattr(cp.proceso, 'tiempo_estimado', None) if getattr(cp, 'proceso', None) else None)
-                                or 0
-                            )
-                            if tiempo_proceso_raw:
-                                try:
-                                    if isinstance(tiempo_proceso_raw, str):
-                                        parts = tiempo_proceso_raw.split(':')
-                                        if len(parts) == 3:
-                                            h, m, s = parts
-                                            tiempo_sec = int(h) * 3600 + int(m) * 60 + int(s)
-                                        else:
-                                            tiempo_sec = int(float(tiempo_proceso_raw))
-                                    else:
-                                        tiempo_sec = int(tiempo_proceso_raw)
-                                    
-                                    cantidad = max(1, int(hoja_activa.cantidad_piezas or 1))
-                                    objetivo_sec = tiempo_sec * cantidad
-                                    restante_sec = max(0, objetivo_sec - transcurrido_sec)
-                                    
-                                    tiempo_objetivo = _format_seconds_to_hms(objetivo_sec)
-                                    tiempo_restante = _format_seconds_to_hms(restante_sec)
-                                    proceso_culminado = restante_sec <= 0
-                                    if objetivo_sec > 0:
-                                        progreso_pct = min(100, int((transcurrido_sec * 100) / objetivo_sec))
-                                except (ValueError, TypeError):
-                                    pass
+                        elapsed_total_sec = max(0, int((end_dt - inicio).total_seconds()))
+                        projection = _get_mp_current_process_projection(
+                            hoja_activa.pn,
+                            hoja_activa.cantidad_piezas,
+                            completed_ids,
+                            elapsed_total_seconds=elapsed_total_sec,
+                        )
+                        if projection:
+                            tiempo_objetivo = projection['objetivo_hms']
+                            tiempo_transcurrido = projection['transcurrido_hms']
+                            tiempo_restante = projection['restante_hms']
+                            proceso_culminado = projection['proceso_culminado']
+                            if projection['objetivo_sec'] > 0:
+                                progreso_pct = min(100, int((projection['transcurrido_sec'] * 100) / projection['objetivo_sec']))
                 # Eficiencia planta: MP no tiene EstacionTrabajo, no se computa
             else:
                 estacion_actual = EstacionTrabajo.query.filter_by(
