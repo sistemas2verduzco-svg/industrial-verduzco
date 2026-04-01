@@ -4720,6 +4720,14 @@ def api_eliminar_hoja_ruta_nuevo(hoja_id):
 def api_activar_maquina_nuevo(maquina_id):
     maq = Máquina.query.get_or_404(maquina_id)
     maq.activo = True
+    hoja_pausada = HojaRutaNueva.query.filter_by(maquina_id=maq.id, estado='pausada').order_by(HojaRutaNueva.fecha_actualizacion.desc()).first()
+    if hoja_pausada:
+        paused_at = hoja_pausada.fecha_actualizacion or datetime.utcnow()
+        if hoja_pausada.fecha_salida:
+            hoja_pausada.fecha_salida = hoja_pausada.fecha_salida + (datetime.utcnow() - paused_at)
+        else:
+            hoja_pausada.fecha_salida = datetime.utcnow()
+        hoja_pausada.estado = 'activa'
     db.session.commit()
     return jsonify({'ok': True, 'maquina_id': maquina_id, 'activo': True}), 200
 
@@ -4730,6 +4738,9 @@ def api_activar_maquina_nuevo(maquina_id):
 def api_desactivar_maquina_nuevo(maquina_id):
     maq = Máquina.query.get_or_404(maquina_id)
     maq.activo = False
+    hoja_activa = HojaRutaNueva.query.filter_by(maquina_id=maq.id, estado='activa').order_by(HojaRutaNueva.fecha_creacion.desc()).first()
+    if hoja_activa:
+        hoja_activa.estado = 'pausada'
     db.session.commit()
     return jsonify({'ok': True, 'maquina_id': maquina_id, 'activo': False}), 200
 
@@ -4740,6 +4751,9 @@ def api_desactivar_maquina_nuevo(maquina_id):
 def api_paro_mantenimiento_nuevo(maquina_id):
     maq = Máquina.query.get_or_404(maquina_id)
     maq.activo = False
+    hoja_activa = HojaRutaNueva.query.filter_by(maquina_id=maq.id, estado='activa').order_by(HojaRutaNueva.fecha_creacion.desc()).first()
+    if hoja_activa:
+        hoja_activa.estado = 'pausada'
     db.session.commit()
     return jsonify({'ok': True, 'maquina_id': maquina_id, 'activo': False, 'motivo': 'mantenimiento'}), 200
 
