@@ -823,9 +823,6 @@
                         </div>
                         <div class="maquina-actions">
                             <button class="btn-small btn-assign" onclick="abrirModalAsignar({{ maq.id }}, '{{ maq.nombre|e }}')">Asignar hoja de ruta</button>
-                            {% if maq.activo %}
-                                <button id="btn-toggle-{{ maq.id }}" class="btn-small btn-retire" onclick="toggleActivacion({{ maq.id }}, false)">Parar máquina</button>
-                            {% endif %}
                             <button class="btn-small btn-maintenance" onclick="paroMantenimiento({{ maq.id }})">Paro por mantenimiento</button>
                             <button class="btn-small btn-retire" onclick="retirarHojaRuta({{ maq.id }})">Retirar hoja de ruta</button>
                             <a href="{{ hoja_detalle_base or '/hojas_ruta' }}/{{ maq.id }}" class="btn-small btn-view">Ver hojas</a>
