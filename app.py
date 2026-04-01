@@ -4720,14 +4720,20 @@ def api_eliminar_hoja_ruta_nuevo(hoja_id):
 def api_activar_maquina_nuevo(maquina_id):
     maq = Máquina.query.get_or_404(maquina_id)
     maq.activo = True
-    hoja_pausada = HojaRutaNueva.query.filter_by(maquina_id=maq.id, estado='pausada').order_by(HojaRutaNueva.fecha_actualizacion.desc()).first()
-    if hoja_pausada:
-        paused_at = hoja_pausada.fecha_actualizacion or datetime.utcnow()
-        if hoja_pausada.fecha_salida:
-            hoja_pausada.fecha_salida = hoja_pausada.fecha_salida + (datetime.utcnow() - paused_at)
-        else:
-            hoja_pausada.fecha_salida = datetime.utcnow()
-        hoja_pausada.estado = 'activa'
+    hoja_actual = HojaRutaNueva.query.filter(
+        HojaRutaNueva.maquina_id == maq.id,
+        HojaRutaNueva.estado.in_(['activa', 'pausada'])
+    ).order_by(HojaRutaNueva.fecha_actualizacion.desc(), HojaRutaNueva.fecha_creacion.desc()).first()
+    if hoja_actual:
+        if hoja_actual.estado == 'pausada':
+            paused_at = hoja_actual.fecha_actualizacion or datetime.utcnow()
+            if hoja_actual.fecha_salida:
+                hoja_actual.fecha_salida = hoja_actual.fecha_salida + (datetime.utcnow() - paused_at)
+            else:
+                hoja_actual.fecha_salida = datetime.utcnow()
+        elif not hoja_actual.fecha_salida:
+            hoja_actual.fecha_salida = datetime.utcnow()
+        hoja_actual.estado = 'activa'
     db.session.commit()
     return jsonify({'ok': True, 'maquina_id': maquina_id, 'activo': True}), 200
 
