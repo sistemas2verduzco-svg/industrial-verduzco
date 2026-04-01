@@ -711,19 +711,7 @@
         .then(r => r.json())
         .then(data => {
             if (data && (data.ok || data.success)) {
-                const icon = document.getElementById('status-icon-' + maquinaId);
-                const text = document.getElementById('status-text-' + maquinaId);
-                const badge = document.getElementById('status-badge-' + maquinaId);
-                const btn = document.getElementById('btn-toggle-' + maquinaId);
-                if (icon) icon.textContent = activar ? '⚡' : '⛔';
-                if (text) text.textContent = activar ? 'Máquina Activada' : 'Máquina Desactivada';
-                if (badge) badge.style.background = activar ? 'linear-gradient(90deg, #28a745, #2ecc71)' : 'linear-gradient(90deg, #dc3545, #e74c3c)';
-                if (btn) {
-                    btn.textContent = activar ? 'Desactivar Máquina' : 'Activar Máquina';
-                    btn.style.background = activar ? '#f44336' : '#2196f3';
-                    btn.style.borderColor = activar ? '#f44336' : '#2196f3';
-                    btn.onclick = function(){ toggleActivacion(maquinaId, !activar); };
-                }
+                window.location.reload();
             } else {
                 alert('❌ Error: respuesta inválida');
             }
