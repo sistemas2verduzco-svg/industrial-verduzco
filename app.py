@@ -3236,10 +3236,21 @@ def api_mapa_maquinas():
         elif existing.estado != 'activa' and h.estado == 'activa':
             hoja_activa_por_maquina[h.maquina_id] = h
 
+    # Tambien considerar maquinas con HojaRutaNueva activa (modulo MP)
+    maquinas_con_hoja_nueva = set(
+        h.maquina_id for h in HojaRutaNueva.query.filter(
+            HojaRutaNueva.maquina_id.isnot(None),
+            HojaRutaNueva.estado.in_(['activa', 'pausada'])
+        ).all()
+    )
+
     # Regla operativa: sin hoja activa asignada => maquina desactivada por default.
+    # Se excluyen maquinas del modulo MP que tienen HojaRutaNueva asignada.
     estado_maquina_changed = False
     for maq in todas_maquinas:
-        if maq.id not in hoja_activa_por_maquina and bool(getattr(maq, 'activo', False)):
+        if (maq.id not in hoja_activa_por_maquina
+                and maq.id not in maquinas_con_hoja_nueva
+                and bool(getattr(maq, 'activo', False))):
             maq.activo = False
             estado_maquina_changed = True
 
