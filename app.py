@@ -3216,6 +3216,7 @@ def hojas_ruta_entregas_list():
         hoja_activa_dict = hoja_activa.to_dict() if hoja_activa else None
         tiempo_objetivo_proceso = None
         tiempo_transcurrido_proceso = None
+        elapsed_sec = 0
         
         if hoja_activa_dict is not None:
             hoja_activa_dict['estaciones'] = _build_mp_virtual_estaciones_by_pn(
@@ -3227,14 +3228,14 @@ def hojas_ruta_entregas_list():
         tiempo_real = '00:00:00'
 
         if hoja_activa:
-            # Calcular tiempo transcurrido considerando paros/desactivaciones
-            if hoja_activa.fecha_salida:
-                start_dt = hoja_activa.fecha_salida
+            # Calcular tiempo transcurrido con fallback para hojas antiguas sin fecha_salida.
+            start_dt = hoja_activa.fecha_salida or hoja_activa.fecha_actualizacion or hoja_activa.fecha_creacion
+            if start_dt:
                 if hoja_activa.estado == 'pausada' and hoja_activa.fecha_actualizacion:
                     end_dt = hoja_activa.fecha_actualizacion
                 else:
                     end_dt = datetime.utcnow()
-                
+
                 elapsed_sec = max(0, int((end_dt - start_dt).total_seconds()))
                 tiempo_real = _format_seconds_to_hms(elapsed_sec)
             else:
@@ -3242,11 +3243,15 @@ def hojas_ruta_entregas_list():
 
             if isinstance(hoja_activa, HojaRutaNueva):
                 completed_ids = _mp_parse_completed_process_ids(hoja_activa.materia_prima)
+                virtual_ests = _build_mp_virtual_estaciones_by_pn(hoja_activa.pn, completed_ids)
+                est_actual = next((e for e in virtual_ests if (e.get('estado') or '').lower() == 'en_curso'), None)
+                if est_actual:
+                    estacion_actual = est_actual.get('operacion') or est_actual.get('nombre') or 'En curso'
                 projection = _get_mp_current_process_projection(
                     hoja_activa.pn,
                     hoja_activa.cantidad_piezas,
                     completed_ids,
-                    elapsed_total_seconds=elapsed_sec if hoja_activa.fecha_salida else 0,
+                    elapsed_total_seconds=elapsed_sec,
                 )
                 if projection:
                     tiempo_objetivo_proceso = projection['objetivo_hms']
