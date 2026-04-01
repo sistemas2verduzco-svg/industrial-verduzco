@@ -453,6 +453,41 @@ def _resolve_clave_descripcion_by_pn(pn_value):
     return _clean_nullable_text(getattr(clave, 'clave', None)) or pn
 
 
+def _build_mp_virtual_estaciones_by_pn(pn_value):
+    """Construye una lista virtual de procesos para hojas MP (sin persistir EstacionTrabajo).
+    Se usa para visualizacion en UI de hojas MP y panel de asignacion.
+    """
+    pn = (pn_value or '').strip()
+    if not pn:
+        return []
+
+    normalized = pn.upper()
+    clave = ClaveProducto.query.filter(func.upper(func.trim(ClaveProducto.clave)) == normalized).first()
+    if not clave:
+        return []
+
+    procesos = ClaveProceso.query.filter_by(clave_id=clave.id).order_by(ClaveProceso.orden.asc()).all()
+    virtual = []
+    for idx, cp in enumerate(procesos, start=1):
+        operacion = (
+            _clean_nullable_text(getattr(cp, 'operacion', None))
+            or _clean_nullable_text(getattr(getattr(cp, 'proceso', None), 'operacion', None))
+            or _clean_nullable_text(getattr(getattr(cp, 'proceso', None), 'nombre', None))
+            or f'Proceso {idx}'
+        )
+        virtual.append({
+            'id': cp.id,
+            'orden': cp.orden or idx,
+            'nombre': operacion,
+            'operacion': operacion,
+            'centro_trabajo': _clean_nullable_text(getattr(cp, 'centro_trabajo', None))
+                             or _clean_nullable_text(getattr(getattr(cp, 'proceso', None), 'centro_trabajo', None)),
+            'estado': 'pendiente',
+            'origen': 'clave_proceso_mp',
+        })
+    return virtual
+
+
 def _sync_hoja_estado_with_checks(hoja, estaciones=None, now_dt=None):
     """Sincroniza el estado de hoja contra sus checks de procesos.
     Regla: completada solo si todas las estaciones estan completadas.
@@ -2896,6 +2931,7 @@ def hojas_ruta_nuevo_form():
         item['firma_ing_jose'] = item.get('supervisor')
         item['firma_ing_rodrigo'] = item.get('operador')
         item['historial_cargas'] = []
+        item['estaciones'] = _build_mp_virtual_estaciones_by_pn(h.pn)
         hojas_data.append(item)
 
     companion_hojas = []
@@ -2959,7 +2995,7 @@ def hoja_ruta_nuevo_ver(hoja_id):
     h['descripcion_clave'] = _resolve_clave_descripcion_by_pn(hoja.pn)
     h['qr_payload'] = f"HRNID:{hoja.id};SERIE:{hoja.nombre or ''}"
     h['qr_deeplink'] = request.url_root.rstrip('/') + f"/hoja_nuevo/{hoja.id}"
-    h['estaciones'] = []
+    h['estaciones'] = _build_mp_virtual_estaciones_by_pn(hoja.pn)
     return render_template('hoja_ruta_ver.html', hoja=h, volver_url='/hojas_ruta_nuevo_form')
 
 @app.route('/hojas_ruta')
@@ -2987,7 +3023,7 @@ def hojas_ruta_entregas_list():
         hoja_activa = hoja_activa_por_maquina.get(maq.id)
         hoja_activa_dict = hoja_activa.to_dict() if hoja_activa else None
         if hoja_activa_dict is not None:
-            hoja_activa_dict['estaciones'] = []
+            hoja_activa_dict['estaciones'] = _build_mp_virtual_estaciones_by_pn(hoja_activa.pn)
 
         estacion_actual = 'Sin produccion'
         tiempo_real = None
@@ -3010,7 +3046,7 @@ def hojas_ruta_entregas_list():
 
     hojas_pendientes = HojaRutaNueva.query.filter(
         HojaRutaNueva.maquina_id.is_(None),
-        HojaRutaNueva.estado.in_(['activa', 'pausada'])
+        HojaRutaNueva.estado.in_(['activa', 'pausada', 'pendiente'])
     ).order_by(HojaRutaNueva.fecha_creacion.asc()).all()
 
     pendientes_data = []
@@ -3023,7 +3059,7 @@ def hojas_ruta_entregas_list():
             'cantidad_piezas': hoja.cantidad_piezas,
             'tiempo_total': hoja.total_tiempo,
             'fecha_creacion': hoja.fecha_creacion.isoformat() if hoja.fecha_creacion else None,
-            'estaciones': [],
+            'estaciones': _build_mp_virtual_estaciones_by_pn(hoja.pn),
         })
 
     facturadas_info = {}
@@ -4214,6 +4250,10 @@ def api_crear_hoja_ruta_nuevo():
     if not clave:
         return jsonify({'error': 'Clave no encontrada'}), 404
 
+    procesos = ClaveProceso.query.filter_by(clave_id=clave.id).order_by(ClaveProceso.orden.asc()).all()
+    if not procesos:
+        return jsonify({'error': 'La clave seleccionada no tiene procesos definidos'}), 400
+
     try:
         fecha_actual = datetime.utcnow()
         hoja = HojaRutaNueva(
@@ -4237,7 +4277,9 @@ def api_crear_hoja_ruta_nuevo():
         hoja.nombre = f"HRN-{fecha_actual.strftime('%Y%m%d')}-{clave_segura}-{hoja.id:04d}"
 
         db.session.commit()
-        return jsonify(hoja.to_dict()), 201
+        result = hoja.to_dict()
+        result['estaciones'] = _build_mp_virtual_estaciones_by_pn(hoja.pn)
+        return jsonify(result), 201
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error creando hoja nueva: {e}", exc_info=True)
