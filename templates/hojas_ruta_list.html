@@ -569,6 +569,12 @@
             color: #fff;
         }
 
+        .btn-stop {
+            background: linear-gradient(120deg, #c73636, #e04747);
+            border-color: #b12e2e;
+            color: #fff;
+        }
+
         .btn-retire {
             background: linear-gradient(120deg, #d53b3b, #ef5252);
             border-color: #c43131;
@@ -823,6 +829,9 @@
                         </div>
                         <div class="maquina-actions">
                             <button class="btn-small btn-assign" onclick="abrirModalAsignar({{ maq.id }}, '{{ maq.nombre|e }}')">Asignar hoja de ruta</button>
+                            {% if maq.activo %}
+                                <button class="btn-small btn-stop" onclick="paroMaquina({{ maq.id }})">Paro de máquina</button>
+                            {% endif %}
                             <button class="btn-small btn-maintenance" onclick="paroMantenimiento({{ maq.id }})">Paro por mantenimiento</button>
                             <button class="btn-small btn-retire" onclick="retirarHojaRuta({{ maq.id }})">Retirar hoja de ruta</button>
                             <a href="{{ hoja_detalle_base or '/hojas_ruta' }}/{{ maq.id }}" class="btn-small btn-view">Ver hojas</a>
@@ -1341,6 +1350,23 @@
                 throw new Error(data.error || 'No se pudo aplicar paro por mantenimiento');
             }
             alert('Máquina en paro por mantenimiento.');
+            window.location.reload();
+        } catch (err) {
+            alert('Error: ' + err.message);
+        }
+    }
+
+    async function paroMaquina(maquinaId) {
+        try {
+            const res = await fetch(API_MAQUINA_BASE + '/' + maquinaId + '/desactivar', {
+                method: 'POST',
+                credentials: 'same-origin'
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.error || 'No se pudo aplicar paro de máquina');
+            }
+            alert('Máquina en paro.');
             window.location.reload();
         } catch (err) {
             alert('Error: ' + err.message);
