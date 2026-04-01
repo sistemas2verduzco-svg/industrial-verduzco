@@ -399,6 +399,41 @@
             font-size: 11px;
         }
 
+        .eff-kpi-grid {
+            margin-top: 10px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 6px;
+        }
+
+        .eff-kpi {
+            border: 1px solid rgba(50, 107, 155, 0.45);
+            border-radius: 8px;
+            padding: 7px;
+            background: rgba(5, 21, 39, 0.55);
+        }
+
+        .eff-kpi-label {
+            display: block;
+            color: var(--muted);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.25px;
+        }
+
+        .eff-kpi-value {
+            margin-top: 3px;
+            font-size: 16px;
+            font-weight: 700;
+            color: #d9edff;
+        }
+
+        .eff-kpi-meta {
+            margin-top: 2px;
+            font-size: 10px;
+            color: #8abbe2;
+        }
+
         .dot {
             width: 9px;
             height: 9px;
@@ -569,6 +604,10 @@
                 grid-template-columns: 1fr;
             }
 
+            .eff-kpi-grid {
+                grid-template-columns: 1fr;
+            }
+
             .stat-value {
                 font-size: 28px;
             }
@@ -705,6 +744,28 @@
                             <span class="eff-value" id="effWeekPct">0%</span>
                         </div>
                         <div class="eff-meta" id="effWeekMeta">Prod 00:00:00 / Disp 00:00:00</div>
+                    </div>
+                </div>
+                <div class="eff-kpi-grid">
+                    <div class="eff-kpi">
+                        <span class="eff-kpi-label">Utilizacion actual</span>
+                        <span class="eff-kpi-value" id="effUtilNow">0%</span>
+                        <div class="eff-kpi-meta" id="effUtilMeta">Prod 0 / 0</div>
+                    </div>
+                    <div class="eff-kpi">
+                        <span class="eff-kpi-label">Asignacion activa</span>
+                        <span class="eff-kpi-value" id="effAssignNow">0%</span>
+                        <div class="eff-kpi-meta" id="effAssignMeta">Con hoja 0 / 0</div>
+                    </div>
+                    <div class="eff-kpi">
+                        <span class="eff-kpi-label">Avance promedio</span>
+                        <span class="eff-kpi-value" id="effAvgProgress">0%</span>
+                        <div class="eff-kpi-meta" id="effProgressMeta">Procesos medidos 0</div>
+                    </div>
+                    <div class="eff-kpi">
+                        <span class="eff-kpi-label">OEE Lite</span>
+                        <span class="eff-kpi-value" id="effOeeLite">0%</span>
+                        <div class="eff-kpi-meta" id="effOeeMeta">Disp x ritmo</div>
                     </div>
                 </div>
             </section>
@@ -953,6 +1014,16 @@
             const hora = eff && eff.hora ? eff.hora : { porcentaje: 0, productivo_hms: '00:00:00', disponible_hms: '00:00:00' };
             const dia = eff && eff.dia ? eff.dia : { porcentaje: 0, productivo_hms: '00:00:00', disponible_hms: '00:00:00' };
             const semana = eff && eff.semana ? eff.semana : { porcentaje: 0, productivo_hms: '00:00:00', disponible_hms: '00:00:00' };
+            const kpis = eff && eff.kpis ? eff.kpis : {
+                utilizacion_actual_pct: 0,
+                asignacion_actual_pct: 0,
+                avance_promedio_pct: 0,
+                oee_lite_pct: 0,
+                maquinas_produciendo: 0,
+                maquinas_asignadas: 0,
+                procesos_medidos: 0,
+                alcance_maquinas: 0,
+            };
 
             document.getElementById('effHourPct').textContent = `${hora.porcentaje}%`;
             document.getElementById('effDayPct').textContent = `${dia.porcentaje}%`;
@@ -961,6 +1032,16 @@
             document.getElementById('effHourMeta').textContent = `Prod ${hora.productivo_hms} / Disp ${hora.disponible_hms}`;
             document.getElementById('effDayMeta').textContent = `Prod ${dia.productivo_hms} / Disp ${dia.disponible_hms}`;
             document.getElementById('effWeekMeta').textContent = `Prod ${semana.productivo_hms} / Disp ${semana.disponible_hms}`;
+
+            document.getElementById('effUtilNow').textContent = `${kpis.utilizacion_actual_pct}%`;
+            document.getElementById('effAssignNow').textContent = `${kpis.asignacion_actual_pct}%`;
+            document.getElementById('effAvgProgress').textContent = `${kpis.avance_promedio_pct}%`;
+            document.getElementById('effOeeLite').textContent = `${kpis.oee_lite_pct}%`;
+
+            document.getElementById('effUtilMeta').textContent = `Prod ${kpis.maquinas_produciendo} / ${kpis.alcance_maquinas}`;
+            document.getElementById('effAssignMeta').textContent = `Con hoja ${kpis.maquinas_asignadas} / ${kpis.alcance_maquinas}`;
+            document.getElementById('effProgressMeta').textContent = `Procesos medidos ${kpis.procesos_medidos}`;
+            document.getElementById('effOeeMeta').textContent = `Disp dia ${dia.porcentaje}% x ritmo ${kpis.ritmo_objetivo_pct || 0}%`;
         }
 
         async function loadMapa() {

@@ -3412,6 +3412,12 @@ def api_mapa_maquinas():
     productive_hour = 0
     productive_day = 0
     productive_week = 0
+    producing_count = 0
+    assigned_count = 0
+    progreso_sum = 0.0
+    progreso_count = 0
+    ritmo_sum = 0.0
+    ritmo_count = 0
 
     def _bounded_seconds(start_dt, end_dt, window_start, window_end):
         if not start_dt or not end_dt:
@@ -3431,6 +3437,8 @@ def api_mapa_maquinas():
         proceso_culminado = False
         progreso_pct = 0
         tiempo_proceso_pieza = None
+        objetivo_sec_metric = 0
+        transcurrido_sec_metric = 0
         if hoja_activa:
             is_mp_hoja = isinstance(hoja_activa, HojaRutaNueva)
             if is_mp_hoja:
@@ -3462,9 +3470,10 @@ def api_mapa_maquinas():
                             tiempo_transcurrido = projection['transcurrido_hms']
                             tiempo_restante = projection['restante_hms']
                             proceso_culminado = projection['proceso_culminado']
+                            objetivo_sec_metric = projection['objetivo_sec']
+                            transcurrido_sec_metric = projection['transcurrido_sec']
                             if projection['objetivo_sec'] > 0:
                                 progreso_pct = min(100, int((projection['transcurrido_sec'] * 100) / projection['objetivo_sec']))
-                # Eficiencia planta: MP no tiene EstacionTrabajo, no se computa
             else:
                 estacion_actual = EstacionTrabajo.query.filter_by(
                     hoja_ruta_id=hoja_activa.id,
@@ -3483,41 +3492,42 @@ def api_mapa_maquinas():
                     if sec_por_pieza > 0:
                         tiempo_proceso_pieza = _format_seconds_to_hms(sec_por_pieza)
                     if objetivo_sec > 0:
+                        objetivo_sec_metric = objetivo_sec
+                        transcurrido_sec_metric = transcurrido_sec
                         tiempo_objetivo = _format_seconds_to_hms(objetivo_sec)
                         tiempo_transcurrido = _format_seconds_to_hms(transcurrido_sec)
                         tiempo_restante = _format_seconds_to_hms(restante_sec)
                         proceso_culminado = restante_sec <= 0
                         progreso_pct = min(100, int((transcurrido_sec * 100) / objetivo_sec))
 
-                # Eficiencia planta: sumar tiempo productivo real por estaciones de la hoja activa.
-                estaciones_hoja = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja_activa.id).all()
-                for est in estaciones_hoja:
-                    start_ref = est.fecha_inicio
-                    if not start_ref and (est.estado or '').lower() == 'en_curso':
-                        start_ref = hoja_activa.fecha_salida
-                    if not start_ref:
-                        continue
-
-                    estado_est = (est.estado or '').lower()
-                    if estado_est == 'en_curso':
-                        interval_end = now_dt
-                    elif estado_est == 'completada' and est.fecha_finalizacion:
-                        interval_end = est.fecha_finalizacion
-                    else:
-                        continue
-
-                    if interval_end <= start_ref:
-                        continue
-
-                    # KPI de eficiencia en tiempo real: usar ventana continua para evitar 0 artificial por cortes de horario.
+            # Eficiencia planta: computar por hoja activa en maquina para incluir Entregas y MP.
+            start_ref = hoja_activa.fecha_salida
+            if start_ref:
+                if hoja_activa.estado == 'pausada' and hoja_activa.fecha_actualizacion:
+                    interval_end = hoja_activa.fecha_actualizacion
+                else:
+                    interval_end = now_dt
+                if interval_end > start_ref:
                     productive_hour += _bounded_seconds(start_ref, interval_end, window_hour_start, now_dt)
                     productive_day += _bounded_seconds(start_ref, interval_end, window_day_start, now_dt)
                     productive_week += _bounded_seconds(start_ref, interval_end, window_week_start, now_dt)
+
+            assigned_count += 1
+            if objetivo_sec_metric > 0:
+                progreso_sum += float(progreso_pct)
+                progreso_count += 1
+                if transcurrido_sec_metric <= objetivo_sec_metric:
+                    ritmo_actual = 100.0
+                else:
+                    ritmo_actual = max(0.0, (objetivo_sec_metric * 100.0) / max(1, transcurrido_sec_metric))
+                ritmo_sum += min(100.0, ritmo_actual)
+                ritmo_count += 1
 
         if hoja_activa:
             if estacion_actual:
                 estado_code = 'produciendo'
                 estado_label = 'En curso'
+                producing_count += 1
             else:
                 estado_code = 'activa'
                 estado_label = 'Activa'
@@ -3550,9 +3560,8 @@ def api_mapa_maquinas():
             'estacion_actual_id': estacion_actual.id if estacion_actual else None,
         })
 
-    # Eficiencia de planta: capacidad base sobre TODAS las maquinas registradas,
-    # no solo las activas, para evitar 100% engañoso cuando trabaja una sola.
-    machine_count = max(1, len(todas_maquinas))
+    # Eficiencia de planta: usar alcance del tablero (maquinas activas visibles en el mapa).
+    machine_count = max(1, len(maquinas))
     available_hour = machine_count * int((now_dt - window_hour_start).total_seconds())
     available_day = machine_count * int((now_dt - window_day_start).total_seconds())
     available_week = machine_count * int((now_dt - window_week_start).total_seconds())
@@ -3562,24 +3571,45 @@ def api_mapa_maquinas():
             return 0
         return round((prod * 100.0) / avail, 1)
 
+    hora_pct = _pct(productive_hour, available_hour)
+    dia_pct = _pct(productive_day, available_day)
+    semana_pct = _pct(productive_week, available_week)
+
+    utilizacion_actual_pct = round((producing_count * 100.0) / machine_count, 1)
+    asignacion_actual_pct = round((assigned_count * 100.0) / machine_count, 1)
+    avance_promedio_pct = round((progreso_sum / progreso_count), 1) if progreso_count else 0.0
+    ritmo_objetivo_pct = round((ritmo_sum / ritmo_count), 1) if ritmo_count else 0.0
+    oee_lite_pct = round((dia_pct * ritmo_objetivo_pct) / 100.0, 1)
+
     eficiencia_planta = {
         'hora': {
-            'porcentaje': _pct(productive_hour, available_hour),
+            'porcentaje': hora_pct,
             'productivo_hms': _format_seconds_to_hms(productive_hour),
             'disponible_hms': _format_seconds_to_hms(available_hour),
             'maquinas_base': machine_count,
         },
         'dia': {
-            'porcentaje': _pct(productive_day, available_day),
+            'porcentaje': dia_pct,
             'productivo_hms': _format_seconds_to_hms(productive_day),
             'disponible_hms': _format_seconds_to_hms(available_day),
             'maquinas_base': machine_count,
         },
         'semana': {
-            'porcentaje': _pct(productive_week, available_week),
+            'porcentaje': semana_pct,
             'productivo_hms': _format_seconds_to_hms(productive_week),
             'disponible_hms': _format_seconds_to_hms(available_week),
             'maquinas_base': machine_count,
+        },
+        'kpis': {
+            'utilizacion_actual_pct': utilizacion_actual_pct,
+            'asignacion_actual_pct': asignacion_actual_pct,
+            'avance_promedio_pct': avance_promedio_pct,
+            'ritmo_objetivo_pct': ritmo_objetivo_pct,
+            'oee_lite_pct': oee_lite_pct,
+            'maquinas_produciendo': producing_count,
+            'maquinas_asignadas': assigned_count,
+            'procesos_medidos': progreso_count,
+            'alcance_maquinas': machine_count,
         },
     }
 
