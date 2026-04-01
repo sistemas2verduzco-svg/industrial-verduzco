@@ -807,7 +807,11 @@
                                                 <input
                                                     type="checkbox"
                                                     {% if est.estado == 'completada' %}checked{% endif %}
+                                                    {% if nuevo_modulo %}
+                                                    onchange="toggleProcesoMP({{ maq.hoja_activa.id }}, {{ est.id }}, this.checked)"
+                                                    {% else %}
                                                     onchange="toggleProceso({{ est.id }}, this.checked)"
+                                                    {% endif %}
                                                 >
                                                 <span>{{ est.operacion or est.nombre or ('Proceso ' ~ loop.index) }}</span>
                                                 <span class="process-chip {{ (est.estado or 'pendiente')|replace('_','-') }}">{{ est.estado or 'pendiente' }}</span>
@@ -1391,6 +1395,25 @@
                 alert('Todos los procesos de la hoja se completaron.');
             }
 
+            window.location.reload();
+        } catch (err) {
+            alert('Error: ' + err.message);
+            window.location.reload();
+        }
+    }
+
+    async function toggleProcesoMP(hojaId, procesoId, checked) {
+        try {
+            const res = await fetch(API_HOJAS_BASE + '/' + hojaId + '/check_proceso', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ proceso_id: procesoId, completada: checked })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.error || 'No se pudo actualizar el proceso MP');
+            }
             window.location.reload();
         } catch (err) {
             alert('Error: ' + err.message);

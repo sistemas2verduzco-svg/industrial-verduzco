@@ -197,6 +197,56 @@ def _qc_extract_scrap_block(text):
     return m.group(0).strip() if m else ''
 
 
+def _mp_extract_process_state_block(text):
+    src = str(text or '')
+    m = re.search(r'\[MP_PROCESS_STATE_START\](.*?)\[MP_PROCESS_STATE_END\]', src, flags=re.S)
+    return m.group(1).strip() if m else ''
+
+
+def _mp_strip_process_state_block(text):
+    src = str(text or '')
+    cleaned = re.sub(
+        r'\n?\[MP_PROCESS_STATE_START\].*?\[MP_PROCESS_STATE_END\]\n?',
+        '\n',
+        src,
+        flags=re.S,
+    )
+    return cleaned.strip()
+
+
+def _mp_parse_completed_process_ids(text):
+    raw = _mp_extract_process_state_block(text)
+    if not raw:
+        return set()
+
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return set()
+
+    ids = payload.get('completed_ids') if isinstance(payload, dict) else []
+    completed = set()
+    for value in ids or []:
+        try:
+            completed.add(int(value))
+        except Exception:
+            continue
+    return completed
+
+
+def _mp_upsert_process_state_block(text, completed_ids):
+    base = _mp_strip_process_state_block(text)
+    normalized = sorted({int(x) for x in (completed_ids or set())})
+    if not normalized:
+        return base or None
+
+    block_payload = json.dumps({'completed_ids': normalized}, ensure_ascii=False)
+    block = f"[MP_PROCESS_STATE_START]\n{block_payload}\n[MP_PROCESS_STATE_END]"
+    if base:
+        return f"{base}\n\n{block}".strip()
+    return block
+
+
 def _qc_parse_review_block(notas_text):
     notas = str(notas_text or '')
     status_match = re.search(r'STATUS=(QC_OK|QC_NOK)', notas)
@@ -453,7 +503,7 @@ def _resolve_clave_descripcion_by_pn(pn_value):
     return _clean_nullable_text(getattr(clave, 'clave', None)) or pn
 
 
-def _build_mp_virtual_estaciones_by_pn(pn_value):
+def _build_mp_virtual_estaciones_by_pn(pn_value, completed_process_ids=None):
     """Construye una lista virtual de procesos para hojas MP (sin persistir EstacionTrabajo).
     Se usa para visualizacion en UI de hojas MP y panel de asignacion.
     """
@@ -467,6 +517,7 @@ def _build_mp_virtual_estaciones_by_pn(pn_value):
         return []
 
     procesos = ClaveProceso.query.filter_by(clave_id=clave.id).order_by(ClaveProceso.orden.asc()).all()
+    completed = {int(x) for x in (completed_process_ids or set())}
     virtual = []
     for idx, cp in enumerate(procesos, start=1):
         operacion = (
@@ -482,9 +533,15 @@ def _build_mp_virtual_estaciones_by_pn(pn_value):
             'operacion': operacion,
             'centro_trabajo': _clean_nullable_text(getattr(cp, 'centro_trabajo', None))
                              or _clean_nullable_text(getattr(getattr(cp, 'proceso', None), 'centro_trabajo', None)),
-            'estado': 'pendiente',
+            'estado': 'completada' if cp.id in completed else 'pendiente',
             'origen': 'clave_proceso_mp',
         })
+
+    for est in virtual:
+        if est['estado'] != 'completada':
+            est['estado'] = 'en_curso'
+            break
+
     return virtual
 
 
@@ -2927,11 +2984,11 @@ def hojas_ruta_nuevo_form():
         item['serie'] = item.get('nombre')
         item['clave'] = item.get('pn')
         item['orden_trabajo'] = item.get('orden_trabajo_hr')
-        item['comentarios'] = _clean_nullable_text(item.get('materia_prima'))
+        item['comentarios'] = _mp_strip_process_state_block(_clean_nullable_text(item.get('materia_prima')))
         item['firma_ing_jose'] = item.get('supervisor')
         item['firma_ing_rodrigo'] = item.get('operador')
         item['historial_cargas'] = []
-        item['estaciones'] = _build_mp_virtual_estaciones_by_pn(h.pn)
+        item['estaciones'] = _build_mp_virtual_estaciones_by_pn(h.pn, _mp_parse_completed_process_ids(h.materia_prima))
         hojas_data.append(item)
 
     companion_hojas = []
@@ -2990,12 +3047,12 @@ def hoja_ruta_nuevo_ver(hoja_id):
     """Vista independiente para ver una hoja nueva por ID, sin requerir máquina."""
     hoja = HojaRutaNueva.query.get_or_404(hoja_id)
     h = hoja.to_dict()
-    h['comentarios_usuario'] = _clean_nullable_text(h.get('materia_prima'))
+    h['comentarios_usuario'] = _mp_strip_process_state_block(_clean_nullable_text(h.get('materia_prima')))
     h['scrap_qc'] = None
     h['descripcion_clave'] = _resolve_clave_descripcion_by_pn(hoja.pn)
     h['qr_payload'] = f"HRNID:{hoja.id};SERIE:{hoja.nombre or ''}"
     h['qr_deeplink'] = request.url_root.rstrip('/') + f"/hoja_nuevo/{hoja.id}"
-    h['estaciones'] = _build_mp_virtual_estaciones_by_pn(hoja.pn)
+    h['estaciones'] = _build_mp_virtual_estaciones_by_pn(hoja.pn, _mp_parse_completed_process_ids(hoja.materia_prima))
     return render_template('hoja_ruta_ver.html', hoja=h, volver_url='/hojas_ruta_nuevo_form')
 
 @app.route('/hojas_ruta')
@@ -3023,7 +3080,10 @@ def hojas_ruta_entregas_list():
         hoja_activa = hoja_activa_por_maquina.get(maq.id)
         hoja_activa_dict = hoja_activa.to_dict() if hoja_activa else None
         if hoja_activa_dict is not None:
-            hoja_activa_dict['estaciones'] = _build_mp_virtual_estaciones_by_pn(hoja_activa.pn)
+            hoja_activa_dict['estaciones'] = _build_mp_virtual_estaciones_by_pn(
+                hoja_activa.pn,
+                _mp_parse_completed_process_ids(hoja_activa.materia_prima),
+            )
 
         estacion_actual = 'Sin produccion'
         tiempo_real = None
@@ -3059,7 +3119,7 @@ def hojas_ruta_entregas_list():
             'cantidad_piezas': hoja.cantidad_piezas,
             'tiempo_total': hoja.total_tiempo,
             'fecha_creacion': hoja.fecha_creacion.isoformat() if hoja.fecha_creacion else None,
-            'estaciones': _build_mp_virtual_estaciones_by_pn(hoja.pn),
+            'estaciones': _build_mp_virtual_estaciones_by_pn(hoja.pn, _mp_parse_completed_process_ids(hoja.materia_prima)),
         })
 
     facturadas_info = {}
@@ -4315,7 +4375,12 @@ def api_actualizar_hoja_ruta_nuevo(hoja_id):
     if 'orden_trabajo' in data:
         hoja.orden_trabajo_hr = (data.get('orden_trabajo') or '').strip() or None
     if 'comentarios' in data:
-        hoja.materia_prima = (data.get('comentarios') or '').strip() or None
+        comentarios_usuario = (data.get('comentarios') or '').strip()
+        process_state = _mp_extract_process_state_block(hoja.materia_prima)
+        if process_state:
+            hoja.materia_prima = _mp_upsert_process_state_block(comentarios_usuario, _mp_parse_completed_process_ids(hoja.materia_prima))
+        else:
+            hoja.materia_prima = comentarios_usuario or None
 
     try:
         db.session.commit()
@@ -4324,6 +4389,78 @@ def api_actualizar_hoja_ruta_nuevo(hoja_id):
         db.session.rollback()
         logger.error(f"Error actualizando hoja nueva {hoja_id}: {e}", exc_info=True)
         return jsonify({'error': 'No se pudo actualizar la hoja de ruta nueva'}), 500
+
+
+@app.route('/api/hojas_ruta_nuevo/<int:hoja_id>/check_proceso', methods=['POST'])
+@login_required
+@requires_any_permission([('estaciones', 'operate'), ('hojas_mp', 'edit'), ('catalog', 'edit')])
+def api_check_proceso_hoja_ruta_nuevo(hoja_id):
+    """Marcar/desmarcar proceso virtual de hoja MP.
+    Persiste el avance en bloque de estado dentro de materia_prima.
+    """
+    hoja = HojaRutaNueva.query.get_or_404(hoja_id)
+    data = request.get_json() or {}
+
+    proceso_id = data.get('proceso_id')
+    completada = bool(data.get('completada', False))
+    if not proceso_id:
+        return jsonify({'error': 'proceso_id requerido'}), 400
+
+    try:
+        proceso_id = int(proceso_id)
+    except Exception:
+        return jsonify({'error': 'proceso_id invalido'}), 400
+
+    clave = None
+    if hoja.pn:
+        clave = ClaveProducto.query.filter(func.upper(func.trim(ClaveProducto.clave)) == hoja.pn.upper().strip()).first()
+    if not clave:
+        return jsonify({'error': 'No se pudo resolver la clave de la hoja'}), 409
+
+    cp = ClaveProceso.query.filter_by(id=proceso_id, clave_id=clave.id).first()
+    if not cp:
+        return jsonify({'error': 'El proceso no pertenece a la clave de la hoja'}), 409
+
+    try:
+        completed_ids = _mp_parse_completed_process_ids(hoja.materia_prima)
+        if completada:
+            completed_ids.add(proceso_id)
+        else:
+            completed_ids.discard(proceso_id)
+
+        hoja.materia_prima = _mp_upsert_process_state_block(hoja.materia_prima, completed_ids)
+
+        virtual = _build_mp_virtual_estaciones_by_pn(hoja.pn, completed_ids)
+        total = len(virtual)
+        completadas = sum(1 for e in virtual if (e.get('estado') or '').lower() == 'completada')
+
+        ahora = datetime.utcnow()
+        if total > 0 and completadas == total:
+            hoja.estado = 'completada'
+            if not hoja.fecha_termino:
+                hoja.fecha_termino = ahora
+        else:
+            hoja.estado = 'activa'
+            hoja.fecha_termino = None
+
+        if not hoja.fecha_salida:
+            hoja.fecha_salida = ahora
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'hoja': hoja.to_dict(),
+            'resumen': {
+                'total': total,
+                'completadas': completadas,
+                'pendientes': max(0, total - completadas),
+            }
+        }), 200
+    except Exception as exc:
+        db.session.rollback()
+        logger.error(f"Error actualizando proceso MP hoja={hoja_id}: {exc}", exc_info=True)
+        return jsonify({'error': 'No se pudo actualizar el proceso MP'}), 500
 
 
 @app.route('/api/hojas_ruta_nuevo/<int:hoja_id>', methods=['DELETE'])
