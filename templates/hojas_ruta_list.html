@@ -796,7 +796,8 @@
                                     </div>
                                      <div class="time-real js-tiempo-reloj"
                                          data-elapsed-base="{{ maq.tiempo_real or '00:00:00' }}"
-                                         data-total="{{ maq.tiempo_objetivo_proceso or maq.hoja_activa.total_tiempo or '' }}">
+                                         data-total="{{ maq.tiempo_objetivo_proceso or maq.hoja_activa.total_tiempo or '' }}"
+                                         data-running="{{ '1' if (maq.activo and maq.hoja_activa and maq.hoja_activa.estado == 'activa') else '0' }}">
                                          Tiempo proceso: <span class="js-tiempo-restante">00:00:00</span>
                                      </div>
                                     <div class="process-box">
@@ -1024,8 +1025,9 @@
         const state = clocks.map(el => {
             const elapsedBase = parseHmsToSeconds(el.dataset.elapsedBase || '00:00:00');
             const totalSeconds = parseHmsToSeconds(el.dataset.total || '');
+            const isRunning = (el.dataset.running || '0') === '1';
             const remainingSpan = el.querySelector('.js-tiempo-restante');
-            return { el, elapsedBase, totalSeconds, remainingSpan };
+            return { el, elapsedBase, totalSeconds, isRunning, remainingSpan };
         });
 
         let tick = 0;
@@ -1034,7 +1036,7 @@
                 if (!item.remainingSpan) return;
 
                 if (item.totalSeconds > 0) {
-                    const elapsedNow = item.elapsedBase + tick;
+                    const elapsedNow = item.elapsedBase + (item.isRunning ? tick : 0);
                     const remaining = Math.max(0, item.totalSeconds - elapsedNow);
                     item.remainingSpan.textContent = formatSecondsToHms(remaining);
                 } else {
