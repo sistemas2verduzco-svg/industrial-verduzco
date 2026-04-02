@@ -8745,6 +8745,30 @@ def maquinaria_ordenes_page():
     ready, missing = _maquinaria_tables_status()
     ordenes = MaquinariaOrdenTrabajo.query.order_by(MaquinariaOrdenTrabajo.id.desc()).limit(60).all() if ready else []
     pedidos = MaquinariaPedido.query.order_by(MaquinariaPedido.id.desc()).limit(80).all() if ready else []
+    pedidos_selector_data = []
+    if ready:
+        pedidos_for_group = MaquinariaPedido.query.order_by(MaquinariaPedido.id.desc()).all()
+        grouped = {}
+        for p in pedidos_for_group:
+            group_key = f"contpaq:{p.contpaq_document_id}" if p.contpaq_document_id else f"pedido:{p.id}"
+            if group_key not in grouped:
+                grouped[group_key] = {
+                    'group_key': group_key,
+                    'source_pedido_id': p.id,
+                    'folio_interno': p.folio_interno or '',
+                    'cliente': p.cliente or '',
+                    'contpaq_document_id': p.contpaq_document_id,
+                    'lineas': [],
+                }
+            grouped[group_key]['lineas'].append({
+                'pedido_id': p.id,
+                'clave_maquina': p.clave_maquina or '',
+                'descripcion_maquina': p.descripcion_maquina or '',
+                'cantidad': int(p.cantidad or 1),
+                'estado': p.estado or '',
+            })
+        pedidos_selector_data = list(grouped.values())
+        pedidos_selector_data.sort(key=lambda g: g.get('source_pedido_id', 0), reverse=True)
     claves = ClaveProducto.query.filter_by(activo=True).order_by(ClaveProducto.clave.asc()).limit(120).all()
     procesos = ProcesoCatalogo.query.filter_by(activo=True).order_by(ProcesoCatalogo.nombre.asc()).limit(120).all()
     return render_template(
@@ -8753,6 +8777,7 @@ def maquinaria_ordenes_page():
         missing_tables=missing,
         ordenes=ordenes,
         pedidos=pedidos,
+        pedidos_selector_data=pedidos_selector_data,
         claves=claves,
         procesos=procesos,
     )
@@ -8766,25 +8791,68 @@ def maquinaria_ordenes_create():
     if not ready:
         return redirect(url_for('maquinaria_ordenes_page'))
 
-    folio_ot = _clean_nullable_text(request.form.get('folio_ot', ''))
-    if not folio_ot:
-        folio_ot = f"MOT-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}"
+    def _new_ot_folio(suffix_idx=None):
+        base = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
+        raw = f"MOT-{base}" if suffix_idx is None else f"MOT-{base}-{suffix_idx:02d}"
+        folio = raw
+        bump = 1
+        while MaquinariaOrdenTrabajo.query.filter_by(folio_ot=folio).first() is not None:
+            folio = f"{raw}-{bump}"
+            bump += 1
+        return folio
 
     fecha_objetivo = _parse_datetime(request.form.get('fecha_objetivo'))
-    orden = MaquinariaOrdenTrabajo(
-        folio_ot=folio_ot,
-        pedido_id=request.form.get('pedido_id', type=int),
-        clave_maquina=_clean_nullable_text(request.form.get('clave_maquina', '')),
-        cantidad=max(1, request.form.get('cantidad', type=int) or 1),
-        estado=_clean_nullable_text(request.form.get('estado', 'planeacion')) or 'planeacion',
-        fecha_objetivo=fecha_objetivo,
-        notas=_clean_nullable_text(request.form.get('notas', '')),
-        created_by=session.get('user'),
-    )
-    if not orden.clave_maquina:
-        return redirect(url_for('maquinaria_ordenes_page'))
+    if not fecha_objetivo:
+        fecha_objetivo = datetime.utcnow()
 
-    db.session.add(orden)
+    pedido_id = request.form.get('pedido_id', type=int)
+    lineas_a_crear = []
+    pedido_ref_id = pedido_id
+    if pedido_id:
+        pedido_base = MaquinariaPedido.query.get(pedido_id)
+        if pedido_base:
+            if pedido_base.contpaq_document_id:
+                lineas = MaquinariaPedido.query.filter_by(contpaq_document_id=pedido_base.contpaq_document_id).order_by(MaquinariaPedido.id.asc()).all()
+            else:
+                lineas = [pedido_base]
+            for p in lineas:
+                if (p.clave_maquina or '').strip():
+                    lineas_a_crear.append({
+                        'pedido_id': p.id,
+                        'clave': p.clave_maquina,
+                        'cantidad': max(1, int(p.cantidad or 1)),
+                        'descripcion': p.descripcion_maquina or '',
+                    })
+
+    if not lineas_a_crear:
+        clave = _clean_nullable_text(request.form.get('clave_maquina', ''))
+        if not clave:
+            return redirect(url_for('maquinaria_ordenes_page'))
+        lineas_a_crear.append({
+            'pedido_id': pedido_id,
+            'clave': clave,
+            'cantidad': max(1, request.form.get('cantidad', type=int) or 1),
+            'descripcion': _clean_nullable_text(request.form.get('descripcion_maquina', '')),
+        })
+
+    notas_base = _clean_nullable_text(request.form.get('notas', ''))
+    for idx, line in enumerate(lineas_a_crear, start=1):
+        notas_linea = notas_base or ''
+        if line.get('descripcion'):
+            notas_linea = f"{notas_linea}\nDesc: {line['descripcion']}".strip()
+
+        orden = MaquinariaOrdenTrabajo(
+            folio_ot=_new_ot_folio(None if len(lineas_a_crear) == 1 else idx),
+            pedido_id=line.get('pedido_id') or pedido_ref_id,
+            clave_maquina=_clean_nullable_text(line.get('clave', '')),
+            cantidad=max(1, int(line.get('cantidad') or 1)),
+            estado=_clean_nullable_text(request.form.get('estado', 'planeacion')) or 'planeacion',
+            fecha_objetivo=fecha_objetivo,
+            notas=notas_linea,
+            created_by=session.get('user'),
+        )
+        db.session.add(orden)
+
     db.session.commit()
     return redirect(url_for('maquinaria_ordenes_page'))
 
