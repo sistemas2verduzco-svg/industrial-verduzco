@@ -8748,6 +8748,21 @@ def maquinaria_ordenes_page():
     pedidos_selector_data = []
     if ready:
         pedidos_for_group = MaquinariaPedido.query.order_by(MaquinariaPedido.id.desc()).all()
+        doc_ids = list({int(p.contpaq_document_id) for p in pedidos_for_group if p.contpaq_document_id})
+        contpaq_lines_by_doc = {}
+        if doc_ids:
+            contpaq_rows = MaquinariaContpaqPedidoDetalle.query.filter(
+                MaquinariaContpaqPedidoDetalle.document_id.in_(doc_ids)
+            ).order_by(MaquinariaContpaqPedidoDetalle.document_id.asc(), MaquinariaContpaqPedidoDetalle.line_number.asc()).all()
+            for row in contpaq_rows:
+                contpaq_lines_by_doc.setdefault(int(row.document_id), []).append({
+                    'pedido_id': None,
+                    'clave_maquina': row.product_key or '',
+                    'descripcion_maquina': row.description or '',
+                    'cantidad': max(1, int(row.quantity or 1)),
+                    'estado': 'contpaq',
+                })
+
         grouped = {}
         for p in pedidos_for_group:
             group_key = f"contpaq:{p.contpaq_document_id}" if p.contpaq_document_id else f"pedido:{p.id}"
@@ -8760,13 +8775,20 @@ def maquinaria_ordenes_page():
                     'contpaq_document_id': p.contpaq_document_id,
                     'lineas': [],
                 }
-            grouped[group_key]['lineas'].append({
-                'pedido_id': p.id,
-                'clave_maquina': p.clave_maquina or '',
-                'descripcion_maquina': p.descripcion_maquina or '',
-                'cantidad': int(p.cantidad or 1),
-                'estado': p.estado or '',
-            })
+            if not p.contpaq_document_id:
+                grouped[group_key]['lineas'].append({
+                    'pedido_id': p.id,
+                    'clave_maquina': p.clave_maquina or '',
+                    'descripcion_maquina': p.descripcion_maquina or '',
+                    'cantidad': int(p.cantidad or 1),
+                    'estado': p.estado or '',
+                })
+
+        for g in grouped.values():
+            docid = g.get('contpaq_document_id')
+            if docid and docid in contpaq_lines_by_doc:
+                g['lineas'] = contpaq_lines_by_doc.get(docid, [])
+
         pedidos_selector_data = list(grouped.values())
         pedidos_selector_data.sort(key=lambda g: g.get('source_pedido_id', 0), reverse=True)
     claves = ClaveProducto.query.filter_by(activo=True).order_by(ClaveProducto.clave.asc()).limit(120).all()
@@ -8812,17 +8834,40 @@ def maquinaria_ordenes_create():
         pedido_base = MaquinariaPedido.query.get(pedido_id)
         if pedido_base:
             if pedido_base.contpaq_document_id:
-                lineas = MaquinariaPedido.query.filter_by(contpaq_document_id=pedido_base.contpaq_document_id).order_by(MaquinariaPedido.id.asc()).all()
+                contpaq_rows = MaquinariaContpaqPedidoDetalle.query.filter_by(
+                    document_id=pedido_base.contpaq_document_id
+                ).order_by(MaquinariaContpaqPedidoDetalle.line_number.asc()).all()
+                if contpaq_rows:
+                    for row in contpaq_rows:
+                        clave = _clean_nullable_text(row.product_key or '')
+                        if not clave:
+                            continue
+                        lineas_a_crear.append({
+                            'pedido_id': pedido_base.id,
+                            'clave': clave,
+                            'cantidad': max(1, int(row.quantity or 1)),
+                            'descripcion': _clean_nullable_text(row.description or ''),
+                        })
+                else:
+                    lineas = MaquinariaPedido.query.filter_by(contpaq_document_id=pedido_base.contpaq_document_id).order_by(MaquinariaPedido.id.asc()).all()
+                    for p in lineas:
+                        if (p.clave_maquina or '').strip():
+                            lineas_a_crear.append({
+                                'pedido_id': p.id,
+                                'clave': p.clave_maquina,
+                                'cantidad': max(1, int(p.cantidad or 1)),
+                                'descripcion': p.descripcion_maquina or '',
+                            })
             else:
                 lineas = [pedido_base]
-            for p in lineas:
-                if (p.clave_maquina or '').strip():
-                    lineas_a_crear.append({
-                        'pedido_id': p.id,
-                        'clave': p.clave_maquina,
-                        'cantidad': max(1, int(p.cantidad or 1)),
-                        'descripcion': p.descripcion_maquina or '',
-                    })
+                for p in lineas:
+                    if (p.clave_maquina or '').strip():
+                        lineas_a_crear.append({
+                            'pedido_id': p.id,
+                            'clave': p.clave_maquina,
+                            'cantidad': max(1, int(p.cantidad or 1)),
+                            'descripcion': p.descripcion_maquina or '',
+                        })
 
     if not lineas_a_crear:
         clave = _clean_nullable_text(request.form.get('clave_maquina', ''))
