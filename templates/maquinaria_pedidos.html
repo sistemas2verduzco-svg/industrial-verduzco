@@ -5,6 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Maquinaria y Ensamble - Pedidos</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .pedido-action-btn {
+            border: 1px solid rgba(255,255,255,0.35);
+            background: rgba(255,255,255,0.16);
+            color: #fff;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 6px 10px;
+            cursor: pointer;
+        }
+        .pedido-action-btn:hover { background: rgba(255,255,255,0.24); }
+        .use-line-btn {
+            border: 1px solid #cbd5e1;
+            background: #ffffff;
+            color: #1e40af;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 7px;
+            cursor: pointer;
+        }
+        .use-line-btn:hover { background:#eff6ff; }
+    </style>
 </head>
 <body>
     {% include '_sidebar.html' %}
@@ -19,22 +43,39 @@
         </div>
         {% endif %}
 
-        <div style="display:grid; grid-template-columns:0.95fr 1.35fr; gap:12px; align-items:start;">
-            <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px;">
+        <div style="display:grid; grid-template-columns:minmax(420px, 1fr) minmax(620px, 1.55fr); gap:12px; align-items:start;">
+            <div style="display:grid; gap:12px; align-content:start;">
+            <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px; position:sticky; top:16px;">
                 <h3 style="margin:0 0 8px 0; font-size:16px;">Nuevo pedido interno</h3>
                 <form method="post" action="/maquinaria/pedidos/create" style="display:grid; gap:8px;">
-                    <input type="text" name="folio_interno" placeholder="Folio interno (opcional)" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
-                    <input type="number" name="contpaq_document_id" placeholder="Document ID CONTPAQ (opcional)" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
-                    <input type="text" name="cliente" placeholder="Cliente" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
-                    <input type="text" name="clave_maquina" placeholder="Clave de maquina" required style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
-                    <input type="text" name="descripcion_maquina" placeholder="Descripcion" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
-                    <input type="number" name="cantidad" min="1" value="1" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
-                    <textarea name="notas" placeholder="Notas" rows="3" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;"></textarea>
+                    <div style="display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:center;">
+                        <select id="pedidoSelector" style="padding:8px; border:1px solid #d1d5db; border-radius:6px; min-width:0;">
+                            <option value="">Seleccionar pedido CONTPAQ...</option>
+                            {% for p in pedidos_contpaq_selector_data %}
+                            <option value="{{ p.document_id }}">{{ p.serie }}-{{ p.folio }} | {{ p.cliente }} | {{ p.fecha_documento }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="button" onclick="importSelectedPedido()" style="border:0; background:#0f766e; color:#fff; font-weight:700; border-radius:6px; padding:9px 11px;">Traer pedido</button>
+                    </div>
+                    <input id="folioInternoField" type="text" name="folio_interno" placeholder="Folio interno (opcional)" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                    <input id="contpaqDocumentIdField" type="number" name="contpaq_document_id" placeholder="Document ID CONTPAQ (opcional)" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                    <input id="clienteField" type="text" name="cliente" placeholder="Cliente" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                    <input id="claveMaquinaField" type="text" name="clave_maquina" placeholder="Clave de maquina" required style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                    <input id="descripcionMaquinaField" type="text" name="descripcion_maquina" placeholder="Descripcion" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                    <input id="cantidadField" type="number" name="cantidad" min="1" value="1" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                    <textarea id="notasField" name="notas" placeholder="Notas" rows="3" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;"></textarea>
                     {% if has_permission('maquinaria_pedidos', 'create') or has_permission('maquinaria_pedidos', 'edit') or current_user.es_admin %}
                     <button type="submit" style="border:0; background:#1d4ed8; color:#fff; font-weight:700; border-radius:6px; padding:9px;">Guardar pedido</button>
                     {% endif %}
                 </form>
                 <div style="margin-top:10px; font-size:12px; color:#64748b;">BOMs cargados: {{ boms|length }}</div>
+            </div>
+
+            <div id="pedidoDetallePanel" style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px; min-height:240px;">
+                <h3 style="margin:0 0 8px 0; font-size:16px;">Pedido CONTPAQ seleccionado</h3>
+                <div id="pedidoDetalleInfo" style="font-size:13px; color:#64748b;">Selecciona un pedido en la consulta y haz clic en Traer pedido.</div>
+                <div id="pedidoDetalleLines" style="margin-top:10px;"></div>
+            </div>
             </div>
 
             <div style="display:grid; gap:12px;">
@@ -55,6 +96,9 @@
                                 </div>
                                 <div style="text-align:right; min-width:200px;">
                                     <div style="display:inline-block; background:rgba(255,255,255,0.14); padding:6px 10px; border-radius:999px; font-size:12px; font-weight:800;">{{ p.status_delivery or 'NO ENTREGADO' }}</div>
+                                    <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
+                                        <button type="button" class="pedido-action-btn" onclick="selectPedidoById({{ p.document_id }})">Usar en formulario</button>
+                                    </div>
                                     <div style="font-size:12px; margin-top:10px; opacity:0.9;">{{ p.date_document.strftime('%Y-%m-%d') if p.date_document else '-' }}</div>
                                     <div style="font-size:12px; opacity:0.9;">Sucursal: {{ p.sucursal or p.depot_name or '-' }}</div>
                                 </div>
@@ -83,6 +127,7 @@
                                             <th style="padding:9px; border-bottom:1px solid #e2e8f0;">Cant.</th>
                                             <th style="padding:9px; border-bottom:1px solid #e2e8f0;">P. Unit</th>
                                             <th style="padding:9px; border-bottom:1px solid #e2e8f0;">Importe</th>
+                                            <th style="padding:9px; border-bottom:1px solid #e2e8f0;">Accion</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -94,9 +139,10 @@
                                             <td style="padding:9px; border-bottom:1px solid #eef2f7;">{{ d.quantity or 0 }}</td>
                                             <td style="padding:9px; border-bottom:1px solid #eef2f7;">{{ '%.2f'|format(d.unit_price or 0) }}</td>
                                             <td style="padding:9px; border-bottom:1px solid #eef2f7; font-weight:700;">{{ '%.2f'|format(d.total_item or 0) }}</td>
+                                            <td style="padding:9px; border-bottom:1px solid #eef2f7;"><button type="button" class="use-line-btn" onclick="useLineFromCard({{ p.document_id }}, {{ d.line_number }})">Usar partida</button></td>
                                         </tr>
                                         {% else %}
-                                        <tr><td colspan="6" style="padding:9px; color:#64748b;">Sin partidas sincronizadas.</td></tr>
+                                        <tr><td colspan="7" style="padding:9px; color:#64748b;">Sin partidas sincronizadas.</td></tr>
                                         {% endfor %}
                                     </tbody>
                                 </table>
@@ -139,6 +185,130 @@
                 </table>
             </div>
         </div>
+
+        <script>
+            const CONTPAQ_PEDIDOS = {{ pedidos_contpaq_selector_data|tojson }};
+            const CONTPAQ_PEDIDOS_MAP = new Map(CONTPAQ_PEDIDOS.map(p => [Number(p.document_id), p]));
+
+            function setValue(id, value) {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.value = value === null || value === undefined ? '' : String(value);
+            }
+
+            function setPedidoSelectorValue(docId) {
+                const sel = document.getElementById('pedidoSelector');
+                if (!sel) return;
+                sel.value = docId ? String(docId) : '';
+            }
+
+            function fillPedidoHeader(pedido) {
+                setValue('contpaqDocumentIdField', pedido.document_id || '');
+                setValue('clienteField', pedido.cliente || '');
+                const notas = [
+                    pedido.titulo ? `Titulo CONTPAQ: ${pedido.titulo}` : '',
+                    pedido.comentarios ? `Comentarios: ${pedido.comentarios}` : '',
+                    pedido.sucursal ? `Sucursal: ${pedido.sucursal}` : '',
+                ].filter(Boolean).join('\n');
+                if (notas) {
+                    setValue('notasField', notas);
+                }
+            }
+
+            function fillByLine(pedido, line) {
+                if (!line) return;
+                setValue('claveMaquinaField', line.product_key || '');
+                setValue('descripcionMaquinaField', line.description || '');
+                setValue('cantidadField', Math.max(1, Number(line.quantity || 1)));
+                const notasEl = document.getElementById('notasField');
+                if (notasEl) {
+                    const lineTag = `Partida CONTPAQ #${line.line_number || '-'}`;
+                    if (!String(notasEl.value || '').includes(lineTag)) {
+                        notasEl.value = `${notasEl.value ? notasEl.value + '\n' : ''}${lineTag}`;
+                    }
+                }
+            }
+
+            function renderSelectedPedido(pedido) {
+                const infoEl = document.getElementById('pedidoDetalleInfo');
+                const linesEl = document.getElementById('pedidoDetalleLines');
+                if (!infoEl || !linesEl) return;
+                if (!pedido) {
+                    infoEl.textContent = 'Selecciona un pedido en la consulta y haz clic en Traer pedido.';
+                    linesEl.innerHTML = '';
+                    return;
+                }
+
+                infoEl.innerHTML = `
+                    <div><b>Pedido:</b> ${pedido.serie || 'E'}-${pedido.folio || '-'}</div>
+                    <div><b>Cliente:</b> ${pedido.cliente || '-'}</div>
+                    <div><b>Fecha:</b> ${pedido.fecha_documento || '-'}</div>
+                    <div><b>Sucursal:</b> ${pedido.sucursal || '-'}</div>
+                `;
+
+                const rows = (pedido.detalles || []).map(line => `
+                    <tr>
+                        <td style="padding:7px; border-bottom:1px solid #eef2f7;">${line.line_number || '-'}</td>
+                        <td style="padding:7px; border-bottom:1px solid #eef2f7;">${line.product_key || '-'}</td>
+                        <td style="padding:7px; border-bottom:1px solid #eef2f7;">${line.description || '-'}</td>
+                        <td style="padding:7px; border-bottom:1px solid #eef2f7;">${line.quantity || 0}</td>
+                        <td style="padding:7px; border-bottom:1px solid #eef2f7;"><button type="button" class="use-line-btn" onclick="useLineFromCard(${pedido.document_id}, ${line.line_number})">Usar</button></td>
+                    </tr>
+                `).join('');
+
+                linesEl.innerHTML = `
+                    <div style="border:1px solid #e2e8f0; border-radius:8px; overflow:auto; max-height:230px; margin-top:8px;">
+                        <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                            <thead>
+                                <tr style="background:#f8fafc; text-align:left;">
+                                    <th style="padding:7px; border-bottom:1px solid #e2e8f0;">Partida</th>
+                                    <th style="padding:7px; border-bottom:1px solid #e2e8f0;">Clave</th>
+                                    <th style="padding:7px; border-bottom:1px solid #e2e8f0;">Descripcion</th>
+                                    <th style="padding:7px; border-bottom:1px solid #e2e8f0;">Cant</th>
+                                    <th style="padding:7px; border-bottom:1px solid #e2e8f0;">Accion</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows || '<tr><td colspan="5" style="padding:8px; color:#64748b;">Sin partidas en este pedido.</td></tr>'}</tbody>
+                        </table>
+                    </div>
+                `;
+            }
+
+            function selectPedidoById(docId, useFirstLine = true) {
+                const pedido = CONTPAQ_PEDIDOS_MAP.get(Number(docId));
+                if (!pedido) return;
+                setPedidoSelectorValue(pedido.document_id);
+                fillPedidoHeader(pedido);
+                renderSelectedPedido(pedido);
+                if (useFirstLine && pedido.detalles && pedido.detalles.length) {
+                    fillByLine(pedido, pedido.detalles[0]);
+                }
+            }
+
+            function importSelectedPedido() {
+                const sel = document.getElementById('pedidoSelector');
+                if (!sel || !sel.value) {
+                    alert('Selecciona un pedido CONTPAQ primero.');
+                    return;
+                }
+                selectPedidoById(Number(sel.value), true);
+            }
+
+            function useLineFromCard(docId, lineNumber) {
+                const pedido = CONTPAQ_PEDIDOS_MAP.get(Number(docId));
+                if (!pedido) return;
+                const line = (pedido.detalles || []).find(d => Number(d.line_number) === Number(lineNumber));
+                if (!line) return;
+                setPedidoSelectorValue(pedido.document_id);
+                fillPedidoHeader(pedido);
+                renderSelectedPedido(pedido);
+                fillByLine(pedido, line);
+            }
+
+            window.selectPedidoById = selectPedidoById;
+            window.importSelectedPedido = importSelectedPedido;
+            window.useLineFromCard = useLineFromCard;
+        </script>
     </div>
 </body>
 </html>

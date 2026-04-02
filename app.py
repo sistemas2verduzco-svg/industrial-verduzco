@@ -8672,6 +8672,29 @@ def maquinaria_pedidos_page():
             MaquinariaContpaqPedido.cancelled.is_(False),
             MaquinariaContpaqPedido.deleted.is_(False),
         ).order_by(MaquinariaContpaqPedido.date_document.desc(), MaquinariaContpaqPedido.id.desc()).limit(80).all()
+    pedidos_contpaq_selector_data = []
+    for p in pedidos_contpaq:
+        detalles = []
+        for d in (p.detalles or []):
+            detalles.append({
+                'line_number': d.line_number,
+                'product_key': d.product_key or '',
+                'description': d.description or '',
+                'quantity': float(d.quantity or 0),
+                'unit_price': float(d.unit_price or 0),
+                'total_item': float(d.total_item or 0),
+            })
+        pedidos_contpaq_selector_data.append({
+            'document_id': int(p.document_id or 0),
+            'folio': p.folio or '',
+            'serie': p.serie or 'E',
+            'cliente': p.business_entity_name or '',
+            'sucursal': p.sucursal or p.depot_name or '',
+            'fecha_documento': p.date_document.strftime('%Y-%m-%d') if p.date_document else '',
+            'titulo': p.title or '',
+            'comentarios': p.comments or '',
+            'detalles': detalles,
+        })
     boms = MaquinariaBOM.query.order_by(MaquinariaBOM.clave_maquina.asc()).all() if ready else []
     return render_template(
         'maquinaria_pedidos.html',
@@ -8679,6 +8702,7 @@ def maquinaria_pedidos_page():
         missing_tables=missing,
         pedidos_locales=pedidos_locales,
         pedidos_contpaq=pedidos_contpaq,
+        pedidos_contpaq_selector_data=pedidos_contpaq_selector_data,
         boms=boms,
     )
 
