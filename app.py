@@ -10,6 +10,7 @@ from functools import wraps
 import secrets
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
+from datetime import timezone as dt_timezone
 from time import time, sleep
 import logging
 import pandas as pd
@@ -22,6 +23,7 @@ import subprocess
 import sys
 import threading
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 # Configurar logging
 logging.basicConfig(
@@ -39,6 +41,15 @@ logger = logging.getLogger(__name__)
 PROCESOS_IMPORT_LOCK = threading.Lock()
 PROCESOS_IMPORT_DIR = os.path.join('uploads', 'imports_jobs')
 os.makedirs(PROCESOS_IMPORT_DIR, exist_ok=True)
+
+MACHINE_SCHEDULE_ENABLED = os.getenv('MACHINE_SCHEDULE_ENABLED', '1').strip().lower() not in ('0', 'false', 'no')
+MACHINE_SCHEDULE_POLL_SECONDS = max(5, int(os.getenv('MACHINE_SCHEDULE_POLL_SECONDS', '15') or '15'))
+MACHINE_SCHEDULE_TIMEZONE = (os.getenv('MACHINE_SCHEDULE_TIMEZONE') or 'America/Mexico_City').strip()
+MACHINE_SCHEDULE_STATE_FILE = os.path.join('uploads', 'machine_schedule_state.json')
+MACHINE_SCHEDULE_ADVISORY_LOCK_ID = 94630211
+_MACHINE_SCHEDULE_THREAD = None
+_MACHINE_SCHEDULE_INIT = False
+_MACHINE_SCHEDULE_STOP = threading.Event()
 
 
 def _procesos_import_job_path(job_id):
@@ -64,6 +75,243 @@ def _set_procesos_import_job(job_id, **fields):
         path = _procesos_import_job_path(job_id)
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(job, f, ensure_ascii=False)
+
+
+def _get_machine_schedule_timezone():
+    try:
+        return ZoneInfo(MACHINE_SCHEDULE_TIMEZONE)
+    except Exception:
+        logger.warning(
+            f"[MAQUINA_SCHEDULE] Zona horaria inválida '{MACHINE_SCHEDULE_TIMEZONE}', usando UTC-06:00 fija"
+        )
+        return dt_timezone(timedelta(hours=-6))
+
+
+def _machine_schedule_now():
+    return datetime.now(_get_machine_schedule_timezone())
+
+
+def _get_machine_schedule_window(now_local=None):
+    now_local = now_local or _machine_schedule_now()
+    weekday = now_local.weekday()
+    current_hm = (now_local.hour, now_local.minute)
+
+    if weekday >= 5:
+        return {
+            'active': False,
+            'slot': 'weekend_off',
+            'label': 'Fuera de turno fin de semana',
+            'now_local': now_local,
+        }
+
+    if current_hm < (6, 30):
+        return {
+            'active': False,
+            'slot': 'before_start',
+            'label': 'Fuera de turno antes de 06:30',
+            'now_local': now_local,
+        }
+    if current_hm < (12, 0):
+        return {
+            'active': True,
+            'slot': 'turno_manana',
+            'label': 'Turno activo 06:30-12:00',
+            'now_local': now_local,
+        }
+    if current_hm < (12, 30):
+        return {
+            'active': False,
+            'slot': 'comida',
+            'label': 'Paro programado 12:00-12:30',
+            'now_local': now_local,
+        }
+    if current_hm < (16, 0):
+        return {
+            'active': True,
+            'slot': 'turno_tarde',
+            'label': 'Turno activo 12:30-16:00',
+            'now_local': now_local,
+        }
+    return {
+        'active': False,
+        'slot': 'after_end',
+        'label': 'Paro programado después de 16:00',
+        'now_local': now_local,
+    }
+
+
+def _machine_schedule_token(schedule_window):
+    now_local = schedule_window['now_local']
+    return f"{now_local.strftime('%Y-%m-%d')}-{schedule_window['slot']}"
+
+
+def _load_machine_schedule_state():
+    if not os.path.exists(MACHINE_SCHEDULE_STATE_FILE):
+        return {}
+    try:
+        with open(MACHINE_SCHEDULE_STATE_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_machine_schedule_state(payload):
+    try:
+        os.makedirs(os.path.dirname(MACHINE_SCHEDULE_STATE_FILE), exist_ok=True)
+        with open(MACHINE_SCHEDULE_STATE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        logger.warning(f"[MAQUINA_SCHEDULE] No se pudo guardar estado del scheduler: {exc}")
+
+
+def _pause_machine_hojas(now_dt=None):
+    now_dt = now_dt or datetime.utcnow()
+
+    hojas_entrega = HojaRutaEntrega.query.filter(
+        HojaRutaEntrega.maquina_id.isnot(None),
+        HojaRutaEntrega.estado == 'activa'
+    ).all()
+    for hoja in hojas_entrega:
+        hoja.estado = 'pausada'
+        hoja.fecha_actualizacion = now_dt
+
+    hojas_mp = HojaRutaNueva.query.filter(
+        HojaRutaNueva.maquina_id.isnot(None),
+        HojaRutaNueva.estado == 'activa'
+    ).all()
+    for hoja in hojas_mp:
+        hoja.estado = 'pausada'
+        hoja.fecha_actualizacion = now_dt
+
+
+def _resume_machine_hojas(now_dt=None):
+    now_dt = now_dt or datetime.utcnow()
+
+    hojas_entrega = HojaRutaEntrega.query.filter(
+        HojaRutaEntrega.maquina_id.isnot(None),
+        HojaRutaEntrega.estado == 'pausada'
+    ).all()
+    for hoja in hojas_entrega:
+        paused_at = hoja.fecha_actualizacion or now_dt
+        if hoja.fecha_salida:
+            hoja.fecha_salida = hoja.fecha_salida + (now_dt - paused_at)
+        else:
+            hoja.fecha_salida = now_dt
+        hoja.estado = 'activa'
+        hoja.fecha_actualizacion = now_dt
+
+    hojas_mp = HojaRutaNueva.query.filter(
+        HojaRutaNueva.maquina_id.isnot(None),
+        HojaRutaNueva.estado == 'pausada'
+    ).all()
+    for hoja in hojas_mp:
+        paused_at = hoja.fecha_actualizacion or now_dt
+        if hoja.fecha_salida:
+            hoja.fecha_salida = hoja.fecha_salida + (now_dt - paused_at)
+        else:
+            hoja.fecha_salida = now_dt
+        hoja.estado = 'activa'
+        hoja.fecha_actualizacion = now_dt
+
+
+def _apply_machine_schedule(force=False):
+    if not MACHINE_SCHEDULE_ENABLED:
+        return False
+
+    lock_acquired = False
+    try:
+        lock_acquired = bool(db.session.execute(
+            text('SELECT pg_try_advisory_lock(:lock_id)'),
+            {'lock_id': MACHINE_SCHEDULE_ADVISORY_LOCK_ID}
+        ).scalar())
+    except Exception as exc:
+        db.session.rollback()
+        logger.warning(f"[MAQUINA_SCHEDULE] No se pudo adquirir lock PostgreSQL: {exc}")
+        return False
+
+    if not lock_acquired:
+        return False
+
+    try:
+        schedule_window = _get_machine_schedule_window()
+        token = _machine_schedule_token(schedule_window)
+        desired_active = bool(schedule_window['active'])
+        saved_state = _load_machine_schedule_state()
+        if not force and saved_state.get('token') == token and saved_state.get('desired_active') == desired_active:
+            return False
+
+        maquinas = Máquina.query.all()
+        now_utc = datetime.utcnow()
+        changed = False
+        for maq in maquinas:
+            if bool(getattr(maq, 'activo', False)) != desired_active:
+                maq.activo = desired_active
+                changed = True
+
+        if desired_active:
+            _resume_machine_hojas(now_dt=now_utc)
+        else:
+            _pause_machine_hojas(now_dt=now_utc)
+
+        db.session.commit()
+        _save_machine_schedule_state({
+            'token': token,
+            'desired_active': desired_active,
+            'label': schedule_window['label'],
+            'applied_at_local': schedule_window['now_local'].isoformat(),
+            'applied_at_utc': now_utc.isoformat(),
+        })
+        logger.info(
+            f"[MAQUINA_SCHEDULE] Aplicado horario '{schedule_window['label']}' => activo={desired_active} maquinas={len(maquinas)}"
+        )
+        return changed
+    except Exception as exc:
+        db.session.rollback()
+        logger.error(f"[MAQUINA_SCHEDULE] Error aplicando horario de máquinas: {exc}", exc_info=True)
+        return False
+    finally:
+        try:
+            db.session.execute(
+                text('SELECT pg_advisory_unlock(:lock_id)'),
+                {'lock_id': MACHINE_SCHEDULE_ADVISORY_LOCK_ID}
+            )
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+
+def _machine_schedule_loop():
+    logger.info(
+        f"[MAQUINA_SCHEDULE] Scheduler activo cada {MACHINE_SCHEDULE_POLL_SECONDS}s timezone={MACHINE_SCHEDULE_TIMEZONE}"
+    )
+    while not _MACHINE_SCHEDULE_STOP.is_set():
+        with app.app_context():
+            _apply_machine_schedule()
+
+        waited = 0
+        while waited < MACHINE_SCHEDULE_POLL_SECONDS and not _MACHINE_SCHEDULE_STOP.is_set():
+            sleep(1)
+            waited += 1
+
+
+def _start_machine_schedule_scheduler_once():
+    global _MACHINE_SCHEDULE_THREAD
+    global _MACHINE_SCHEDULE_INIT
+
+    if _MACHINE_SCHEDULE_INIT:
+        return
+    _MACHINE_SCHEDULE_INIT = True
+
+    if not MACHINE_SCHEDULE_ENABLED:
+        logger.info('[MAQUINA_SCHEDULE] Scheduler deshabilitado por MACHINE_SCHEDULE_ENABLED=0')
+        return
+
+    _MACHINE_SCHEDULE_THREAD = threading.Thread(
+        target=_machine_schedule_loop,
+        name='machine-shift-scheduler',
+        daemon=True,
+    )
+    _MACHINE_SCHEDULE_THREAD.start()
 
 
 def _run_procesos_import_job(job_id, filename, abs_saved_path, sheet):
@@ -1546,11 +1794,14 @@ def _start_contpaq_scheduler_once():
 def log_access_y_cierre_por_hora():
     try:
         _start_contpaq_scheduler_once()
+        _start_machine_schedule_scheduler_once()
 
         path = request.path
         # skip static files and health checks
         if path.startswith('/static') or path.startswith('/favicon'):
             return
+
+        _apply_machine_schedule()
 
         # get client ip (respect X-Forwarded-For when behind proxy)
         if request.headers.get('X-Forwarded-For'):
@@ -3385,15 +3636,18 @@ def api_mapa_maquinas():
         ).all()
     )
 
-    # Regla operativa: sin hoja activa asignada => maquina desactivada por default.
-    # Se excluyen maquinas del modulo MP que tienen HojaRutaNueva asignada.
+    schedule_window = _get_machine_schedule_window()
+
+    # Regla operativa: fuera de turno, sin hoja activa asignada => maquina desactivada por default.
+    # Durante turno activo, el scheduler de horario manda para respetar 06:30 / 12:00 / 12:30 / 16:00.
     estado_maquina_changed = False
-    for maq in todas_maquinas:
-        if (maq.id not in hoja_activa_por_maquina
-                and maq.id not in maquinas_con_hoja_nueva
-                and bool(getattr(maq, 'activo', False))):
-            maq.activo = False
-            estado_maquina_changed = True
+    if not schedule_window['active']:
+        for maq in todas_maquinas:
+            if (maq.id not in hoja_activa_por_maquina
+                    and maq.id not in maquinas_con_hoja_nueva
+                    and bool(getattr(maq, 'activo', False))):
+                maq.activo = False
+                estado_maquina_changed = True
 
     if estado_maquina_changed:
         try:
@@ -3401,7 +3655,7 @@ def api_mapa_maquinas():
         except Exception:
             db.session.rollback()
 
-    maquinas = [m for m in todas_maquinas if bool(getattr(m, 'activo', False))]
+    maquinas = list(todas_maquinas)
     data = []
     now_dt = datetime.utcnow()
 
@@ -3560,7 +3814,20 @@ def api_mapa_maquinas():
             'estacion_actual_id': estacion_actual.id if estacion_actual else None,
         })
 
-    # Eficiencia de planta: usar alcance del tablero (maquinas activas visibles en el mapa).
+    estado_priority = {
+        'produciendo': 0,
+        'activa': 1,
+        'sin_hoja': 2,
+    }
+    data.sort(
+        key=lambda item: (
+            estado_priority.get(item.get('estado_code'), 9),
+            0 if bool(item.get('activo')) else 1,
+            (item.get('nombre') or '').lower(),
+        )
+    )
+
+    # Eficiencia de planta: usar alcance del tablero (todas las maquinas visibles en el mapa).
     machine_count = max(1, len(maquinas))
     available_hour = machine_count * int((now_dt - window_hour_start).total_seconds())
     available_day = machine_count * int((now_dt - window_day_start).total_seconds())
@@ -4365,7 +4632,20 @@ def api_aprobar_ot():
 def api_activar_maquina(maquina_id):
     maq = Máquina.query.get_or_404(maquina_id)
     try:
+        now_dt = datetime.utcnow()
         maq.activo = True
+        hoja_actual = HojaRutaEntrega.query.filter(
+            HojaRutaEntrega.maquina_id == maq.id,
+            HojaRutaEntrega.estado.in_(['activa', 'pausada'])
+        ).order_by(HojaRutaEntrega.fecha_actualizacion.desc(), HojaRutaEntrega.fecha_creacion.desc()).first()
+        if hoja_actual and hoja_actual.estado == 'pausada':
+            paused_at = hoja_actual.fecha_actualizacion or now_dt
+            if hoja_actual.fecha_salida:
+                hoja_actual.fecha_salida = hoja_actual.fecha_salida + (now_dt - paused_at)
+            else:
+                hoja_actual.fecha_salida = now_dt
+            hoja_actual.estado = 'activa'
+            hoja_actual.fecha_actualizacion = now_dt
         db.session.commit()
         logger.info(f"[MAQUINA] Activada maquina {maquina_id}")
         return jsonify({'ok': True, 'maquina_id': maquina_id, 'activo': True}), 200
@@ -4381,7 +4661,12 @@ def api_activar_maquina(maquina_id):
 def api_desactivar_maquina(maquina_id):
     maq = Máquina.query.get_or_404(maquina_id)
     try:
+        now_dt = datetime.utcnow()
         maq.activo = False
+        hoja_activa = HojaRutaEntrega.query.filter_by(maquina_id=maq.id, estado='activa').order_by(HojaRutaEntrega.fecha_creacion.desc()).first()
+        if hoja_activa:
+            hoja_activa.estado = 'pausada'
+            hoja_activa.fecha_actualizacion = now_dt
         db.session.commit()
         logger.info(f"[MAQUINA] Desactivada maquina {maquina_id}")
         return jsonify({'ok': True, 'maquina_id': maquina_id, 'activo': False}), 200
@@ -4398,7 +4683,12 @@ def api_paro_mantenimiento(maquina_id):
     """Poner máquina en paro por mantenimiento (desactivada)."""
     maq = Máquina.query.get_or_404(maquina_id)
     try:
+        now_dt = datetime.utcnow()
         maq.activo = False
+        hoja_activa = HojaRutaEntrega.query.filter_by(maquina_id=maq.id, estado='activa').order_by(HojaRutaEntrega.fecha_creacion.desc()).first()
+        if hoja_activa:
+            hoja_activa.estado = 'pausada'
+            hoja_activa.fecha_actualizacion = now_dt
         db.session.commit()
         logger.info(f"[MAQUINA] Paro mantenimiento maquina {maquina_id}")
         return jsonify({'ok': True, 'maquina_id': maquina_id, 'activo': False, 'motivo': 'mantenimiento'}), 200
@@ -4861,6 +5151,7 @@ def api_eliminar_hoja_ruta_nuevo(hoja_id):
 @requires_any_permission([('estaciones', 'operate'), ('catalog', 'edit')])
 def api_activar_maquina_nuevo(maquina_id):
     maq = Máquina.query.get_or_404(maquina_id)
+    now_dt = datetime.utcnow()
     maq.activo = True
     hoja_actual = HojaRutaNueva.query.filter(
         HojaRutaNueva.maquina_id == maq.id,
@@ -4868,14 +5159,15 @@ def api_activar_maquina_nuevo(maquina_id):
     ).order_by(HojaRutaNueva.fecha_actualizacion.desc(), HojaRutaNueva.fecha_creacion.desc()).first()
     if hoja_actual:
         if hoja_actual.estado == 'pausada':
-            paused_at = hoja_actual.fecha_actualizacion or datetime.utcnow()
+            paused_at = hoja_actual.fecha_actualizacion or now_dt
             if hoja_actual.fecha_salida:
-                hoja_actual.fecha_salida = hoja_actual.fecha_salida + (datetime.utcnow() - paused_at)
+                hoja_actual.fecha_salida = hoja_actual.fecha_salida + (now_dt - paused_at)
             else:
-                hoja_actual.fecha_salida = datetime.utcnow()
+                hoja_actual.fecha_salida = now_dt
         elif not hoja_actual.fecha_salida:
-            hoja_actual.fecha_salida = datetime.utcnow()
+            hoja_actual.fecha_salida = now_dt
         hoja_actual.estado = 'activa'
+        hoja_actual.fecha_actualizacion = now_dt
     db.session.commit()
     return jsonify({'ok': True, 'maquina_id': maquina_id, 'activo': True}), 200
 
@@ -4885,10 +5177,12 @@ def api_activar_maquina_nuevo(maquina_id):
 @requires_any_permission([('estaciones', 'operate'), ('catalog', 'edit')])
 def api_desactivar_maquina_nuevo(maquina_id):
     maq = Máquina.query.get_or_404(maquina_id)
+    now_dt = datetime.utcnow()
     maq.activo = False
     hoja_activa = HojaRutaNueva.query.filter_by(maquina_id=maq.id, estado='activa').order_by(HojaRutaNueva.fecha_creacion.desc()).first()
     if hoja_activa:
         hoja_activa.estado = 'pausada'
+        hoja_activa.fecha_actualizacion = now_dt
     db.session.commit()
     return jsonify({'ok': True, 'maquina_id': maquina_id, 'activo': False}), 200
 
@@ -4898,10 +5192,12 @@ def api_desactivar_maquina_nuevo(maquina_id):
 @requires_any_permission([('estaciones', 'operate'), ('catalog', 'edit')])
 def api_paro_mantenimiento_nuevo(maquina_id):
     maq = Máquina.query.get_or_404(maquina_id)
+    now_dt = datetime.utcnow()
     maq.activo = False
     hoja_activa = HojaRutaNueva.query.filter_by(maquina_id=maq.id, estado='activa').order_by(HojaRutaNueva.fecha_creacion.desc()).first()
     if hoja_activa:
         hoja_activa.estado = 'pausada'
+        hoja_activa.fecha_actualizacion = now_dt
     db.session.commit()
     return jsonify({'ok': True, 'maquina_id': maquina_id, 'activo': False, 'motivo': 'mantenimiento'}), 200
 
@@ -8668,4 +8964,5 @@ def internal_error(error):
 
 if __name__ == '__main__':
     _start_contpaq_scheduler_once()
+    _start_machine_schedule_scheduler_once()
     app.run(host='0.0.0.0', port=5000, debug=False)

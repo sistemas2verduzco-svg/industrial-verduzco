@@ -910,6 +910,7 @@
             meta.className = 'machine-meta';
             meta.appendChild(makeMetaRow('Pieza', machine.pieza));
             meta.appendChild(makeMetaRow('Hoja', machine.hoja_serie));
+            meta.appendChild(makeMetaRow('Equipo', machine.activo ? 'ACTIVA' : 'INACTIVA'));
             meta.appendChild(makeMetaRow('Estacion', machine.estacion_actual || 'Sin produccion'));
             meta.appendChild(makeMetaRow('Tiempo pza/proceso', machine.tiempo_proceso_pieza || 'N/A'));
             meta.appendChild(makeMetaRow('Objetivo proceso', machine.tiempo_objetivo_proceso || 'N/A'));
@@ -1053,7 +1054,7 @@
                 }
 
                 const data = await res.json();
-                const maquinas = Array.isArray(data.maquinas) ? data.maquinas.filter(m => m.activo) : [];
+                const maquinas = Array.isArray(data.maquinas) ? data.maquinas : [];
                 allMaquinas = maquinas;
                 renderMachineGroups(maquinas);
                 renderStats(maquinas);
