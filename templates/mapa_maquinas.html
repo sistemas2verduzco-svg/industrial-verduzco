@@ -118,6 +118,10 @@
             min-width: 0;
         }
 
+        .stack-panel {
+            margin-top: 10px;
+        }
+
         .panel {
             background: linear-gradient(180deg, rgba(8, 31, 56, 0.9), rgba(7, 23, 44, 0.9));
             border: 1px solid rgba(40, 102, 157, 0.6);
@@ -673,7 +677,7 @@
         <section class="main-zone">
             <section class="panel">
                 <div class="panel-title">
-                    <span>Maquinas en operacion</span>
+                    <span>Maquinas produciendo</span>
                     <span id="primaryCount">0 equipos</span>
                 </div>
                 <div class="filter-bar">
@@ -683,6 +687,14 @@
                     <button class="filter-btn" id="filterSinHoja" onclick="setFilter('sin_hoja')">Sin hoja de ruta <span class="filter-count" id="fcSinHoja">0</span></button>
                 </div>
                 <div class="primary-grid" id="primaryGrid"></div>
+            </section>
+
+            <section class="panel stack-panel">
+                <div class="panel-title">
+                    <span>Maquinas no trabajando</span>
+                    <span id="secondaryCount">0 equipos</span>
+                </div>
+                <div class="primary-grid" id="secondaryGrid"></div>
             </section>
         </section>
 
@@ -959,8 +971,11 @@
 
         function renderMachineGroups(maquinas) {
             const primary = document.getElementById('primaryGrid');
+            const secondary = document.getElementById('secondaryGrid');
             primary.innerHTML = '';
+            secondary.innerHTML = '';
 
+            const produciendo = maquinas.filter(m => m.estado_code === 'produciendo');
             const conHoja = maquinas.filter(m => m.estado_code === 'produciendo' || m.estado_code === 'activa');
             const sinHoja = maquinas.filter(m => m.estado_code === 'sin_hoja');
 
@@ -969,29 +984,39 @@
             document.getElementById('fcConHoja').textContent = conHoja.length;
             document.getElementById('fcSinHoja').textContent = sinHoja.length;
 
-            let mainList;
+            let topList = [];
+            let bottomList = [];
             if (currentFilter === 'con_hoja') {
-                mainList = conHoja;
+                topList = produciendo;
+                bottomList = maquinas.filter(m => m.estado_code === 'activa');
             } else if (currentFilter === 'sin_hoja') {
-                mainList = sinHoja;
+                topList = [];
+                bottomList = sinHoja;
             } else {
-                mainList = maquinas;
+                topList = produciendo;
+                bottomList = maquinas.filter(m => m.estado_code !== 'produciendo');
             }
 
-            if (!mainList.length) {
+            if (!topList.length) {
                 const emptyMain = document.createElement('div');
                 emptyMain.className = 'empty';
-                emptyMain.textContent = currentFilter === 'con_hoja'
-                    ? 'No hay maquinas con hoja de ruta asignada.'
-                    : currentFilter === 'sin_hoja'
-                    ? 'No hay maquinas sin hoja de ruta.'
-                    : 'No hay maquinas activas para mostrar.';
+                emptyMain.textContent = 'No hay maquinas produciendo en este filtro.';
                 primary.appendChild(emptyMain);
             } else {
-                mainList.forEach(m => primary.appendChild(buildMachineCard(m)));
+                topList.forEach(m => primary.appendChild(buildMachineCard(m)));
             }
 
-            document.getElementById('primaryCount').textContent = mainList.length + ' equipos';
+            if (!bottomList.length) {
+                const emptySecondary = document.createElement('div');
+                emptySecondary.className = 'empty';
+                emptySecondary.textContent = 'No hay maquinas para mostrar en no trabajando.';
+                secondary.appendChild(emptySecondary);
+            } else {
+                bottomList.forEach(m => secondary.appendChild(buildMachineCard(m)));
+            }
+
+            document.getElementById('primaryCount').textContent = topList.length + ' equipos';
+            document.getElementById('secondaryCount').textContent = bottomList.length + ' equipos';
         }
 
         function renderStats(maquinas) {
