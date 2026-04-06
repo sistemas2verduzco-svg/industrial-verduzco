@@ -9469,6 +9469,7 @@ def maquinaria_estaciones_page():
                 'operator_id': plan.get('operator_id'),
                 'operator_username': plan.get('operator_username') or '',
                 'station': plan.get('station') or '',
+                'process_name': plan.get('process_name') or '',
                 'process_status': plan_status,
                 'start_at': plan.get('start_at') or None,
                 'duration_hours': float(plan.get('duration_hours') or 0),
@@ -9547,6 +9548,7 @@ def api_maquinaria_estaciones_plan_update():
 
     start_at = (str(data.get('start_at') or '')).strip() or None
     station = _clean_nullable_text(data.get('station'))
+    process_name = _clean_nullable_text(data.get('process_name'))
     machine_icon = _clean_nullable_text(data.get('machine_icon')) or _mye_machine_icon(orden.clave_maquina)
 
     current_state = _mye_parse_plan_state(orden.notas)
@@ -9554,6 +9556,7 @@ def api_maquinaria_estaciones_plan_update():
         'operator_id': operator_id,
         'operator_username': operator_username,
         'station': station,
+        'process_name': process_name,
         'process_status': status_value,
         'start_at': start_at,
         'duration_hours': duration_hours,

@@ -34,7 +34,7 @@
 
         .mye-board {
             display: grid;
-            grid-template-columns: 1.1fr 1.3fr 1fr;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 12px;
             margin-bottom: 12px;
         }
@@ -131,6 +131,15 @@
             transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
         }
 
+        .mye-order-card[draggable="true"] {
+            cursor: grab;
+        }
+
+        .mye-order-card.dragging {
+            opacity: 0.55;
+            transform: scale(0.99);
+        }
+
         .mye-order-card:hover {
             transform: translateY(-1px);
             border-color: #9ec4eb;
@@ -223,7 +232,7 @@
 
         .mye-main {
             display: grid;
-            grid-template-columns: minmax(280px, 320px) minmax(680px, 1fr) minmax(300px, 360px);
+            grid-template-columns: minmax(280px, 320px) minmax(900px, 1fr);
             gap: 12px;
         }
 
@@ -266,6 +275,12 @@
         .mye-op-role {
             color: var(--mye-muted);
             font-size: 11px;
+        }
+
+        .mye-drop-target {
+            border-color: #2a7abf !important;
+            background: #eaf4ff !important;
+            box-shadow: inset 0 0 0 1px rgba(42, 122, 191, 0.25);
         }
 
         .mye-schedule-wrap {
@@ -352,63 +367,6 @@
             cursor: pointer;
         }
 
-        .mye-editor {
-            background: var(--mye-panel);
-            border: 1px solid var(--mye-border);
-            border-radius: 12px;
-            padding: 10px;
-            min-height: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .mye-editor-collapsed {
-            min-height: auto;
-        }
-
-        .mye-editor-collapsed .mye-editor-content {
-            display: none;
-        }
-
-        .mye-editor-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-            cursor: pointer;
-            user-select: none;
-            padding: 8px;
-            background: linear-gradient(135deg, #f0f7ff, #f5faff);
-            border-radius: 8px;
-            border: 1px solid #dbe5f1;
-        }
-
-        .mye-editor-header:hover {
-            background: linear-gradient(135deg, #e8f4ff, #f0f9ff);
-        }
-
-        .mye-editor-toggle {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-weight: 700;
-            color: #0f3a5f;
-        }
-
-        .mye-editor-toggle-icon {
-            display: inline-block;
-            transition: transform 0.2s ease;
-        }
-
-        .mye-editor-collapsed .mye-editor-toggle-icon {
-            transform: rotate(-90deg);
-        }
-
-        .mye-editor-content {
-            display: contents;
-        }
-
         .mye-processes {
             background: var(--mye-panel);
             border: 1px solid var(--mye-border);
@@ -453,67 +411,19 @@
             margin-top: 2px;
         }
 
-        .mye-editor input,
-        .mye-editor select,
-        .mye-editor textarea {
-            width: 100%;
-            border: 1px solid #cfdceb;
-            border-radius: 8px;
-            padding: 8px;
-            font-size: 13px;
-            background: #fff;
-        }
-
-        .mye-editor label {
-            font-size: 12px;
-            color: #1f456f;
-            font-weight: 700;
-        }
-
-        .mye-editor-row {
-            display: grid;
-            gap: 6px;
-        }
-
-        .mye-actions {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            margin-top: 4px;
-        }
-
-        .mye-btn {
-            border: 0;
-            border-radius: 8px;
-            padding: 9px;
-            font-size: 13px;
-            font-weight: 700;
-            cursor: pointer;
-        }
-
-        .mye-btn-save {
-            background: #0f766e;
-            color: #fff;
-        }
-
-        .mye-btn-clear {
-            background: #e2e8f0;
-            color: #334155;
-        }
-
         .mye-msg {
             min-height: 18px;
             font-size: 12px;
             color: #334155;
+            margin: 6px 0 10px 0;
         }
 
         @media (max-width: 1480px) {
             .mye-main {
                 grid-template-columns: 300px 1fr;
             }
-            .mye-editor {
-                grid-column: 1 / -1;
-                min-height: auto;
+            .mye-board {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
             }
         }
 
@@ -534,6 +444,7 @@
         <div class="mye-header">
             <h2>Maquinaria y Ensamble - Estaciones de Trabajo</h2>
             <p>Tablero editable para asignar orden de trabajo + operador + estacion y controlar avance por horas, dias o semanas.</p>
+            <div id="myeMsg" class="mye-msg"></div>
         </div>
 
         {% if setup_required %}
@@ -565,6 +476,19 @@
                 <h3 class="mye-panel-title">Estatus del Proceso</h3>
                 <div id="myeStatusGrid" class="mye-status-grid"></div>
             </article>
+
+            <article class="mye-processes">
+                <div class="mye-panel-head">
+                    <h3 class="mye-panel-title" style="margin:0;">Procesos</h3>
+                    <button id="myeAddProcessBtn" class="mye-head-btn" type="button">+ Crear proceso</button>
+                </div>
+                <div id="myeProcessForm" class="mye-inline-form">
+                    <input id="myeNewProcessName" type="text" placeholder="Nombre proceso" />
+                    <input id="myeNewProcessDuration" type="number" min="0.5" step="0.5" placeholder="Duracion (hrs)" value="1" style="max-width:140px;" />
+                    <button id="myeSaveProcessBtn" type="button">Guardar</button>
+                </div>
+                <div id="myeProcessList" class="mye-process-list"></div>
+            </article>
         </section>
 
         <section class="mye-main">
@@ -591,69 +515,6 @@
                 </div>
                 <div id="myeTimeline" class="mye-timeline"></div>
             </article>
-
-            <aside class="mye-editor">
-                <div class="mye-editor-header" id="myeEditorHeader">
-                    <div class="mye-editor-toggle">
-                        <span class="mye-editor-toggle-icon">▼</span>
-                        <span>Editor de Asignacion</span>
-                    </div>
-                </div>
-                <div class="mye-editor-content">
-                    <div class="mye-editor-row">
-                        <label for="myeOrderSelect">Orden de trabajo</label>
-                        <select id="myeOrderSelect"></select>
-                    </div>
-                    <div class="mye-editor-row">
-                        <label for="myeOperatorSelect">Operador</label>
-                        <select id="myeOperatorSelect"></select>
-                    </div>
-                    <div class="mye-editor-row">
-                        <label for="myeStationSelect">Estacion</label>
-                        <select id="myeStationSelect"></select>
-                    </div>
-                    <div class="mye-editor-row">
-                        <label for="myeStatusSelect">Estatus del proceso</label>
-                        <select id="myeStatusSelect"></select>
-                    </div>
-                    <div class="mye-editor-row">
-                        <label for="myeStartInput">Inicio</label>
-                        <input id="myeStartInput" type="datetime-local">
-                    </div>
-                    <div class="mye-editor-row">
-                        <label for="myeDurationInput">Duracion (horas)</label>
-                        <input id="myeDurationInput" type="number" min="0" step="0.5" value="8">
-                    </div>
-                    <div class="mye-editor-row">
-                        <label for="myeIconInput">Icono maquina</label>
-                        <input id="myeIconInput" type="text" maxlength="3" placeholder="🏭">
-                    </div>
-                    <div class="mye-editor-row">
-                        <label for="myeNotes">Notas visibles OT</label>
-                        <textarea id="myeNotes" rows="4" placeholder="Notas operativas..."></textarea>
-                    </div>
-                    <div class="mye-actions">
-                        <button id="myeSaveBtn" class="mye-btn mye-btn-save" type="button">Guardar</button>
-                        <button id="myeClearBtn" class="mye-btn mye-btn-clear" type="button">Quitar asignacion</button>
-                    </div>
-                    <div id="myeMsg" class="mye-msg"></div>
-                </div>
-            </aside>
-        </section>
-
-        <section class="mye-board" style="margin-top:12px;">
-            <article class="mye-processes">
-                <div class="mye-panel-head">
-                    <h3 class="mye-panel-title" style="margin:0;">Procesos</h3>
-                    <button id="myeAddProcessBtn" class="mye-head-btn" type="button">+ Crear proceso</button>
-                </div>
-                <div id="myeProcessForm" class="mye-inline-form">
-                    <input id="myeNewProcessName" type="text" placeholder="Nombre proceso" />
-                    <input id="myeNewProcessDuration" type="number" min="0.5" step="0.5" placeholder="Duracion (hrs)" value="1" style="max-width:140px;" />
-                    <button id="myeSaveProcessBtn" type="button">Guardar</button>
-                </div>
-                <div id="myeProcessList" class="mye-process-list"></div>
-            </article>
         </section>
     </div>
 
@@ -662,7 +523,6 @@
         const MYE_OPERATORS = {{ operadores|tojson }};
         const MYE_MACHINES = {{ maquinas|tojson }};
         const MYE_PROCESSES = {{ procesos|tojson }};
-        const MYE_STATIONS = {{ estaciones_catalogo|tojson }};
         const MYE_STATUS = {{ status_catalogo|tojson }};
 
         (function() {
@@ -672,16 +532,6 @@
             const operatorsEl = document.getElementById('myeOperators');
             const timelineEl = document.getElementById('myeTimeline');
             const processListEl = document.getElementById('myeProcessList');
-            const orderSelect = document.getElementById('myeOrderSelect');
-            const operatorSelect = document.getElementById('myeOperatorSelect');
-            const stationSelect = document.getElementById('myeStationSelect');
-            const statusSelect = document.getElementById('myeStatusSelect');
-            const startInput = document.getElementById('myeStartInput');
-            const durationInput = document.getElementById('myeDurationInput');
-            const iconInput = document.getElementById('myeIconInput');
-            const notesInput = document.getElementById('myeNotes');
-            const saveBtn = document.getElementById('myeSaveBtn');
-            const clearBtn = document.getElementById('myeClearBtn');
             const msgEl = document.getElementById('myeMsg');
             const scaleBtns = Array.from(document.querySelectorAll('.mye-scale-btn'));
             const scheduleStartInput = document.getElementById('myeStartAt');
@@ -695,8 +545,6 @@
             const newMachineClave = document.getElementById('myeNewMachineClave');
             const newMachineNombre = document.getElementById('myeNewMachineNombre');
             const saveMachineBtn = document.getElementById('myeSaveMachineBtn');
-            const editorHeader = document.getElementById('myeEditorHeader');
-            const editorPanel = document.querySelector('.mye-editor');
             const addProcessBtn = document.getElementById('myeAddProcessBtn');
             const processForm = document.getElementById('myeProcessForm');
             const newProcessName = document.getElementById('myeNewProcessName');
@@ -705,7 +553,10 @@
 
             const orderMap = new Map((MYE_ORDERS || []).map(o => [Number(o.id), o]));
             const operatorMap = new Map((MYE_OPERATORS || []).map(o => [Number(o.id), o]));
+            const machineMap = new Map((MYE_MACHINES || []).map(m => [String(m.clave_maquina || '').toLowerCase(), m]));
+            const processMap = new Map((MYE_PROCESSES || []).map(p => [Number(p.id), p]));
             let selectedOrderId = MYE_ORDERS.length ? Number(MYE_ORDERS[0].id) : null;
+            let draggedOrderId = null;
             let scale = 'hours';
 
             function nowLocalInput() {
@@ -724,6 +575,93 @@
                 return (MYE_STATUS || []).find(s => s.id === id) || MYE_STATUS[0] || { id: 'por_iniciar', label: 'Por iniciar', color: '#94a3b8' };
             }
 
+            function showMessage(text, isError) {
+                if (!msgEl) return;
+                msgEl.textContent = text || '';
+                msgEl.style.color = isError ? '#dc2626' : '#0f766e';
+            }
+
+            function getOrder(orderId) {
+                return orderMap.get(Number(orderId)) || null;
+            }
+
+            function ensureOrderPlan(order) {
+                if (!order.plan || typeof order.plan !== 'object') {
+                    order.plan = {};
+                }
+                return order.plan;
+            }
+
+            function withDropHandlers(element, onDropOrder) {
+                if (!element) return;
+                element.addEventListener('dragover', function(e) {
+                    e.preventDefault();
+                    element.classList.add('mye-drop-target');
+                });
+                element.addEventListener('dragleave', function() {
+                    element.classList.remove('mye-drop-target');
+                });
+                element.addEventListener('drop', function(e) {
+                    e.preventDefault();
+                    element.classList.remove('mye-drop-target');
+                    const raw = e.dataTransfer ? e.dataTransfer.getData('text/plain') : '';
+                    const orderId = Number(raw || draggedOrderId || 0);
+                    const order = getOrder(orderId);
+                    if (!order) return;
+                    onDropOrder(order);
+                });
+            }
+
+            async function saveOrderPlan(order, patch, okMessage) {
+                const plan = ensureOrderPlan(order);
+                const payload = {
+                    action: 'save',
+                    ot_id: Number(order.id),
+                    operator_id: Object.prototype.hasOwnProperty.call(patch, 'operator_id') ? patch.operator_id : (plan.operator_id || null),
+                    station: Object.prototype.hasOwnProperty.call(patch, 'station') ? (patch.station || '') : (plan.station || ''),
+                    process_name: Object.prototype.hasOwnProperty.call(patch, 'process_name') ? (patch.process_name || '') : (plan.process_name || ''),
+                    process_status: Object.prototype.hasOwnProperty.call(patch, 'process_status') ? (patch.process_status || 'por_iniciar') : (plan.process_status || 'por_iniciar'),
+                    start_at: Object.prototype.hasOwnProperty.call(patch, 'start_at') ? (patch.start_at || null) : (plan.start_at || null),
+                    duration_hours: Object.prototype.hasOwnProperty.call(patch, 'duration_hours') ? Number(patch.duration_hours || 0) : Number(plan.duration_hours || 0),
+                    machine_icon: Object.prototype.hasOwnProperty.call(patch, 'machine_icon') ? (patch.machine_icon || '🏭') : (plan.machine_icon || '🏭'),
+                    notas: order.notas || '',
+                };
+
+                try {
+                    const res = await fetch('/api/maquinaria/estaciones/plan/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify(payload),
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data.ok) throw new Error(data.message || 'No se pudo guardar');
+
+                    const opId = payload.operator_id ? Number(payload.operator_id) : null;
+                    const opRef = opId ? operatorMap.get(opId) : null;
+                    order.plan = {
+                        operator_id: opId,
+                        operator_username: opRef ? (opRef.username || '') : '',
+                        station: payload.station || '',
+                        process_name: payload.process_name || '',
+                        process_status: payload.process_status || 'por_iniciar',
+                        start_at: payload.start_at || null,
+                        duration_hours: Number(payload.duration_hours || 0),
+                        machine_icon: payload.machine_icon || '🏭',
+                    };
+                    selectedOrderId = Number(order.id);
+
+                    renderOrders();
+                    renderOperators();
+                    renderMachines();
+                    renderProcesses();
+                    renderTimeline();
+                    showMessage(okMessage || data.message || 'Asignacion actualizada', false);
+                } catch (err) {
+                    showMessage(err.message || 'Error al guardar', true);
+                }
+            }
+
             function renderStatusCatalog() {
                 statusGridEl.innerHTML = (MYE_STATUS || []).map((s, idx) => {
                     return `<div class="mye-status-chip"><span class="mye-dot" style="background:${s.color};"></span>${idx + 1}. ${textSafe(s.label)}</div>`;
@@ -734,11 +672,15 @@
                 orderListEl.innerHTML = (MYE_ORDERS || []).map(o => {
                     const active = Number(o.id) === Number(selectedOrderId) ? 'active' : '';
                     const st = statusById((o.plan && o.plan.process_status) || 'por_iniciar');
+                    const opName = (o.plan && o.plan.operator_username) ? o.plan.operator_username : 'Sin operador';
+                    const processName = (o.plan && o.plan.process_name) ? o.plan.process_name : 'Sin proceso';
                     return `
-                        <article class="mye-order-card ${active}" data-order-id="${o.id}">
+                        <article class="mye-order-card ${active}" data-order-id="${o.id}" draggable="true">
                             <div class="mye-order-title">${textSafe(o.folio_ot)} - ${textSafe(o.clave_maquina || '-')}</div>
                             <div class="mye-order-meta">Cant: ${Number(o.cantidad || 1)} | Estado: ${textSafe(o.estado || '-')}</div>
-                            <div class="mye-order-meta">Estatus proceso: <b style="color:${st.color};">${textSafe(st.label)}</b></div>
+                            <div class="mye-order-meta">Operador: <b>${textSafe(opName)}</b></div>
+                            <div class="mye-order-meta">Proceso: <b>${textSafe(processName)}</b></div>
+                            <div class="mye-order-meta">Estatus: <b style="color:${st.color};">${textSafe(st.label)}</b></div>
                         </article>
                     `;
                 }).join('') || '<div class="mye-order-meta">Sin ordenes de trabajo.</div>';
@@ -746,8 +688,21 @@
                 orderListEl.querySelectorAll('[data-order-id]').forEach(node => {
                     node.addEventListener('click', () => {
                         selectedOrderId = Number(node.getAttribute('data-order-id'));
-                        syncEditorFromSelectedOrder();
                         renderOrders();
+                    });
+                    node.addEventListener('dragstart', function(e) {
+                        const orderId = Number(node.getAttribute('data-order-id'));
+                        draggedOrderId = orderId;
+                        node.classList.add('dragging');
+                        if (e.dataTransfer) {
+                            e.dataTransfer.effectAllowed = 'move';
+                            e.dataTransfer.setData('text/plain', String(orderId));
+                        }
+                    });
+                    node.addEventListener('dragend', function() {
+                        node.classList.remove('dragging');
+                        draggedOrderId = null;
+                        document.querySelectorAll('.mye-drop-target').forEach(el => el.classList.remove('mye-drop-target'));
                     });
                 });
             }
@@ -757,13 +712,26 @@
                     const icon = m.icon || '🏭';
                     const linkedOt = (MYE_ORDERS || []).filter(o => String(o.clave_maquina || '').toLowerCase() === String(m.clave_maquina || '').toLowerCase()).length;
                     return `
-                        <div class="mye-machine" title="${textSafe(m.nombre_maquina || m.clave_maquina || '-')}">
+                        <div class="mye-machine" data-machine-key="${textSafe(m.clave_maquina || '')}" title="${textSafe(m.nombre_maquina || m.clave_maquina || '-')}">
                             <div class="mye-machine-icon">${textSafe(icon)}</div>
                             <div style="font-weight:700; font-size:12px; color:#153a61; word-break:break-word;">${textSafe(m.clave_maquina || '-')}</div>
                             <div style="font-size:10px; color:#64748b;">OTs: ${linkedOt}</div>
                         </div>
                     `;
                 }).join('') || '<div class="mye-order-meta" style="grid-column:1/-1; text-align:center;">Sin maquinas cargadas.</div>';
+
+                machineGridEl.querySelectorAll('[data-machine-key]').forEach(node => {
+                    const key = String(node.getAttribute('data-machine-key') || '').toLowerCase();
+                    const machine = machineMap.get(key);
+                    withDropHandlers(node, function(order) {
+                        if (!machine) return;
+                        saveOrderPlan(order, {
+                            station: machine.clave_maquina || '',
+                            machine_icon: machine.icon || '🏭',
+                            process_status: 'configuracion',
+                        }, `OT ${order.folio_ot || order.id} asignada a maquina ${machine.clave_maquina || '-'}`);
+                    });
+                });
             }
 
             function renderOperators() {
@@ -778,9 +746,13 @@
                 }).join('') || '<div class="mye-order-meta">Sin operadores activos.</div>';
 
                 operatorsEl.querySelectorAll('[data-op-id]').forEach(node => {
-                    node.addEventListener('click', () => {
-                        const opId = Number(node.getAttribute('data-op-id'));
-                        if (operatorSelect) operatorSelect.value = String(opId);
+                    const opId = Number(node.getAttribute('data-op-id'));
+                    const op = operatorMap.get(opId);
+                    withDropHandlers(node, function(order) {
+                        saveOrderPlan(order, {
+                            operator_id: opId,
+                            process_status: 'configuracion',
+                        }, `OT ${order.folio_ot || order.id} asignada a operador ${op ? op.username : opId}`);
                     });
                 });
             }
@@ -807,10 +779,11 @@
                         if (left > 100 || left + width < 0) return '';
                         const clampedLeft = Math.max(0, left);
                         const clampedWidth = Math.max(4, Math.min(100 - clampedLeft, width));
+                        const line2 = (o.plan && o.plan.process_name) || (o.plan && o.plan.station) || o.clave_maquina || '-';
                         return `
-                            <div class="mye-block" data-order-id="${o.id}" style="left:${clampedLeft}%; width:${clampedWidth}%; background:${st.color};">
+                            <div class="mye-block" data-order-id="${o.id}" style="left:${clampedLeft}%; width:${clampedWidth}%; background:${st.color};" draggable="true">
                                 ${textSafe((o.plan && o.plan.machine_icon) || '🏭')} ${textSafe(o.folio_ot)}
-                                <br>${textSafe(o.plan && o.plan.station ? o.plan.station : (o.clave_maquina || '-'))}
+                                <br>${textSafe(line2)}
                             </div>
                         `;
                     }).join('');
@@ -818,7 +791,7 @@
                     return `
                         <div class="mye-row">
                             <div class="mye-row-name">${textSafe(op.username)}</div>
-                            <div class="mye-row-track">${cards}</div>
+                            <div class="mye-row-track" data-track-op-id="${op.id}">${cards}</div>
                         </div>
                     `;
                 }).join('');
@@ -828,37 +801,57 @@
                 timelineEl.querySelectorAll('.mye-block').forEach(node => {
                     node.addEventListener('click', () => {
                         selectedOrderId = Number(node.getAttribute('data-order-id'));
-                        syncEditorFromSelectedOrder();
                         renderOrders();
+                    });
+                    node.addEventListener('dragstart', function(e) {
+                        const orderId = Number(node.getAttribute('data-order-id'));
+                        draggedOrderId = orderId;
+                        if (e.dataTransfer) {
+                            e.dataTransfer.effectAllowed = 'move';
+                            e.dataTransfer.setData('text/plain', String(orderId));
+                        }
+                    });
+                    node.addEventListener('dragend', function() {
+                        draggedOrderId = null;
+                        document.querySelectorAll('.mye-drop-target').forEach(el => el.classList.remove('mye-drop-target'));
+                    });
+                });
+
+                timelineEl.querySelectorAll('[data-track-op-id]').forEach(node => {
+                    const opId = Number(node.getAttribute('data-track-op-id'));
+                    const op = operatorMap.get(opId);
+                    withDropHandlers(node, function(order) {
+                        saveOrderPlan(order, {
+                            operator_id: opId,
+                            process_status: 'en_proceso',
+                            start_at: nowLocalInput(),
+                        }, `OT ${order.folio_ot || order.id} movida al timeline de ${op ? op.username : opId}`);
                     });
                 });
             }
 
-            function fillEditorCatalogs() {
-                orderSelect.innerHTML = (MYE_ORDERS || []).map(o => `<option value="${o.id}">${textSafe(o.folio_ot)} - ${textSafe(o.clave_maquina || '-')}</option>`).join('');
-                operatorSelect.innerHTML = `<option value="">Sin operador</option>` + (MYE_OPERATORS || []).map(op => `<option value="${op.id}">${textSafe(op.username)}</option>`).join('');
-                stationSelect.innerHTML = `<option value="">Sin estacion</option>` + (MYE_STATIONS || []).map(st => `<option value="${textSafe(st)}">${textSafe(st)}</option>`).join('');
-                statusSelect.innerHTML = (MYE_STATUS || []).map(st => `<option value="${st.id}">${textSafe(st.label)}</option>`).join('');
-            }
+            function renderProcesses() {
+                processListEl.innerHTML = (MYE_PROCESSES || []).map(proc => {
+                    return `
+                        <article class="mye-process-item" data-proc-id="${proc.id}">
+                            <div class="mye-process-name">${textSafe(proc.nombre || '-')}</div>
+                            <div class="mye-process-meta">${Number(proc.duracion_default || 1)} horas | Creado: ${textSafe(proc.created_at ? proc.created_at.slice(0, 10) : '-')}</div>
+                        </article>
+                    `;
+                }).join('') || '<div class="mye-order-meta">Sin procesos definidos.</div>';
 
-            function syncEditorFromSelectedOrder() {
-                if (!selectedOrderId || !orderMap.has(selectedOrderId)) return;
-                const order = orderMap.get(selectedOrderId);
-                const plan = order.plan || {};
-
-                orderSelect.value = String(order.id);
-                operatorSelect.value = plan.operator_id ? String(plan.operator_id) : '';
-                stationSelect.value = plan.station || '';
-                statusSelect.value = plan.process_status || 'por_iniciar';
-                startInput.value = plan.start_at ? String(plan.start_at).slice(0, 16) : nowLocalInput();
-                durationInput.value = String(Number(plan.duration_hours || 8));
-                iconInput.value = plan.machine_icon || '🏭';
-                notesInput.value = order.notas || '';
-            }
-
-            function showMessage(text, isError) {
-                msgEl.textContent = text || '';
-                msgEl.style.color = isError ? '#dc2626' : '#0f766e';
+                processListEl.querySelectorAll('[data-proc-id]').forEach(node => {
+                    const procId = Number(node.getAttribute('data-proc-id'));
+                    const proc = processMap.get(procId);
+                    withDropHandlers(node, function(order) {
+                        saveOrderPlan(order, {
+                            process_name: proc ? (proc.nombre || '') : '',
+                            process_status: 'en_proceso',
+                            duration_hours: proc ? Number(proc.duracion_default || 1) : Number((order.plan && order.plan.duration_hours) || 1),
+                            start_at: (order.plan && order.plan.start_at) || nowLocalInput(),
+                        }, `OT ${order.folio_ot || order.id} asignada a proceso ${proc ? proc.nombre : procId}`);
+                    });
+                });
             }
 
             async function createOperator() {
@@ -880,21 +873,17 @@
                     if (!res.ok || !data.ok) throw new Error(data.message || 'No se pudo agregar operador');
 
                     const operator = data.operator || {};
-                    MYE_OPERATORS.push({
+                    const item = {
                         id: Number(operator.id),
                         username: operator.username || username,
                         role: operator.role || role || 'Operador',
-                    });
-                    operatorMap.set(Number(operator.id), {
-                        id: Number(operator.id),
-                        username: operator.username || username,
-                        role: operator.role || role || 'Operador',
-                    });
+                    };
+                    MYE_OPERATORS.push(item);
+                    operatorMap.set(item.id, item);
 
-                    fillEditorCatalogs();
                     renderOperators();
                     renderTimeline();
-                    showMessage(data.message || 'Operador agregado');
+                    showMessage(data.message || 'Operador agregado', false);
                     if (newOperatorName) newOperatorName.value = '';
                     if (newOperatorRole) newOperatorRole.value = '';
                 } catch (err) {
@@ -921,31 +910,22 @@
                     if (!res.ok || !data.ok) throw new Error(data.message || 'No se pudo cargar maquina');
 
                     const machine = data.machine || {};
-                    MYE_MACHINES.push({
+                    const item = {
                         id: Number(machine.id),
                         clave_maquina: machine.clave_maquina || clave,
                         nombre_maquina: machine.nombre_maquina || nombre || clave,
                         icon: machine.icon || '🏭',
-                    });
+                    };
+                    MYE_MACHINES.push(item);
+                    machineMap.set(String(item.clave_maquina || '').toLowerCase(), item);
 
                     renderMachines();
-                    showMessage(data.message || 'Maquina agregada');
+                    showMessage(data.message || 'Maquina agregada', false);
                     if (newMachineClave) newMachineClave.value = '';
                     if (newMachineNombre) newMachineNombre.value = '';
                 } catch (err) {
                     showMessage(err.message || 'Error al cargar maquina', true);
                 }
-            }
-
-            function renderProcesses() {
-                processListEl.innerHTML = (MYE_PROCESSES || []).map(proc => {
-                    return `
-                        <article class="mye-process-item" data-proc-id="${proc.id}">
-                            <div class="mye-process-name">${textSafe(proc.nombre || '-')}</div>
-                            <div class="mye-process-meta">${Number(proc.duracion_default || 1)} horas | Creado: ${textSafe(proc.created_at ? proc.created_at.slice(0, 10) : '-')}</div>
-                        </article>
-                    `;
-                }).join('') || '<div class="mye-order-meta">Sin procesos definidos.</div>';
             }
 
             async function createProcess() {
@@ -967,15 +947,17 @@
                     if (!res.ok || !data.ok) throw new Error(data.message || 'No se pudo crear proceso');
 
                     const process = data.process || {};
-                    MYE_PROCESSES.push({
+                    const item = {
                         id: Number(process.id),
                         nombre: process.nombre || nombre,
                         duracion_default: Number(process.duracion_default || duracion),
                         created_at: process.created_at,
-                    });
+                    };
+                    MYE_PROCESSES.push(item);
+                    processMap.set(item.id, item);
 
                     renderProcesses();
-                    showMessage(data.message || 'Proceso creado');
+                    showMessage(data.message || 'Proceso creado', false);
                     if (newProcessName) newProcessName.value = '';
                     if (newProcessDuration) newProcessDuration.value = '1';
                 } catch (err) {
@@ -983,90 +965,13 @@
                 }
             }
 
-            async function saveAssignment(action) {
-                const otId = Number(orderSelect.value || selectedOrderId || 0);
-                if (!otId) {
-                    showMessage('Selecciona una OT.', true);
-                    return;
-                }
-
-                const payload = {
-                    action: action || 'save',
-                    ot_id: otId,
-                    operator_id: operatorSelect.value || null,
-                    station: stationSelect.value || '',
-                    process_status: statusSelect.value || 'por_iniciar',
-                    start_at: startInput.value || null,
-                    duration_hours: Number(durationInput.value || 0),
-                    machine_icon: iconInput.value || '🏭',
-                    notas: notesInput.value || '',
-                };
-
-                try {
-                    const res = await fetch('/api/maquinaria/estaciones/plan/update', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'same-origin',
-                        body: JSON.stringify(payload),
-                    });
-                    const data = await res.json();
-                    if (!res.ok || !data.ok) throw new Error(data.message || 'No se pudo guardar');
-
-                    const order = orderMap.get(otId);
-                    if (order) {
-                        if (action === 'clear') {
-                            order.plan = {
-                                operator_id: null,
-                                operator_username: '',
-                                station: '',
-                                process_status: 'por_iniciar',
-                                start_at: null,
-                                duration_hours: 0,
-                                machine_icon: iconInput.value || '🏭',
-                            };
-                        } else {
-                            const opId = payload.operator_id ? Number(payload.operator_id) : null;
-                            const op = opId ? operatorMap.get(opId) : null;
-                            order.plan = {
-                                operator_id: opId,
-                                operator_username: op ? (op.username || '') : '',
-                                station: payload.station || '',
-                                process_status: payload.process_status || 'por_iniciar',
-                                start_at: payload.start_at || null,
-                                duration_hours: Number(payload.duration_hours || 0),
-                                machine_icon: payload.machine_icon || '🏭',
-                            };
-                        }
-                    }
-
-                    selectedOrderId = otId;
-                    showMessage(data.message || 'Guardado');
-                    renderOrders();
-                    renderOperators();
-                    renderMachines();
-                    renderTimeline();
-                    syncEditorFromSelectedOrder();
-                } catch (err) {
-                    showMessage(err.message || 'Error al guardar', true);
-                }
-            }
-
-            fillEditorCatalogs();
             renderStatusCatalog();
             renderOrders();
             renderMachines();
             renderOperators();
             renderProcesses();
-
             scheduleStartInput.value = nowLocalInput();
-            syncEditorFromSelectedOrder();
             renderTimeline();
-
-            orderSelect.addEventListener('change', function() {
-                selectedOrderId = Number(this.value || 0) || selectedOrderId;
-                syncEditorFromSelectedOrder();
-                renderOrders();
-            });
 
             scaleBtns.forEach(btn => {
                 btn.addEventListener('click', function() {
@@ -1075,10 +980,7 @@
                     renderTimeline();
                 });
             });
-
             scheduleStartInput.addEventListener('change', renderTimeline);
-            saveBtn.addEventListener('click', () => saveAssignment('save'));
-            clearBtn.addEventListener('click', () => saveAssignment('clear'));
 
             if (addOperatorBtn && operatorForm) {
                 addOperatorBtn.addEventListener('click', function() {
@@ -1086,9 +988,7 @@
                     if (operatorForm.style.display === 'grid' && newOperatorName) newOperatorName.focus();
                 });
             }
-            if (saveOperatorBtn) {
-                saveOperatorBtn.addEventListener('click', createOperator);
-            }
+            if (saveOperatorBtn) saveOperatorBtn.addEventListener('click', createOperator);
             if (newOperatorName) {
                 newOperatorName.addEventListener('keydown', function(e) {
                     if (e.key === 'Enter') {
@@ -1104,9 +1004,7 @@
                     if (machineForm.style.display === 'grid' && newMachineClave) newMachineClave.focus();
                 });
             }
-            if (saveMachineBtn) {
-                saveMachineBtn.addEventListener('click', createMachine);
-            }
+            if (saveMachineBtn) saveMachineBtn.addEventListener('click', createMachine);
             if (newMachineClave) {
                 newMachineClave.addEventListener('keydown', function(e) {
                     if (e.key === 'Enter') {
@@ -1116,23 +1014,13 @@
                 });
             }
 
-            // Editor collapsible
-            if (editorHeader && editorPanel) {
-                editorHeader.addEventListener('click', function() {
-                    editorPanel.classList.toggle('mye-editor-collapsed');
-                });
-            }
-
-            // Procesos
             if (addProcessBtn && processForm) {
                 addProcessBtn.addEventListener('click', function() {
                     processForm.style.display = processForm.style.display === 'grid' ? 'none' : 'grid';
                     if (processForm.style.display === 'grid' && newProcessName) newProcessName.focus();
                 });
             }
-            if (saveProcessBtn) {
-                saveProcessBtn.addEventListener('click', createProcess);
-            }
+            if (saveProcessBtn) saveProcessBtn.addEventListener('click', createProcess);
             if (newProcessName) {
                 newProcessName.addEventListener('keydown', function(e) {
                     if (e.key === 'Enter') {
