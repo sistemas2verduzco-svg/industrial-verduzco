@@ -198,6 +198,20 @@
             margin-top: 2px;
         }
 
+        .mye-time-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 10px;
+            font-weight: 700;
+            color: #0f766e;
+            background: #ecfdf5;
+            border: 1px solid #bbf7d0;
+            border-radius: 999px;
+            padding: 2px 7px;
+            margin-top: 4px;
+        }
+
         .mye-machines {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -605,6 +619,41 @@
                 return new Date(now.getTime() - tz).toISOString().slice(0, 16);
             }
 
+            function toDateSafe(value) {
+                if (!value) return null;
+                const dt = new Date(value);
+                if (Number.isNaN(dt.getTime())) return null;
+                return dt;
+            }
+
+            function elapsedMsFromPlan(plan) {
+                if (!plan || plan.process_status !== 'en_proceso') return 0;
+                const dt = toDateSafe(plan.start_at);
+                if (!dt) return 0;
+                return Math.max(0, Date.now() - dt.getTime());
+            }
+
+            function formatElapsed(ms) {
+                const totalSec = Math.max(0, Math.floor((ms || 0) / 1000));
+                const h = Math.floor(totalSec / 3600);
+                const m = Math.floor((totalSec % 3600) / 60);
+                const s = totalSec % 60;
+                return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            }
+
+            function getOrderElapsedText(order) {
+                return formatElapsed(elapsedMsFromPlan(order && order.plan ? order.plan : null));
+            }
+
+            function getOperatorElapsedMs(operatorId) {
+                const opId = Number(operatorId || 0);
+                return (MYE_ORDERS || []).reduce((acc, ot) => {
+                    const plan = ot && ot.plan ? ot.plan : {};
+                    if (Number(plan.operator_id || 0) !== opId) return acc;
+                    return acc + elapsedMsFromPlan(plan);
+                }, 0);
+            }
+
             function textSafe(value) {
                 return String(value || '').replace(/[&<>"']/g, function(c) {
                     return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] || c;
@@ -745,11 +794,13 @@
                     const hasIntervention = !!String((o.plan && o.plan.station) || '').trim();
                     const hasProcess = !!String((o.plan && o.plan.process_name) || '').trim();
                     const canStart = hasOperator && hasIntervention && hasProcess && st.id !== 'en_proceso' && st.id !== 'terminado';
+                    const isInProgress = st.id === 'en_proceso';
                     const missing = [
                         hasOperator ? '' : 'operador',
                         hasIntervention ? '' : 'intervencion',
                         hasProcess ? '' : 'proceso',
                     ].filter(Boolean);
+                    const elapsed = getOrderElapsedText(o);
                     return `
                         <article class="mye-order-card ${active}" data-order-id="${o.id}" draggable="true">
                             <div class="mye-order-title">${textSafe(o.folio_ot)} - ${textSafe(o.clave_maquina || '-')}</div>
@@ -757,8 +808,9 @@
                             <div class="mye-order-meta">Operador: <b>${textSafe(opName)}</b></div>
                             <div class="mye-order-meta">Proceso: <b>${textSafe(processName)}</b></div>
                             <div class="mye-order-meta">Estatus: <b style="color:${st.color};">${textSafe(st.label)}</b></div>
+                            ${isInProgress ? `<div class="mye-time-chip">Tiempo: <span data-order-elapsed-id="${o.id}">${elapsed}</span></div>` : ''}
                             <div class="mye-order-actions">
-                                <button class="mye-start-btn" type="button" data-start-order-id="${o.id}" ${canStart ? '' : 'disabled'}>Iniciar</button>
+                                <button class="mye-start-btn" type="button" data-start-order-id="${o.id}" ${canStart ? '' : 'disabled'}>${isInProgress ? 'En curso' : 'Iniciar'}</button>
                             </div>
                             ${canStart ? '' : `<div class="mye-requirement-hint">Falta: ${textSafe(missing.join(', ') || 'asignacion completa')}</div>`}
                         </article>
@@ -824,7 +876,7 @@
                         saveOrderPlan(order, {
                             process_status: 'en_proceso',
                             start_at: nowLocalInput(),
-                        }, `OT ${order.folio_ot || order.id} iniciada`);
+                        }, `Operador activado en OT ${order.folio_ot || order.id}. Tiempo iniciado.`);
                     });
                 });
             }
@@ -866,10 +918,12 @@
             function renderOperators() {
                 operatorsEl.innerHTML = (MYE_OPERATORS || []).map(op => {
                     const assigned = (MYE_ORDERS || []).filter(o => Number(o.plan && o.plan.operator_id) === Number(op.id)).length;
+                    const activeMs = getOperatorElapsedMs(op.id);
                     return `
                         <article class="mye-operator-item" data-op-id="${op.id}" draggable="true">
                             <div class="mye-op-name">${textSafe(op.username)}</div>
                             <div class="mye-op-role">${textSafe(op.role || 'Operador')} | OTs: ${assigned}</div>
+                            <div class="mye-time-chip">Tiempo activo: <span data-op-elapsed-id="${op.id}">${formatElapsed(activeMs)}</span></div>
                         </article>
                     `;
                 }).join('') || '<div class="mye-order-meta">Sin operadores activos.</div>';
@@ -916,10 +970,13 @@
                         const clampedLeft = Math.max(0, left);
                         const clampedWidth = Math.max(4, Math.min(100 - clampedLeft, width));
                         const line2 = (o.plan && o.plan.process_name) || (o.plan && o.plan.station) || o.clave_maquina || '-';
+                        const elapsed = getOrderElapsedText(o);
+                        const showElapsed = (o.plan && o.plan.process_status) === 'en_proceso';
                         return `
                             <div class="mye-block" data-order-id="${o.id}" style="left:${clampedLeft}%; width:${clampedWidth}%; background:${st.color};" draggable="true">
                                 ${textSafe((o.plan && o.plan.machine_icon) || '🏭')} ${textSafe(o.folio_ot)}
                                 <br>${textSafe(line2)}
+                                ${showElapsed ? `<br><span data-order-elapsed-id="${o.id}">${elapsed}</span>` : ''}
                             </div>
                         `;
                     }).join('');
@@ -959,8 +1016,8 @@
                     withDropHandlers(node, function(order) {
                         saveOrderPlan(order, {
                             operator_id: opId,
-                            process_status: 'en_proceso',
-                            start_at: nowLocalInput(),
+                            process_status: 'configuracion',
+                            start_at: (order.plan && order.plan.start_at) || null,
                         }, `OT ${order.folio_ot || order.id} movida al timeline de ${op ? op.username : opId}`);
                     });
                 });
@@ -989,9 +1046,9 @@
                     withDropHandlers(node, function(order) {
                         saveOrderPlan(order, {
                             process_name: proc ? (proc.nombre || '') : '',
-                            process_status: 'en_proceso',
+                            process_status: 'configuracion',
                             duration_hours: proc ? Number(proc.duracion_default || 1) : Number((order.plan && order.plan.duration_hours) || 1),
-                            start_at: (order.plan && order.plan.start_at) || nowLocalInput(),
+                            start_at: (order.plan && order.plan.start_at) || null,
                         }, `OT ${order.folio_ot || order.id} asignada a proceso ${proc ? proc.nombre : procId}`);
                     });
                 });
@@ -1108,6 +1165,22 @@
                 }
             }
 
+            function refreshElapsedDisplays() {
+                const orderElapsedEls = document.querySelectorAll('[data-order-elapsed-id]');
+                orderElapsedEls.forEach(node => {
+                    const orderId = Number(node.getAttribute('data-order-elapsed-id'));
+                    const order = getOrder(orderId);
+                    if (!order) return;
+                    node.textContent = getOrderElapsedText(order);
+                });
+
+                const opElapsedEls = document.querySelectorAll('[data-op-elapsed-id]');
+                opElapsedEls.forEach(node => {
+                    const opId = Number(node.getAttribute('data-op-elapsed-id'));
+                    node.textContent = formatElapsed(getOperatorElapsedMs(opId));
+                });
+            }
+
             renderStatusCatalog();
             renderOrders();
             renderMachines();
@@ -1115,6 +1188,7 @@
             renderProcesses();
             scheduleStartInput.value = nowLocalInput();
             renderTimeline();
+            setInterval(refreshElapsedDisplays, 1000);
 
             scaleBtns.forEach(btn => {
                 btn.addEventListener('click', function() {
