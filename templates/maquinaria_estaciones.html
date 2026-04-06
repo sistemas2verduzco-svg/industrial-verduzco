@@ -1144,6 +1144,9 @@
                         const st = statusById((o.plan && o.plan.process_status) || 'por_iniciar');
                         const startMs = orderStartMs.get(o.id) || startDate.getTime();
                         const duration = Math.max(0.5, Number((o.plan && o.plan.duration_hours) || 1));
+                        const hasOperator = Number((o.plan && o.plan.operator_id) || 0) > 0;
+                        const hasIntervention = !!String((o.plan && o.plan.station) || '').trim();
+                        const hasProcess = !!String((o.plan && o.plan.process_name) || '').trim();
                         const left = ((startMs - startDate.getTime()) / totalRange) * 100;
                         const width = ((duration * 3600000) / totalRange) * 100;
                         if (left > 100 || left + width < 0) return '';
@@ -1153,10 +1156,12 @@
                         const elapsed = getOrderElapsedText(o);
                         const showElapsed = (o.plan && o.plan.process_status) === 'en_proceso';
                         const plannedLabel = formatHHMM(duration);
+                        const assignmentLabel = `Asig O:${hasOperator ? 'OK' : '--'} I:${hasIntervention ? 'OK' : '--'} P:${hasProcess ? 'OK' : '--'}`;
                         return `
                             <div class="mye-block" data-order-id="${o.id}" style="left:${clampedLeft}%; width:${clampedWidth}%; background:${st.color};" draggable="true">
                                 ${textSafe((o.plan && o.plan.machine_icon) || '🏭')} ${textSafe(o.folio_ot)}
                                 <br>${textSafe(line2)} <span style="opacity:.75;font-size:.75em;">(${plannedLabel})</span>
+                                <br><span style="opacity:.85;font-size:.72em;">${assignmentLabel}</span>
                                 ${showElapsed ? `<br><span data-order-elapsed-id="${o.id}">${elapsed}</span>` : ''}
                             </div>
                         `;
@@ -1188,6 +1193,59 @@
                     node.addEventListener('dragend', function() {
                         draggedOrderId = null;
                         document.querySelectorAll('.mye-drop-target').forEach(el => el.classList.remove('mye-drop-target'));
+                    });
+
+                    node.addEventListener('dragover', function(e) {
+                        e.preventDefault();
+                        node.classList.add('mye-drop-target');
+                    });
+                    node.addEventListener('dragleave', function() {
+                        node.classList.remove('mye-drop-target');
+                    });
+                    node.addEventListener('drop', function(e) {
+                        e.preventDefault();
+                        node.classList.remove('mye-drop-target');
+
+                        const targetOrderId = Number(node.getAttribute('data-order-id') || 0);
+                        const order = getOrder(targetOrderId);
+                        if (!order) return;
+
+                        const payload = getDragPayload(e);
+                        if (!payload || payload.type === 'order') return;
+
+                        if (payload.type === 'machine') {
+                            const machineKey = String(payload.machineKey || '').toLowerCase();
+                            const machine = machineMap.get(machineKey);
+                            saveOrderPlan(order, {
+                                station: machine ? (machine.clave_maquina || '') : (payload.machineKey || ''),
+                                machine_icon: machine ? (machine.icon || '🏭') : '🏭',
+                                process_status: 'configuracion',
+                                timer_started_at: null,
+                            }, `OT ${order.folio_ot || order.id} actualizada con maquina ${machine ? machine.clave_maquina : payload.machineKey}`);
+                            return;
+                        }
+
+                        if (payload.type === 'process') {
+                            const procId = Number(payload.processId || 0);
+                            const proc = processMap.get(procId);
+                            saveOrderPlan(order, {
+                                process_name: proc ? (proc.nombre || '') : '',
+                                process_status: 'configuracion',
+                                duration_hours: proc ? Number(proc.duracion_default || 1) : Number((order.plan && order.plan.duration_hours) || 1),
+                                timer_started_at: null,
+                            }, `OT ${order.folio_ot || order.id} actualizada con proceso ${proc ? proc.nombre : procId}`);
+                            return;
+                        }
+
+                        if (payload.type === 'operator') {
+                            const opId = Number(payload.operatorId || 0);
+                            const op = operatorMap.get(opId);
+                            saveOrderPlan(order, {
+                                operator_id: opId,
+                                process_status: 'configuracion',
+                                timer_started_at: null,
+                            }, `OT ${order.folio_ot || order.id} reasignada a ${op ? op.username : opId}`);
+                        }
                     });
                 });
 
