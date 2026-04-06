@@ -331,6 +331,27 @@
             font-size: 11px;
         }
 
+        .mye-op-action-btn {
+            border: 0;
+            border-radius: 7px;
+            background: #1d4ed8;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 5px 8px;
+            cursor: pointer;
+            margin-top: 6px;
+        }
+
+        .mye-op-action-btn:hover {
+            background: #1e40af;
+        }
+
+        .mye-op-action-btn:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+
         .mye-drop-target {
             border-color: #2a7abf !important;
             background: #eaf4ff !important;
@@ -730,8 +751,9 @@
                 });
             }
 
-            async function saveOrderPlan(order, patch, okMessage) {
+            async function saveOrderPlan(order, patch, okMessage, options) {
                 const plan = ensureOrderPlan(order);
+                const opts = options || {};
                 const payload = {
                     action: 'save',
                     ot_id: Number(order.id),
@@ -773,14 +795,22 @@
                     };
                     selectedOrderId = Number(order.id);
 
-                    renderOrders();
-                    renderOperators();
-                    renderMachines();
-                    renderProcesses();
-                    renderTimeline();
-                    showMessage(okMessage || data.message || 'Asignacion actualizada', false);
+                    if (!opts.skipRender) {
+                        renderOrders();
+                        renderOperators();
+                        renderMachines();
+                        renderProcesses();
+                        renderTimeline();
+                    }
+                    if (!opts.skipMessage) {
+                        showMessage(okMessage || data.message || 'Asignacion actualizada', false);
+                    }
+                    return true;
                 } catch (err) {
-                    showMessage(err.message || 'Error al guardar', true);
+                    if (!opts.skipMessage) {
+                        showMessage(err.message || 'Error al guardar', true);
+                    }
+                    return false;
                 }
             }
 
@@ -800,19 +830,13 @@
                     const hasIntervention = !!String((o.plan && o.plan.station) || '').trim();
                     const hasProcess = !!String((o.plan && o.plan.process_name) || '').trim();
                     const isInProgress = st.id === 'en_proceso';
-                    const isPaused = st.id === 'pausado';
                     const hasAllAssignments = hasOperator && hasIntervention && hasProcess;
-                    const canStart = hasAllAssignments && !isInProgress && !isPaused && st.id !== 'terminado';
-                    const canResume = hasAllAssignments && isPaused;
                     const missing = [
                         hasOperator ? '' : 'operador',
                         hasIntervention ? '' : 'intervencion',
                         hasProcess ? '' : 'proceso',
                     ].filter(Boolean);
                     const elapsed = getOrderElapsedText(o);
-                    const actionLabel = isInProgress ? 'Pausar' : (isPaused ? 'Reanudar' : 'Iniciar');
-                    const actionType = isInProgress ? 'pause' : (isPaused ? 'resume' : 'start');
-                    const actionDisabled = isInProgress ? false : (isPaused ? !canResume : !canStart);
                     return `
                         <article class="mye-order-card ${active}" data-order-id="${o.id}" draggable="true">
                             <div class="mye-order-title">${textSafe(o.folio_ot)} - ${textSafe(o.clave_maquina || '-')}</div>
@@ -821,9 +845,6 @@
                             <div class="mye-order-meta">Proceso: <b>${textSafe(processName)}</b></div>
                             <div class="mye-order-meta">Estatus: <b style="color:${st.color};">${textSafe(st.label)}</b></div>
                             ${isInProgress ? `<div class="mye-time-chip">Tiempo: <span data-order-elapsed-id="${o.id}">${elapsed}</span></div>` : ''}
-                            <div class="mye-order-actions">
-                                <button class="mye-start-btn" type="button" data-action-order-id="${o.id}" data-action-type="${actionType}" ${actionDisabled ? 'disabled' : ''}>${actionLabel}</button>
-                            </div>
                             ${hasAllAssignments ? '' : `<div class="mye-requirement-hint">Falta: ${textSafe(missing.join(', ') || 'asignacion completa')}</div>`}
                         </article>
                     `;
@@ -878,40 +899,7 @@
                     });
                 });
 
-                orderListEl.querySelectorAll('[data-action-order-id]').forEach(node => {
-                    node.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const orderId = Number(node.getAttribute('data-action-order-id'));
-                        const actionType = String(node.getAttribute('data-action-type') || 'start');
-                        const order = getOrder(orderId);
-                        if (!order) return;
-                        const plan = ensureOrderPlan(order);
-                        const nowRef = nowLocalInput();
-                        if (actionType === 'pause') {
-                            const baseSec = Math.max(0, Number(plan.elapsed_seconds || 0));
-                            const timerRef = toDateSafe(plan.timer_started_at || plan.start_at);
-                            const extraSec = timerRef ? Math.max(0, (Date.now() - timerRef.getTime()) / 1000) : 0;
-                            saveOrderPlan(order, {
-                                process_status: 'pausado',
-                                timer_started_at: null,
-                                elapsed_seconds: baseSec + extraSec,
-                            }, `OT ${order.folio_ot || order.id} en pausa`);
-                        } else if (actionType === 'resume') {
-                            saveOrderPlan(order, {
-                                process_status: 'en_proceso',
-                                timer_started_at: nowRef,
-                            }, `Operador reactivado en OT ${order.folio_ot || order.id}`);
-                        } else {
-                            saveOrderPlan(order, {
-                                process_status: 'en_proceso',
-                                start_at: plan.start_at || nowRef,
-                                timer_started_at: nowRef,
-                                elapsed_seconds: Math.max(0, Number(plan.elapsed_seconds || 0)),
-                            }, `Operador activado en OT ${order.folio_ot || order.id}. Tiempo iniciado.`);
-                        }
-                    });
-                });
+                
             }
 
             function renderMachines() {
@@ -948,15 +936,125 @@
                 });
             }
 
+            async function applyOperatorAction(opId, actionType) {
+                const operator = operatorMap.get(Number(opId));
+                if (!operator) return;
+
+                const allAssigned = (MYE_ORDERS || []).filter(o => Number(o.plan && o.plan.operator_id) === Number(opId));
+                const eligible = allAssigned.filter(o => {
+                    const p = o.plan || {};
+                    return !!String(p.station || '').trim() && !!String(p.process_name || '').trim() && Number(p.operator_id || 0) > 0;
+                });
+
+                let targets = [];
+                if (actionType === 'pause') {
+                    targets = eligible.filter(o => String((o.plan && o.plan.process_status) || '') === 'en_proceso');
+                } else if (actionType === 'resume') {
+                    targets = eligible.filter(o => String((o.plan && o.plan.process_status) || '') === 'pausado');
+                } else {
+                    const ready = eligible.find(o => {
+                        const st = String((o.plan && o.plan.process_status) || 'por_iniciar');
+                        return st !== 'en_proceso' && st !== 'terminado' && st !== 'pausado';
+                    });
+                    targets = ready ? [ready] : [];
+                }
+
+                if (!targets.length) {
+                    showMessage(`No hay OTs elegibles para ${actionType} en ${operator.username}.`, true);
+                    return;
+                }
+
+                let updated = 0;
+                for (const order of targets) {
+                    const plan = ensureOrderPlan(order);
+                    const nowRef = nowLocalInput();
+                    let patch = {};
+                    if (actionType === 'pause') {
+                        const baseSec = Math.max(0, Number(plan.elapsed_seconds || 0));
+                        const timerRef = toDateSafe(plan.timer_started_at || plan.start_at);
+                        const extraSec = timerRef ? Math.max(0, (Date.now() - timerRef.getTime()) / 1000) : 0;
+                        patch = {
+                            process_status: 'pausado',
+                            timer_started_at: null,
+                            elapsed_seconds: baseSec + extraSec,
+                        };
+                    } else if (actionType === 'resume') {
+                        patch = {
+                            process_status: 'en_proceso',
+                            timer_started_at: nowRef,
+                        };
+                    } else {
+                        patch = {
+                            process_status: 'en_proceso',
+                            start_at: plan.start_at || nowRef,
+                            timer_started_at: nowRef,
+                            elapsed_seconds: Math.max(0, Number(plan.elapsed_seconds || 0)),
+                        };
+                    }
+
+                    const ok = await saveOrderPlan(order, patch, '', { skipRender: true, skipMessage: true });
+                    if (ok) updated += 1;
+                }
+
+                renderOrders();
+                renderOperators();
+                renderMachines();
+                renderProcesses();
+                renderTimeline();
+
+                if (!updated) {
+                    showMessage(`No se pudieron actualizar OTs de ${operator.username}.`, true);
+                    return;
+                }
+                if (actionType === 'pause') {
+                    showMessage(`Labor pausada para ${operator.username} (${updated} OTs).`, false);
+                } else if (actionType === 'resume') {
+                    showMessage(`Labor reanudada para ${operator.username} (${updated} OTs).`, false);
+                } else {
+                    showMessage(`Labor iniciada para ${operator.username} (OT ${targets[0].folio_ot || targets[0].id}).`, false);
+                }
+            }
+
             function renderOperators() {
                 operatorsEl.innerHTML = (MYE_OPERATORS || []).map(op => {
-                    const assigned = (MYE_ORDERS || []).filter(o => Number(o.plan && o.plan.operator_id) === Number(op.id)).length;
+                    const assignedOrders = (MYE_ORDERS || []).filter(o => Number(o.plan && o.plan.operator_id) === Number(op.id));
+                    const assigned = assignedOrders.length;
                     const activeMs = getOperatorElapsedMs(op.id);
+
+                    const eligible = assignedOrders.filter(o => {
+                        const p = o.plan || {};
+                        return !!String(p.station || '').trim() && !!String(p.process_name || '').trim() && Number(p.operator_id || 0) > 0;
+                    });
+                    const activeCount = eligible.filter(o => String((o.plan && o.plan.process_status) || '') === 'en_proceso').length;
+                    const pausedCount = eligible.filter(o => String((o.plan && o.plan.process_status) || '') === 'pausado').length;
+                    const readyCount = eligible.filter(o => {
+                        const st = String((o.plan && o.plan.process_status) || 'por_iniciar');
+                        return st !== 'en_proceso' && st !== 'terminado' && st !== 'pausado';
+                    }).length;
+
+                    let actionType = 'start';
+                    let actionLabel = 'Iniciar labor';
+                    let actionDisabled = true;
+                    if (activeCount > 0) {
+                        actionType = 'pause';
+                        actionLabel = `Pausar labor (${activeCount})`;
+                        actionDisabled = false;
+                    } else if (pausedCount > 0) {
+                        actionType = 'resume';
+                        actionLabel = `Reanudar labor (${pausedCount})`;
+                        actionDisabled = false;
+                    } else if (readyCount > 0) {
+                        actionType = 'start';
+                        actionLabel = 'Iniciar labor';
+                        actionDisabled = false;
+                    }
+
                     return `
                         <article class="mye-operator-item" data-op-id="${op.id}" draggable="true">
                             <div class="mye-op-name">${textSafe(op.username)}</div>
                             <div class="mye-op-role">${textSafe(op.role || 'Operador')} | OTs: ${assigned}</div>
                             <div class="mye-time-chip">Tiempo activo: <span data-op-elapsed-id="${op.id}">${formatElapsed(activeMs)}</span></div>
+                            <button class="mye-op-action-btn" type="button" data-op-action-id="${op.id}" data-op-action-type="${actionType}" ${actionDisabled ? 'disabled' : ''}>${textSafe(actionLabel)}</button>
                         </article>
                     `;
                 }).join('') || '<div class="mye-order-meta">Sin operadores activos.</div>';
@@ -977,6 +1075,16 @@
                             process_status: 'configuracion',
                             timer_started_at: null,
                         }, `OT ${order.folio_ot || order.id} asignada a operador ${op ? op.username : opId}`);
+                    });
+                });
+
+                operatorsEl.querySelectorAll('[data-op-action-id]').forEach(btn => {
+                    btn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const opId = Number(btn.getAttribute('data-op-action-id'));
+                        const actionType = String(btn.getAttribute('data-op-action-type') || 'start');
+                        applyOperatorAction(opId, actionType);
                     });
                 });
             }
