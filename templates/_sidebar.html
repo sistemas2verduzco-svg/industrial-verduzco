@@ -20,10 +20,7 @@
         {% endif %}
     </div>
 
-    <div class="sb-tools">
-        <input id="sbNavSearch" class="sb-search" type="text" placeholder="Buscar modulo..." aria-label="Buscar en menu" />
-        <button id="sbClearSearch" class="sb-clear-search" type="button" aria-label="Limpiar busqueda">×</button>
-    </div>
+
 
     <nav class="sb-nav" style="display:flex; flex-direction:column; gap:4px;">
         {% if has_permission('catalog', 'view') or current_user and current_user.es_admin %}
@@ -180,48 +177,7 @@
         display: none;
     }
 
-    .sb-tools {
-        display: flex;
-        gap: 8px;
-        margin-top: -8px;
-        margin-bottom: 12px;
-    }
 
-    .sb-search {
-        flex: 1 1 auto;
-        min-width: 0;
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        background: rgba(255, 255, 255, 0.08);
-        color: #e8f4ff;
-        border-radius: 8px;
-        padding: 8px 10px;
-        font-size: 12px;
-    }
-
-    .sb-search::placeholder {
-        color: #a7c8e2;
-    }
-
-    .sb-search:focus {
-        outline: none;
-        border-color: rgba(100, 181, 246, 0.8);
-        box-shadow: 0 0 0 2px rgba(100, 181, 246, 0.2);
-    }
-
-    .sb-clear-search {
-        width: 34px;
-        border-radius: 8px;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        background: rgba(255, 255, 255, 0.08);
-        color: #d7ecff;
-        cursor: pointer;
-        font-size: 18px;
-        line-height: 1;
-    }
-
-    .sb-clear-search:hover {
-        background: rgba(255, 255, 255, 0.15);
-    }
 
     .sb-section-title {
         display: flex;
@@ -229,23 +185,38 @@
         justify-content: space-between;
         cursor: pointer;
         user-select: none;
-        border-radius: 6px;
-        padding: 4px 8px;
-        transition: background 0.2s;
+        border-radius: 8px;
+        padding: 8px 12px;
+        transition: all 0.3s cubic-bezier(0.2, 0, 0.2, 1);
+        font-size: 11px;
+        color: #90caf9;
+        font-weight: 600;
+        margin-top: 15px;
+        margin-bottom: 8px;
+        padding-left: 8px;
+        position: relative;
     }
 
     .sb-section-title:hover {
-        background: rgba(255, 255, 255, 0.08);
+        background: rgba(100, 181, 246, 0.12);
+        color: #64b5f6;
+        padding-left: 12px;
     }
 
     .sb-section-caret {
-        font-size: 11px;
-        color: #b8dbf5;
-        transition: transform 0.2s;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        color: #64b5f6;
+        transition: transform 0.3s cubic-bezier(0.2, 0, 0.2, 1);
+        flex-shrink: 0;
     }
 
     .sb-section-title.is-collapsed .sb-section-caret {
-        transform: rotate(-90deg);
+        transform: rotate(-180deg);
     }
 
     .sb-section-body.is-hidden {
@@ -475,8 +446,6 @@
         }
 
         const nav = sidebar.querySelector('.sb-nav');
-        const searchInput = document.getElementById('sbNavSearch');
-        const clearSearchBtn = document.getElementById('sbClearSearch');
         const sectionStateKey = 'sidebar.section.state.v1';
         let sectionPairs = [];
 
@@ -507,7 +476,7 @@
                 node.dataset.section = label;
 
                 if (!node.querySelector('.sb-section-caret')) {
-                    node.innerHTML = `<span>${label}</span><span class="sb-section-caret">▾</span>`;
+                    node.innerHTML = `<span>${label}</span><span class="sb-section-caret">⌄</span>`;
                 }
 
                 const body = document.createElement('div');
@@ -576,31 +545,6 @@
             });
         }
 
-        function applyMenuFilter() {
-            if (!nav || !searchInput) return;
-            const q = (searchInput.value || '').trim().toLowerCase();
-            const searching = q.length > 0;
-
-            sectionPairs.forEach(function(pair) {
-                const links = Array.from(pair.body.querySelectorAll('.sb-link'));
-                let visibleCount = 0;
-
-                links.forEach(function(link) {
-                    const txt = (link.textContent || '').toLowerCase();
-                    const match = !searching || txt.includes(q);
-                    link.style.display = match ? '' : 'none';
-                    if (match) visibleCount += 1;
-                });
-
-                pair.header.style.display = visibleCount > 0 ? '' : 'none';
-                pair.body.style.display = visibleCount > 0 ? '' : 'none';
-                if (searching && visibleCount > 0) {
-                    pair.body.classList.remove('is-hidden');
-                    pair.header.classList.remove('is-collapsed');
-                }
-            });
-        }
-
         const alertBadge = document.getElementById('sb-alertas-badge');
 
         function formatBadgeCount(n) {
@@ -663,22 +607,9 @@
             if (!document.hidden) refreshAlertBadge();
         });
 
-        if (searchInput) {
-            searchInput.addEventListener('input', applyMenuFilter);
-        }
-
-        if (clearSearchBtn && searchInput) {
-            clearSearchBtn.addEventListener('click', function() {
-                searchInput.value = '';
-                applyMenuFilter();
-                searchInput.focus();
-            });
-        }
-
         markActiveLinks();
         buildCollapsibleSections();
         initSectionInteractions();
-        applyMenuFilter();
         refreshAlertBadge();
         setInterval(refreshAlertBadge, 15000);
     })();
