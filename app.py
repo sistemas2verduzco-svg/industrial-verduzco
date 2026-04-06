@@ -50,6 +50,8 @@ MACHINE_SCHEDULE_ADVISORY_LOCK_ID = 94630211
 _MACHINE_SCHEDULE_THREAD = None
 _MACHINE_SCHEDULE_INIT = False
 _MACHINE_SCHEDULE_STOP = threading.Event()
+MYE_CATALOG_FILE = os.path.join('uploads', 'maquinaria_estaciones_catalogo.json')
+_MYE_CATALOG_LOCK = threading.Lock()
 
 
 def _procesos_import_job_path(job_id):
@@ -568,6 +570,50 @@ def _mye_machine_icon(clave_txt):
     if any(x in key for x in ['cnc', 'router']):
         return '⚙️'
     return '🏭'
+
+
+def _mye_default_catalog():
+    return {
+        'operators': [],
+        'machines': [],
+    }
+
+
+def _mye_read_catalog():
+    if not os.path.exists(MYE_CATALOG_FILE):
+        return _mye_default_catalog()
+
+    try:
+        with open(MYE_CATALOG_FILE, 'r', encoding='utf-8') as f:
+            payload = json.load(f)
+    except Exception:
+        return _mye_default_catalog()
+
+    if not isinstance(payload, dict):
+        return _mye_default_catalog()
+
+    operators = payload.get('operators')
+    machines = payload.get('machines')
+    return {
+        'operators': operators if isinstance(operators, list) else [],
+        'machines': machines if isinstance(machines, list) else [],
+    }
+
+
+def _mye_write_catalog(catalog):
+    os.makedirs(os.path.dirname(MYE_CATALOG_FILE), exist_ok=True)
+    with open(MYE_CATALOG_FILE, 'w', encoding='utf-8') as f:
+        json.dump(catalog, f, ensure_ascii=False, indent=2)
+
+
+def _mye_next_id(items):
+    max_id = 0
+    for item in items or []:
+        try:
+            max_id = max(max_id, int(item.get('id') or 0))
+        except Exception:
+            continue
+    return max_id + 1
 
 
 def _qc_parse_review_block(notas_text):
@@ -9334,7 +9380,7 @@ def maquinaria_estaciones_page():
     ready, missing = _maquinaria_tables_status()
     estaciones_ref = EstacionPlantilla.query.order_by(EstacionPlantilla.orden.asc()).all()
     ordenes = MaquinariaOrdenTrabajo.query.order_by(MaquinariaOrdenTrabajo.id.desc()).limit(180).all() if ready else []
-    operadores = Usuario.query.filter_by(activo=True).order_by(Usuario.username.asc()).limit(250).all()
+    catalog = _mye_read_catalog()
 
     estaciones_catalogo = []
     for e in estaciones_ref:
@@ -9344,14 +9390,32 @@ def maquinaria_estaciones_page():
         estaciones_catalogo.append(label)
     estaciones_catalogo = sorted(set(estaciones_catalogo))
 
-    operadores_payload = [
-        {
-            'id': u.id,
-            'username': u.username,
-            'role': u.role.name if getattr(u, 'role', None) else '',
-        }
-        for u in operadores
-    ]
+    operadores_payload = sorted(
+        [
+            {
+                'id': int(o.get('id') or 0),
+                'username': _clean_nullable_text(o.get('username')) or '',
+                'role': _clean_nullable_text(o.get('role')) or 'Operador',
+            }
+            for o in (catalog.get('operators') or [])
+            if int(o.get('id') or 0) > 0 and (_clean_nullable_text(o.get('username')) or '')
+        ],
+        key=lambda x: (x.get('username') or '').lower()
+    )
+
+    maquinas_payload = sorted(
+        [
+            {
+                'id': int(m.get('id') or 0),
+                'clave_maquina': _clean_nullable_text(m.get('clave_maquina')) or '',
+                'nombre_maquina': _clean_nullable_text(m.get('nombre_maquina')) or '',
+                'icon': _clean_nullable_text(m.get('icon')) or _mye_machine_icon(m.get('clave_maquina')),
+            }
+            for m in (catalog.get('machines') or [])
+            if int(m.get('id') or 0) > 0 and (_clean_nullable_text(m.get('clave_maquina')) or '')
+        ],
+        key=lambda x: (x.get('clave_maquina') or '').lower()
+    )
 
     status_catalogo = [
         {'id': 'por_iniciar', 'label': 'Por iniciar', 'color': '#94a3b8'},
@@ -9402,6 +9466,7 @@ def maquinaria_estaciones_page():
         estaciones_ref=estaciones_ref,
         estaciones_catalogo=estaciones_catalogo,
         operadores=operadores_payload,
+        maquinas=maquinas_payload,
         status_catalogo=status_catalogo,
         ordenes=ordenes_payload,
     )
@@ -9442,9 +9507,14 @@ def api_maquinaria_estaciones_plan_update():
 
     operator_username = ''
     if operator_id:
-        user = Usuario.query.get(operator_id)
-        if user:
-            operator_username = user.username or ''
+        catalog = _mye_read_catalog()
+        operator_ref = next(
+            (o for o in (catalog.get('operators') or []) if int(o.get('id') or 0) == int(operator_id)),
+            None,
+        )
+        if not operator_ref:
+            return jsonify({'ok': False, 'message': 'Operador no existe en catalogo'}), 422
+        operator_username = _clean_nullable_text(operator_ref.get('username')) or ''
 
     status_value = (str(data.get('process_status') or 'por_iniciar')).strip().lower()
     allowed_status = {'por_iniciar', 'configuracion', 'en_proceso', 'revision', 'terminado', 'pausado'}
@@ -9488,6 +9558,81 @@ def api_maquinaria_estaciones_plan_update():
     orden.updated_at = datetime.utcnow()
     db.session.commit()
     return jsonify({'ok': True, 'message': 'Planeacion guardada'})
+
+
+@app.route('/api/maquinaria/estaciones/operators/create', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_estaciones', 'create'), ('maquinaria_estaciones', 'edit'), ('maquinaria_estaciones', 'update')])
+def api_maquinaria_estaciones_operators_create():
+    data = request.get_json(silent=True) or {}
+    username = _clean_nullable_text(data.get('username'))
+    role = _clean_nullable_text(data.get('role')) or 'Operador'
+
+    if not username:
+        return jsonify({'ok': False, 'message': 'Nombre del operador es obligatorio'}), 422
+
+    with _MYE_CATALOG_LOCK:
+        catalog = _mye_read_catalog()
+        operators = catalog.get('operators') or []
+
+        duplicate = next(
+            (o for o in operators if (str(o.get('username') or '').strip().lower() == username.lower())),
+            None,
+        )
+        if duplicate:
+            return jsonify({'ok': False, 'message': 'Ese operador ya existe'}), 409
+
+        new_operator = {
+            'id': _mye_next_id(operators),
+            'username': username,
+            'role': role,
+            'created_at': datetime.utcnow().isoformat(),
+        }
+        operators.append(new_operator)
+        catalog['operators'] = operators
+        _mye_write_catalog(catalog)
+
+    return jsonify({'ok': True, 'message': 'Operador agregado', 'operator': new_operator})
+
+
+@app.route('/api/maquinaria/estaciones/machines/create', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_estaciones', 'create'), ('maquinaria_estaciones', 'edit'), ('maquinaria_estaciones', 'update')])
+def api_maquinaria_estaciones_machines_create():
+    data = request.get_json(silent=True) or {}
+    clave_maquina = _clean_nullable_text(data.get('clave_maquina'))
+    nombre_maquina = _clean_nullable_text(data.get('nombre_maquina'))
+    icon = _clean_nullable_text(data.get('icon'))
+
+    if not clave_maquina:
+        return jsonify({'ok': False, 'message': 'Clave de maquina es obligatoria'}), 422
+
+    if not icon:
+        icon = _mye_machine_icon(clave_maquina)
+
+    with _MYE_CATALOG_LOCK:
+        catalog = _mye_read_catalog()
+        machines = catalog.get('machines') or []
+
+        duplicate = next(
+            (m for m in machines if (str(m.get('clave_maquina') or '').strip().lower() == clave_maquina.lower())),
+            None,
+        )
+        if duplicate:
+            return jsonify({'ok': False, 'message': 'Esa maquina ya existe'}), 409
+
+        new_machine = {
+            'id': _mye_next_id(machines),
+            'clave_maquina': clave_maquina,
+            'nombre_maquina': nombre_maquina or clave_maquina,
+            'icon': icon,
+            'created_at': datetime.utcnow().isoformat(),
+        }
+        machines.append(new_machine)
+        catalog['machines'] = machines
+        _mye_write_catalog(catalog)
+
+    return jsonify({'ok': True, 'message': 'Maquina agregada', 'machine': new_machine})
 
 
 @app.route('/maquinaria/calidad')

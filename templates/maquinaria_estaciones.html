@@ -60,6 +60,55 @@
             text-transform: uppercase;
         }
 
+        .mye-panel-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .mye-head-btn {
+            border: 1px solid #b8d6f2;
+            background: #eef6ff;
+            color: #1c5589;
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .mye-head-btn:hover {
+            background: #e4f0ff;
+        }
+
+        .mye-inline-form {
+            display: none;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+
+        .mye-inline-form input {
+            border: 1px solid #cfdceb;
+            border-radius: 8px;
+            padding: 7px 8px;
+            font-size: 12px;
+        }
+
+        .mye-inline-form button {
+            border: 0;
+            border-radius: 8px;
+            background: #0f766e;
+            color: #fff;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 7px 10px;
+            cursor: pointer;
+        }
+
         .mye-list {
             display: grid;
             gap: 8px;
@@ -393,7 +442,15 @@
             </article>
 
             <article class="mye-panel">
-                <h3 class="mye-panel-title">Intervenciones (maquinas)</h3>
+                <div class="mye-panel-head">
+                    <h3 class="mye-panel-title" style="margin:0;">Intervenciones (maquinas)</h3>
+                    <button id="myeAddMachineBtn" class="mye-head-btn" type="button">+ Cargar maquina</button>
+                </div>
+                <div id="myeMachineForm" class="mye-inline-form">
+                    <input id="myeNewMachineClave" type="text" placeholder="Clave maquina" />
+                    <input id="myeNewMachineNombre" type="text" placeholder="Nombre" />
+                    <button id="myeSaveMachineBtn" type="button">Guardar</button>
+                </div>
                 <div id="myeMachineGrid" class="mye-machines"></div>
             </article>
 
@@ -405,7 +462,15 @@
 
         <section class="mye-main">
             <aside class="mye-operators">
-                <h3 class="mye-panel-title">Operadores</h3>
+                <div class="mye-panel-head">
+                    <h3 class="mye-panel-title" style="margin:0;">Operadores</h3>
+                    <button id="myeAddOperatorBtn" class="mye-head-btn" type="button">+ Agregar operador</button>
+                </div>
+                <div id="myeOperatorForm" class="mye-inline-form">
+                    <input id="myeNewOperatorName" type="text" placeholder="Nombre operador" />
+                    <input id="myeNewOperatorRole" type="text" placeholder="Especialidad/rol" />
+                    <button id="myeSaveOperatorBtn" type="button">Guardar</button>
+                </div>
                 <div id="myeOperators" class="mye-operator-list"></div>
             </aside>
 
@@ -466,6 +531,7 @@
     <script>
         const MYE_ORDERS = {{ ordenes|tojson }};
         const MYE_OPERATORS = {{ operadores|tojson }};
+        const MYE_MACHINES = {{ maquinas|tojson }};
         const MYE_STATIONS = {{ estaciones_catalogo|tojson }};
         const MYE_STATUS = {{ status_catalogo|tojson }};
 
@@ -488,6 +554,16 @@
             const msgEl = document.getElementById('myeMsg');
             const scaleBtns = Array.from(document.querySelectorAll('.mye-scale-btn'));
             const scheduleStartInput = document.getElementById('myeStartAt');
+            const addOperatorBtn = document.getElementById('myeAddOperatorBtn');
+            const operatorForm = document.getElementById('myeOperatorForm');
+            const newOperatorName = document.getElementById('myeNewOperatorName');
+            const newOperatorRole = document.getElementById('myeNewOperatorRole');
+            const saveOperatorBtn = document.getElementById('myeSaveOperatorBtn');
+            const addMachineBtn = document.getElementById('myeAddMachineBtn');
+            const machineForm = document.getElementById('myeMachineForm');
+            const newMachineClave = document.getElementById('myeNewMachineClave');
+            const newMachineNombre = document.getElementById('myeNewMachineNombre');
+            const saveMachineBtn = document.getElementById('myeSaveMachineBtn');
 
             const orderMap = new Map((MYE_ORDERS || []).map(o => [Number(o.id), o]));
             const operatorMap = new Map((MYE_OPERATORS || []).map(o => [Number(o.id), o]));
@@ -539,18 +615,19 @@
             }
 
             function renderMachines() {
-                machineGridEl.innerHTML = (MYE_ORDERS || []).slice(0, 60).map(o => {
-                    const icon = (o.plan && o.plan.machine_icon) || '🏭';
+                machineGridEl.innerHTML = (MYE_MACHINES || []).slice(0, 120).map(m => {
+                    const icon = m.icon || '🏭';
+                    const linkedOt = (MYE_ORDERS || []).filter(o => String(o.clave_maquina || '').toLowerCase() === String(m.clave_maquina || '').toLowerCase()).length;
                     return `
                         <div class="mye-machine">
                             <div class="mye-machine-icon">${textSafe(icon)}</div>
                             <div>
-                                <div class="mye-op-name" style="font-size:12px;">${textSafe(o.folio_ot)}</div>
-                                <div class="mye-op-role">${textSafe(o.clave_maquina || '-')}</div>
+                                <div class="mye-op-name" style="font-size:12px;">${textSafe(m.clave_maquina || '-')}</div>
+                                <div class="mye-op-role">${textSafe(m.nombre_maquina || '-')} | OTs: ${linkedOt}</div>
                             </div>
                         </div>
                     `;
-                }).join('') || '<div class="mye-order-meta">Sin maquinaria en cola.</div>';
+                }).join('') || '<div class="mye-order-meta">Sin maquinas cargadas.</div>';
             }
 
             function renderOperators() {
@@ -648,6 +725,82 @@
                 msgEl.style.color = isError ? '#dc2626' : '#0f766e';
             }
 
+            async function createOperator() {
+                const username = (newOperatorName && newOperatorName.value || '').trim();
+                const role = (newOperatorRole && newOperatorRole.value || '').trim();
+                if (!username) {
+                    showMessage('Escribe el nombre del operador.', true);
+                    return;
+                }
+
+                try {
+                    const res = await fetch('/api/maquinaria/estaciones/operators/create', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ username: username, role: role }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data.ok) throw new Error(data.message || 'No se pudo agregar operador');
+
+                    const operator = data.operator || {};
+                    MYE_OPERATORS.push({
+                        id: Number(operator.id),
+                        username: operator.username || username,
+                        role: operator.role || role || 'Operador',
+                    });
+                    operatorMap.set(Number(operator.id), {
+                        id: Number(operator.id),
+                        username: operator.username || username,
+                        role: operator.role || role || 'Operador',
+                    });
+
+                    fillEditorCatalogs();
+                    renderOperators();
+                    renderTimeline();
+                    showMessage(data.message || 'Operador agregado');
+                    if (newOperatorName) newOperatorName.value = '';
+                    if (newOperatorRole) newOperatorRole.value = '';
+                } catch (err) {
+                    showMessage(err.message || 'Error al crear operador', true);
+                }
+            }
+
+            async function createMachine() {
+                const clave = (newMachineClave && newMachineClave.value || '').trim();
+                const nombre = (newMachineNombre && newMachineNombre.value || '').trim();
+                if (!clave) {
+                    showMessage('Escribe la clave de la maquina.', true);
+                    return;
+                }
+
+                try {
+                    const res = await fetch('/api/maquinaria/estaciones/machines/create', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ clave_maquina: clave, nombre_maquina: nombre }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data.ok) throw new Error(data.message || 'No se pudo cargar maquina');
+
+                    const machine = data.machine || {};
+                    MYE_MACHINES.push({
+                        id: Number(machine.id),
+                        clave_maquina: machine.clave_maquina || clave,
+                        nombre_maquina: machine.nombre_maquina || nombre || clave,
+                        icon: machine.icon || '🏭',
+                    });
+
+                    renderMachines();
+                    showMessage(data.message || 'Maquina agregada');
+                    if (newMachineClave) newMachineClave.value = '';
+                    if (newMachineNombre) newMachineNombre.value = '';
+                } catch (err) {
+                    showMessage(err.message || 'Error al cargar maquina', true);
+                }
+            }
+
             async function saveAssignment(action) {
                 const otId = Number(orderSelect.value || selectedOrderId || 0);
                 if (!otId) {
@@ -743,6 +896,42 @@
             scheduleStartInput.addEventListener('change', renderTimeline);
             saveBtn.addEventListener('click', () => saveAssignment('save'));
             clearBtn.addEventListener('click', () => saveAssignment('clear'));
+
+            if (addOperatorBtn && operatorForm) {
+                addOperatorBtn.addEventListener('click', function() {
+                    operatorForm.style.display = operatorForm.style.display === 'grid' ? 'none' : 'grid';
+                    if (operatorForm.style.display === 'grid' && newOperatorName) newOperatorName.focus();
+                });
+            }
+            if (saveOperatorBtn) {
+                saveOperatorBtn.addEventListener('click', createOperator);
+            }
+            if (newOperatorName) {
+                newOperatorName.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        createOperator();
+                    }
+                });
+            }
+
+            if (addMachineBtn && machineForm) {
+                addMachineBtn.addEventListener('click', function() {
+                    machineForm.style.display = machineForm.style.display === 'grid' ? 'none' : 'grid';
+                    if (machineForm.style.display === 'grid' && newMachineClave) newMachineClave.focus();
+                });
+            }
+            if (saveMachineBtn) {
+                saveMachineBtn.addEventListener('click', createMachine);
+            }
+            if (newMachineClave) {
+                newMachineClave.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        createMachine();
+                    }
+                });
+            }
         })();
     </script>
 </body>
