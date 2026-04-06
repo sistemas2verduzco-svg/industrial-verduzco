@@ -164,6 +164,28 @@
             color: var(--mye-muted);
         }
 
+        .mye-order-actions {
+            margin-top: 6px;
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .mye-start-btn {
+            border: 0;
+            border-radius: 7px;
+            background: #0f766e;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 5px 8px;
+            cursor: pointer;
+        }
+
+        .mye-start-btn:hover {
+            background: #0d665f;
+        }
+
         .mye-machines {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -185,6 +207,12 @@
             text-align: center;
             cursor: pointer;
             transition: background 0.2s ease, transform 0.2s ease;
+        }
+
+        .mye-machine[draggable="true"],
+        .mye-process-item[draggable="true"],
+        .mye-operator-item[draggable="true"] {
+            cursor: grab;
         }
 
         .mye-machine:hover {
@@ -571,6 +599,33 @@
                 });
             }
 
+            function setDragPayload(e, payload, fallbackText) {
+                if (!e || !e.dataTransfer) return;
+                try {
+                    e.dataTransfer.setData('application/json', JSON.stringify(payload || {}));
+                } catch (err) {
+                }
+                e.dataTransfer.setData('text/plain', String(fallbackText || ''));
+            }
+
+            function getDragPayload(e) {
+                if (!e || !e.dataTransfer) return null;
+                const rawJson = e.dataTransfer.getData('application/json');
+                if (rawJson) {
+                    try {
+                        const parsed = JSON.parse(rawJson);
+                        if (parsed && typeof parsed === 'object') return parsed;
+                    } catch (err) {
+                    }
+                }
+                const rawText = e.dataTransfer.getData('text/plain');
+                const orderId = Number(rawText || draggedOrderId || 0);
+                if (orderId > 0) {
+                    return { type: 'order', orderId: orderId };
+                }
+                return null;
+            }
+
             function statusById(id) {
                 return (MYE_STATUS || []).find(s => s.id === id) || MYE_STATUS[0] || { id: 'por_iniciar', label: 'Por iniciar', color: '#94a3b8' };
             }
@@ -604,11 +659,11 @@
                 element.addEventListener('drop', function(e) {
                     e.preventDefault();
                     element.classList.remove('mye-drop-target');
-                    const raw = e.dataTransfer ? e.dataTransfer.getData('text/plain') : '';
-                    const orderId = Number(raw || draggedOrderId || 0);
+                    const payload = getDragPayload(e);
+                    const orderId = payload && payload.type === 'order' ? Number(payload.orderId || 0) : Number(draggedOrderId || 0);
                     const order = getOrder(orderId);
                     if (!order) return;
-                    onDropOrder(order);
+                    onDropOrder(order, payload, e);
                 });
             }
 
@@ -674,6 +729,10 @@
                     const st = statusById((o.plan && o.plan.process_status) || 'por_iniciar');
                     const opName = (o.plan && o.plan.operator_username) ? o.plan.operator_username : 'Sin operador';
                     const processName = (o.plan && o.plan.process_name) ? o.plan.process_name : 'Sin proceso';
+                    const hasOperator = Number((o.plan && o.plan.operator_id) || 0) > 0;
+                    const hasIntervention = !!String((o.plan && o.plan.station) || '').trim();
+                    const hasProcess = !!String((o.plan && o.plan.process_name) || '').trim();
+                    const canStart = hasOperator && hasIntervention && hasProcess && st.id !== 'en_proceso' && st.id !== 'terminado';
                     return `
                         <article class="mye-order-card ${active}" data-order-id="${o.id}" draggable="true">
                             <div class="mye-order-title">${textSafe(o.folio_ot)} - ${textSafe(o.clave_maquina || '-')}</div>
@@ -681,28 +740,73 @@
                             <div class="mye-order-meta">Operador: <b>${textSafe(opName)}</b></div>
                             <div class="mye-order-meta">Proceso: <b>${textSafe(processName)}</b></div>
                             <div class="mye-order-meta">Estatus: <b style="color:${st.color};">${textSafe(st.label)}</b></div>
+                            <div class="mye-order-actions">
+                                ${canStart ? `<button class="mye-start-btn" type="button" data-start-order-id="${o.id}">Iniciar</button>` : ''}
+                            </div>
                         </article>
                     `;
                 }).join('') || '<div class="mye-order-meta">Sin ordenes de trabajo.</div>';
 
                 orderListEl.querySelectorAll('[data-order-id]').forEach(node => {
+                    const orderId = Number(node.getAttribute('data-order-id'));
                     node.addEventListener('click', () => {
-                        selectedOrderId = Number(node.getAttribute('data-order-id'));
+                        selectedOrderId = orderId;
                         renderOrders();
                     });
                     node.addEventListener('dragstart', function(e) {
-                        const orderId = Number(node.getAttribute('data-order-id'));
                         draggedOrderId = orderId;
                         node.classList.add('dragging');
                         if (e.dataTransfer) {
                             e.dataTransfer.effectAllowed = 'move';
-                            e.dataTransfer.setData('text/plain', String(orderId));
+                            setDragPayload(e, { type: 'order', orderId: orderId }, orderId);
                         }
                     });
                     node.addEventListener('dragend', function() {
                         node.classList.remove('dragging');
                         draggedOrderId = null;
                         document.querySelectorAll('.mye-drop-target').forEach(el => el.classList.remove('mye-drop-target'));
+                    });
+
+                    withDropHandlers(node, function(orderTarget, payload) {
+                        if (!payload || payload.type === 'order') return;
+                        if (payload.type === 'machine') {
+                            const machine = machineMap.get(String(payload.machineKey || '').toLowerCase());
+                            if (!machine) return;
+                            saveOrderPlan(orderTarget, {
+                                station: machine.clave_maquina || '',
+                                machine_icon: machine.icon || '🏭',
+                                process_status: 'configuracion',
+                            }, `Maquina ${machine.clave_maquina || '-'} asignada a OT ${orderTarget.folio_ot || orderTarget.id}`);
+                        } else if (payload.type === 'process') {
+                            const proc = processMap.get(Number(payload.processId || 0));
+                            if (!proc) return;
+                            saveOrderPlan(orderTarget, {
+                                process_name: proc.nombre || '',
+                                process_status: 'configuracion',
+                                duration_hours: Number(proc.duracion_default || 1),
+                            }, `Proceso ${proc.nombre || '-'} asignado a OT ${orderTarget.folio_ot || orderTarget.id}`);
+                        } else if (payload.type === 'operator') {
+                            const op = operatorMap.get(Number(payload.operatorId || 0));
+                            if (!op) return;
+                            saveOrderPlan(orderTarget, {
+                                operator_id: Number(op.id),
+                                process_status: 'configuracion',
+                            }, `Operador ${op.username || '-'} asignado a OT ${orderTarget.folio_ot || orderTarget.id}`);
+                        }
+                    });
+                });
+
+                orderListEl.querySelectorAll('[data-start-order-id]').forEach(node => {
+                    node.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const orderId = Number(node.getAttribute('data-start-order-id'));
+                        const order = getOrder(orderId);
+                        if (!order) return;
+                        saveOrderPlan(order, {
+                            process_status: 'en_proceso',
+                            start_at: nowLocalInput(),
+                        }, `OT ${order.folio_ot || order.id} iniciada`);
                     });
                 });
             }
@@ -712,7 +816,7 @@
                     const icon = m.icon || '🏭';
                     const linkedOt = (MYE_ORDERS || []).filter(o => String(o.clave_maquina || '').toLowerCase() === String(m.clave_maquina || '').toLowerCase()).length;
                     return `
-                        <div class="mye-machine" data-machine-key="${textSafe(m.clave_maquina || '')}" title="${textSafe(m.nombre_maquina || m.clave_maquina || '-')}">
+                        <div class="mye-machine" data-machine-key="${textSafe(m.clave_maquina || '')}" title="${textSafe(m.nombre_maquina || m.clave_maquina || '-')}" draggable="true">
                             <div class="mye-machine-icon">${textSafe(icon)}</div>
                             <div style="font-weight:700; font-size:12px; color:#153a61; word-break:break-word;">${textSafe(m.clave_maquina || '-')}</div>
                             <div style="font-size:10px; color:#64748b;">OTs: ${linkedOt}</div>
@@ -723,6 +827,13 @@
                 machineGridEl.querySelectorAll('[data-machine-key]').forEach(node => {
                     const key = String(node.getAttribute('data-machine-key') || '').toLowerCase();
                     const machine = machineMap.get(key);
+                    node.addEventListener('dragstart', function(e) {
+                        if (!machine) return;
+                        if (e.dataTransfer) {
+                            e.dataTransfer.effectAllowed = 'copyMove';
+                            setDragPayload(e, { type: 'machine', machineKey: key }, machine.clave_maquina || key);
+                        }
+                    });
                     withDropHandlers(node, function(order) {
                         if (!machine) return;
                         saveOrderPlan(order, {
@@ -738,7 +849,7 @@
                 operatorsEl.innerHTML = (MYE_OPERATORS || []).map(op => {
                     const assigned = (MYE_ORDERS || []).filter(o => Number(o.plan && o.plan.operator_id) === Number(op.id)).length;
                     return `
-                        <article class="mye-operator-item" data-op-id="${op.id}">
+                        <article class="mye-operator-item" data-op-id="${op.id}" draggable="true">
                             <div class="mye-op-name">${textSafe(op.username)}</div>
                             <div class="mye-op-role">${textSafe(op.role || 'Operador')} | OTs: ${assigned}</div>
                         </article>
@@ -748,6 +859,13 @@
                 operatorsEl.querySelectorAll('[data-op-id]').forEach(node => {
                     const opId = Number(node.getAttribute('data-op-id'));
                     const op = operatorMap.get(opId);
+                    node.addEventListener('dragstart', function(e) {
+                        if (!op) return;
+                        if (e.dataTransfer) {
+                            e.dataTransfer.effectAllowed = 'copyMove';
+                            setDragPayload(e, { type: 'operator', operatorId: opId }, opId);
+                        }
+                    });
                     withDropHandlers(node, function(order) {
                         saveOrderPlan(order, {
                             operator_id: opId,
@@ -808,7 +926,7 @@
                         draggedOrderId = orderId;
                         if (e.dataTransfer) {
                             e.dataTransfer.effectAllowed = 'move';
-                            e.dataTransfer.setData('text/plain', String(orderId));
+                            setDragPayload(e, { type: 'order', orderId: orderId }, orderId);
                         }
                     });
                     node.addEventListener('dragend', function() {
@@ -833,7 +951,7 @@
             function renderProcesses() {
                 processListEl.innerHTML = (MYE_PROCESSES || []).map(proc => {
                     return `
-                        <article class="mye-process-item" data-proc-id="${proc.id}">
+                        <article class="mye-process-item" data-proc-id="${proc.id}" draggable="true">
                             <div class="mye-process-name">${textSafe(proc.nombre || '-')}</div>
                             <div class="mye-process-meta">${Number(proc.duracion_default || 1)} horas | Creado: ${textSafe(proc.created_at ? proc.created_at.slice(0, 10) : '-')}</div>
                         </article>
@@ -843,6 +961,13 @@
                 processListEl.querySelectorAll('[data-proc-id]').forEach(node => {
                     const procId = Number(node.getAttribute('data-proc-id'));
                     const proc = processMap.get(procId);
+                    node.addEventListener('dragstart', function(e) {
+                        if (!proc) return;
+                        if (e.dataTransfer) {
+                            e.dataTransfer.effectAllowed = 'copyMove';
+                            setDragPayload(e, { type: 'process', processId: procId }, procId);
+                        }
+                    });
                     withDropHandlers(node, function(order) {
                         saveOrderPlan(order, {
                             process_name: proc ? (proc.nombre || '') : '',
