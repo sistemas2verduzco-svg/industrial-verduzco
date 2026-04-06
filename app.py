@@ -2134,13 +2134,28 @@ def _resolve_post_login_endpoint(user):
 
 @app.context_processor
 def inject_user_helpers():
-    """Inyecta `current_user` y `has_permission` en todas las plantillas."""
+    """Inyecta `current_user`, `has_permission` y `alertas_pendientes_count` en todas las plantillas."""
     user = get_current_user()
+
     def has_permission(module, action):
         if not user:
             return False
         return user.has_permission(module, action)
-    return dict(current_user=user, has_permission=has_permission)
+
+    alertas_pendientes_count = 0
+    if user and (user.es_admin or (user.has_permission('alertas_buzon', 'view'))):
+        try:
+            alertas_pendientes_count = db.session.execute(
+                db.text('SELECT COUNT(*) FROM alertas_buzon_general WHERE atendida = false')
+            ).scalar() or 0
+        except Exception:
+            alertas_pendientes_count = 0
+
+    return dict(
+        current_user=user,
+        has_permission=has_permission,
+        alertas_pendientes_count=int(alertas_pendientes_count),
+    )
 
 
 def requires_permission(module, action):

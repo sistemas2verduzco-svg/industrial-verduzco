@@ -44,7 +44,14 @@
         <a href="/mapa_maquinas" class="sb-link sb-sub" data-base="/mapa_maquinas"><span>🗺️</span> <span>Mapa de Maquinas</span></a>
         {% endif %}
         {% if has_permission('alertas_buzon', 'view') or current_user and current_user.es_admin %}
-        <a href="/alertas_buzon" class="sb-link sb-sub" data-base="/alertas_buzon" id="sb-alertas-link"><span>📬</span> <span>Buzon de Alertas</span> <span id="sb-alertas-badge" class="sb-badge" style="display:none;" aria-label="Alertas pendientes"></span></a>
+        <a href="/alertas_buzon" class="sb-link sb-sub" data-base="/alertas_buzon" id="sb-alertas-link" style="position:relative;">
+            <span>📬</span>
+            <span>Buzon de Alertas</span>
+            <span id="sb-alertas-badge" class="sb-badge" aria-label="Alertas pendientes"
+                  style="display:{% if alertas_pendientes_count and alertas_pendientes_count > 0 %}inline-flex{% else %}none{% endif %};">
+                {{ [alertas_pendientes_count, 99]|min if alertas_pendientes_count <= 99 else '99+' }}
+            </span>
+        </a>
         {% endif %}
 
         {% if has_permission('entregas', 'view') or has_permission('almacen', 'view') or has_permission('facturacion', 'view') or current_user and current_user.es_admin %}
@@ -207,25 +214,27 @@
 
     .sb-badge {
         margin-left: auto;
-        min-width: 20px;
-        height: 20px;
+        min-width: 22px;
+        height: 22px;
         padding: 0 6px;
         border-radius: 999px;
         background: #ef4444;
         color: #fff;
-        font-size: 11px;
-        font-weight: 700;
+        font-size: 12px;
+        font-weight: 800;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         line-height: 1;
-        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+        box-shadow: 0 0 0 2px #0b2745, 0 2px 8px rgba(239,68,68,0.6);
         animation: sb-badge-pulse 1.8s ease-in-out infinite;
+        letter-spacing: 0;
+        flex-shrink: 0;
     }
 
     @keyframes sb-badge-pulse {
-        0%, 100% { transform: scale(1); box-shadow: 0 1px 4px rgba(239,68,68,0.5); }
-        50%       { transform: scale(1.18); box-shadow: 0 2px 10px rgba(239,68,68,0.75); }
+        0%, 100% { transform: scale(1);    box-shadow: 0 0 0 2px #0b2745, 0 2px 8px rgba(239,68,68,0.5); }
+        50%       { transform: scale(1.22); box-shadow: 0 0 0 2px #0b2745, 0 3px 14px rgba(239,68,68,0.85); }
     }
 
     .sb-footer {
@@ -405,7 +414,7 @@
                 const payload = await res.json();
                 const pendientes = Number(payload && payload.pendientes ? payload.pendientes : 0);
                 if (pendientes > 0) {
-                    alertBadge.textContent = formatBadgeCount(pendientes);
+                    alertBadge.textContent = pendientes > 99 ? '99+' : String(pendientes);
                     alertBadge.style.display = 'inline-flex';
                     alertBadge.title = pendientes + ' alerta(s) pendiente(s)';
                 } else {
@@ -414,9 +423,7 @@
                     alertBadge.title = '';
                 }
             } catch (_err) {
-                alertBadge.textContent = '';
-                alertBadge.style.display = 'none';
-                alertBadge.title = '';
+                /* red error — keep whatever the server rendered */
             }
         }
 
