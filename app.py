@@ -576,6 +576,7 @@ def _mye_default_catalog():
     return {
         'operators': [],
         'machines': [],
+        'processes': [],
     }
 
 
@@ -594,9 +595,11 @@ def _mye_read_catalog():
 
     operators = payload.get('operators')
     machines = payload.get('machines')
+    processes = payload.get('processes')
     return {
         'operators': operators if isinstance(operators, list) else [],
         'machines': machines if isinstance(machines, list) else [],
+        'processes': processes if isinstance(processes, list) else [],
     }
 
 
@@ -9417,6 +9420,20 @@ def maquinaria_estaciones_page():
         key=lambda x: (x.get('clave_maquina') or '').lower()
     )
 
+    procesos_payload = sorted(
+        [
+            {
+                'id': int(p.get('id') or 0),
+                'nombre': _clean_nullable_text(p.get('nombre')) or '',
+                'duracion_default': float(p.get('duracion_default') or 1),
+                'created_at': p.get('created_at') or '',
+            }
+            for p in (catalog.get('processes') or [])
+            if int(p.get('id') or 0) > 0 and (_clean_nullable_text(p.get('nombre')) or '')
+        ],
+        key=lambda x: (x.get('nombre') or '').lower()
+    )
+
     status_catalogo = [
         {'id': 'por_iniciar', 'label': 'Por iniciar', 'color': '#94a3b8'},
         {'id': 'configuracion', 'label': 'Configurando', 'color': '#f59e0b'},
@@ -9467,6 +9484,7 @@ def maquinaria_estaciones_page():
         estaciones_catalogo=estaciones_catalogo,
         operadores=operadores_payload,
         maquinas=maquinas_payload,
+        procesos=procesos_payload,
         status_catalogo=status_catalogo,
         ordenes=ordenes_payload,
     )
@@ -9633,6 +9651,41 @@ def api_maquinaria_estaciones_machines_create():
         _mye_write_catalog(catalog)
 
     return jsonify({'ok': True, 'message': 'Maquina agregada', 'machine': new_machine})
+
+
+@app.route('/api/maquinaria/estaciones/processes/create', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_estaciones', 'create'), ('maquinaria_estaciones', 'edit'), ('maquinaria_estaciones', 'update')])
+def api_maquinaria_estaciones_processes_create():
+    data = request.get_json(silent=True) or {}
+    nombre = _clean_nullable_text(data.get('nombre'))
+    duracion_default = float(data.get('duracion_default') or 1)
+
+    if not nombre:
+        return jsonify({'ok': False, 'message': 'Nombre del proceso es obligatorio'}), 422
+
+    with _MYE_CATALOG_LOCK:
+        catalog = _mye_read_catalog()
+        processes = catalog.get('processes') or []
+
+        duplicate = next(
+            (p for p in processes if (str(p.get('nombre') or '').strip().lower() == nombre.lower())),
+            None,
+        )
+        if duplicate:
+            return jsonify({'ok': False, 'message': 'Ese proceso ya existe'}), 409
+
+        new_process = {
+            'id': _mye_next_id(processes),
+            'nombre': nombre,
+            'duracion_default': max(0.5, duracion_default),
+            'created_at': datetime.utcnow().isoformat(),
+        }
+        processes.append(new_process)
+        catalog['processes'] = processes
+        _mye_write_catalog(catalog)
+
+    return jsonify({'ok': True, 'message': 'Proceso creado', 'process': new_process})
 
 
 @app.route('/maquinaria/calidad')

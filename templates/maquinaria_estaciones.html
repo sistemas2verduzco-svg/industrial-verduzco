@@ -89,6 +89,10 @@
             grid-template-columns: 1fr 1fr auto;
             gap: 6px;
             margin-bottom: 8px;
+            padding: 8px;
+            background: #f9fbfd;
+            border: 1px solid #dbe5f1;
+            border-radius: 8px;
         }
 
         .mye-inline-form input {
@@ -96,6 +100,7 @@
             border-radius: 8px;
             padding: 7px 8px;
             font-size: 12px;
+            background: #fff;
         }
 
         .mye-inline-form button {
@@ -107,6 +112,8 @@
             font-weight: 700;
             padding: 7px 10px;
             cursor: pointer;
+            white-space: nowrap;
+            align-self: center;
         }
 
         .mye-list {
@@ -150,9 +157,11 @@
 
         .mye-machines {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
             gap: 8px;
-            overflow: auto;
+            overflow-y: auto;
+            max-height: 320px;
+            padding: 4px;
         }
 
         .mye-machine {
@@ -160,10 +169,18 @@
             border-radius: 10px;
             background: #f8fbff;
             padding: 8px;
-            display: grid;
-            grid-template-columns: 36px 1fr;
-            gap: 8px;
+            display: flex;
+            flex-direction: column;
             align-items: center;
+            gap: 6px;
+            text-align: center;
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.2s ease;
+        }
+
+        .mye-machine:hover {
+            background: #f0f8ff;
+            transform: translateY(-2px);
         }
 
         .mye-machine-icon {
@@ -340,10 +357,100 @@
             border: 1px solid var(--mye-border);
             border-radius: 12px;
             padding: 10px;
-            min-height: 520px;
+            min-height: auto;
             display: flex;
             flex-direction: column;
             gap: 8px;
+        }
+
+        .mye-editor-collapsed {
+            min-height: auto;
+        }
+
+        .mye-editor-collapsed .mye-editor-content {
+            display: none;
+        }
+
+        .mye-editor-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            cursor: pointer;
+            user-select: none;
+            padding: 8px;
+            background: linear-gradient(135deg, #f0f7ff, #f5faff);
+            border-radius: 8px;
+            border: 1px solid #dbe5f1;
+        }
+
+        .mye-editor-header:hover {
+            background: linear-gradient(135deg, #e8f4ff, #f0f9ff);
+        }
+
+        .mye-editor-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 700;
+            color: #0f3a5f;
+        }
+
+        .mye-editor-toggle-icon {
+            display: inline-block;
+            transition: transform 0.2s ease;
+        }
+
+        .mye-editor-collapsed .mye-editor-toggle-icon {
+            transform: rotate(-90deg);
+        }
+
+        .mye-editor-content {
+            display: contents;
+        }
+
+        .mye-processes {
+            background: var(--mye-panel);
+            border: 1px solid var(--mye-border);
+            border-radius: 12px;
+            padding: 10px;
+            min-height: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .mye-process-list {
+            display: grid;
+            gap: 8px;
+            overflow: auto;
+            max-height: 300px;
+        }
+
+        .mye-process-item {
+            border: 1px solid #dbe7f5;
+            border-left: 4px solid #7fb5e8;
+            border-radius: 8px;
+            padding: 8px;
+            background: #fff;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .mye-process-item:hover {
+            background: #f5faff;
+        }
+
+        .mye-process-name {
+            font-weight: 700;
+            font-size: 13px;
+            color: #153a61;
+        }
+
+        .mye-process-meta {
+            font-size: 11px;
+            color: var(--mye-muted);
+            margin-top: 2px;
         }
 
         .mye-editor input,
@@ -486,45 +593,67 @@
             </article>
 
             <aside class="mye-editor">
-                <h3 class="mye-panel-title">Editor de Asignacion</h3>
-                <div class="mye-editor-row">
-                    <label for="myeOrderSelect">Orden de trabajo</label>
-                    <select id="myeOrderSelect"></select>
+                <div class="mye-editor-header" id="myeEditorHeader">
+                    <div class="mye-editor-toggle">
+                        <span class="mye-editor-toggle-icon">▼</span>
+                        <span>Editor de Asignacion</span>
+                    </div>
                 </div>
-                <div class="mye-editor-row">
-                    <label for="myeOperatorSelect">Operador</label>
-                    <select id="myeOperatorSelect"></select>
+                <div class="mye-editor-content">
+                    <div class="mye-editor-row">
+                        <label for="myeOrderSelect">Orden de trabajo</label>
+                        <select id="myeOrderSelect"></select>
+                    </div>
+                    <div class="mye-editor-row">
+                        <label for="myeOperatorSelect">Operador</label>
+                        <select id="myeOperatorSelect"></select>
+                    </div>
+                    <div class="mye-editor-row">
+                        <label for="myeStationSelect">Estacion</label>
+                        <select id="myeStationSelect"></select>
+                    </div>
+                    <div class="mye-editor-row">
+                        <label for="myeStatusSelect">Estatus del proceso</label>
+                        <select id="myeStatusSelect"></select>
+                    </div>
+                    <div class="mye-editor-row">
+                        <label for="myeStartInput">Inicio</label>
+                        <input id="myeStartInput" type="datetime-local">
+                    </div>
+                    <div class="mye-editor-row">
+                        <label for="myeDurationInput">Duracion (horas)</label>
+                        <input id="myeDurationInput" type="number" min="0" step="0.5" value="8">
+                    </div>
+                    <div class="mye-editor-row">
+                        <label for="myeIconInput">Icono maquina</label>
+                        <input id="myeIconInput" type="text" maxlength="3" placeholder="🏭">
+                    </div>
+                    <div class="mye-editor-row">
+                        <label for="myeNotes">Notas visibles OT</label>
+                        <textarea id="myeNotes" rows="4" placeholder="Notas operativas..."></textarea>
+                    </div>
+                    <div class="mye-actions">
+                        <button id="myeSaveBtn" class="mye-btn mye-btn-save" type="button">Guardar</button>
+                        <button id="myeClearBtn" class="mye-btn mye-btn-clear" type="button">Quitar asignacion</button>
+                    </div>
+                    <div id="myeMsg" class="mye-msg"></div>
                 </div>
-                <div class="mye-editor-row">
-                    <label for="myeStationSelect">Estacion</label>
-                    <select id="myeStationSelect"></select>
-                </div>
-                <div class="mye-editor-row">
-                    <label for="myeStatusSelect">Estatus del proceso</label>
-                    <select id="myeStatusSelect"></select>
-                </div>
-                <div class="mye-editor-row">
-                    <label for="myeStartInput">Inicio</label>
-                    <input id="myeStartInput" type="datetime-local">
-                </div>
-                <div class="mye-editor-row">
-                    <label for="myeDurationInput">Duracion (horas)</label>
-                    <input id="myeDurationInput" type="number" min="0" step="0.5" value="8">
-                </div>
-                <div class="mye-editor-row">
-                    <label for="myeIconInput">Icono maquina</label>
-                    <input id="myeIconInput" type="text" maxlength="3" placeholder="🏭">
-                </div>
-                <div class="mye-editor-row">
-                    <label for="myeNotes">Notas visibles OT</label>
-                    <textarea id="myeNotes" rows="4" placeholder="Notas operativas..."></textarea>
-                </div>
-                <div class="mye-actions">
-                    <button id="myeSaveBtn" class="mye-btn mye-btn-save" type="button">Guardar</button>
-                    <button id="myeClearBtn" class="mye-btn mye-btn-clear" type="button">Quitar asignacion</button>
-                </div>
-                <div id="myeMsg" class="mye-msg"></div>
             </aside>
+        </section>
+
+        <section class="mye-board" style="margin-top:12px;">
+            <article class="mye-processes">
+                <div class="mye-panel-head">
+                    <h3 class="mye-panel-title" style="margin:0;">Procesos</h3>
+                    <button id="myeAddProcessBtn" class="mye-head-btn" type="button">+ Crear proceso</button>
+                </div>
+                <div id="myeProcessForm" class="mye-inline-form">
+                    <input id="myeNewProcessName" type="text" placeholder="Nombre proceso" />
+                    <input id="myeNewProcessDuration" type="number" min="0.5" step="0.5" placeholder="Duracion (hrs)" value="1" style="max-width:140px;" />
+                    <button id="myeSaveProcessBtn" type="button">Guardar</button>
+                </div>
+                <div id="myeProcessList" class="mye-process-list"></div>
+            </article>
         </section>
     </div>
 
@@ -532,6 +661,7 @@
         const MYE_ORDERS = {{ ordenes|tojson }};
         const MYE_OPERATORS = {{ operadores|tojson }};
         const MYE_MACHINES = {{ maquinas|tojson }};
+        const MYE_PROCESSES = {{ procesos|tojson }};
         const MYE_STATIONS = {{ estaciones_catalogo|tojson }};
         const MYE_STATUS = {{ status_catalogo|tojson }};
 
@@ -541,6 +671,7 @@
             const statusGridEl = document.getElementById('myeStatusGrid');
             const operatorsEl = document.getElementById('myeOperators');
             const timelineEl = document.getElementById('myeTimeline');
+            const processListEl = document.getElementById('myeProcessList');
             const orderSelect = document.getElementById('myeOrderSelect');
             const operatorSelect = document.getElementById('myeOperatorSelect');
             const stationSelect = document.getElementById('myeStationSelect');
@@ -564,6 +695,13 @@
             const newMachineClave = document.getElementById('myeNewMachineClave');
             const newMachineNombre = document.getElementById('myeNewMachineNombre');
             const saveMachineBtn = document.getElementById('myeSaveMachineBtn');
+            const editorHeader = document.getElementById('myeEditorHeader');
+            const editorPanel = document.querySelector('.mye-editor');
+            const addProcessBtn = document.getElementById('myeAddProcessBtn');
+            const processForm = document.getElementById('myeProcessForm');
+            const newProcessName = document.getElementById('myeNewProcessName');
+            const newProcessDuration = document.getElementById('myeNewProcessDuration');
+            const saveProcessBtn = document.getElementById('myeSaveProcessBtn');
 
             const orderMap = new Map((MYE_ORDERS || []).map(o => [Number(o.id), o]));
             const operatorMap = new Map((MYE_OPERATORS || []).map(o => [Number(o.id), o]));
@@ -619,15 +757,13 @@
                     const icon = m.icon || '🏭';
                     const linkedOt = (MYE_ORDERS || []).filter(o => String(o.clave_maquina || '').toLowerCase() === String(m.clave_maquina || '').toLowerCase()).length;
                     return `
-                        <div class="mye-machine">
+                        <div class="mye-machine" title="${textSafe(m.nombre_maquina || m.clave_maquina || '-')}">
                             <div class="mye-machine-icon">${textSafe(icon)}</div>
-                            <div>
-                                <div class="mye-op-name" style="font-size:12px;">${textSafe(m.clave_maquina || '-')}</div>
-                                <div class="mye-op-role">${textSafe(m.nombre_maquina || '-')} | OTs: ${linkedOt}</div>
-                            </div>
+                            <div style="font-weight:700; font-size:12px; color:#153a61; word-break:break-word;">${textSafe(m.clave_maquina || '-')}</div>
+                            <div style="font-size:10px; color:#64748b;">OTs: ${linkedOt}</div>
                         </div>
                     `;
-                }).join('') || '<div class="mye-order-meta">Sin maquinas cargadas.</div>';
+                }).join('') || '<div class="mye-order-meta" style="grid-column:1/-1; text-align:center;">Sin maquinas cargadas.</div>';
             }
 
             function renderOperators() {
@@ -801,6 +937,52 @@
                 }
             }
 
+            function renderProcesses() {
+                processListEl.innerHTML = (MYE_PROCESSES || []).map(proc => {
+                    return `
+                        <article class="mye-process-item" data-proc-id="${proc.id}">
+                            <div class="mye-process-name">${textSafe(proc.nombre || '-')}</div>
+                            <div class="mye-process-meta">${Number(proc.duracion_default || 1)} horas | Creado: ${textSafe(proc.created_at ? proc.created_at.slice(0, 10) : '-')}</div>
+                        </article>
+                    `;
+                }).join('') || '<div class="mye-order-meta">Sin procesos definidos.</div>';
+            }
+
+            async function createProcess() {
+                const nombre = (newProcessName && newProcessName.value || '').trim();
+                const duracion = Number(newProcessDuration && newProcessDuration.value || 1);
+                if (!nombre) {
+                    showMessage('Escribe el nombre del proceso.', true);
+                    return;
+                }
+
+                try {
+                    const res = await fetch('/api/maquinaria/estaciones/processes/create', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ nombre: nombre, duracion_default: duracion }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data.ok) throw new Error(data.message || 'No se pudo crear proceso');
+
+                    const process = data.process || {};
+                    MYE_PROCESSES.push({
+                        id: Number(process.id),
+                        nombre: process.nombre || nombre,
+                        duracion_default: Number(process.duracion_default || duracion),
+                        created_at: process.created_at,
+                    });
+
+                    renderProcesses();
+                    showMessage(data.message || 'Proceso creado');
+                    if (newProcessName) newProcessName.value = '';
+                    if (newProcessDuration) newProcessDuration.value = '1';
+                } catch (err) {
+                    showMessage(err.message || 'Error al crear proceso', true);
+                }
+            }
+
             async function saveAssignment(action) {
                 const otId = Number(orderSelect.value || selectedOrderId || 0);
                 if (!otId) {
@@ -874,6 +1056,7 @@
             renderOrders();
             renderMachines();
             renderOperators();
+            renderProcesses();
 
             scheduleStartInput.value = nowLocalInput();
             syncEditorFromSelectedOrder();
@@ -929,6 +1112,32 @@
                     if (e.key === 'Enter') {
                         e.preventDefault();
                         createMachine();
+                    }
+                });
+            }
+
+            // Editor collapsible
+            if (editorHeader && editorPanel) {
+                editorHeader.addEventListener('click', function() {
+                    editorPanel.classList.toggle('mye-editor-collapsed');
+                });
+            }
+
+            // Procesos
+            if (addProcessBtn && processForm) {
+                addProcessBtn.addEventListener('click', function() {
+                    processForm.style.display = processForm.style.display === 'grid' ? 'none' : 'grid';
+                    if (processForm.style.display === 'grid' && newProcessName) newProcessName.focus();
+                });
+            }
+            if (saveProcessBtn) {
+                saveProcessBtn.addEventListener('click', createProcess);
+            }
+            if (newProcessName) {
+                newProcessName.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        createProcess();
                     }
                 });
             }
