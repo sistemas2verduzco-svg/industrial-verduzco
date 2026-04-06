@@ -8757,6 +8757,7 @@ def maquinaria_ordenes_page():
             for row in contpaq_rows:
                 contpaq_lines_by_doc.setdefault(int(row.document_id), []).append({
                     'pedido_id': None,
+                    'line_number': int(row.line_number or 0),
                     'clave_maquina': row.product_key or '',
                     'descripcion_maquina': row.description or '',
                     'cantidad': max(1, int(row.quantity or 1)),
@@ -8778,6 +8779,7 @@ def maquinaria_ordenes_page():
             if not p.contpaq_document_id:
                 grouped[group_key]['lineas'].append({
                     'pedido_id': p.id,
+                    'line_number': None,
                     'clave_maquina': p.clave_maquina or '',
                     'descripcion_maquina': p.descripcion_maquina or '',
                     'cantidad': int(p.cantidad or 1),
@@ -8824,6 +8826,17 @@ def maquinaria_ordenes_create():
         return folio
 
     fecha_objetivo = _parse_datetime(request.form.get('fecha_objetivo'))
+    selected_lines_raw = _clean_nullable_text(request.form.get('selected_line_numbers', ''))
+    selected_line_numbers = set()
+    if selected_lines_raw:
+        for token in selected_lines_raw.split(','):
+            token = (token or '').strip()
+            if not token:
+                continue
+            try:
+                selected_line_numbers.add(int(token))
+            except Exception:
+                continue
     if not fecha_objetivo:
         fecha_objetivo = datetime.utcnow()
 
@@ -8839,6 +8852,8 @@ def maquinaria_ordenes_create():
                 ).order_by(MaquinariaContpaqPedidoDetalle.line_number.asc()).all()
                 if contpaq_rows:
                     for row in contpaq_rows:
+                        if selected_line_numbers and int(row.line_number or 0) not in selected_line_numbers:
+                            continue
                         clave = _clean_nullable_text(row.product_key or '')
                         if not clave:
                             continue
