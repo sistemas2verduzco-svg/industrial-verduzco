@@ -726,11 +726,13 @@
 
             function setDragPayload(e, payload, fallbackText) {
                 if (!e || !e.dataTransfer) return;
+                const serialized = JSON.stringify(payload || {});
                 try {
-                    e.dataTransfer.setData('application/json', JSON.stringify(payload || {}));
+                    e.dataTransfer.setData('application/json', serialized);
                 } catch (err) {
                 }
-                e.dataTransfer.setData('text/plain', String(fallbackText || ''));
+                // text/plain is the most reliable cross-browser drag channel.
+                e.dataTransfer.setData('text/plain', serialized || String(fallbackText || ''));
             }
 
             function getDragPayload(e) {
@@ -744,6 +746,15 @@
                     }
                 }
                 const rawText = e.dataTransfer.getData('text/plain');
+                if (rawText) {
+                    try {
+                        const parsedText = JSON.parse(rawText);
+                        if (parsedText && typeof parsedText === 'object' && parsedText.type) {
+                            return parsedText;
+                        }
+                    } catch (err) {
+                    }
+                }
                 const orderId = Number(rawText || draggedOrderId || 0);
                 if (orderId > 0) {
                     return { type: 'order', orderId: orderId };
