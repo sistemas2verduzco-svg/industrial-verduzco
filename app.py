@@ -9472,6 +9472,8 @@ def maquinaria_estaciones_page():
                 'process_name': plan.get('process_name') or '',
                 'process_status': plan_status,
                 'start_at': plan.get('start_at') or None,
+                'timer_started_at': plan.get('timer_started_at') or None,
+                'elapsed_seconds': float(plan.get('elapsed_seconds') or 0),
                 'duration_hours': float(plan.get('duration_hours') or 0),
                 'machine_icon': plan.get('machine_icon') or _mye_machine_icon(o.clave_maquina),
             },
@@ -9547,9 +9549,14 @@ def api_maquinaria_estaciones_plan_update():
         duration_hours = 0
 
     start_at = (str(data.get('start_at') or '')).strip() or None
+    timer_started_at = (str(data.get('timer_started_at') or '')).strip() or None
     station = _clean_nullable_text(data.get('station'))
     process_name = _clean_nullable_text(data.get('process_name'))
     machine_icon = _clean_nullable_text(data.get('machine_icon')) or _mye_machine_icon(orden.clave_maquina)
+    try:
+        elapsed_seconds = max(0.0, float(data.get('elapsed_seconds') or 0))
+    except Exception:
+        elapsed_seconds = 0.0
 
     current_state = _mye_parse_plan_state(orden.notas)
     current_state.update({
@@ -9559,6 +9566,8 @@ def api_maquinaria_estaciones_plan_update():
         'process_name': process_name,
         'process_status': status_value,
         'start_at': start_at,
+        'timer_started_at': timer_started_at,
+        'elapsed_seconds': elapsed_seconds,
         'duration_hours': duration_hours,
         'machine_icon': machine_icon,
     })
