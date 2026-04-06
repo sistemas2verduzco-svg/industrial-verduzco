@@ -43,8 +43,8 @@
         {% if has_permission('mapa', 'view') or current_user and current_user.es_admin %}
         <a href="/mapa_maquinas" class="sb-link sb-sub" data-base="/mapa_maquinas"><span>🗺️</span> <span>Mapa de Maquinas</span></a>
         {% endif %}
-        {% if has_permission('mapa', 'view') or has_permission('estaciones', 'view') or current_user and current_user.es_admin %}
-        <a href="/alertas_buzon" class="sb-link sb-sub" data-base="/alertas_buzon"><span>📬</span> <span>Buzon de Alertas</span></a>
+        {% if has_permission('alertas_buzon', 'view') or current_user and current_user.es_admin %}
+        <a href="/alertas_buzon" class="sb-link sb-sub" data-base="/alertas_buzon" id="sb-alertas-link"><span>📬</span> <span>Buzon de Alertas</span> <span id="sb-alertas-badge" class="sb-badge" style="display:none;" aria-label="Alertas pendientes"></span></a>
         {% endif %}
 
         {% if has_permission('entregas', 'view') or has_permission('almacen', 'view') or has_permission('facturacion', 'view') or current_user and current_user.es_admin %}
@@ -203,6 +203,23 @@
     .sb-logout:hover {
         background: rgba(255,118,118,0.1);
         border-left-color: #ff7675;
+    }
+
+    .sb-badge {
+        margin-left: auto;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 999px;
+        background: #ef4444;
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
     }
 
     .sb-footer {
@@ -365,6 +382,39 @@
             });
         }
 
+        const alertBadge = document.getElementById('sb-alertas-badge');
+
+        function formatBadgeCount(n) {
+            if (n > 99) return '99+';
+            return String(n);
+        }
+
+        async function refreshAlertBadge() {
+            if (!alertBadge) return;
+            try {
+                const res = await fetch('/api/alertas_buzon?status=pendientes&limit=1', {
+                    credentials: 'same-origin'
+                });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const payload = await res.json();
+                const pendientes = Number(payload && payload.pendientes ? payload.pendientes : 0);
+                if (pendientes > 0) {
+                    alertBadge.textContent = formatBadgeCount(pendientes);
+                    alertBadge.style.display = 'inline-flex';
+                    alertBadge.title = pendientes + ' alertas pendientes';
+                } else {
+                    alertBadge.textContent = '';
+                    alertBadge.style.display = 'none';
+                    alertBadge.title = '';
+                }
+            } catch (_err) {
+                // Silent fail: if API is unavailable, do not interrupt sidebar behavior.
+                alertBadge.textContent = '';
+                alertBadge.style.display = 'none';
+                alertBadge.title = '';
+            }
+        }
+
         function isMobile() {
             return window.matchMedia('(max-width: 980px)').matches;
         }
@@ -393,6 +443,12 @@
             }
         });
 
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) refreshAlertBadge();
+        });
+
         markActiveLinks();
+        refreshAlertBadge();
+        setInterval(refreshAlertBadge, 15000);
     })();
 </script>

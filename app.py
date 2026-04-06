@@ -2092,6 +2092,8 @@ def _resolve_post_login_endpoint(user):
         return 'hojas_ruta_list'
     if user.has_permission('mapa', 'view'):
         return 'mapa_maquinas'
+    if user.has_permission('alertas_buzon', 'view'):
+        return 'alertas_buzon_page'
     if user.has_permission('hojas_entregas', 'view') or user.has_permission('hojas_mp', 'view') or user.has_permission('hojas', 'view'):
         return 'hojas_ruta_form'
     if user.has_permission('calidad', 'view'):
@@ -2199,6 +2201,7 @@ ROLE_MODULE_BUNDLES = {
     'estaciones_view': [('catalog', 'view'), ('estaciones', 'view')],
     'estaciones_operate': [('catalog', 'view'), ('estaciones', 'view'), ('estaciones', 'operate')],
     'mapa_view': [('catalog', 'view'), ('mapa', 'view')],
+    'alertas_buzon_view': [('alertas_buzon', 'view')],
     'calidad_view': [('catalog', 'view'), ('calidad', 'view')],
     'calidad_edit': [('catalog', 'view'), ('calidad', 'view'), ('calidad', 'edit')],
     'entregas_view': [('catalog', 'view'), ('entregas', 'view')],
@@ -2257,6 +2260,7 @@ DEFAULT_PERMISSION_CATALOG = [
     ('estaciones', 'view', 'Ver estaciones T'),
     ('estaciones', 'operate', 'Operar estaciones/maquinas'),
     ('mapa', 'view', 'Ver mapa de maquinas'),
+    ('alertas_buzon', 'view', 'Ver buzon de alertas'),
     ('calidad', 'view', 'Ver control de calidad'),
     ('calidad', 'edit', 'Registrar/editar revision de calidad'),
     ('entregas', 'view', 'Ver módulo de entregas'),
@@ -2286,6 +2290,7 @@ SIMPLE_PERMISSION_MODULES = [
     ('hojas_mp', 'Hojas de ruta MP'),
     ('estaciones', 'Estaciones T'),
     ('mapa', 'Mapa de maquinas'),
+    ('alertas_buzon', 'Buzon de alertas'),
     ('calidad', 'Control de calidad'),
     ('entregas', 'Entregas'),
     ('almacen', 'Almacen'),
@@ -3995,7 +4000,7 @@ def api_mapa_maquinas():
 
 @app.route('/alertas_buzon')
 @login_required
-@requires_any_permission([('mapa', 'view'), ('estaciones', 'view'), ('catalog', 'view')])
+@requires_permission('alertas_buzon', 'view')
 def alertas_buzon_page():
     _ensure_alertas_buzon_table()
     return render_template('alertas_buzon.html')
@@ -4003,7 +4008,7 @@ def alertas_buzon_page():
 
 @app.route('/api/alertas_buzon')
 @login_required
-@requires_any_permission([('mapa', 'view'), ('estaciones', 'view'), ('catalog', 'view')])
+@requires_permission('alertas_buzon', 'view')
 def api_alertas_buzon_list():
     if not _ensure_alertas_buzon_table():
         return jsonify({'items': [], 'total': 0, 'pendientes': 0})
@@ -4028,7 +4033,7 @@ def api_alertas_buzon_list():
 
 @app.route('/api/alertas_buzon/<int:alerta_id>/atender', methods=['POST'])
 @login_required
-@requires_any_permission([('mapa', 'view'), ('estaciones', 'view'), ('catalog', 'view')])
+@requires_permission('alertas_buzon', 'view')
 def api_alertas_buzon_atender(alerta_id):
     if not _ensure_alertas_buzon_table():
         return jsonify({'error': 'No se pudo acceder al buzón de alertas'}), 500
@@ -4045,7 +4050,7 @@ def api_alertas_buzon_atender(alerta_id):
 
 @app.route('/api/alertas_buzon/atender_todas', methods=['POST'])
 @login_required
-@requires_any_permission([('mapa', 'view'), ('estaciones', 'view'), ('catalog', 'view')])
+@requires_permission('alertas_buzon', 'view')
 def api_alertas_buzon_atender_todas():
     if not _ensure_alertas_buzon_table():
         return jsonify({'error': 'No se pudo acceder al buzón de alertas'}), 500

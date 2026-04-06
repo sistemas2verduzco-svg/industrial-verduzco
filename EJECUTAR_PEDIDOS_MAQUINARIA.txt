@@ -11,7 +11,9 @@ Sincronizar en la nube los pedidos de maquinaria desde CONTPAQ con estos filtros
 CAMBIOS YA SUBIDOS A GIT
 ------------------------
 - Branch: contpaq-mi4-integration
-- Commit: 09ab219
+- Commit base modulo: 09ab219
+- Commit ajuste vista + guia: 5f3c885
+- Commit importador BOM Excel: 223b672
 
 ARCHIVOS IMPORTANTES
 --------------------
@@ -98,6 +100,7 @@ CONTPAQ_SQLSERVER_PASSWORD=Limac00
 --------------------------
 cd C:\Scripts
 python contpaq_maquinaria_sync_agent.py
+py -3 -u contpaq_maquinaria_sync_agent.py
 
 RESULTADO ESPERADO:
 Debe conectarse a SQL Server, leer pedidos serie E no entregados, enviarlos a la nube
@@ -176,3 +179,30 @@ RESUMEN RAPIDO
 5. En Windows: python C:\Scripts\contpaq_maquinaria_sync_agent.py
 6. En Windows: crear tarea programada cada 2 horas
 7. Validar en: https://controlcalidad360.site/maquinaria/pedidos
+
+============================================================
+BLOQUE UNICO DE COMANDOS (COPIAR Y PEGAR)
+============================================================
+
+NUBE (APP + TABLAS + IMPORT BOM)
+--------------------------------
+cd /ruta/de/tu/proyecto
+git pull
+docker compose restart app
+docker compose exec app python create_maquinaria_ensamble_tables.py
+docker compose exec app python scripts/import_maquinaria_boms_excel.py --excel-path "BOOMS ACTUALIZADOS (RB) _ 28012026.xlsx"
+docker compose exec app python -c "from app import app; from models import db,MaquinariaBOM,MaquinariaBOMComponente; app.app_context().push(); print('boms=',MaquinariaBOM.query.count(),'componentes=',MaquinariaBOMComponente.query.count())"
+
+WINDOWS CONTPAQ (PRUEBA MANUAL SYNC)
+------------------------------------
+cd C:\Scripts
+py -3 -u contpaq_maquinaria_sync_agent.py
+
+RENDER/CACHE (SI SIGUE VIENDOSE RECORTADO)
+------------------------------------------
+cd /ruta/de/tu/proyecto
+git pull
+docker compose restart app nginx
+docker compose logs app --tail=120
+
+Luego en navegador usar recarga forzada: Ctrl+F5

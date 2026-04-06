@@ -1,0 +1,199 @@
+EXPLICACION SIMPLE DE LA EFICIENCIA EN EL MAPA DE MAQUINAS
+
+1. IDEA GENERAL
+
+La eficiencia del mapa NO se calcula por piezas terminadas.
+Se calcula por tiempo de uso de las maquinas visibles en el tablero.
+
+La formula base es:
+
+Eficiencia = (Tiempo productivo / Tiempo disponible) x 100
+
+
+2. QUE ES TIEMPO PRODUCTIVO
+
+Es el tiempo en que las maquinas realmente han estado trabajando dentro de la ventana que se esta midiendo.
+
+Ejemplo:
+- Maquina 1 trabajo 40 minutos
+- Maquina 2 trabajo 30 minutos
+- Maquina 3 trabajo 60 minutos
+
+Entonces:
+
+Tiempo productivo = 40 + 30 + 60 = 130 minutos
+
+
+3. QUE ES TIEMPO DISPONIBLE
+
+Es el tiempo total que las maquinas del mapa pudieron haber trabajado en esa misma ventana.
+
+Ejemplo con 3 maquinas en una hora:
+
+Tiempo disponible = 3 x 60 = 180 minutos
+
+
+4. COMO SALE LA EFICIENCIA
+
+Si el tiempo productivo fue 130 y el disponible 180:
+
+Eficiencia = (130 / 180) x 100 = 72.2%
+
+
+5. EFICIENCIA POR HORA
+
+Toma solo la ultima hora.
+
+Formula:
+
+Eficiencia por hora =
+(Tiempo productivo de la ultima hora / (Maquinas del mapa x 60 minutos)) x 100
+
+Ejemplo:
+- 10 maquinas visibles
+- Entre todas trabajaron 390 minutos en la ultima hora
+
+Disponible = 10 x 60 = 600 minutos
+
+Eficiencia por hora = (390 / 600) x 100 = 65%
+
+
+6. EFICIENCIA POR DIA
+
+Toma desde las 12:00 a.m. de hoy hasta el momento actual.
+
+Formula:
+
+Eficiencia por dia =
+(Tiempo productivo acumulado hoy / Tiempo disponible de hoy) x 100
+
+Ejemplo:
+- Son las 3:00 p.m. = 15 horas transcurridas
+- Hay 8 maquinas visibles
+
+Tiempo disponible del dia = 8 x 15 = 120 horas-maquina
+
+Si realmente trabajaron 78 horas-maquina:
+
+Eficiencia por dia = (78 / 120) x 100 = 65%
+
+
+7. EFICIENCIA POR SEMANA
+
+Toma desde el lunes a las 12:00 a.m. hasta ahorita.
+
+Formula:
+
+Eficiencia por semana =
+(Tiempo productivo acumulado en la semana / Tiempo disponible acumulado en la semana) x 100
+
+La mecanica es igual, solo cambia la ventana de tiempo.
+
+
+8. UTILIZACION ACTUAL
+
+Mide cuantas maquinas del mapa estan produciendo en este momento.
+
+Formula:
+
+Utilizacion actual =
+(Maquinas produciendo / Maquinas del mapa) x 100
+
+Ejemplo:
+- 17 maquinas en el mapa
+- 12 produciendo ahorita
+
+Utilizacion actual = (12 / 17) x 100 = 70.6%
+
+
+9. ASIGNACION ACTIVA
+
+Mide cuantas maquinas tienen hoja asignada, aunque no todas esten produciendo todavia.
+
+Formula:
+
+Asignacion activa =
+(Maquinas con hoja asignada / Maquinas del mapa) x 100
+
+Ejemplo:
+- 17 maquinas visibles
+- 15 con hoja asignada
+
+Asignacion activa = (15 / 17) x 100 = 88.2%
+
+
+10. AVANCE PROMEDIO
+
+Mide que tanto han avanzado los procesos actuales contra su tiempo objetivo.
+
+Primero se calcula cada proceso:
+
+Avance del proceso =
+(Tiempo transcurrido / Tiempo objetivo) x 100
+
+Ejemplo:
+- Proceso A: objetivo 100 min, lleva 50 min = 50%
+- Proceso B: objetivo 80 min, lleva 40 min = 50%
+- Proceso C: objetivo 60 min, lleva 30 min = 50%
+
+Promedio:
+
+Avance promedio = (50 + 50 + 50) / 3 = 50%
+
+
+11. RITMO OBJETIVO
+
+Mide si el proceso va dentro del tiempo esperado o si va retrasado.
+
+Si va dentro del tiempo objetivo, se toma como 100%.
+Si ya se paso del tiempo, baja proporcionalmente.
+
+Ejemplo:
+- Objetivo = 60 min
+- Lleva = 75 min
+
+Ritmo = (60 / 75) x 100 = 80%
+
+Si va bien o antes del objetivo:
+
+Ritmo = 100%
+
+
+12. OEE LITE
+
+No es un OEE industrial completo.
+Es una version simple para tablero.
+
+Combina:
+- Eficiencia del dia
+- Ritmo objetivo
+
+Formula:
+
+OEE Lite = (Eficiencia del dia x Ritmo objetivo) / 100
+
+Ejemplo:
+- Eficiencia del dia = 70%
+- Ritmo objetivo = 90%
+
+OEE Lite = (70 x 90) / 100 = 63%
+
+
+13. RESUMEN RAPIDO
+
+- Por hora: que tanto trabajo la planta en la ultima hora.
+- Por dia: que tanto trabajo hoy.
+- Por semana: que tanto trabajo esta semana.
+- Utilizacion actual: cuantas maquinas estan corriendo ahorita.
+- Asignacion activa: cuantas maquinas tienen trabajo cargado.
+- Avance promedio: que tan avanzados van los procesos.
+- Ritmo objetivo: que tan cerca van del tiempo estandar.
+- OEE Lite: mezcla de ocupacion diaria y ritmo contra objetivo.
+
+
+14. FRASE MAS SIMPLE DE TODAS
+
+Si el sistema dice 60% por dia, significa:
+
+De todo el tiempo que las maquinas visibles pudieron haber trabajado hoy,
+solo el 60% realmente estuvo ocupado en produccion.
