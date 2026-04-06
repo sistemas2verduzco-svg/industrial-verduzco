@@ -908,6 +908,46 @@
                 return false;
             }
 
+            function pickTrackOrderByPosition(trackNode, opId, event) {
+                if (!trackNode) return null;
+
+                const rowOrders = (MYE_ORDERS || []).filter(o => Number(o.plan && o.plan.operator_id) === Number(opId));
+                if (!rowOrders.length) return null;
+                if (rowOrders.length === 1) return rowOrders[0];
+
+                const rect = trackNode.getBoundingClientRect();
+                const xRatio = rect.width > 0 ? ((event.clientX - rect.left) / rect.width) : 0;
+                const xPct = Math.max(0, Math.min(100, xRatio * 100));
+
+                const blocks = Array.from(trackNode.querySelectorAll('.mye-block[data-order-id]'));
+                if (!blocks.length) return null;
+
+                // 1) Exact hit: drop happened over block range.
+                for (const block of blocks) {
+                    const left = parseFloat(String(block.style.left || '0').replace('%', '')) || 0;
+                    const width = parseFloat(String(block.style.width || '0').replace('%', '')) || 0;
+                    const right = left + width;
+                    if (xPct >= left && xPct <= right) {
+                        return getOrder(Number(block.getAttribute('data-order-id') || 0));
+                    }
+                }
+
+                // 2) Nearest center fallback.
+                let nearest = null;
+                let nearestDistance = Number.POSITIVE_INFINITY;
+                for (const block of blocks) {
+                    const left = parseFloat(String(block.style.left || '0').replace('%', '')) || 0;
+                    const width = parseFloat(String(block.style.width || '0').replace('%', '')) || 0;
+                    const center = left + (width / 2);
+                    const dist = Math.abs(center - xPct);
+                    if (dist < nearestDistance) {
+                        nearestDistance = dist;
+                        nearest = getOrder(Number(block.getAttribute('data-order-id') || 0));
+                    }
+                }
+                return nearest;
+            }
+
             function renderStatusCatalog() {
                 statusGridEl.innerHTML = (MYE_STATUS || []).map((s, idx) => {
                     return `<div class="mye-status-chip"><span class="mye-dot" style="background:${s.color};"></span>${idx + 1}. ${textSafe(s.label)}</div>`;
@@ -1321,19 +1361,22 @@
                         }
 
                         const rowOrders = (MYE_ORDERS || []).filter(o => Number(o.plan && o.plan.operator_id) === opId);
-                        let target = null;
+                        let target = pickTrackOrderByPosition(node, opId, e);
 
-                        if (selectedOrderId) {
+                        // Secondary fallback to selected order in same line.
+                        if (!target && selectedOrderId) {
                             const selected = getOrder(selectedOrderId);
                             if (selected && Number(selected.plan && selected.plan.operator_id) === opId) {
                                 target = selected;
                             }
                         }
+
                         if (!target && rowOrders.length === 1) {
                             target = rowOrders[0];
                         }
+
                         if (!target) {
-                            showMessage('Selecciona la OT de esa linea (clic en el bloque amarillo) y vuelve a soltar.', true);
+                            showMessage('No se encontro OT destino en esa linea. Suelta encima del bloque o mas cerca del bloque deseado.', true);
                             return;
                         }
 
