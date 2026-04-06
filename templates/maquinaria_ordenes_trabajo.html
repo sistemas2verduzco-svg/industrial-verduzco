@@ -5,10 +5,54 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Maquinaria y Ensamble - Ordenes de Trabajo</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .ot-page {
+            display: grid;
+            gap: 12px;
+        }
+        .ot-top-grid {
+            display: grid;
+            grid-template-columns: minmax(420px, 0.9fr) minmax(560px, 1.35fr);
+            gap: 12px;
+            align-items: start;
+        }
+        .ot-panel {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 12px;
+        }
+        .ot-ref-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+        .ot-preview-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        .ot-preview-table th,
+        .ot-preview-table td {
+            padding: 7px;
+            border-bottom: 1px solid #e5e7eb;
+            text-align: left;
+            vertical-align: top;
+        }
+        .ot-preview-table th {
+            background: #eef2ff;
+        }
+        @media (max-width: 1100px) {
+            .ot-top-grid,
+            .ot-ref-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 <body>
     {% include '_sidebar.html' %}
-    <div class="container" style="padding-top:20px;">
+    <div class="container ot-page" style="padding-top:20px; max-width: 1500px;">
         <h2 style="margin:0 0 6px 0;">Maquinaria y Ensamble - Orden de Trabajo</h2>
         <div style="color:#64748b; font-size:13px; margin-bottom:14px;">Se genera a partir de pedido y puede consultar claves/procesos de Produccion.</div>
 
@@ -18,8 +62,8 @@
         </div>
         {% endif %}
 
-        <div style="display:grid; grid-template-columns:1.1fr 1fr; gap:12px;">
-            <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px;">
+        <div class="ot-top-grid">
+            <div class="ot-panel">
                 <h3 style="margin:0 0 8px 0; font-size:16px;">Crear orden de trabajo</h3>
                 <form method="post" action="/maquinaria/ordenes-trabajo/create" style="display:grid; gap:8px;">
                     <input type="text" name="folio_ot" value="AUTO" readonly style="padding:8px; border:1px solid #d1d5db; border-radius:6px; background:#f8fafc; color:#64748b; font-weight:700;">
@@ -40,17 +84,27 @@
                 </form>
                 <div style="margin-top:8px; color:#64748b; font-size:12px;">Cuando selecciones pedido, se generan OTs para todas las claves y cantidades.</div>
             </div>
-            <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px;">
+            <div class="ot-panel" id="pedidoPreviewPanelOT">
+                <h3 style="margin:0 0 8px 0; font-size:16px;">Vista previa completa del pedido</h3>
+                <div id="pedidoPreviewSummaryOT" style="color:#64748b; font-size:13px; margin-bottom:10px;">Selecciona un pedido para ver todas sus claves, cantidades y datos de generación.</div>
+                <div id="pedidoLinesWrapOT" style="display:none; border:1px solid #e2e8f0; border-radius:8px; padding:8px; max-height:430px; overflow:auto; background:#f8fafc;"></div>
+            </div>
+        </div>
+
+        <div class="ot-ref-grid">
+            <div class="ot-panel">
                 <h3 style="margin:0 0 8px 0; font-size:16px;">Claves de Produccion (consulta)</h3>
-                <div style="max-height:180px; overflow:auto; font-size:13px;">
+                <div style="max-height:220px; overflow:auto; font-size:13px;">
                     {% for c in claves %}
                     <div style="padding:6px 0; border-bottom:1px solid #eef2f7;">{{ c.clave }} - {{ c.nombre or '-' }}</div>
                     {% else %}
                     <div style="color:#64748b;">Sin claves.</div>
                     {% endfor %}
                 </div>
-                <h3 style="margin:10px 0 8px 0; font-size:16px;">Procesos de Produccion (consulta)</h3>
-                <div style="max-height:180px; overflow:auto; font-size:13px;">
+            </div>
+            <div class="ot-panel">
+                <h3 style="margin:0 0 8px 0; font-size:16px;">Procesos de Produccion (consulta)</h3>
+                <div style="max-height:220px; overflow:auto; font-size:13px;">
                     {% for p in procesos %}
                     <div style="padding:6px 0; border-bottom:1px solid #eef2f7;">{{ p.nombre }}</div>
                     {% else %}
@@ -60,7 +114,7 @@
             </div>
         </div>
 
-        <div style="margin-top:12px; background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px;">
+        <div class="ot-panel">
             <h3 style="margin:0 0 8px 0; font-size:16px;">Ordenes de trabajo recientes</h3>
             <table style="width:100%; border-collapse:collapse; font-size:13px;">
                 <thead>
@@ -101,10 +155,14 @@
 
             function renderPedidoLinesOT(group) {
                 const wrap = document.getElementById('pedidoLinesWrapOT');
+                const summary = document.getElementById('pedidoPreviewSummaryOT');
                 if (!wrap) return;
                 if (!group || !Array.isArray(group.lineas) || !group.lineas.length) {
                     wrap.style.display = 'none';
                     wrap.innerHTML = '';
+                    if (summary) {
+                        summary.textContent = 'Selecciona un pedido para ver todas sus claves, cantidades y datos de generación.';
+                    }
                     return;
                 }
 
@@ -117,15 +175,24 @@
                     </tr>
                 `).join('');
 
+                if (summary) {
+                    summary.innerHTML = `
+                        <div><b>Pedido:</b> ${group.folio_interno || '-'}</div>
+                        <div><b>Cliente:</b> ${group.cliente || '-'}</div>
+                        <div><b>DocID CONTPAQ:</b> ${group.contpaq_document_id || '-'}</div>
+                        <div><b>Fecha OT:</b> ${document.getElementById('fechaObjetivoOT')?.value || '-'}</div>
+                        <div><b>OTs a generar:</b> ${group.lineas.length}</div>
+                    `;
+                }
+
                 wrap.innerHTML = `
-                    <div style="font-size:12px; color:#334155; margin-bottom:6px;"><b>Se generaran ${group.lineas.length} OTs</b> para este pedido.</div>
-                    <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                    <table class="ot-preview-table">
                         <thead>
-                            <tr style="background:#eef2ff; text-align:left;">
-                                <th style="padding:6px; border-bottom:1px solid #e5e7eb;">#</th>
-                                <th style="padding:6px; border-bottom:1px solid #e5e7eb;">Clave</th>
-                                <th style="padding:6px; border-bottom:1px solid #e5e7eb;">Descripcion</th>
-                                <th style="padding:6px; border-bottom:1px solid #e5e7eb;">Cantidad</th>
+                            <tr>
+                                <th>#</th>
+                                <th>Clave</th>
+                                <th>Descripcion</th>
+                                <th>Cantidad</th>
                             </tr>
                         </thead>
                         <tbody>${rows}</tbody>
