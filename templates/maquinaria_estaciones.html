@@ -5,38 +5,745 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Maquinaria y Ensamble - Estaciones de Trabajo</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        :root {
+            --mye-bg: #f5f8fc;
+            --mye-panel: #ffffff;
+            --mye-border: #dbe5f1;
+            --mye-muted: #64748b;
+            --mye-title: #0f3a5f;
+            --mye-accent: #2a7abf;
+            --mye-accent-soft: #e6f2ff;
+        }
+
+        .mye-page {
+            padding-top: 20px;
+            max-width: 1650px;
+        }
+
+        .mye-header h2 {
+            margin: 0 0 6px 0;
+            color: var(--mye-title);
+        }
+
+        .mye-header p {
+            margin: 0 0 14px 0;
+            font-size: 13px;
+            color: var(--mye-muted);
+        }
+
+        .mye-board {
+            display: grid;
+            grid-template-columns: 1.1fr 1.3fr 1fr;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .mye-panel {
+            background: var(--mye-panel);
+            border: 1px solid var(--mye-border);
+            border-radius: 12px;
+            padding: 10px;
+            box-shadow: 0 1px 3px rgba(15, 58, 95, 0.08);
+            min-height: 180px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .mye-panel-title {
+            margin: 0 0 8px 0;
+            font-size: 13px;
+            color: #1e3a5f;
+            font-weight: 800;
+            letter-spacing: 0.2px;
+            text-transform: uppercase;
+        }
+
+        .mye-list {
+            display: grid;
+            gap: 8px;
+            overflow: auto;
+        }
+
+        .mye-order-card {
+            border: 1px solid #d7e6f7;
+            border-radius: 10px;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+            padding: 8px;
+            cursor: pointer;
+            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        }
+
+        .mye-order-card:hover {
+            transform: translateY(-1px);
+            border-color: #9ec4eb;
+            box-shadow: 0 5px 12px rgba(35, 105, 171, 0.12);
+        }
+
+        .mye-order-card.active {
+            border-color: #2a7abf;
+            box-shadow: inset 0 0 0 1px rgba(42, 122, 191, 0.28);
+            background: linear-gradient(180deg, #f3f9ff 0%, #ebf5ff 100%);
+        }
+
+        .mye-order-title {
+            font-weight: 800;
+            color: #1b4268;
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+
+        .mye-order-meta {
+            font-size: 12px;
+            color: var(--mye-muted);
+        }
+
+        .mye-machines {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 8px;
+            overflow: auto;
+        }
+
+        .mye-machine {
+            border: 1px solid #d4e4f5;
+            border-radius: 10px;
+            background: #f8fbff;
+            padding: 8px;
+            display: grid;
+            grid-template-columns: 36px 1fr;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .mye-machine-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #e7f2ff;
+            font-size: 18px;
+        }
+
+        .mye-status-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+            overflow: auto;
+        }
+
+        .mye-status-chip {
+            border-radius: 10px;
+            padding: 8px;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            background: #f8fafc;
+            font-size: 12px;
+            font-weight: 700;
+            color: #334155;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .mye-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .mye-main {
+            display: grid;
+            grid-template-columns: minmax(280px, 320px) minmax(680px, 1fr) minmax(300px, 360px);
+            gap: 12px;
+        }
+
+        .mye-operators {
+            background: var(--mye-panel);
+            border: 1px solid var(--mye-border);
+            border-radius: 12px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            min-height: 520px;
+        }
+
+        .mye-operator-list {
+            overflow: auto;
+            display: grid;
+            gap: 8px;
+        }
+
+        .mye-operator-item {
+            border: 1px solid #dbe7f5;
+            border-left: 4px solid #7fb5e8;
+            border-radius: 8px;
+            padding: 8px;
+            cursor: pointer;
+            background: #fff;
+            transition: background 0.2s ease;
+        }
+
+        .mye-operator-item:hover {
+            background: #f5faff;
+        }
+
+        .mye-op-name {
+            font-weight: 700;
+            font-size: 13px;
+            color: #153a61;
+        }
+
+        .mye-op-role {
+            color: var(--mye-muted);
+            font-size: 11px;
+        }
+
+        .mye-schedule-wrap {
+            background: var(--mye-panel);
+            border: 1px solid var(--mye-border);
+            border-radius: 12px;
+            padding: 10px;
+            min-height: 520px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .mye-schedule-toolbar {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 8px;
+        }
+
+        .mye-scale-btn {
+            border: 1px solid #bfd9f2;
+            background: #f7fbff;
+            color: #1c5589;
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .mye-scale-btn.active {
+            border-color: #2a7abf;
+            background: #eaf4ff;
+        }
+
+        .mye-timeline {
+            border: 1px solid #d7e5f4;
+            border-radius: 10px;
+            overflow: auto;
+            flex: 1;
+            background: #fff;
+        }
+
+        .mye-row {
+            display: grid;
+            grid-template-columns: 180px 1fr;
+            border-bottom: 1px solid #edf2f8;
+            min-height: 54px;
+        }
+
+        .mye-row-name {
+            padding: 8px;
+            font-size: 12px;
+            color: #1f456f;
+            font-weight: 700;
+            border-right: 1px solid #edf2f8;
+            background: #fbfdff;
+        }
+
+        .mye-row-track {
+            position: relative;
+            background-image: repeating-linear-gradient(
+                to right,
+                rgba(153, 177, 203, 0.2),
+                rgba(153, 177, 203, 0.2) 1px,
+                transparent 1px,
+                transparent 40px
+            );
+        }
+
+        .mye-block {
+            position: absolute;
+            top: 7px;
+            height: 40px;
+            border-radius: 9px;
+            padding: 5px 8px;
+            color: #fff;
+            font-size: 11px;
+            line-height: 1.2;
+            overflow: hidden;
+            box-shadow: 0 3px 8px rgba(15, 58, 95, 0.2);
+            cursor: pointer;
+        }
+
+        .mye-editor {
+            background: var(--mye-panel);
+            border: 1px solid var(--mye-border);
+            border-radius: 12px;
+            padding: 10px;
+            min-height: 520px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .mye-editor input,
+        .mye-editor select,
+        .mye-editor textarea {
+            width: 100%;
+            border: 1px solid #cfdceb;
+            border-radius: 8px;
+            padding: 8px;
+            font-size: 13px;
+            background: #fff;
+        }
+
+        .mye-editor label {
+            font-size: 12px;
+            color: #1f456f;
+            font-weight: 700;
+        }
+
+        .mye-editor-row {
+            display: grid;
+            gap: 6px;
+        }
+
+        .mye-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 4px;
+        }
+
+        .mye-btn {
+            border: 0;
+            border-radius: 8px;
+            padding: 9px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .mye-btn-save {
+            background: #0f766e;
+            color: #fff;
+        }
+
+        .mye-btn-clear {
+            background: #e2e8f0;
+            color: #334155;
+        }
+
+        .mye-msg {
+            min-height: 18px;
+            font-size: 12px;
+            color: #334155;
+        }
+
+        @media (max-width: 1480px) {
+            .mye-main {
+                grid-template-columns: 300px 1fr;
+            }
+            .mye-editor {
+                grid-column: 1 / -1;
+                min-height: auto;
+            }
+        }
+
+        @media (max-width: 1160px) {
+            .mye-board,
+            .mye-main {
+                grid-template-columns: 1fr;
+            }
+            .mye-row {
+                grid-template-columns: 140px 1fr;
+            }
+        }
+    </style>
 </head>
 <body>
     {% include '_sidebar.html' %}
-    <div class="container" style="padding-top:20px;">
-        <h2 style="margin:0 0 6px 0;">Maquinaria y Ensamble - Estaciones de Trabajo</h2>
-        <div style="color:#64748b; font-size:13px; margin-bottom:14px;">Replica base de estaciones T para trabajo de cableado, arnes, cabezales, soldadura y laminado.</div>
-
-        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px;">
-            <h3 style="margin:0 0 8px 0; font-size:16px;">Estaciones de referencia</h3>
-            <table style="width:100%; border-collapse:collapse; font-size:13px;">
-                <thead>
-                    <tr style="background:#f8fafc; text-align:left;">
-                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Orden</th>
-                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Centro de trabajo</th>
-                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Operacion</th>
-                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Tiempo estimado</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for e in estaciones_ref %}
-                    <tr>
-                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ e.orden }}</td>
-                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ e.centro_trabajo or '-' }}</td>
-                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ e.operacion or '-' }}</td>
-                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ e.tiempo_estimado or '-' }}</td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="4" style="padding:8px; color:#64748b;">Sin estaciones base.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+    <div class="container mye-page">
+        <div class="mye-header">
+            <h2>Maquinaria y Ensamble - Estaciones de Trabajo</h2>
+            <p>Tablero editable para asignar orden de trabajo + operador + estacion y controlar avance por horas, dias o semanas.</p>
         </div>
+
+        {% if setup_required %}
+        <div style="background:#fff3cd; border:1px solid #ffe69c; color:#664d03; border-radius:8px; padding:10px; margin-bottom:12px;">
+            Faltan tablas nuevas para este modulo. Ejecuta create_maquinaria_ensamble_tables.py. Detectadas: {{ missing_tables|join(', ') }}
+        </div>
+        {% endif %}
+
+        <section class="mye-board">
+            <article class="mye-panel">
+                <h3 class="mye-panel-title">Ordenes de Trabajo</h3>
+                <div id="myeOrderList" class="mye-list"></div>
+            </article>
+
+            <article class="mye-panel">
+                <h3 class="mye-panel-title">Intervenciones (maquinas)</h3>
+                <div id="myeMachineGrid" class="mye-machines"></div>
+            </article>
+
+            <article class="mye-panel">
+                <h3 class="mye-panel-title">Estatus del Proceso</h3>
+                <div id="myeStatusGrid" class="mye-status-grid"></div>
+            </article>
+        </section>
+
+        <section class="mye-main">
+            <aside class="mye-operators">
+                <h3 class="mye-panel-title">Operadores</h3>
+                <div id="myeOperators" class="mye-operator-list"></div>
+            </aside>
+
+            <article class="mye-schedule-wrap">
+                <h3 class="mye-panel-title" style="margin-bottom: 6px;">Schedule (horas, dias y semanas)</h3>
+                <div class="mye-schedule-toolbar">
+                    <button class="mye-scale-btn active" data-scale="hours" type="button">Horas</button>
+                    <button class="mye-scale-btn" data-scale="days" type="button">Dias</button>
+                    <button class="mye-scale-btn" data-scale="weeks" type="button">Semanas</button>
+                    <input id="myeStartAt" type="datetime-local" style="max-width:220px;">
+                </div>
+                <div id="myeTimeline" class="mye-timeline"></div>
+            </article>
+
+            <aside class="mye-editor">
+                <h3 class="mye-panel-title">Editor de Asignacion</h3>
+                <div class="mye-editor-row">
+                    <label for="myeOrderSelect">Orden de trabajo</label>
+                    <select id="myeOrderSelect"></select>
+                </div>
+                <div class="mye-editor-row">
+                    <label for="myeOperatorSelect">Operador</label>
+                    <select id="myeOperatorSelect"></select>
+                </div>
+                <div class="mye-editor-row">
+                    <label for="myeStationSelect">Estacion</label>
+                    <select id="myeStationSelect"></select>
+                </div>
+                <div class="mye-editor-row">
+                    <label for="myeStatusSelect">Estatus del proceso</label>
+                    <select id="myeStatusSelect"></select>
+                </div>
+                <div class="mye-editor-row">
+                    <label for="myeStartInput">Inicio</label>
+                    <input id="myeStartInput" type="datetime-local">
+                </div>
+                <div class="mye-editor-row">
+                    <label for="myeDurationInput">Duracion (horas)</label>
+                    <input id="myeDurationInput" type="number" min="0" step="0.5" value="8">
+                </div>
+                <div class="mye-editor-row">
+                    <label for="myeIconInput">Icono maquina</label>
+                    <input id="myeIconInput" type="text" maxlength="3" placeholder="🏭">
+                </div>
+                <div class="mye-editor-row">
+                    <label for="myeNotes">Notas visibles OT</label>
+                    <textarea id="myeNotes" rows="4" placeholder="Notas operativas..."></textarea>
+                </div>
+                <div class="mye-actions">
+                    <button id="myeSaveBtn" class="mye-btn mye-btn-save" type="button">Guardar</button>
+                    <button id="myeClearBtn" class="mye-btn mye-btn-clear" type="button">Quitar asignacion</button>
+                </div>
+                <div id="myeMsg" class="mye-msg"></div>
+            </aside>
+        </section>
     </div>
+
+    <script>
+        const MYE_ORDERS = {{ ordenes|tojson }};
+        const MYE_OPERATORS = {{ operadores|tojson }};
+        const MYE_STATIONS = {{ estaciones_catalogo|tojson }};
+        const MYE_STATUS = {{ status_catalogo|tojson }};
+
+        (function() {
+            const orderListEl = document.getElementById('myeOrderList');
+            const machineGridEl = document.getElementById('myeMachineGrid');
+            const statusGridEl = document.getElementById('myeStatusGrid');
+            const operatorsEl = document.getElementById('myeOperators');
+            const timelineEl = document.getElementById('myeTimeline');
+            const orderSelect = document.getElementById('myeOrderSelect');
+            const operatorSelect = document.getElementById('myeOperatorSelect');
+            const stationSelect = document.getElementById('myeStationSelect');
+            const statusSelect = document.getElementById('myeStatusSelect');
+            const startInput = document.getElementById('myeStartInput');
+            const durationInput = document.getElementById('myeDurationInput');
+            const iconInput = document.getElementById('myeIconInput');
+            const notesInput = document.getElementById('myeNotes');
+            const saveBtn = document.getElementById('myeSaveBtn');
+            const clearBtn = document.getElementById('myeClearBtn');
+            const msgEl = document.getElementById('myeMsg');
+            const scaleBtns = Array.from(document.querySelectorAll('.mye-scale-btn'));
+            const scheduleStartInput = document.getElementById('myeStartAt');
+
+            const orderMap = new Map((MYE_ORDERS || []).map(o => [Number(o.id), o]));
+            const operatorMap = new Map((MYE_OPERATORS || []).map(o => [Number(o.id), o]));
+            let selectedOrderId = MYE_ORDERS.length ? Number(MYE_ORDERS[0].id) : null;
+            let scale = 'hours';
+
+            function nowLocalInput() {
+                const now = new Date();
+                const tz = now.getTimezoneOffset() * 60000;
+                return new Date(now.getTime() - tz).toISOString().slice(0, 16);
+            }
+
+            function textSafe(value) {
+                return String(value || '').replace(/[&<>"']/g, function(c) {
+                    return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] || c;
+                });
+            }
+
+            function statusById(id) {
+                return (MYE_STATUS || []).find(s => s.id === id) || MYE_STATUS[0] || { id: 'por_iniciar', label: 'Por iniciar', color: '#94a3b8' };
+            }
+
+            function renderStatusCatalog() {
+                statusGridEl.innerHTML = (MYE_STATUS || []).map((s, idx) => {
+                    return `<div class="mye-status-chip"><span class="mye-dot" style="background:${s.color};"></span>${idx + 1}. ${textSafe(s.label)}</div>`;
+                }).join('');
+            }
+
+            function renderOrders() {
+                orderListEl.innerHTML = (MYE_ORDERS || []).map(o => {
+                    const active = Number(o.id) === Number(selectedOrderId) ? 'active' : '';
+                    const st = statusById((o.plan && o.plan.process_status) || 'por_iniciar');
+                    return `
+                        <article class="mye-order-card ${active}" data-order-id="${o.id}">
+                            <div class="mye-order-title">${textSafe(o.folio_ot)} - ${textSafe(o.clave_maquina || '-')}</div>
+                            <div class="mye-order-meta">Cant: ${Number(o.cantidad || 1)} | Estado: ${textSafe(o.estado || '-')}</div>
+                            <div class="mye-order-meta">Estatus proceso: <b style="color:${st.color};">${textSafe(st.label)}</b></div>
+                        </article>
+                    `;
+                }).join('') || '<div class="mye-order-meta">Sin ordenes de trabajo.</div>';
+
+                orderListEl.querySelectorAll('[data-order-id]').forEach(node => {
+                    node.addEventListener('click', () => {
+                        selectedOrderId = Number(node.getAttribute('data-order-id'));
+                        syncEditorFromSelectedOrder();
+                        renderOrders();
+                    });
+                });
+            }
+
+            function renderMachines() {
+                machineGridEl.innerHTML = (MYE_ORDERS || []).slice(0, 60).map(o => {
+                    const icon = (o.plan && o.plan.machine_icon) || '🏭';
+                    return `
+                        <div class="mye-machine">
+                            <div class="mye-machine-icon">${textSafe(icon)}</div>
+                            <div>
+                                <div class="mye-op-name" style="font-size:12px;">${textSafe(o.folio_ot)}</div>
+                                <div class="mye-op-role">${textSafe(o.clave_maquina || '-')}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('') || '<div class="mye-order-meta">Sin maquinaria en cola.</div>';
+            }
+
+            function renderOperators() {
+                operatorsEl.innerHTML = (MYE_OPERATORS || []).map(op => {
+                    const assigned = (MYE_ORDERS || []).filter(o => Number(o.plan && o.plan.operator_id) === Number(op.id)).length;
+                    return `
+                        <article class="mye-operator-item" data-op-id="${op.id}">
+                            <div class="mye-op-name">${textSafe(op.username)}</div>
+                            <div class="mye-op-role">${textSafe(op.role || 'Operador')} | OTs: ${assigned}</div>
+                        </article>
+                    `;
+                }).join('') || '<div class="mye-order-meta">Sin operadores activos.</div>';
+
+                operatorsEl.querySelectorAll('[data-op-id]').forEach(node => {
+                    node.addEventListener('click', () => {
+                        const opId = Number(node.getAttribute('data-op-id'));
+                        if (operatorSelect) operatorSelect.value = String(opId);
+                    });
+                });
+            }
+
+            function getScaleConfig() {
+                if (scale === 'weeks') return { slotHours: 24 * 7, totalSlots: 8 };
+                if (scale === 'days') return { slotHours: 24, totalSlots: 14 };
+                return { slotHours: 1, totalSlots: 24 };
+            }
+
+            function renderTimeline() {
+                const cfg = getScaleConfig();
+                const startDate = new Date(scheduleStartInput.value || nowLocalInput());
+                const msSlot = cfg.slotHours * 3600000;
+                const totalRange = cfg.totalSlots * msSlot;
+
+                const rows = (MYE_OPERATORS || []).map(op => {
+                    const cards = (MYE_ORDERS || []).filter(o => Number(o.plan && o.plan.operator_id) === Number(op.id)).map(o => {
+                        const st = statusById((o.plan && o.plan.process_status) || 'por_iniciar');
+                        const start = new Date((o.plan && o.plan.start_at) || startDate.toISOString());
+                        const duration = Math.max(0.5, Number((o.plan && o.plan.duration_hours) || 1));
+                        const left = ((start.getTime() - startDate.getTime()) / totalRange) * 100;
+                        const width = ((duration * 3600000) / totalRange) * 100;
+                        if (left > 100 || left + width < 0) return '';
+                        const clampedLeft = Math.max(0, left);
+                        const clampedWidth = Math.max(4, Math.min(100 - clampedLeft, width));
+                        return `
+                            <div class="mye-block" data-order-id="${o.id}" style="left:${clampedLeft}%; width:${clampedWidth}%; background:${st.color};">
+                                ${textSafe((o.plan && o.plan.machine_icon) || '🏭')} ${textSafe(o.folio_ot)}
+                                <br>${textSafe(o.plan && o.plan.station ? o.plan.station : (o.clave_maquina || '-'))}
+                            </div>
+                        `;
+                    }).join('');
+
+                    return `
+                        <div class="mye-row">
+                            <div class="mye-row-name">${textSafe(op.username)}</div>
+                            <div class="mye-row-track">${cards}</div>
+                        </div>
+                    `;
+                }).join('');
+
+                timelineEl.innerHTML = rows || '<div class="mye-order-meta" style="padding:10px;">No hay datos para mostrar en timeline.</div>';
+
+                timelineEl.querySelectorAll('.mye-block').forEach(node => {
+                    node.addEventListener('click', () => {
+                        selectedOrderId = Number(node.getAttribute('data-order-id'));
+                        syncEditorFromSelectedOrder();
+                        renderOrders();
+                    });
+                });
+            }
+
+            function fillEditorCatalogs() {
+                orderSelect.innerHTML = (MYE_ORDERS || []).map(o => `<option value="${o.id}">${textSafe(o.folio_ot)} - ${textSafe(o.clave_maquina || '-')}</option>`).join('');
+                operatorSelect.innerHTML = `<option value="">Sin operador</option>` + (MYE_OPERATORS || []).map(op => `<option value="${op.id}">${textSafe(op.username)}</option>`).join('');
+                stationSelect.innerHTML = `<option value="">Sin estacion</option>` + (MYE_STATIONS || []).map(st => `<option value="${textSafe(st)}">${textSafe(st)}</option>`).join('');
+                statusSelect.innerHTML = (MYE_STATUS || []).map(st => `<option value="${st.id}">${textSafe(st.label)}</option>`).join('');
+            }
+
+            function syncEditorFromSelectedOrder() {
+                if (!selectedOrderId || !orderMap.has(selectedOrderId)) return;
+                const order = orderMap.get(selectedOrderId);
+                const plan = order.plan || {};
+
+                orderSelect.value = String(order.id);
+                operatorSelect.value = plan.operator_id ? String(plan.operator_id) : '';
+                stationSelect.value = plan.station || '';
+                statusSelect.value = plan.process_status || 'por_iniciar';
+                startInput.value = plan.start_at ? String(plan.start_at).slice(0, 16) : nowLocalInput();
+                durationInput.value = String(Number(plan.duration_hours || 8));
+                iconInput.value = plan.machine_icon || '🏭';
+                notesInput.value = order.notas || '';
+            }
+
+            function showMessage(text, isError) {
+                msgEl.textContent = text || '';
+                msgEl.style.color = isError ? '#dc2626' : '#0f766e';
+            }
+
+            async function saveAssignment(action) {
+                const otId = Number(orderSelect.value || selectedOrderId || 0);
+                if (!otId) {
+                    showMessage('Selecciona una OT.', true);
+                    return;
+                }
+
+                const payload = {
+                    action: action || 'save',
+                    ot_id: otId,
+                    operator_id: operatorSelect.value || null,
+                    station: stationSelect.value || '',
+                    process_status: statusSelect.value || 'por_iniciar',
+                    start_at: startInput.value || null,
+                    duration_hours: Number(durationInput.value || 0),
+                    machine_icon: iconInput.value || '🏭',
+                    notas: notesInput.value || '',
+                };
+
+                try {
+                    const res = await fetch('/api/maquinaria/estaciones/plan/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify(payload),
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data.ok) throw new Error(data.message || 'No se pudo guardar');
+
+                    const order = orderMap.get(otId);
+                    if (order) {
+                        if (action === 'clear') {
+                            order.plan = {
+                                operator_id: null,
+                                operator_username: '',
+                                station: '',
+                                process_status: 'por_iniciar',
+                                start_at: null,
+                                duration_hours: 0,
+                                machine_icon: iconInput.value || '🏭',
+                            };
+                        } else {
+                            const opId = payload.operator_id ? Number(payload.operator_id) : null;
+                            const op = opId ? operatorMap.get(opId) : null;
+                            order.plan = {
+                                operator_id: opId,
+                                operator_username: op ? (op.username || '') : '',
+                                station: payload.station || '',
+                                process_status: payload.process_status || 'por_iniciar',
+                                start_at: payload.start_at || null,
+                                duration_hours: Number(payload.duration_hours || 0),
+                                machine_icon: payload.machine_icon || '🏭',
+                            };
+                        }
+                    }
+
+                    selectedOrderId = otId;
+                    showMessage(data.message || 'Guardado');
+                    renderOrders();
+                    renderOperators();
+                    renderMachines();
+                    renderTimeline();
+                    syncEditorFromSelectedOrder();
+                } catch (err) {
+                    showMessage(err.message || 'Error al guardar', true);
+                }
+            }
+
+            fillEditorCatalogs();
+            renderStatusCatalog();
+            renderOrders();
+            renderMachines();
+            renderOperators();
+
+            scheduleStartInput.value = nowLocalInput();
+            syncEditorFromSelectedOrder();
+            renderTimeline();
+
+            orderSelect.addEventListener('change', function() {
+                selectedOrderId = Number(this.value || 0) || selectedOrderId;
+                syncEditorFromSelectedOrder();
+                renderOrders();
+            });
+
+            scaleBtns.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    scale = this.getAttribute('data-scale') || 'hours';
+                    scaleBtns.forEach(b => b.classList.toggle('active', b === this));
+                    renderTimeline();
+                });
+            });
+
+            scheduleStartInput.addEventListener('change', renderTimeline);
+            saveBtn.addEventListener('click', () => saveAssignment('save'));
+            clearBtn.addEventListener('click', () => saveAssignment('clear'));
+        })();
+    </script>
 </body>
 </html>

@@ -496,6 +496,80 @@ def _mp_upsert_process_state_block(text, completed_ids):
     return block
 
 
+def _mye_extract_plan_state_block(text):
+    src = str(text or '')
+    m = re.search(r'\[MYE_PLAN_STATE_START\](.*?)\[MYE_PLAN_STATE_END\]', src, flags=re.S)
+    return m.group(1).strip() if m else ''
+
+
+def _mye_strip_plan_state_block(text):
+    src = str(text or '')
+    cleaned = re.sub(
+        r'\n?\[MYE_PLAN_STATE_START\].*?\[MYE_PLAN_STATE_END\]\n?',
+        '\n',
+        src,
+        flags=re.S,
+    )
+    return cleaned.strip()
+
+
+def _mye_parse_plan_state(text):
+    raw = _mye_extract_plan_state_block(text)
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _mye_upsert_plan_state_block(text, state_payload):
+    base = _mye_strip_plan_state_block(text)
+    payload = state_payload if isinstance(state_payload, dict) else {}
+    compact = {
+        'operator_id': int(payload.get('operator_id')) if str(payload.get('operator_id') or '').isdigit() else None,
+        'operator_username': (str(payload.get('operator_username') or '').strip() or None),
+        'station': (str(payload.get('station') or '').strip() or None),
+        'process_status': (str(payload.get('process_status') or '').strip() or None),
+        'start_at': (str(payload.get('start_at') or '').strip() or None),
+        'duration_hours': float(payload.get('duration_hours') or 0),
+        'machine_icon': (str(payload.get('machine_icon') or '').strip() or None),
+    }
+    compact = {
+        k: v for k, v in compact.items()
+        if v not in (None, '', 0, 0.0)
+    }
+
+    if not compact:
+        return base or None
+
+    block_payload = json.dumps(compact, ensure_ascii=False)
+    block = f"[MYE_PLAN_STATE_START]\n{block_payload}\n[MYE_PLAN_STATE_END]"
+    if base:
+        return f"{base}\n\n{block}".strip()
+    return block
+
+
+def _mye_machine_icon(clave_txt):
+    key = (clave_txt or '').lower()
+    if any(x in key for x in ['sold', 'weld']):
+        return '🔥'
+    if any(x in key for x in ['laser', 'corte', 'cut']):
+        return '✂️'
+    if any(x in key for x in ['arnes', 'cable']):
+        return '🔌'
+    if any(x in key for x in ['ensamble', 'assembly']):
+        return '🧩'
+    if any(x in key for x in ['lamin', 'roll']):
+        return '🛞'
+    if any(x in key for x in ['prensa', 'press']):
+        return '🗜️'
+    if any(x in key for x in ['cnc', 'router']):
+        return '⚙️'
+    return '🏭'
+
+
 def _qc_parse_review_block(notas_text):
     notas = str(notas_text or '')
     status_match = re.search(r'STATUS=(QC_OK|QC_NOK)', notas)
@@ -9257,8 +9331,163 @@ def maquinaria_claves_procesos_page():
 @login_required
 @requires_any_permission([('maquinaria_estaciones', 'view'), ('maquinaria_estaciones', 'edit'), ('maquinaria_estaciones', 'create'), ('maquinaria_estaciones', 'update'), ('maquinaria_estaciones', 'delete')])
 def maquinaria_estaciones_page():
+    ready, missing = _maquinaria_tables_status()
     estaciones_ref = EstacionPlantilla.query.order_by(EstacionPlantilla.orden.asc()).all()
-    return render_template('maquinaria_estaciones.html', estaciones_ref=estaciones_ref)
+    ordenes = MaquinariaOrdenTrabajo.query.order_by(MaquinariaOrdenTrabajo.id.desc()).limit(180).all() if ready else []
+    operadores = Usuario.query.filter_by(activo=True).order_by(Usuario.username.asc()).limit(250).all()
+
+    estaciones_catalogo = []
+    for e in estaciones_ref:
+        label = (e.operacion or e.centro_trabajo or '').strip()
+        if not label:
+            continue
+        estaciones_catalogo.append(label)
+    estaciones_catalogo = sorted(set(estaciones_catalogo))
+
+    operadores_payload = [
+        {
+            'id': u.id,
+            'username': u.username,
+            'role': u.role.name if getattr(u, 'role', None) else '',
+        }
+        for u in operadores
+    ]
+
+    status_catalogo = [
+        {'id': 'por_iniciar', 'label': 'Por iniciar', 'color': '#94a3b8'},
+        {'id': 'configuracion', 'label': 'Configurando', 'color': '#f59e0b'},
+        {'id': 'en_proceso', 'label': 'En proceso', 'color': '#3b82f6'},
+        {'id': 'revision', 'label': 'Revision', 'color': '#8b5cf6'},
+        {'id': 'terminado', 'label': 'Terminado', 'color': '#10b981'},
+        {'id': 'pausado', 'label': 'Pausado', 'color': '#ef4444'},
+    ]
+
+    ordenes_payload = []
+    for o in ordenes:
+        plan = _mye_parse_plan_state(o.notas)
+        order_notes = _mye_strip_plan_state_block(o.notas)
+        order_status = (o.estado or '').strip().lower() or 'planeacion'
+        plan_status = (plan.get('process_status') or '').strip().lower()
+        if not plan_status:
+            if order_status in ('produccion', 'en_proceso'):
+                plan_status = 'en_proceso'
+            elif order_status in ('cerrada', 'terminada', 'finalizada', 'completa'):
+                plan_status = 'terminado'
+            else:
+                plan_status = 'por_iniciar'
+
+        ordenes_payload.append({
+            'id': o.id,
+            'folio_ot': o.folio_ot,
+            'clave_maquina': o.clave_maquina,
+            'cantidad': int(o.cantidad or 1),
+            'estado': o.estado or 'planeacion',
+            'fecha_objetivo': o.fecha_objetivo.isoformat() if o.fecha_objetivo else None,
+            'notas': order_notes or '',
+            'plan': {
+                'operator_id': plan.get('operator_id'),
+                'operator_username': plan.get('operator_username') or '',
+                'station': plan.get('station') or '',
+                'process_status': plan_status,
+                'start_at': plan.get('start_at') or None,
+                'duration_hours': float(plan.get('duration_hours') or 0),
+                'machine_icon': plan.get('machine_icon') or _mye_machine_icon(o.clave_maquina),
+            },
+        })
+
+    return render_template(
+        'maquinaria_estaciones.html',
+        setup_required=not ready,
+        missing_tables=missing,
+        estaciones_ref=estaciones_ref,
+        estaciones_catalogo=estaciones_catalogo,
+        operadores=operadores_payload,
+        status_catalogo=status_catalogo,
+        ordenes=ordenes_payload,
+    )
+
+
+@app.route('/api/maquinaria/estaciones/plan/update', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_estaciones', 'edit'), ('maquinaria_estaciones', 'create'), ('maquinaria_estaciones', 'update')])
+def api_maquinaria_estaciones_plan_update():
+    ready, missing = _maquinaria_tables_status()
+    if not ready:
+        return jsonify({'ok': False, 'message': f'Faltan tablas: {", ".join(missing)}'}), 400
+
+    data = request.get_json(silent=True) or {}
+    ot_id = data.get('ot_id')
+    try:
+        ot_id = int(ot_id)
+    except Exception:
+        return jsonify({'ok': False, 'message': 'OT invalida'}), 422
+
+    orden = MaquinariaOrdenTrabajo.query.get_or_404(ot_id)
+    base_notes = _clean_nullable_text(data.get('notas'))
+    action = (str(data.get('action') or 'save')).strip().lower()
+    if action == 'clear':
+        orden.notas = base_notes or _mye_strip_plan_state_block(orden.notas) or None
+        orden.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'ok': True, 'message': 'Asignacion eliminada'})
+
+    operator_id = data.get('operator_id')
+    if operator_id in (None, ''):
+        operator_id = None
+    else:
+        try:
+            operator_id = int(operator_id)
+        except Exception:
+            return jsonify({'ok': False, 'message': 'Operador invalido'}), 422
+
+    operator_username = ''
+    if operator_id:
+        user = Usuario.query.get(operator_id)
+        if user:
+            operator_username = user.username or ''
+
+    status_value = (str(data.get('process_status') or 'por_iniciar')).strip().lower()
+    allowed_status = {'por_iniciar', 'configuracion', 'en_proceso', 'revision', 'terminado', 'pausado'}
+    if status_value not in allowed_status:
+        status_value = 'por_iniciar'
+
+    duration_hours = 0
+    try:
+        duration_hours = max(0.0, float(data.get('duration_hours') or 0))
+    except Exception:
+        duration_hours = 0
+
+    start_at = (str(data.get('start_at') or '')).strip() or None
+    station = _clean_nullable_text(data.get('station'))
+    machine_icon = _clean_nullable_text(data.get('machine_icon')) or _mye_machine_icon(orden.clave_maquina)
+
+    current_state = _mye_parse_plan_state(orden.notas)
+    current_state.update({
+        'operator_id': operator_id,
+        'operator_username': operator_username,
+        'station': station,
+        'process_status': status_value,
+        'start_at': start_at,
+        'duration_hours': duration_hours,
+        'machine_icon': machine_icon,
+    })
+
+    notes_src = base_notes if base_notes is not None else _mye_strip_plan_state_block(orden.notas)
+    orden.notas = _mye_upsert_plan_state_block(notes_src, current_state)
+    if status_value == 'terminado':
+        orden.estado = 'cerrada'
+    elif status_value == 'en_proceso':
+        orden.estado = 'produccion'
+    elif status_value == 'pausado':
+        orden.estado = 'pausada'
+    elif status_value == 'configuracion':
+        orden.estado = 'configuracion'
+    else:
+        orden.estado = 'planeacion'
+
+    orden.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({'ok': True, 'message': 'Planeacion guardada'})
 
 
 @app.route('/maquinaria/calidad')
