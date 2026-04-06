@@ -405,7 +405,7 @@
             display: grid;
             grid-template-columns: 180px 1fr;
             border-bottom: 1px solid #edf2f8;
-            min-height: 54px;
+            min-height: 62px;
         }
 
         .mye-row-name {
@@ -431,15 +431,23 @@
         .mye-block {
             position: absolute;
             top: 7px;
-            height: 40px;
+            min-height: 48px;
             border-radius: 9px;
-            padding: 5px 8px;
+            padding: 5px 7px;
             color: #fff;
-            font-size: 11px;
+            font-size: 10px;
             line-height: 1.2;
             overflow: hidden;
             box-shadow: 0 3px 8px rgba(15, 58, 95, 0.2);
             cursor: pointer;
+            font-weight: 700;
+        }
+
+        .mye-block-line {
+            display: block;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            overflow: hidden;
         }
 
         .mye-processes {
@@ -688,6 +696,17 @@
                 const h = Math.floor(totalMin / 60);
                 const m = totalMin % 60;
                 return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+            }
+
+            function isLightHexColor(hex) {
+                const str = String(hex || '').trim();
+                const normalized = str.startsWith('#') ? str.slice(1) : str;
+                if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return false;
+                const r = parseInt(normalized.slice(0, 2), 16);
+                const g = parseInt(normalized.slice(2, 4), 16);
+                const b = parseInt(normalized.slice(4, 6), 16);
+                const luminance = (0.299 * r + 0.587 * g + 0.114 * b);
+                return luminance > 150;
             }
 
             function getOperatorElapsedMs(operatorId) {
@@ -1152,17 +1171,18 @@
                         if (left > 100 || left + width < 0) return '';
                         const clampedLeft = Math.max(0, left);
                         const clampedWidth = Math.max(4, Math.min(100 - clampedLeft, width));
+                        const readableWidth = Math.min(100 - clampedLeft, Math.max(clampedWidth, 12));
                         const line2 = (o.plan && o.plan.process_name) || (o.plan && o.plan.station) || o.clave_maquina || '-';
                         const elapsed = getOrderElapsedText(o);
                         const showElapsed = (o.plan && o.plan.process_status) === 'en_proceso';
                         const plannedLabel = formatHHMM(duration);
-                        const assignmentLabel = `Asig O:${hasOperator ? 'OK' : '--'} I:${hasIntervention ? 'OK' : '--'} P:${hasProcess ? 'OK' : '--'}`;
+                        const assignmentLabel = `O:${hasOperator ? 'OK' : '--'} I:${hasIntervention ? 'OK' : '--'} P:${hasProcess ? 'OK' : '--'}`;
+                        const textColor = isLightHexColor(st.color) ? '#0f172a' : '#ffffff';
                         return `
-                            <div class="mye-block" data-order-id="${o.id}" style="left:${clampedLeft}%; width:${clampedWidth}%; background:${st.color};" draggable="true">
-                                ${textSafe((o.plan && o.plan.machine_icon) || '🏭')} ${textSafe(o.folio_ot)}
-                                <br>${textSafe(line2)} <span style="opacity:.75;font-size:.75em;">(${plannedLabel})</span>
-                                <br><span style="opacity:.85;font-size:.72em;">${assignmentLabel}</span>
-                                ${showElapsed ? `<br><span data-order-elapsed-id="${o.id}">${elapsed}</span>` : ''}
+                            <div class="mye-block" data-order-id="${o.id}" style="left:${clampedLeft}%; width:${readableWidth}%; background:${st.color}; color:${textColor};" draggable="true" title="${textSafe(o.folio_ot)} | ${textSafe(line2)} | ${assignmentLabel}">
+                                <span class="mye-block-line">${textSafe((o.plan && o.plan.machine_icon) || '🏭')} ${textSafe(o.folio_ot)} (${plannedLabel})</span>
+                                <span class="mye-block-line">${assignmentLabel}</span>
+                                ${showElapsed ? `<span class="mye-block-line" data-order-elapsed-id="${o.id}">${elapsed}</span>` : ''}
                             </div>
                         `;
                     }).join('');
