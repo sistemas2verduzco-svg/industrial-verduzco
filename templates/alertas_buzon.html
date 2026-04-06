@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buzon de Alertas</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    {% include '_sidebar.html' %}
+    <div class="container" style="padding-top:20px; max-width:1500px;">
+        <div style="display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
+            <div>
+                <h2 style="margin:0;">Buzon General de Alertas</h2>
+                <div style="color:#64748b; font-size:13px; margin-top:5px;">Alertas de Estaciones T y Mapa de Maquinas. Se mantienen hasta atenderse.</div>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <button id="btnPendientes" type="button" onclick="setAlertFilter('pendientes')" style="border:1px solid #0f766e; background:#0f766e; color:#fff; border-radius:8px; padding:8px 12px; font-weight:700;">Pendientes</button>
+                <button id="btnTodas" type="button" onclick="setAlertFilter('all')" style="border:1px solid #cbd5e1; background:#fff; color:#0f172a; border-radius:8px; padding:8px 12px; font-weight:700;">Todas</button>
+                <button type="button" onclick="atenderTodas()" style="border:1px solid #1d4ed8; background:#1d4ed8; color:#fff; border-radius:8px; padding:8px 12px; font-weight:700;">Atender todas</button>
+            </div>
+        </div>
+
+        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px; margin-bottom:12px; display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap;">
+            <div id="alertsSummary" style="font-size:14px; color:#334155;">Cargando alertas...</div>
+            <div id="alertsRefresh" style="font-size:12px; color:#64748b;">Actualizando...</div>
+        </div>
+
+        <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; overflow:hidden;">
+            <div style="overflow:auto;">
+                <table style="width:100%; border-collapse:collapse; font-size:13px; min-width:980px;">
+                    <thead>
+                        <tr style="background:#f8fafc; text-align:left;">
+                            <th style="padding:9px; border-bottom:1px solid #e5e7eb;">Fecha</th>
+                            <th style="padding:9px; border-bottom:1px solid #e5e7eb;">Origen</th>
+                            <th style="padding:9px; border-bottom:1px solid #e5e7eb;">Tipo</th>
+                            <th style="padding:9px; border-bottom:1px solid #e5e7eb;">Titulo</th>
+                            <th style="padding:9px; border-bottom:1px solid #e5e7eb;">Mensaje</th>
+                            <th style="padding:9px; border-bottom:1px solid #e5e7eb;">Estado</th>
+                            <th style="padding:9px; border-bottom:1px solid #e5e7eb;">Accion</th>
+                        </tr>
+                    </thead>
+                    <tbody id="alertsBody">
+                        <tr><td colspan="7" style="padding:10px; color:#64748b;">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const REFRESH_MS = 8000;
+        let currentFilter = 'pendientes';
+
+        function fmtDate(value) {
+            if (!value) return '-';
+            const d = new Date(value);
+            if (Number.isNaN(d.getTime())) return value;
+            return d.toLocaleString();
+        }
+
+        function setAlertFilter(filter) {
+            currentFilter = filter;
+            const btnPend = document.getElementById('btnPendientes');
+            const btnAll = document.getElementById('btnTodas');
+            if (btnPend) {
+                btnPend.style.background = filter === 'pendientes' ? '#0f766e' : '#fff';
+                btnPend.style.color = filter === 'pendientes' ? '#fff' : '#0f172a';
+            }
+            if (btnAll) {
+                btnAll.style.background = filter === 'all' ? '#0f766e' : '#fff';
+                btnAll.style.color = filter === 'all' ? '#fff' : '#0f172a';
+            }
+            loadAlerts();
+        }
+
+        async function atenderAlerta(id) {
+            if (!id) return;
+            const res = await fetch('/api/alertas_buzon/' + id + '/atender', {
+                method: 'POST',
+                credentials: 'same-origin'
+            });
+            if (!res.ok) {
+                alert('No se pudo atender la alerta.');
+                return;
+            }
+            await loadAlerts();
+        }
+
+        async function atenderTodas() {
+            const res = await fetch('/api/alertas_buzon/atender_todas', {
+                method: 'POST',
+                credentials: 'same-origin'
+            });
+            if (!res.ok) {
+                alert('No se pudieron atender todas las alertas.');
+                return;
+            }
+            await loadAlerts();
+        }
+
+        async function loadAlerts() {
+            const refreshEl = document.getElementById('alertsRefresh');
+            const body = document.getElementById('alertsBody');
+            const summary = document.getElementById('alertsSummary');
+            if (refreshEl) refreshEl.textContent = 'Actualizando...';
+
+            try {
+                const statusParam = currentFilter === 'all' ? 'all' : 'pendientes';
+                const res = await fetch('/api/alertas_buzon?status=' + encodeURIComponent(statusParam) + '&limit=300', {
+                    credentials: 'same-origin'
+                });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+
+                const payload = await res.json();
+                const items = Array.isArray(payload.items) ? payload.items : [];
+                const pendientes = Number(payload.pendientes || 0);
+
+                if (summary) {
+                    summary.textContent = `Pendientes: ${pendientes} | Mostrando: ${items.length}`;
+                }
+
+                if (!items.length) {
+                    body.innerHTML = '<tr><td colspan="7" style="padding:10px; color:#64748b;">Sin alertas para el filtro actual.</td></tr>';
+                } else {
+                    body.innerHTML = items.map(item => {
+                        const estadoHtml = item.atendida
+                            ? `<span style="display:inline-block; padding:3px 8px; border-radius:999px; background:#dcfce7; color:#166534; font-weight:700;">Atendida</span>`
+                            : `<span style="display:inline-block; padding:3px 8px; border-radius:999px; background:#fee2e2; color:#991b1b; font-weight:700;">Pendiente</span>`;
+                        const accionHtml = item.atendida
+                            ? `<span style="color:#64748b; font-size:12px;">${item.atendida_por || '-'} ${item.atendida_at ? '(' + fmtDate(item.atendida_at) + ')' : ''}</span>`
+                            : `<button type="button" onclick="atenderAlerta(${item.id})" style="border:1px solid #2563eb; background:#2563eb; color:#fff; border-radius:6px; padding:5px 9px; font-size:12px; font-weight:700;">Atender</button>`;
+
+                        return `
+                            <tr>
+                                <td style="padding:9px; border-bottom:1px solid #eef2f7; white-space:nowrap;">${fmtDate(item.created_at)}</td>
+                                <td style="padding:9px; border-bottom:1px solid #eef2f7;">${item.origen || '-'}</td>
+                                <td style="padding:9px; border-bottom:1px solid #eef2f7;">${item.tipo || '-'}</td>
+                                <td style="padding:9px; border-bottom:1px solid #eef2f7; font-weight:700;">${item.titulo || '-'}</td>
+                                <td style="padding:9px; border-bottom:1px solid #eef2f7;">${item.mensaje || '-'}</td>
+                                <td style="padding:9px; border-bottom:1px solid #eef2f7;">${estadoHtml}</td>
+                                <td style="padding:9px; border-bottom:1px solid #eef2f7;">${accionHtml}</td>
+                            </tr>
+                        `;
+                    }).join('');
+                }
+
+                if (refreshEl) {
+                    refreshEl.textContent = 'Actualizado ' + new Date().toLocaleTimeString();
+                }
+            } catch (err) {
+                console.error(err);
+                if (body) {
+                    body.innerHTML = '<tr><td colspan="7" style="padding:10px; color:#b91c1c;">Error cargando alertas.</td></tr>';
+                }
+                if (refreshEl) {
+                    refreshEl.textContent = 'Error de actualización';
+                }
+            }
+        }
+
+        window.atenderAlerta = atenderAlerta;
+        window.atenderTodas = atenderTodas;
+        window.setAlertFilter = setAlertFilter;
+
+        loadAlerts();
+        setInterval(loadAlerts, REFRESH_MS);
+    </script>
+</body>
+</html>

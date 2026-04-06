@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice, ContpaqPrecioPublico, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice, ContpaqPrecioPublico, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, AlertaBuzonGeneral
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -986,6 +986,89 @@ def _ensure_hoja_impresiones_parciales_table():
         except Exception:
             pass
         return False
+
+
+_ALERTAS_BUZON_TABLE_READY = False
+
+
+def _ensure_alertas_buzon_table():
+    global _ALERTAS_BUZON_TABLE_READY
+
+    if _ALERTAS_BUZON_TABLE_READY:
+        return True
+
+    try:
+        AlertaBuzonGeneral.__table__.create(bind=db.engine, checkfirst=True)
+        _ALERTAS_BUZON_TABLE_READY = True
+        return True
+    except Exception as exc:
+        logger.warning(f"No se pudo asegurar la tabla de alertas del buzon: {exc}")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return False
+
+
+def _serialize_alerta_buzon(item):
+    return {
+        'id': item.id,
+        'evento_clave': item.evento_clave,
+        'origen': item.origen,
+        'tipo': item.tipo,
+        'titulo': item.titulo,
+        'mensaje': item.mensaje,
+        'maquina_id': item.maquina_id,
+        'hoja_id': item.hoja_id,
+        'estacion_id': item.estacion_id,
+        'atendida': bool(item.atendida),
+        'atendida_por': item.atendida_por,
+        'atendida_at': item.atendida_at.isoformat() if item.atendida_at else None,
+        'created_at': item.created_at.isoformat() if item.created_at else None,
+    }
+
+
+def _crear_alerta_buzon(
+    *,
+    evento_clave,
+    origen,
+    tipo,
+    titulo,
+    mensaje='',
+    maquina_id=None,
+    hoja_id=None,
+    estacion_id=None,
+    commit=True,
+):
+    if not evento_clave:
+        return None
+    if not _ensure_alertas_buzon_table():
+        return None
+
+    try:
+        existente = AlertaBuzonGeneral.query.filter_by(evento_clave=evento_clave).first()
+        if existente:
+            return existente
+
+        alerta = AlertaBuzonGeneral(
+            evento_clave=evento_clave,
+            origen=origen,
+            tipo=tipo,
+            titulo=titulo,
+            mensaje=mensaje,
+            maquina_id=maquina_id,
+            hoja_id=hoja_id,
+            estacion_id=estacion_id,
+            atendida=False,
+        )
+        db.session.add(alerta)
+        if commit:
+            db.session.commit()
+        return alerta
+    except Exception as exc:
+        db.session.rollback()
+        logger.error(f"Error creando alerta de buzon: {exc}", exc_info=True)
+        return None
 
 def _current_username_for_audit(user=None):
     username = getattr(user, 'username', None) if user else None
@@ -3672,6 +3755,7 @@ def api_mapa_maquinas():
     progreso_count = 0
     ritmo_sum = 0.0
     ritmo_count = 0
+    alertas_buzon_nuevas = False
 
     def _bounded_seconds(start_dt, end_dt, window_start, window_end):
         if not start_dt or not end_dt:
@@ -3789,6 +3873,26 @@ def api_mapa_maquinas():
             estado_code = 'sin_hoja'
             estado_label = 'Sin hoja'
 
+        if proceso_culminado and hoja_activa:
+            origen_modulo = 'mapa_maquinas'
+            tipo_alerta = 'proceso_culminado'
+            hoja_modulo = 'mp' if isinstance(hoja_activa, HojaRutaNueva) else 'entregas'
+            estacion_key = str(estacion_actual.id) if estacion_actual else 'sin_estacion'
+            evento_clave = f"mapa:{hoja_modulo}:maq:{maq.id}:hoja:{hoja_activa.id}:est:{estacion_key}:culminado"
+            alerta = _crear_alerta_buzon(
+                evento_clave=evento_clave,
+                origen=origen_modulo,
+                tipo=tipo_alerta,
+                titulo=f"Proceso culminado en {maq.nombre}",
+                mensaje=f"Hoja: {hoja_activa.nombre or 'N/A'} | Pieza: {hoja_activa.pn or 'N/A'}",
+                maquina_id=maq.id,
+                hoja_id=hoja_activa.id,
+                estacion_id=estacion_actual.id if estacion_actual else None,
+                commit=False,
+            )
+            if alerta is not None and alerta in db.session.new:
+                alertas_buzon_nuevas = True
+
         data.append({
             'id': maq.id,
             'nombre': maq.nombre,
@@ -3848,6 +3952,12 @@ def api_mapa_maquinas():
     ritmo_objetivo_pct = round((ritmo_sum / ritmo_count), 1) if ritmo_count else 0.0
     oee_lite_pct = round((dia_pct * ritmo_objetivo_pct) / 100.0, 1)
 
+    if alertas_buzon_nuevas:
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
     eficiencia_planta = {
         'hora': {
             'porcentaje': hora_pct,
@@ -3881,6 +3991,74 @@ def api_mapa_maquinas():
     }
 
     return jsonify({'maquinas': data, 'eficiencia_planta': eficiencia_planta})
+
+
+@app.route('/alertas_buzon')
+@login_required
+@requires_any_permission([('mapa', 'view'), ('estaciones', 'view'), ('catalog', 'view')])
+def alertas_buzon_page():
+    _ensure_alertas_buzon_table()
+    return render_template('alertas_buzon.html')
+
+
+@app.route('/api/alertas_buzon')
+@login_required
+@requires_any_permission([('mapa', 'view'), ('estaciones', 'view'), ('catalog', 'view')])
+def api_alertas_buzon_list():
+    if not _ensure_alertas_buzon_table():
+        return jsonify({'items': [], 'total': 0, 'pendientes': 0})
+
+    status = (request.args.get('status') or 'pendientes').strip().lower()
+    limit = max(1, min(500, int(request.args.get('limit') or 200)))
+    query = AlertaBuzonGeneral.query
+    if status in ('pendientes', 'pending'):
+        query = query.filter(AlertaBuzonGeneral.atendida.is_(False))
+    elif status in ('atendidas', 'done'):
+        query = query.filter(AlertaBuzonGeneral.atendida.is_(True))
+
+    items = query.order_by(AlertaBuzonGeneral.created_at.desc()).limit(limit).all()
+    pendientes_count = AlertaBuzonGeneral.query.filter(AlertaBuzonGeneral.atendida.is_(False)).count()
+
+    return jsonify({
+        'items': [_serialize_alerta_buzon(x) for x in items],
+        'total': len(items),
+        'pendientes': pendientes_count,
+    })
+
+
+@app.route('/api/alertas_buzon/<int:alerta_id>/atender', methods=['POST'])
+@login_required
+@requires_any_permission([('mapa', 'view'), ('estaciones', 'view'), ('catalog', 'view')])
+def api_alertas_buzon_atender(alerta_id):
+    if not _ensure_alertas_buzon_table():
+        return jsonify({'error': 'No se pudo acceder al buzón de alertas'}), 500
+
+    alerta = AlertaBuzonGeneral.query.get_or_404(alerta_id)
+    if not alerta.atendida:
+        alerta.atendida = True
+        alerta.atendida_por = _current_username_for_audit(get_current_user())
+        alerta.atendida_at = datetime.utcnow()
+        db.session.commit()
+
+    return jsonify({'ok': True, 'item': _serialize_alerta_buzon(alerta)})
+
+
+@app.route('/api/alertas_buzon/atender_todas', methods=['POST'])
+@login_required
+@requires_any_permission([('mapa', 'view'), ('estaciones', 'view'), ('catalog', 'view')])
+def api_alertas_buzon_atender_todas():
+    if not _ensure_alertas_buzon_table():
+        return jsonify({'error': 'No se pudo acceder al buzón de alertas'}), 500
+
+    user_name = _current_username_for_audit(get_current_user())
+    now_dt = datetime.utcnow()
+    q = AlertaBuzonGeneral.query.filter(AlertaBuzonGeneral.atendida.is_(False)).all()
+    for alerta in q:
+        alerta.atendida = True
+        alerta.atendida_por = user_name
+        alerta.atendida_at = now_dt
+    db.session.commit()
+    return jsonify({'ok': True, 'updated': len(q)})
 
 
 @app.route('/hojas_ruta_entregas_form')
@@ -4858,6 +5036,19 @@ def api_check_proceso_estacion(estacion_id):
             estacion.estado = 'completada'
             estacion.fecha_finalizacion = ahora
 
+            evento_clave_est = f"estaciones_t:estacion:{estacion.id}:hoja:{hoja.id}:fin:{ahora.strftime('%Y%m%d%H%M%S')}"
+            _crear_alerta_buzon(
+                evento_clave=evento_clave_est,
+                origen='estaciones_t',
+                tipo='estacion_completada',
+                titulo=f"Estacion completada: {estacion.operacion or estacion.nombre or 'Proceso'}",
+                mensaje=f"Hoja {hoja.nombre or hoja.id} | Maquina ID: {hoja.maquina_id or 'N/A'}",
+                maquina_id=hoja.maquina_id,
+                hoja_id=hoja.id,
+                estacion_id=estacion.id,
+                commit=False,
+            )
+
             # Limpiar cualquier en_curso previo para mantener un solo proceso activo.
             otras_en_curso = EstacionTrabajo.query.filter(
                 EstacionTrabajo.hoja_ruta_id == hoja.id,
@@ -4904,6 +5095,20 @@ def api_check_proceso_estacion(estacion_id):
 
         # Sincronizar estado final segun checks reales.
         _sync_hoja_estado_with_checks(hoja, now_dt=ahora)
+
+        if (hoja.estado or '').lower() == 'completada':
+            evento_clave_hoja = f"estaciones_t:hoja:{hoja.id}:completada:{(hoja.fecha_termino or ahora).strftime('%Y%m%d%H%M%S')}"
+            _crear_alerta_buzon(
+                evento_clave=evento_clave_hoja,
+                origen='estaciones_t',
+                tipo='hoja_completada',
+                titulo=f"Hoja completada: {hoja.nombre or hoja.id}",
+                mensaje=f"Todos los procesos de la hoja fueron completados.",
+                maquina_id=hoja.maquina_id,
+                hoja_id=hoja.id,
+                estacion_id=None,
+                commit=False,
+            )
 
         db.session.commit()
 

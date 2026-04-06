@@ -1539,3 +1539,40 @@ class MaquinariaAlmacenResguardo(db.Model):
             'fecha_salida': self.fecha_salida.isoformat() if self.fecha_salida else None,
             'observaciones': self.observaciones,
         }
+
+
+class AlertaBuzonGeneral(db.Model):
+    __tablename__ = 'alertas_buzon_general'
+
+    id = db.Column(db.Integer, primary_key=True)
+    evento_clave = db.Column(db.String(255), nullable=False, unique=True, index=True)
+    origen = db.Column(db.String(60), nullable=False, index=True)
+    tipo = db.Column(db.String(60), nullable=False, index=True)
+    titulo = db.Column(db.String(255), nullable=False)
+    mensaje = db.Column(db.Text, nullable=True)
+    maquina_id = db.Column(db.Integer, nullable=True, index=True)
+    hoja_id = db.Column(db.Integer, nullable=True, index=True)
+    estacion_id = db.Column(db.Integer, nullable=True, index=True)
+    atendida = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    atendida_por = db.Column(db.String(100), nullable=True)
+    atendida_at = db.Column(db.DateTime, nullable=True, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'evento_clave': self.evento_clave,
+            'origen': self.origen,
+            'tipo': self.tipo,
+            'titulo': self.titulo,
+            'mensaje': self.mensaje,
+            'maquina_id': self.maquina_id,
+            'hoja_id': self.hoja_id,
+            'estacion_id': self.estacion_id,
+            'atendida': self.atendida,
+            'atendida_por': self.atendida_por,
+            'atendida_at': self.atendida_at.isoformat() if self.atendida_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
