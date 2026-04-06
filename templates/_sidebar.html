@@ -220,6 +220,12 @@
         justify-content: center;
         line-height: 1;
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+        animation: sb-badge-pulse 1.8s ease-in-out infinite;
+    }
+
+    @keyframes sb-badge-pulse {
+        0%, 100% { transform: scale(1); box-shadow: 0 1px 4px rgba(239,68,68,0.5); }
+        50%       { transform: scale(1.18); box-shadow: 0 2px 10px rgba(239,68,68,0.75); }
     }
 
     .sb-footer {
@@ -392,7 +398,7 @@
         async function refreshAlertBadge() {
             if (!alertBadge) return;
             try {
-                const res = await fetch('/api/alertas_buzon?status=pendientes&limit=1', {
+                const res = await fetch('/api/alertas_buzon/count', {
                     credentials: 'same-origin'
                 });
                 if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -401,14 +407,13 @@
                 if (pendientes > 0) {
                     alertBadge.textContent = formatBadgeCount(pendientes);
                     alertBadge.style.display = 'inline-flex';
-                    alertBadge.title = pendientes + ' alertas pendientes';
+                    alertBadge.title = pendientes + ' alerta(s) pendiente(s)';
                 } else {
                     alertBadge.textContent = '';
                     alertBadge.style.display = 'none';
                     alertBadge.title = '';
                 }
             } catch (_err) {
-                // Silent fail: if API is unavailable, do not interrupt sidebar behavior.
                 alertBadge.textContent = '';
                 alertBadge.style.display = 'none';
                 alertBadge.title = '';

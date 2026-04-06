@@ -4022,6 +4022,21 @@ def alertas_buzon_page():
     return render_template('alertas_buzon.html')
 
 
+@app.route('/api/alertas_buzon/count')
+@login_required
+@requires_permission('alertas_buzon', 'view')
+def api_alertas_buzon_count():
+    """Lightweight endpoint for sidebar badge. Always returns 200 with a safe count."""
+    try:
+        _ensure_alertas_buzon_table()
+        count = db.session.execute(
+            db.text('SELECT COUNT(*) FROM alertas_buzon_general WHERE atendida = false')
+        ).scalar() or 0
+        return jsonify({'pendientes': int(count)})
+    except Exception:
+        return jsonify({'pendientes': 0})
+
+
 @app.route('/api/alertas_buzon')
 @login_required
 @requires_permission('alertas_buzon', 'view')
