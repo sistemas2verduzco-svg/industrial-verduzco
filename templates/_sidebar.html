@@ -20,28 +20,33 @@
         {% endif %}
     </div>
 
+    <div class="sb-tools">
+        <input id="sbNavSearch" class="sb-search" type="text" placeholder="Buscar modulo..." aria-label="Buscar en menu" />
+        <button id="sbClearSearch" class="sb-clear-search" type="button" aria-label="Limpiar busqueda">×</button>
+    </div>
+
     <nav class="sb-nav" style="display:flex; flex-direction:column; gap:4px;">
         {% if has_permission('catalog', 'view') or current_user and current_user.es_admin %}
         <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">PRODUCCION</div>
         {% if has_permission('hojas_entregas', 'view') or has_permission('hojas_mp', 'view') or has_permission('hojas', 'view') or current_user and current_user.es_admin %}
         {% if has_permission('hojas_entregas', 'view') or has_permission('hojas', 'view') or current_user and current_user.es_admin %}
-        <a href="/hojas_ruta_form" class="sb-link" data-base="/hojas_ruta_form" data-extra="/hoja/"><span>📄</span> <span>HOJAS DE RUTA ENTREGAS</span></a>
+        <a href="/hojas_ruta_form" class="sb-link" data-base="/hojas_ruta_form" data-extra="/hoja/"><span>📄</span> <span>Hojas Entregas</span></a>
         {% endif %}
         {% if has_permission('hojas_mp', 'view') or has_permission('hojas', 'view') or current_user and current_user.es_admin %}
-        <a href="/hojas_ruta_nuevo_form" class="sb-link" data-base="/hojas_ruta_nuevo_form" data-extra="/hoja_nuevo/"><span>🆕</span> <span>HOJAS DE RUTA MP</span></a>
+        <a href="/hojas_ruta_nuevo_form" class="sb-link" data-base="/hojas_ruta_nuevo_form" data-extra="/hoja_nuevo/"><span>🆕</span> <span>Hojas MP</span></a>
         {% endif %}
         {% endif %}
         {% if has_permission('procesos', 'view') or current_user and current_user.es_admin %}
         <a href="/procesos" class="sb-link" data-base="/procesos"><span>🧩</span> <span>Procesos y Claves</span></a>
         {% endif %}
         {% if has_permission('calidad', 'view') or current_user and current_user.es_admin %}
-        <a href="/control_calidad" class="sb-link" data-base="/control_calidad"><span>🔍</span> <span>Control Calidad</span></a>
+        <a href="/control_calidad" class="sb-link" data-base="/control_calidad"><span>🔍</span> <span>Calidad</span></a>
         {% endif %}
         {% if has_permission('estaciones', 'view') or current_user and current_user.es_admin %}
         <a href="/hojas_ruta" class="sb-link" data-base="/hojas_ruta" data-extra="/hojas_ruta_nuevo/"><span>🏭</span> <span>Estaciones T</span></a>
         {% endif %}
         {% if has_permission('mapa', 'view') or current_user and current_user.es_admin %}
-        <a href="/mapa_maquinas" class="sb-link sb-sub" data-base="/mapa_maquinas"><span>🗺️</span> <span>Mapa de Maquinas</span></a>
+        <a href="/mapa_maquinas" class="sb-link sb-sub" data-base="/mapa_maquinas"><span>🗺️</span> <span>Mapa</span></a>
         {% endif %}
         {% if has_permission('alertas_buzon', 'view') or current_user and current_user.es_admin %}
         <a href="/alertas_buzon" class="sb-link sb-sub" data-base="/alertas_buzon" id="sb-alertas-link" style="position:relative;">
@@ -74,16 +79,16 @@
         <a href="/maquinaria/pedidos" class="sb-link" data-base="/maquinaria/pedidos"><span>📥</span> <span>Pedidos</span></a>
         {% endif %}
         {% if has_permission('maquinaria_ordenes', 'view') or current_user and current_user.es_admin %}
-        <a href="/maquinaria/ordenes-trabajo" class="sb-link" data-base="/maquinaria/ordenes-trabajo"><span>🧾</span> <span>Orden de Trabajo</span></a>
+        <a href="/maquinaria/ordenes-trabajo" class="sb-link" data-base="/maquinaria/ordenes-trabajo"><span>🧾</span> <span>Ordenes</span></a>
         {% endif %}
         {% if has_permission('maquinaria_boms', 'view') or current_user and current_user.es_admin %}
         <a href="/maquinaria/boms" class="sb-link" data-base="/maquinaria/boms"><span>🧱</span> <span>BOMs</span></a>
         {% endif %}
         {% if has_permission('maquinaria_claves_procesos', 'view') or current_user and current_user.es_admin %}
-        <a href="/maquinaria/claves-procesos" class="sb-link" data-base="/maquinaria/claves-procesos"><span>🧩</span> <span>Claves y Procesos</span></a>
+        <a href="/maquinaria/claves-procesos" class="sb-link" data-base="/maquinaria/claves-procesos"><span>🧩</span> <span>Claves/Procesos</span></a>
         {% endif %}
         {% if has_permission('maquinaria_estaciones', 'view') or current_user and current_user.es_admin %}
-        <a href="/maquinaria/estaciones" class="sb-link" data-base="/maquinaria/estaciones"><span>🏭</span> <span>Estaciones de Trabajo</span></a>
+        <a href="/maquinaria/estaciones" class="sb-link" data-base="/maquinaria/estaciones"><span>🏭</span> <span>Estaciones</span></a>
         {% endif %}
         {% if has_permission('maquinaria_calidad', 'view') or current_user and current_user.es_admin %}
         <a href="/maquinaria/calidad" class="sb-link" data-base="/maquinaria/calidad"><span>🔎</span> <span>Calidad</span></a>
@@ -103,9 +108,9 @@
 
         {% if has_permission('tickets', 'view') or current_user and current_user.es_admin %}
         <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">SOPORTE</div>
-        <a href="/soporte" class="sb-link" data-base="/soporte"><span>🔧</span> <span>Sistema de Tickets</span></a>
+        <a href="/soporte" class="sb-link" data-base="/soporte"><span>🔧</span> <span>Tickets</span></a>
         <a href="/soporte" class="sb-link sb-sub" data-base="/soporte"><span>📥</span> <span>Exportar</span></a>
-        <a href="/reportar" class="sb-link sb-sub" data-base="/reportar"><span>📋</span> <span>Reportar Incidencia</span></a>
+        <a href="/reportar" class="sb-link sb-sub" data-base="/reportar"><span>📋</span> <span>Reportar</span></a>
         {% endif %}
 
         {% if has_permission('catalog', 'view') or has_permission('catalog', 'edit') or has_permission('proveedores', 'view') or has_permission('admin', 'view') or has_permission('users', 'view') or has_permission('users', 'edit') or has_permission('roles', 'view') or has_permission('roles', 'edit') or has_permission('permissions', 'view') or has_permission('permissions', 'edit') or current_user and current_user.es_admin %}
@@ -172,6 +177,78 @@
     .sb-nav::-webkit-scrollbar {
         width: 0;
         height: 0;
+        display: none;
+    }
+
+    .sb-tools {
+        display: flex;
+        gap: 8px;
+        margin-top: -8px;
+        margin-bottom: 12px;
+    }
+
+    .sb-search {
+        flex: 1 1 auto;
+        min-width: 0;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.08);
+        color: #e8f4ff;
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-size: 12px;
+    }
+
+    .sb-search::placeholder {
+        color: #a7c8e2;
+    }
+
+    .sb-search:focus {
+        outline: none;
+        border-color: rgba(100, 181, 246, 0.8);
+        box-shadow: 0 0 0 2px rgba(100, 181, 246, 0.2);
+    }
+
+    .sb-clear-search {
+        width: 34px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.08);
+        color: #d7ecff;
+        cursor: pointer;
+        font-size: 18px;
+        line-height: 1;
+    }
+
+    .sb-clear-search:hover {
+        background: rgba(255, 255, 255, 0.15);
+    }
+
+    .sb-section-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        user-select: none;
+        border-radius: 6px;
+        padding: 4px 8px;
+        transition: background 0.2s;
+    }
+
+    .sb-section-title:hover {
+        background: rgba(255, 255, 255, 0.08);
+    }
+
+    .sb-section-caret {
+        font-size: 11px;
+        color: #b8dbf5;
+        transition: transform 0.2s;
+    }
+
+    .sb-section-title.is-collapsed .sb-section-caret {
+        transform: rotate(-90deg);
+    }
+
+    .sb-section-body.is-hidden {
         display: none;
     }
 
@@ -397,6 +474,133 @@
             });
         }
 
+        const nav = sidebar.querySelector('.sb-nav');
+        const searchInput = document.getElementById('sbNavSearch');
+        const clearSearchBtn = document.getElementById('sbClearSearch');
+        const sectionStateKey = 'sidebar.section.state.v1';
+        let sectionPairs = [];
+
+        function isSectionHeaderNode(node) {
+            if (!node || node.tagName !== 'DIV') return false;
+            const txt = (node.textContent || '').trim();
+            return [
+                'PRODUCCION',
+                'LOGISTICA',
+                'MAQUINARIA Y ENSAMBLE',
+                'CONTPAQ',
+                'SOPORTE',
+                'ADMINISTRACION',
+                'CONFIGURACION',
+            ].includes(txt);
+        }
+
+        function buildCollapsibleSections() {
+            if (!nav) return;
+            const nodes = Array.from(nav.children);
+            nodes.forEach(function(node) {
+                if (!isSectionHeaderNode(node)) return;
+
+                node.classList.add('sb-section-title');
+                node.setAttribute('role', 'button');
+                node.setAttribute('tabindex', '0');
+                const label = (node.textContent || '').trim();
+                node.dataset.section = label;
+
+                if (!node.querySelector('.sb-section-caret')) {
+                    node.innerHTML = `<span>${label}</span><span class="sb-section-caret">▾</span>`;
+                }
+
+                const body = document.createElement('div');
+                body.className = 'sb-section-body';
+                body.dataset.sectionBody = label;
+                nav.insertBefore(body, node.nextSibling);
+
+                let next = body.nextSibling;
+                while (next && !isSectionHeaderNode(next)) {
+                    if (next.classList && next.classList.contains('sb-logout')) break;
+                    if (next.tagName === 'DIV' && (next.style.height || '').trim() === '1px') break;
+                    const move = next;
+                    next = next.nextSibling;
+                    body.appendChild(move);
+                }
+
+                sectionPairs.push({ header: node, body: body, name: label });
+            });
+        }
+
+        function loadSectionState() {
+            try {
+                return JSON.parse(localStorage.getItem(sectionStateKey) || '{}');
+            } catch (_e) {
+                return {};
+            }
+        }
+
+        function saveSectionState(state) {
+            try {
+                localStorage.setItem(sectionStateKey, JSON.stringify(state));
+            } catch (_e) {
+                // ignore storage errors
+            }
+        }
+
+        function setSectionCollapsed(pair, collapsed) {
+            pair.header.classList.toggle('is-collapsed', collapsed);
+            pair.body.classList.toggle('is-hidden', collapsed);
+        }
+
+        function initSectionInteractions() {
+            const state = loadSectionState();
+            sectionPairs.forEach(function(pair) {
+                const hasActive = !!pair.body.querySelector('.sb-link.active');
+                const defaultCollapsed = !hasActive && pair.name !== 'PRODUCCION';
+                const collapsed = Object.prototype.hasOwnProperty.call(state, pair.name)
+                    ? !!state[pair.name]
+                    : defaultCollapsed;
+                setSectionCollapsed(pair, collapsed);
+
+                const toggleSection = function() {
+                    const nowCollapsed = !pair.body.classList.contains('is-hidden');
+                    setSectionCollapsed(pair, nowCollapsed);
+                    state[pair.name] = nowCollapsed;
+                    saveSectionState(state);
+                };
+
+                pair.header.addEventListener('click', toggleSection);
+                pair.header.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        toggleSection();
+                    }
+                });
+            });
+        }
+
+        function applyMenuFilter() {
+            if (!nav || !searchInput) return;
+            const q = (searchInput.value || '').trim().toLowerCase();
+            const searching = q.length > 0;
+
+            sectionPairs.forEach(function(pair) {
+                const links = Array.from(pair.body.querySelectorAll('.sb-link'));
+                let visibleCount = 0;
+
+                links.forEach(function(link) {
+                    const txt = (link.textContent || '').toLowerCase();
+                    const match = !searching || txt.includes(q);
+                    link.style.display = match ? '' : 'none';
+                    if (match) visibleCount += 1;
+                });
+
+                pair.header.style.display = visibleCount > 0 ? '' : 'none';
+                pair.body.style.display = visibleCount > 0 ? '' : 'none';
+                if (searching && visibleCount > 0) {
+                    pair.body.classList.remove('is-hidden');
+                    pair.header.classList.remove('is-collapsed');
+                }
+            });
+        }
+
         const alertBadge = document.getElementById('sb-alertas-badge');
 
         function formatBadgeCount(n) {
@@ -459,7 +663,22 @@
             if (!document.hidden) refreshAlertBadge();
         });
 
+        if (searchInput) {
+            searchInput.addEventListener('input', applyMenuFilter);
+        }
+
+        if (clearSearchBtn && searchInput) {
+            clearSearchBtn.addEventListener('click', function() {
+                searchInput.value = '';
+                applyMenuFilter();
+                searchInput.focus();
+            });
+        }
+
         markActiveLinks();
+        buildCollapsibleSections();
+        initSectionInteractions();
+        applyMenuFilter();
         refreshAlertBadge();
         setInterval(refreshAlertBadge, 15000);
     })();
