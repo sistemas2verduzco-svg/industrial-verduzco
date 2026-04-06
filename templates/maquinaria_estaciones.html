@@ -866,8 +866,10 @@
                 }
             }
 
-            function applyPayloadToOrder(order, payload, fallbackOperatorId) {
+            function applyPayloadToOrder(order, payload, fallbackOperatorId, options) {
                 if (!order || !payload) return false;
+                const opts = options || {};
+                const forcedStartAt = Object.prototype.hasOwnProperty.call(opts, 'start_at') ? opts.start_at : undefined;
 
                 if (payload.type === 'machine') {
                     const machineKey = String(payload.machineKey || '').toLowerCase();
@@ -876,6 +878,7 @@
                         station: machine ? (machine.clave_maquina || '') : (payload.machineKey || ''),
                         machine_icon: machine ? (machine.icon || '🏭') : '🏭',
                         process_status: 'configuracion',
+                        start_at: forcedStartAt !== undefined ? forcedStartAt : ((order.plan && order.plan.start_at) || nowLocalInput()),
                         timer_started_at: null,
                     }, `OT ${order.folio_ot || order.id} actualizada con maquina ${machine ? machine.clave_maquina : payload.machineKey}`);
                     return true;
@@ -888,6 +891,7 @@
                         process_name: proc ? (proc.nombre || '') : '',
                         process_status: 'configuracion',
                         duration_hours: proc ? Number(proc.duracion_default || 1) : Number((order.plan && order.plan.duration_hours) || 1),
+                        start_at: forcedStartAt !== undefined ? forcedStartAt : ((order.plan && order.plan.start_at) || nowLocalInput()),
                         timer_started_at: null,
                     }, `OT ${order.folio_ot || order.id} actualizada con proceso ${proc ? proc.nombre : procId}`);
                     return true;
@@ -900,6 +904,7 @@
                     saveOrderPlan(order, {
                         operator_id: opId,
                         process_status: 'configuracion',
+                        start_at: forcedStartAt !== undefined ? forcedStartAt : ((order.plan && order.plan.start_at) || nowLocalInput()),
                         timer_started_at: null,
                     }, `OT ${order.folio_ot || order.id} reasignada a ${op ? op.username : opId}`);
                     return true;
@@ -946,6 +951,16 @@
                     }
                 }
                 return nearest;
+            }
+
+            function startAtFromTrackDrop(trackNode, event, startDate, cfg) {
+                if (!trackNode || !event || !startDate || !cfg) return nowLocalInput();
+                const rect = trackNode.getBoundingClientRect();
+                const ratio = rect.width > 0 ? ((event.clientX - rect.left) / rect.width) : 0;
+                const safeRatio = Math.max(0, Math.min(1, ratio));
+                const totalMs = cfg.totalSlots * cfg.slotHours * 3600000;
+                const dropMs = startDate.getTime() + (safeRatio * totalMs);
+                return new Date(dropMs).toISOString().slice(0, 16);
             }
 
             function renderStatusCatalog() {
@@ -1380,7 +1395,8 @@
                             return;
                         }
 
-                        const ok = applyPayloadToOrder(target, payload, opId);
+                        const droppedStartAt = startAtFromTrackDrop(node, e, startDate, cfg);
+                        const ok = applyPayloadToOrder(target, payload, opId, { start_at: droppedStartAt });
                         if (!ok) {
                             showMessage('Ese tipo de elemento no se puede asignar en la barra.', true);
                         }
