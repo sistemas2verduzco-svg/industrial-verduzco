@@ -559,7 +559,7 @@
                 </div>
                 <div id="myeProcessForm" class="mye-inline-form">
                     <input id="myeNewProcessName" type="text" placeholder="Nombre proceso" />
-                    <input id="myeNewProcessDuration" type="number" min="0.5" step="0.5" placeholder="Duracion (hrs)" value="1" style="max-width:140px;" />
+                    <input id="myeNewProcessDuration" type="text" placeholder="Duración HH:MM (ej: 02:30)" value="01:00" style="max-width:160px;" title="Tiempo estimado del proceso en horas y minutos. Este tiempo se usa para la línea del tiempo." required />
                     <button id="myeSaveProcessBtn" type="button">Guardar</button>
                 </div>
                 <div id="myeProcessList" class="mye-process-list"></div>
@@ -666,6 +666,28 @@
 
             function getOrderElapsedText(order) {
                 return formatElapsed(elapsedMsFromPlan(order && order.plan ? order.plan : null));
+            }
+
+            /** Parse "HH:MM" or decimal-hours string → float hours */
+            function parseHHMM(val) {
+                if (!val && val !== 0) return 1;
+                const str = String(val).trim();
+                if (str.includes(':')) {
+                    const parts = str.split(':');
+                    const h = Math.max(0, Number(parts[0]) || 0);
+                    const m = Math.max(0, Math.min(59, Number(parts[1]) || 0));
+                    return h + m / 60;
+                }
+                const n = parseFloat(str);
+                return Number.isFinite(n) && n > 0 ? n : 1;
+            }
+
+            /** Convert float hours → "HH:MM" string */
+            function formatHHMM(hours) {
+                const totalMin = Math.round(Math.max(0, Number(hours) || 0) * 60);
+                const h = Math.floor(totalMin / 60);
+                const m = totalMin % 60;
+                return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
             }
 
             function getOperatorElapsedMs(operatorId) {
@@ -1102,11 +1124,27 @@
                 const totalRange = cfg.totalSlots * msSlot;
 
                 const rows = (MYE_OPERATORS || []).map(op => {
-                    const cards = (MYE_ORDERS || []).filter(o => Number(o.plan && o.plan.operator_id) === Number(op.id)).map(o => {
+                    const opOrders = (MYE_ORDERS || []).filter(o => Number(o.plan && o.plan.operator_id) === Number(op.id));
+
+                    // Sequential positioning: OTs with explicit start_at keep it;
+                    // OTs without start_at are queued one after another from scheduleStart.
+                    let seqCursor = startDate.getTime();
+                    const orderStartMs = new Map();
+                    opOrders.forEach(o => {
+                        const explicit = toDateSafe(o.plan && o.plan.start_at);
+                        if (explicit) {
+                            orderStartMs.set(o.id, explicit.getTime());
+                        } else {
+                            orderStartMs.set(o.id, seqCursor);
+                            seqCursor += Math.max(0.5, Number((o.plan && o.plan.duration_hours) || 1)) * 3600000;
+                        }
+                    });
+
+                    const cards = opOrders.map(o => {
                         const st = statusById((o.plan && o.plan.process_status) || 'por_iniciar');
-                        const start = new Date((o.plan && o.plan.start_at) || startDate.toISOString());
+                        const startMs = orderStartMs.get(o.id) || startDate.getTime();
                         const duration = Math.max(0.5, Number((o.plan && o.plan.duration_hours) || 1));
-                        const left = ((start.getTime() - startDate.getTime()) / totalRange) * 100;
+                        const left = ((startMs - startDate.getTime()) / totalRange) * 100;
                         const width = ((duration * 3600000) / totalRange) * 100;
                         if (left > 100 || left + width < 0) return '';
                         const clampedLeft = Math.max(0, left);
@@ -1114,10 +1152,11 @@
                         const line2 = (o.plan && o.plan.process_name) || (o.plan && o.plan.station) || o.clave_maquina || '-';
                         const elapsed = getOrderElapsedText(o);
                         const showElapsed = (o.plan && o.plan.process_status) === 'en_proceso';
+                        const plannedLabel = formatHHMM(duration);
                         return `
                             <div class="mye-block" data-order-id="${o.id}" style="left:${clampedLeft}%; width:${clampedWidth}%; background:${st.color};" draggable="true">
                                 ${textSafe((o.plan && o.plan.machine_icon) || '🏭')} ${textSafe(o.folio_ot)}
-                                <br>${textSafe(line2)}
+                                <br>${textSafe(line2)} <span style="opacity:.75;font-size:.75em;">(${plannedLabel})</span>
                                 ${showElapsed ? `<br><span data-order-elapsed-id="${o.id}">${elapsed}</span>` : ''}
                             </div>
                         `;
@@ -1171,7 +1210,7 @@
                     return `
                         <article class="mye-process-item" data-proc-id="${proc.id}" draggable="true">
                             <div class="mye-process-name">${textSafe(proc.nombre || '-')}</div>
-                            <div class="mye-process-meta">${Number(proc.duracion_default || 1)} horas | Creado: ${textSafe(proc.created_at ? proc.created_at.slice(0, 10) : '-')}</div>
+                            <div class="mye-process-meta">⏱ ${textSafe(formatHHMM(proc.duracion_default || 1))} | Creado: ${textSafe(proc.created_at ? proc.created_at.slice(0, 10) : '-')}</div>
                         </article>
                     `;
                 }).join('') || '<div class="mye-order-meta">Sin procesos definidos.</div>';
@@ -1274,9 +1313,13 @@
 
             async function createProcess() {
                 const nombre = (newProcessName && newProcessName.value || '').trim();
-                const duracion = Number(newProcessDuration && newProcessDuration.value || 1);
+                const duracion = parseHHMM((newProcessDuration && newProcessDuration.value) || '01:00');
                 if (!nombre) {
                     showMessage('Escribe el nombre del proceso.', true);
+                    return;
+                }
+                if (!duracion || duracion <= 0) {
+                    showMessage('La duración del proceso es obligatoria. Formato: HH:MM (ej: 02:30).', true);
                     return;
                 }
 
@@ -1303,7 +1346,7 @@
                     renderProcesses();
                     showMessage(data.message || 'Proceso creado', false);
                     if (newProcessName) newProcessName.value = '';
-                    if (newProcessDuration) newProcessDuration.value = '1';
+                    if (newProcessDuration) newProcessDuration.value = '01:00';
                 } catch (err) {
                     showMessage(err.message || 'Error al crear proceso', true);
                 }
