@@ -186,6 +186,18 @@
             background: #0d665f;
         }
 
+        .mye-start-btn:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+            opacity: 0.85;
+        }
+
+        .mye-requirement-hint {
+            font-size: 10px;
+            color: #64748b;
+            margin-top: 2px;
+        }
+
         .mye-machines {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -733,6 +745,11 @@
                     const hasIntervention = !!String((o.plan && o.plan.station) || '').trim();
                     const hasProcess = !!String((o.plan && o.plan.process_name) || '').trim();
                     const canStart = hasOperator && hasIntervention && hasProcess && st.id !== 'en_proceso' && st.id !== 'terminado';
+                    const missing = [
+                        hasOperator ? '' : 'operador',
+                        hasIntervention ? '' : 'intervencion',
+                        hasProcess ? '' : 'proceso',
+                    ].filter(Boolean);
                     return `
                         <article class="mye-order-card ${active}" data-order-id="${o.id}" draggable="true">
                             <div class="mye-order-title">${textSafe(o.folio_ot)} - ${textSafe(o.clave_maquina || '-')}</div>
@@ -741,8 +758,9 @@
                             <div class="mye-order-meta">Proceso: <b>${textSafe(processName)}</b></div>
                             <div class="mye-order-meta">Estatus: <b style="color:${st.color};">${textSafe(st.label)}</b></div>
                             <div class="mye-order-actions">
-                                ${canStart ? `<button class="mye-start-btn" type="button" data-start-order-id="${o.id}">Iniciar</button>` : ''}
+                                <button class="mye-start-btn" type="button" data-start-order-id="${o.id}" ${canStart ? '' : 'disabled'}>Iniciar</button>
                             </div>
+                            ${canStart ? '' : `<div class="mye-requirement-hint">Falta: ${textSafe(missing.join(', ') || 'asignacion completa')}</div>`}
                         </article>
                     `;
                 }).join('') || '<div class="mye-order-meta">Sin ordenes de trabajo.</div>';
