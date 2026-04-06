@@ -1556,6 +1556,7 @@ class AlertaBuzonGeneral(db.Model):
     atendida = db.Column(db.Boolean, nullable=False, default=False, index=True)
     atendida_por = db.Column(db.String(100), nullable=True)
     atendida_at = db.Column(db.DateTime, nullable=True, index=True)
+    nota_atencion = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -1573,6 +1574,7 @@ class AlertaBuzonGeneral(db.Model):
             'atendida': self.atendida,
             'atendida_por': self.atendida_por,
             'atendida_at': self.atendida_at.isoformat() if self.atendida_at else None,
+            'nota_atencion': self.nota_atencion,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }

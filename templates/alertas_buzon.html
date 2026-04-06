@@ -5,6 +5,44 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Buzon de Alertas</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        /* Modal overlay */
+        #modalAtender {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 9000;
+            background: rgba(2,15,30,0.55);
+            align-items: center;
+            justify-content: center;
+        }
+        #modalAtender.active { display: flex; }
+        #modalAtenderBox {
+            background: #fff;
+            border-radius: 12px;
+            padding: 28px 28px 22px;
+            max-width: 500px;
+            width: 94%;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.22);
+        }
+        #modalNotaInput {
+            width: 100%;
+            min-height: 80px;
+            padding: 10px;
+            border: 2px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-top: 10px;
+            resize: vertical;
+            box-sizing: border-box;
+            transition: border-color 0.15s;
+        }
+        #modalNotaInput:focus { outline: none; border-color: #2563eb; }
+        #modalNotaInput.error { border-color: #ef4444; }
+        #modalNotaError { color: #ef4444; font-size: 12px; margin-top: 4px; display: none; }
+        .modal-btns { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+        .modal-btns button { border-radius: 8px; padding: 9px 18px; font-weight: 700; cursor: pointer; font-size: 13px; }
+    </style>
 </head>
 <body>
     {% include '_sidebar.html' %}
@@ -17,7 +55,7 @@
             <div style="display:flex; gap:8px; align-items:center;">
                 <button id="btnPendientes" type="button" onclick="setAlertFilter('pendientes')" style="border:1px solid #0f766e; background:#0f766e; color:#fff; border-radius:8px; padding:8px 12px; font-weight:700;">Pendientes</button>
                 <button id="btnTodas" type="button" onclick="setAlertFilter('all')" style="border:1px solid #cbd5e1; background:#fff; color:#0f172a; border-radius:8px; padding:8px 12px; font-weight:700;">Todas</button>
-                <button type="button" onclick="atenderTodas()" style="border:1px solid #1d4ed8; background:#1d4ed8; color:#fff; border-radius:8px; padding:8px 12px; font-weight:700;">Atender todas</button>
+                <button type="button" onclick="abrirModalTodas()" style="border:1px solid #1d4ed8; background:#1d4ed8; color:#fff; border-radius:8px; padding:8px 12px; font-weight:700;">Atender todas</button>
             </div>
         </div>
 
@@ -28,7 +66,7 @@
 
         <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; overflow:hidden;">
             <div style="overflow:auto;">
-                <table style="width:100%; border-collapse:collapse; font-size:13px; min-width:980px;">
+                <table style="width:100%; border-collapse:collapse; font-size:13px; min-width:1080px;">
                     <thead>
                         <tr style="background:#f8fafc; text-align:left;">
                             <th style="padding:9px; border-bottom:1px solid #e5e7eb;">Fecha</th>
@@ -37,13 +75,28 @@
                             <th style="padding:9px; border-bottom:1px solid #e5e7eb;">Titulo</th>
                             <th style="padding:9px; border-bottom:1px solid #e5e7eb;">Mensaje</th>
                             <th style="padding:9px; border-bottom:1px solid #e5e7eb;">Estado</th>
-                            <th style="padding:9px; border-bottom:1px solid #e5e7eb;">Accion</th>
+                            <th style="padding:9px; border-bottom:1px solid #e5e7eb;">Accion tomada</th>
+                            <th style="padding:9px; border-bottom:1px solid #e5e7eb;"></th>
                         </tr>
                     </thead>
                     <tbody id="alertsBody">
-                        <tr><td colspan="7" style="padding:10px; color:#64748b;">Cargando...</td></tr>
+                        <tr><td colspan="8" style="padding:10px; color:#64748b;">Cargando...</td></tr>
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal nota de atención -->
+    <div id="modalAtender" role="dialog" aria-modal="true" aria-labelledby="modalAtenderTitle">
+        <div id="modalAtenderBox">
+            <div style="font-size:16px; font-weight:700; margin-bottom:6px;" id="modalAtenderTitle">Registrar acción tomada</div>
+            <div style="color:#64748b; font-size:13px;" id="modalAtenderSubtitle">Describe qué acción realizaste para atender esta alerta. Campo obligatorio.</div>
+            <textarea id="modalNotaInput" placeholder="Ej: Se revisó la máquina, se ajustó parámetro X, se notificó a mantenimiento..."></textarea>
+            <div id="modalNotaError">La nota es obligatoria. No puedes dejar este campo vacío.</div>
+            <div class="modal-btns">
+                <button type="button" onclick="cerrarModal()" style="border:1px solid #cbd5e1; background:#fff; color:#374151;">Cancelar</button>
+                <button type="button" id="modalConfirmBtn" onclick="confirmarAtencion()" style="border:1px solid #2563eb; background:#2563eb; color:#fff;">Confirmar atención</button>
             </div>
         </div>
     </div>
@@ -51,6 +104,8 @@
     <script>
         const REFRESH_MS = 8000;
         let currentFilter = 'pendientes';
+        let _pendingAlertId = null;   // null = todas
+        let _modalResolve = null;
 
         function fmtDate(value) {
             if (!value) return '-';
@@ -59,46 +114,101 @@
             return d.toLocaleString();
         }
 
+        function escHtml(s) {
+            return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
         function setAlertFilter(filter) {
             currentFilter = filter;
-            const btnPend = document.getElementById('btnPendientes');
-            const btnAll = document.getElementById('btnTodas');
-            if (btnPend) {
-                btnPend.style.background = filter === 'pendientes' ? '#0f766e' : '#fff';
-                btnPend.style.color = filter === 'pendientes' ? '#fff' : '#0f172a';
-            }
-            if (btnAll) {
-                btnAll.style.background = filter === 'all' ? '#0f766e' : '#fff';
-                btnAll.style.color = filter === 'all' ? '#fff' : '#0f172a';
-            }
+            document.getElementById('btnPendientes').style.background = filter === 'pendientes' ? '#0f766e' : '#fff';
+            document.getElementById('btnPendientes').style.color = filter === 'pendientes' ? '#fff' : '#0f172a';
+            document.getElementById('btnTodas').style.background = filter === 'all' ? '#0f766e' : '#fff';
+            document.getElementById('btnTodas').style.color = filter === 'all' ? '#fff' : '#0f172a';
             loadAlerts();
         }
 
-        async function atenderAlerta(id) {
-            if (!id) return;
-            const res = await fetch('/api/alertas_buzon/' + id + '/atender', {
-                method: 'POST',
-                credentials: 'same-origin'
-            });
-            if (!res.ok) {
-                alert('No se pudo atender la alerta.');
-                return;
+        /* ---- Modal ---- */
+        function abrirModal(alertId) {
+            _pendingAlertId = alertId || null;
+            const subtitle = document.getElementById('modalAtenderSubtitle');
+            const title = document.getElementById('modalAtenderTitle');
+            if (alertId) {
+                title.textContent = 'Registrar acción tomada';
+                subtitle.textContent = 'Describe qué acción realizaste para atender esta alerta. Campo obligatorio.';
+            } else {
+                title.textContent = 'Atender todas las pendientes';
+                subtitle.textContent = 'Esta nota quedará registrada en TODAS las alertas pendientes. Campo obligatorio.';
             }
-            await loadAlerts();
+            const input = document.getElementById('modalNotaInput');
+            const errEl = document.getElementById('modalNotaError');
+            input.value = '';
+            input.classList.remove('error');
+            errEl.style.display = 'none';
+            document.getElementById('modalAtender').classList.add('active');
+            setTimeout(() => input.focus(), 80);
         }
 
-        async function atenderTodas() {
-            const res = await fetch('/api/alertas_buzon/atender_todas', {
-                method: 'POST',
-                credentials: 'same-origin'
-            });
-            if (!res.ok) {
-                alert('No se pudieron atender todas las alertas.');
-                return;
-            }
-            await loadAlerts();
+        function abrirModalTodas() { abrirModal(null); }
+
+        function cerrarModal() {
+            document.getElementById('modalAtender').classList.remove('active');
+            _pendingAlertId = null;
         }
 
+        async function confirmarAtencion() {
+            const input = document.getElementById('modalNotaInput');
+            const errEl = document.getElementById('modalNotaError');
+            const nota = input.value.trim();
+            if (!nota) {
+                input.classList.add('error');
+                errEl.style.display = 'block';
+                input.focus();
+                return;
+            }
+            input.classList.remove('error');
+            errEl.style.display = 'none';
+
+            const btn = document.getElementById('modalConfirmBtn');
+            btn.disabled = true;
+            btn.textContent = 'Guardando...';
+
+            try {
+                let url, payload;
+                if (_pendingAlertId) {
+                    url = '/api/alertas_buzon/' + _pendingAlertId + '/atender';
+                } else {
+                    url = '/api/alertas_buzon/atender_todas';
+                }
+                const res = await fetch(url, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({nota})
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(data.error || 'No se pudo registrar la atención.');
+                    return;
+                }
+                cerrarModal();
+                await loadAlerts();
+            } catch (err) {
+                alert('Error de red: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Confirmar atención';
+            }
+        }
+
+        // Close modal on Escape
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') cerrarModal();
+        });
+        document.getElementById('modalAtender').addEventListener('click', function(e) {
+            if (e.target === this) cerrarModal();
+        });
+
+        /* ---- Table ---- */
         async function loadAlerts() {
             const refreshEl = document.getElementById('alertsRefresh');
             const body = document.getElementById('alertsBody');
@@ -107,60 +217,63 @@
 
             try {
                 const statusParam = currentFilter === 'all' ? 'all' : 'pendientes';
-                const res = await fetch('/api/alertas_buzon?status=' + encodeURIComponent(statusParam) + '&limit=300', {
-                    credentials: 'same-origin'
-                });
+                const res = await fetch('/api/alertas_buzon?status=' + encodeURIComponent(statusParam) + '&limit=300', {credentials:'same-origin'});
                 if (!res.ok) throw new Error('HTTP ' + res.status);
 
                 const payload = await res.json();
                 const items = Array.isArray(payload.items) ? payload.items : [];
                 const pendientes = Number(payload.pendientes || 0);
 
-                if (summary) {
-                    summary.textContent = `Pendientes: ${pendientes} | Mostrando: ${items.length}`;
-                }
+                if (summary) summary.innerHTML = `<strong>Pendientes: ${pendientes}</strong> &nbsp;|&nbsp; Mostrando: ${items.length}`;
 
                 if (!items.length) {
-                    body.innerHTML = '<tr><td colspan="7" style="padding:10px; color:#64748b;">Sin alertas para el filtro actual.</td></tr>';
+                    body.innerHTML = '<tr><td colspan="8" style="padding:14px; color:#64748b;">Sin alertas para el filtro actual.</td></tr>';
                 } else {
                     body.innerHTML = items.map(item => {
                         const estadoHtml = item.atendida
-                            ? `<span style="display:inline-block; padding:3px 8px; border-radius:999px; background:#dcfce7; color:#166534; font-weight:700;">Atendida</span>`
-                            : `<span style="display:inline-block; padding:3px 8px; border-radius:999px; background:#fee2e2; color:#991b1b; font-weight:700;">Pendiente</span>`;
-                        const accionHtml = item.atendida
-                            ? `<span style="color:#64748b; font-size:12px;">${item.atendida_por || '-'} ${item.atendida_at ? '(' + fmtDate(item.atendida_at) + ')' : ''}</span>`
-                            : `<button type="button" onclick="atenderAlerta(${item.id})" style="border:1px solid #2563eb; background:#2563eb; color:#fff; border-radius:6px; padding:5px 9px; font-size:12px; font-weight:700;">Atender</button>`;
+                            ? `<span style="display:inline-block;padding:3px 8px;border-radius:999px;background:#dcfce7;color:#166534;font-weight:700;">Atendida</span>`
+                            : `<span style="display:inline-block;padding:3px 8px;border-radius:999px;background:#fee2e2;color:#991b1b;font-weight:700;">Pendiente</span>`;
 
-                        return `
-                            <tr>
-                                <td style="padding:9px; border-bottom:1px solid #eef2f7; white-space:nowrap;">${fmtDate(item.created_at)}</td>
-                                <td style="padding:9px; border-bottom:1px solid #eef2f7;">${item.origen || '-'}</td>
-                                <td style="padding:9px; border-bottom:1px solid #eef2f7;">${item.tipo || '-'}</td>
-                                <td style="padding:9px; border-bottom:1px solid #eef2f7; font-weight:700;">${item.titulo || '-'}</td>
-                                <td style="padding:9px; border-bottom:1px solid #eef2f7;">${item.mensaje || '-'}</td>
-                                <td style="padding:9px; border-bottom:1px solid #eef2f7;">${estadoHtml}</td>
-                                <td style="padding:9px; border-bottom:1px solid #eef2f7;">${accionHtml}</td>
-                            </tr>
-                        `;
+                        let accionColHtml;
+                        if (item.atendida) {
+                            const notaTexto = item.nota_atencion
+                                ? `<div style="font-size:12px;color:#1e40af;margin-top:3px;font-style:italic;">"${escHtml(item.nota_atencion)}"</div>`
+                                : `<div style="font-size:11px;color:#94a3b8;">Sin nota</div>`;
+                            accionColHtml = `<div style="font-size:12px;color:#374151;font-weight:600;">${escHtml(item.atendida_por || '-')}</div>
+                                            <div style="font-size:11px;color:#94a3b8;">${item.atendida_at ? fmtDate(item.atendida_at) : ''}</div>
+                                            ${notaTexto}`;
+                        } else {
+                            accionColHtml = `<span style="color:#94a3b8;font-size:12px;">—</span>`;
+                        }
+
+                        const btnAtender = item.atendida ? '' :
+                            `<button type="button" onclick="abrirModal(${item.id})"
+                                style="border:1px solid #2563eb;background:#2563eb;color:#fff;border-radius:6px;padding:5px 11px;font-size:12px;font-weight:700;white-space:nowrap;">
+                                ✔ Atender</button>`;
+
+                        return `<tr style="${item.atendida ? 'opacity:0.72;' : ''}">
+                            <td style="padding:9px;border-bottom:1px solid #eef2f7;white-space:nowrap;">${fmtDate(item.created_at)}</td>
+                            <td style="padding:9px;border-bottom:1px solid #eef2f7;">${escHtml(item.origen)}</td>
+                            <td style="padding:9px;border-bottom:1px solid #eef2f7;">${escHtml(item.tipo)}</td>
+                            <td style="padding:9px;border-bottom:1px solid #eef2f7;font-weight:700;">${escHtml(item.titulo)}</td>
+                            <td style="padding:9px;border-bottom:1px solid #eef2f7;max-width:260px;">${escHtml(item.mensaje)}</td>
+                            <td style="padding:9px;border-bottom:1px solid #eef2f7;">${estadoHtml}</td>
+                            <td style="padding:9px;border-bottom:1px solid #eef2f7;max-width:220px;">${accionColHtml}</td>
+                            <td style="padding:9px;border-bottom:1px solid #eef2f7;">${btnAtender}</td>
+                        </tr>`;
                     }).join('');
                 }
 
-                if (refreshEl) {
-                    refreshEl.textContent = 'Actualizado ' + new Date().toLocaleTimeString();
-                }
+                if (refreshEl) refreshEl.textContent = 'Actualizado ' + new Date().toLocaleTimeString();
             } catch (err) {
                 console.error(err);
-                if (body) {
-                    body.innerHTML = '<tr><td colspan="7" style="padding:10px; color:#b91c1c;">Error cargando alertas.</td></tr>';
-                }
-                if (refreshEl) {
-                    refreshEl.textContent = 'Error de actualización';
-                }
+                if (body) body.innerHTML = '<tr><td colspan="8" style="padding:10px;color:#b91c1c;">Error cargando alertas.</td></tr>';
+                if (refreshEl) refreshEl.textContent = 'Error de actualización';
             }
         }
 
-        window.atenderAlerta = atenderAlerta;
-        window.atenderTodas = atenderTodas;
+        window.abrirModal = abrirModal;
+        window.abrirModalTodas = abrirModalTodas;
         window.setAlertFilter = setAlertFilter;
 
         loadAlerts();

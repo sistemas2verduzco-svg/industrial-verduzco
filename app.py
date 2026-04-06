@@ -999,15 +999,30 @@ def _ensure_alertas_buzon_table():
 
     try:
         AlertaBuzonGeneral.__table__.create(bind=db.engine, checkfirst=True)
-        _ALERTAS_BUZON_TABLE_READY = True
-        return True
     except Exception as exc:
-        logger.warning(f"No se pudo asegurar la tabla de alertas del buzon: {exc}")
+        logger.warning(f"No se pudo crear la tabla de alertas del buzon: {exc}")
         try:
             db.session.rollback()
         except Exception:
             pass
         return False
+
+    # Ensure nota_atencion column exists (migration for existing tables).
+    try:
+        with db.engine.connect() as conn:
+            conn.execute(db.text(
+                "ALTER TABLE alertas_buzon_general ADD COLUMN IF NOT EXISTS nota_atencion TEXT"
+            ))
+            conn.commit()
+    except Exception as exc:
+        logger.debug(f"_ensure nota_atencion column: {exc}")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+    _ALERTAS_BUZON_TABLE_READY = True
+    return True
 
 
 def _serialize_alerta_buzon(item):
@@ -1024,6 +1039,7 @@ def _serialize_alerta_buzon(item):
         'atendida': bool(item.atendida),
         'atendida_por': item.atendida_por,
         'atendida_at': item.atendida_at.isoformat() if item.atendida_at else None,
+        'nota_atencion': item.nota_atencion or '',
         'created_at': item.created_at.isoformat() if item.created_at else None,
     }
 
@@ -4038,11 +4054,17 @@ def api_alertas_buzon_atender(alerta_id):
     if not _ensure_alertas_buzon_table():
         return jsonify({'error': 'No se pudo acceder al buzón de alertas'}), 500
 
+    data = request.get_json(silent=True) or {}
+    nota = (data.get('nota') or '').strip()
+    if not nota:
+        return jsonify({'error': 'La nota de atención es obligatoria. Describe qué acción tomaste.'}), 422
+
     alerta = AlertaBuzonGeneral.query.get_or_404(alerta_id)
     if not alerta.atendida:
         alerta.atendida = True
         alerta.atendida_por = _current_username_for_audit(get_current_user())
         alerta.atendida_at = datetime.utcnow()
+        alerta.nota_atencion = nota
         db.session.commit()
 
     return jsonify({'ok': True, 'item': _serialize_alerta_buzon(alerta)})
@@ -4055,6 +4077,11 @@ def api_alertas_buzon_atender_todas():
     if not _ensure_alertas_buzon_table():
         return jsonify({'error': 'No se pudo acceder al buzón de alertas'}), 500
 
+    data = request.get_json(silent=True) or {}
+    nota = (data.get('nota') or '').strip()
+    if not nota:
+        return jsonify({'error': 'La nota de atención es obligatoria. Describe qué acción tomaste.'}), 422
+
     user_name = _current_username_for_audit(get_current_user())
     now_dt = datetime.utcnow()
     q = AlertaBuzonGeneral.query.filter(AlertaBuzonGeneral.atendida.is_(False)).all()
@@ -4062,6 +4089,7 @@ def api_alertas_buzon_atender_todas():
         alerta.atendida = True
         alerta.atendida_por = user_name
         alerta.atendida_at = now_dt
+        alerta.nota_atencion = nota
     db.session.commit()
     return jsonify({'ok': True, 'updated': len(q)})
 
