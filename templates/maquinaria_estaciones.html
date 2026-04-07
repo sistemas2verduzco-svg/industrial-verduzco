@@ -425,6 +425,53 @@
             background: #fff;
         }
 
+        .mye-scale-row {
+            display: grid;
+            grid-template-columns: 180px 1fr;
+            border-bottom: 1px solid #d7e5f4;
+            background: #f8fbff;
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }
+
+        .mye-scale-name {
+            padding: 6px 8px;
+            font-size: 11px;
+            color: #1f456f;
+            font-weight: 700;
+            border-right: 1px solid #e4eef9;
+            background: #f4f9ff;
+        }
+
+        .mye-scale-track {
+            position: relative;
+            height: 28px;
+            --mye-grid-step: 40px;
+            background-image: repeating-linear-gradient(
+                to right,
+                rgba(153, 177, 203, 0.2),
+                rgba(153, 177, 203, 0.2) 1px,
+                transparent 1px,
+                transparent var(--mye-grid-step)
+            );
+        }
+
+        .mye-scale-slot {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            font-size: 10px;
+            font-weight: 700;
+            color: #355a82;
+            padding: 6px 4px 0 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            border-right: 1px solid rgba(153, 177, 203, 0.2);
+            pointer-events: none;
+        }
+
         .mye-row {
             display: grid;
             grid-template-columns: 180px 1fr;
@@ -1524,6 +1571,28 @@
                 const gridPx = scale === 'hours' ? 42 : (scale === 'days' ? 26 : 14);
                 timelineEl.style.setProperty('--mye-grid-step', `${gridPx}px`);
 
+                const slots = Array.from({ length: cfg.totalSlots }).map((_, i) => {
+                    const dt = new Date(startDate.getTime() + (i * msSlot));
+                    let label = '';
+                    if (scale === 'hours') {
+                        label = `${String(dt.getHours()).padStart(2, '0')}:00`;
+                    } else if (scale === 'days') {
+                        label = `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}`;
+                    } else {
+                        const end = new Date(dt.getTime() + (6 * 24 * 3600000));
+                        label = `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')} - ${String(end.getDate()).padStart(2, '0')}/${String(end.getMonth() + 1).padStart(2, '0')}`;
+                    }
+                    return `<div class="mye-scale-slot" style="left:${(i / cfg.totalSlots) * 100}%; width:${100 / cfg.totalSlots}%">${textSafe(label)}</div>`;
+                }).join('');
+
+                const scaleTitle = scale === 'hours' ? 'Horas' : (scale === 'days' ? 'Dias' : 'Semanas');
+                const header = `
+                    <div class="mye-scale-row">
+                        <div class="mye-scale-name">${scaleTitle}</div>
+                        <div class="mye-scale-track">${slots}</div>
+                    </div>
+                `;
+
                 const rows = (MYE_OPERATORS || []).map(op => {
                     const opOrders = (MYE_ORDERS || []).filter(o => !!getPlanForOperator(o, op.id));
                     const rowStartMs = opOrders.reduce((minMs, o) => {
@@ -1536,6 +1605,9 @@
 
                     const cards = opOrders.flatMap(o => {
                         const plan = getPlanForOperator(o, op.id) || {};
+                        const planStatus = statusById((plan.process_status || 'por_iniciar'));
+                        const statusColor = planStatus && planStatus.color ? planStatus.color : '#94a3b8';
+                        const statusLabel = planStatus && planStatus.label ? planStatus.label : 'Por iniciar';
                         const startMs = toDateSafe(plan.start_at) ? toDateSafe(plan.start_at).getTime() : startDate.getTime();
                         const totalDuration = Array.isArray(plan.steps) && plan.steps.length
                             ? plan.steps.reduce((acc, s) => acc + durationHoursSafe(s.duration_hours, 1), 0)
@@ -1581,7 +1653,7 @@
 
                             blocks.push(`
                                 <div class="mye-block mye-block-process" data-order-id="${o.id}" data-plan-op-id="${op.id}" data-step-idx="${idx}" data-comp-type="process"
-                                    style="left:${stepVisualLeft}%; width:${stepVisualWidth}%; background:#22c55e; border-left:1px solid rgba(255,255,255,0.5); border-right:1px solid rgba(255,255,255,0.5);"
+                                    style="left:${stepVisualLeft}%; width:${stepVisualWidth}%; background:#22c55e; border-left:1px solid rgba(255,255,255,0.5); border-right:1px solid rgba(255,255,255,0.5); box-shadow: inset 0 0 0 2px ${statusColor};"
                                     draggable="true" title="Proceso: ${textSafe(step.name)} (${formatHHMM(step.duration_hours || 1)})">
                                     <div class="mye-step-remain" style="position:absolute;right:0;top:0;height:100%;width:${remainWidth.toFixed(1)}%;background:rgba(0,0,0,0.18);border-radius:0 6px 6px 0;pointer-events:none;"></div>
                                     <span class="mye-block-line" style="position:relative;z-index:2;">${textSafe(step.name)}</span>
@@ -1596,10 +1668,11 @@
                         const hasProc = steps.length > 0;
                         blocks.push(`
                             <div class="mye-block mye-block-ot" data-order-id="${o.id}" data-plan-op-id="${op.id}" data-comp-type="ot"
-                                style="left:${clampedLeft}%; width:${readableWidth}%; background:#fbbf24;"
+                                style="left:${clampedLeft}%; width:${readableWidth}%; background:#fbbf24; box-shadow: inset 0 0 0 2px ${statusColor};"
                                 draggable="true" title="${textSafe(o.folio_ot)}">
                                 <span class="mye-block-line">${textSafe(o.folio_ot)}</span>
                                 <span class="mye-block-line">O:${hasOp ? 'OK' : '--'} I:${hasInt ? 'OK' : '--'} P:${hasProc ? 'OK' : '--'}</span>
+                                <span class="mye-block-line" style="color:${statusColor};">E:${textSafe(statusLabel)}</span>
                             </div>`);
 
                         return blocks;
@@ -1613,7 +1686,7 @@
                     `;
                 }).join('');
 
-                timelineEl.innerHTML = rows || '<div class="mye-order-meta" style="padding:10px;">No hay datos para mostrar en timeline.</div>';
+                timelineEl.innerHTML = header + (rows || '<div class="mye-order-meta" style="padding:10px;">No hay datos para mostrar en timeline.</div>');
 
                 timelineEl.querySelectorAll('.mye-block').forEach(node => {
                     node.addEventListener('click', () => {
