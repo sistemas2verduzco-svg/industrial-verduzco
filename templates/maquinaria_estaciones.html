@@ -648,6 +648,13 @@
                 return new Date(now.getTime() - tz).toISOString().slice(0, 16);
             }
 
+            function toLocalInputFromDate(dateObj) {
+                const dt = dateObj instanceof Date ? dateObj : new Date(dateObj);
+                if (Number.isNaN(dt.getTime())) return nowLocalInput();
+                const tz = dt.getTimezoneOffset() * 60000;
+                return new Date(dt.getTime() - tz).toISOString().slice(0, 16);
+            }
+
             function toDateSafe(value) {
                 if (!value) return null;
                 const dt = new Date(value);
@@ -960,7 +967,7 @@
                 const safeRatio = Math.max(0, Math.min(1, ratio));
                 const totalMs = cfg.totalSlots * cfg.slotHours * 3600000;
                 const dropMs = startDate.getTime() + (safeRatio * totalMs);
-                return new Date(dropMs).toISOString().slice(0, 16);
+                return toLocalInputFromDate(new Date(dropMs));
             }
 
             function renderStatusCatalog() {
