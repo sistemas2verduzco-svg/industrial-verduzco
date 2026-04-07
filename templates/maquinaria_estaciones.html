@@ -445,12 +445,13 @@
             position: relative;
             height: 136px;
             overflow: hidden;
+            --mye-grid-step: 40px;
             background-image: repeating-linear-gradient(
                 to right,
                 rgba(153, 177, 203, 0.2),
                 rgba(153, 177, 203, 0.2) 1px,
                 transparent 1px,
-                transparent 40px
+                transparent var(--mye-grid-step)
             );
         }
 
@@ -597,7 +598,7 @@
 
             <article class="mye-panel">
                 <div class="mye-panel-head">
-                    <h3 class="mye-panel-title" style="margin:0;">Intervenciones (maquinas)</h3>
+                    <h3 class="mye-panel-title" style="margin:0;">Estaciones de trabajo (maquinas)</h3>
                     <button id="myeAddMachineBtn" class="mye-head-btn" type="button">+ Cargar maquina</button>
                 </div>
                 <div id="myeMachineForm" class="mye-inline-form">
@@ -606,7 +607,7 @@
                     <button id="myeSaveMachineBtn" type="button">Guardar</button>
                 </div>
                 <div id="myeMachineGrid" class="mye-machines"></div>
-                <div id="myeUnassignMachine" class="mye-unassign-drop">Soltar bloque naranja aqui para quitar intervencion</div>
+                <div id="myeUnassignMachine" class="mye-unassign-drop">Soltar bloque naranja aqui para quitar estacion</div>
             </article>
 
             <article class="mye-panel">
@@ -1246,7 +1247,7 @@
                     const hasAllAssignments = hasOperator && hasIntervention && hasProcess;
                     const missing = [
                         hasOperator ? '' : 'operador',
-                        hasIntervention ? '' : 'intervencion',
+                        hasIntervention ? '' : 'estacion',
                         hasProcess ? '' : 'proceso',
                     ].filter(Boolean);
                     const elapsed = getOrderElapsedText(o);
@@ -1520,6 +1521,9 @@
                 const totalRange = cfg.totalSlots * msSlot;
                 const nowMs = Date.now();
 
+                const gridPx = scale === 'hours' ? 42 : (scale === 'days' ? 26 : 14);
+                timelineEl.style.setProperty('--mye-grid-step', `${gridPx}px`);
+
                 const rows = (MYE_OPERATORS || []).map(op => {
                     const opOrders = (MYE_ORDERS || []).filter(o => !!getPlanForOperator(o, op.id));
                     const rowStartMs = opOrders.reduce((minMs, o) => {
@@ -1545,7 +1549,7 @@
 
                         const blocks = [];
 
-                        // Bloque naranja: Máquina/Intervención
+                        // Bloque naranja: Máquina/Estación
                         if (String(plan.station || '').trim()) {
                             blocks.push(`
                                 <div class="mye-block mye-block-machine" data-order-id="${o.id}" data-plan-op-id="${op.id}" data-comp-type="machine"
@@ -2019,7 +2023,8 @@
 
             withDropHandlers(unassignProcessEl, function(order, payload) {
                 if (!payload || payload.type !== 'plan_component' || String(payload.compType || '') !== 'process') return;
-                removePlanComponent(order, Number(payload.operatorId || 0), 'process', Number(payload.stepIdx || -1));
+                const stepIdx = Object.prototype.hasOwnProperty.call(payload, 'stepIdx') ? Number(payload.stepIdx) : -1;
+                removePlanComponent(order, Number(payload.operatorId || 0), 'process', stepIdx);
             });
 
             withDropHandlers(unassignOtEl, function(order, payload) {
