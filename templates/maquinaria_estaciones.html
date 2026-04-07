@@ -435,7 +435,7 @@
             top: 4px;
             min-height: 26px;
             border-radius: 6px;
-            padding: 3px 20px 3px 6px;
+            padding: 3px 6px;
             color: #000;
             font-size: 11px;
             line-height: 1.25;
@@ -450,26 +450,17 @@
         .mye-block-process { top: 36px; }
         .mye-block-ot      { top: 68px; }
 
-        .mye-block-remove {
-            position: absolute;
-            top: 2px;
-            right: 2px;
-            width: 14px;
-            height: 14px;
-            border: none;
-            border-radius: 50%;
-            background: rgba(0, 0, 0, 0.22);
-            color: #fff;
-            font-size: 10px;
+        .mye-unassign-drop {
+            margin-top: 8px;
+            border: 1px dashed #f59e0b;
+            background: #fff8e7;
+            color: #92400e;
+            border-radius: 8px;
+            padding: 7px 8px;
+            font-size: 11px;
             font-weight: 700;
-            line-height: 1;
-            cursor: pointer;
-            z-index: 5;
-            padding: 0;
-        }
-
-        .mye-block-remove:hover {
-            background: rgba(0, 0, 0, 0.35);
+            text-align: center;
+            user-select: none;
         }
 
         .mye-block-line {
@@ -584,6 +575,7 @@
                     <button id="myeSaveMachineBtn" type="button">Guardar</button>
                 </div>
                 <div id="myeMachineGrid" class="mye-machines"></div>
+                <div id="myeUnassignMachine" class="mye-unassign-drop">Soltar bloque naranja aqui para quitar intervencion</div>
             </article>
 
             <article class="mye-panel">
@@ -602,6 +594,7 @@
                     <button id="myeSaveProcessBtn" type="button">Guardar</button>
                 </div>
                 <div id="myeProcessList" class="mye-process-list"></div>
+                <div id="myeUnassignProcess" class="mye-unassign-drop">Soltar bloque verde aqui para quitar proceso</div>
             </article>
         </section>
 
@@ -617,6 +610,7 @@
                     <button id="myeSaveOperatorBtn" type="button">Guardar</button>
                 </div>
                 <div id="myeOperators" class="mye-operator-list"></div>
+                <div id="myeUnassignOt" class="mye-unassign-drop">Soltar bloque amarillo aqui para quitar OT de este operador</div>
             </aside>
 
             <article class="mye-schedule-wrap">
@@ -664,6 +658,9 @@
             const newProcessName = document.getElementById('myeNewProcessName');
             const newProcessDuration = document.getElementById('myeNewProcessDuration');
             const saveProcessBtn = document.getElementById('myeSaveProcessBtn');
+            const unassignMachineEl = document.getElementById('myeUnassignMachine');
+            const unassignProcessEl = document.getElementById('myeUnassignProcess');
+            const unassignOtEl = document.getElementById('myeUnassignOt');
 
             const orderMap = new Map((MYE_ORDERS || []).map(o => [Number(o.id), o]));
             const operatorMap = new Map((MYE_OPERATORS || []).map(o => [Number(o.id), o]));
@@ -862,7 +859,7 @@
                     e.preventDefault();
                     element.classList.remove('mye-drop-target');
                     const payload = getDragPayload(e);
-                    const orderId = payload && payload.type === 'order' ? Number(payload.orderId || 0) : Number(draggedOrderId || 0);
+                    const orderId = payload && Object.prototype.hasOwnProperty.call(payload, 'orderId') ? Number(payload.orderId || 0) : Number(draggedOrderId || 0);
                     const order = getOrder(orderId);
                     if (!order) return;
                     onDropOrder(order, payload, e);
@@ -1462,7 +1459,6 @@
                                 <div class="mye-block mye-block-machine" data-order-id="${o.id}" data-plan-op-id="${op.id}" data-comp-type="machine"
                                     style="left:${clampedLeft}%; width:${readableWidth}%; background:#f97316;"
                                     draggable="true" title="Máquina: ${textSafe(plan.station)}">
-                                    <button type="button" class="mye-block-remove" data-remove-comp="machine" data-order-id="${o.id}" data-plan-op-id="${op.id}" title="Quitar máquina">x</button>
                                     <span class="mye-block-line">${textSafe(plan.machine_icon || '🏭')} ${textSafe(plan.station)}</span>
                                 </div>`);
                         }
@@ -1488,7 +1484,6 @@
                                 <div class="mye-block mye-block-process" data-order-id="${o.id}" data-plan-op-id="${op.id}" data-step-idx="${idx}" data-comp-type="process"
                                     style="left:${stepClampedLeft}%; width:${stepReadableWidth}%; background:#22c55e;"
                                     draggable="true" title="Proceso: ${textSafe(step.name)} (${formatHHMM(step.duration_hours || 1)})">
-                                    <button type="button" class="mye-block-remove" data-remove-comp="process" data-order-id="${o.id}" data-plan-op-id="${op.id}" data-step-idx="${idx}" title="Quitar proceso">x</button>
                                     <div class="mye-step-remain" style="position:absolute;right:0;top:0;height:100%;width:${remainWidth.toFixed(1)}%;background:rgba(0,0,0,0.18);border-radius:0 6px 6px 0;pointer-events:none;"></div>
                                     <span class="mye-block-line" style="position:relative;z-index:2;">${textSafe(step.name)}</span>
                                     <span class="mye-block-line mye-step-time" data-order-id="${o.id}" data-step-idx="${idx}" style="position:relative;z-index:2;">${formatHHMM(Math.max(0, (stepDurMs - stepElapsed) / 3600000))}</span>
@@ -1504,7 +1499,6 @@
                             <div class="mye-block mye-block-ot" data-order-id="${o.id}" data-plan-op-id="${op.id}" data-comp-type="ot"
                                 style="left:${clampedLeft}%; width:${readableWidth}%; background:#fbbf24;"
                                 draggable="true" title="${textSafe(o.folio_ot)}">
-                                <button type="button" class="mye-block-remove" data-remove-comp="ot" data-order-id="${o.id}" data-plan-op-id="${op.id}" title="Quitar OT de este operador">x</button>
                                 <span class="mye-block-line">${textSafe(o.folio_ot)}</span>
                                 <span class="mye-block-line">O:${hasOp ? 'OK' : '--'} I:${hasInt ? 'OK' : '--'} P:${hasProc ? 'OK' : '--'}</span>
                             </div>`);
@@ -1522,20 +1516,6 @@
 
                 timelineEl.innerHTML = rows || '<div class="mye-order-meta" style="padding:10px;">No hay datos para mostrar en timeline.</div>';
 
-                timelineEl.querySelectorAll('.mye-block-remove').forEach(btn => {
-                    btn.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const orderId = Number(btn.getAttribute('data-order-id') || 0);
-                        const opId = Number(btn.getAttribute('data-plan-op-id') || 0);
-                        const comp = String(btn.getAttribute('data-remove-comp') || '');
-                        const stepIdx = Number(btn.getAttribute('data-step-idx') || -1);
-                        const order = getOrder(orderId);
-                        if (!order || !opId || !comp) return;
-                        removePlanComponent(order, opId, comp, stepIdx);
-                    });
-                });
-
                 timelineEl.querySelectorAll('.mye-block').forEach(node => {
                     node.addEventListener('click', () => {
                         selectedOrderId = Number(node.getAttribute('data-order-id'));
@@ -1543,10 +1523,19 @@
                     });
                     node.addEventListener('dragstart', function(e) {
                         const orderId = Number(node.getAttribute('data-order-id'));
+                        const opId = Number(node.getAttribute('data-plan-op-id') || 0);
+                        const compType = String(node.getAttribute('data-comp-type') || 'ot');
+                        const stepIdx = Number(node.getAttribute('data-step-idx') || -1);
                         draggedOrderId = orderId;
                         if (e.dataTransfer) {
                             e.dataTransfer.effectAllowed = 'move';
-                            setDragPayload(e, { type: 'order', orderId: orderId }, orderId);
+                            setDragPayload(e, {
+                                type: 'plan_component',
+                                orderId: orderId,
+                                operatorId: opId,
+                                compType: compType,
+                                stepIdx: stepIdx,
+                            }, orderId);
                         }
                     });
                     node.addEventListener('dragend', function() {
@@ -1579,13 +1568,17 @@
                         const targetPlan = getPlanForOperator(order, opId) || order.plan || {};
                         const droppedStartAt = trackNode ? startAtFromTrackDrop(trackNode, e, startDate, cfg) : (targetPlan.start_at || nowLocalInput());
 
-                        if (payload.type === 'order') {
+                        if (payload.type === 'order' || (payload.type === 'plan_component' && String(payload.compType || '') === 'ot')) {
                             saveOrderPlan(order, {
                                 operator_id: opId || Number(order.plan && order.plan.operator_id) || null,
                                 process_status: 'configuracion',
                                 start_at: droppedStartAt,
                                 timer_started_at: null,
                             }, `OT ${order.folio_ot || order.id} movida al timeline de ${opId || '-'}`, { operator_id_context: opId });
+                            return;
+                        }
+
+                        if (payload.type === 'plan_component') {
                             return;
                         }
 
@@ -1611,7 +1604,7 @@
                         const payload = getDragPayload(e);
                         if (!payload) return;
 
-                        if (payload.type === 'order') {
+                        if (payload.type === 'order' || (payload.type === 'plan_component' && String(payload.compType || '') === 'ot')) {
                             const orderId = Number(payload.orderId || draggedOrderId || 0);
                             const order = getOrder(orderId);
                             if (!order) return;
@@ -1830,6 +1823,21 @@
             scheduleStartInput.value = nowLocalInput();
             renderTimeline();
             setInterval(refreshElapsedDisplays, 1000);
+
+            withDropHandlers(unassignMachineEl, function(order, payload) {
+                if (!payload || payload.type !== 'plan_component' || String(payload.compType || '') !== 'machine') return;
+                removePlanComponent(order, Number(payload.operatorId || 0), 'machine', -1);
+            });
+
+            withDropHandlers(unassignProcessEl, function(order, payload) {
+                if (!payload || payload.type !== 'plan_component' || String(payload.compType || '') !== 'process') return;
+                removePlanComponent(order, Number(payload.operatorId || 0), 'process', Number(payload.stepIdx || -1));
+            });
+
+            withDropHandlers(unassignOtEl, function(order, payload) {
+                if (!payload || payload.type !== 'plan_component' || String(payload.compType || '') !== 'ot') return;
+                removePlanComponent(order, Number(payload.operatorId || 0), 'ot', -1);
+            });
 
             // Actualiza en tiempo real la barra de progreso y tiempo restante de cada step
             setInterval(function tickStepProgress() {
