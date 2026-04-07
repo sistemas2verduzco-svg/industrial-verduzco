@@ -913,19 +913,35 @@
                     else plans.push(mergedPlan);
                 }
 
+                const rootPlan = explicitPlans
+                    ? (plans[0] || {
+                        operator_id: null,
+                        operator_username: '',
+                        station: '',
+                        process_name: '',
+                        process_status: 'por_iniciar',
+                        start_at: null,
+                        timer_started_at: null,
+                        elapsed_seconds: 0,
+                        duration_hours: 0,
+                        machine_icon: '🏭',
+                        steps: [],
+                    })
+                    : mergedPlan;
+
                 const payload = {
                     action: 'save',
                     ot_id: Number(order.id),
-                    operator_id: mergedPlan.operator_id || null,
-                    station: mergedPlan.station || '',
-                    process_name: mergedPlan.process_name || '',
-                    process_status: mergedPlan.process_status || 'por_iniciar',
-                    start_at: mergedPlan.start_at || null,
-                    timer_started_at: mergedPlan.timer_started_at || null,
-                    elapsed_seconds: Number(mergedPlan.elapsed_seconds || 0),
-                    duration_hours: Number(mergedPlan.duration_hours || 0),
-                    machine_icon: mergedPlan.machine_icon || '🏭',
-                    steps: Array.isArray(mergedPlan.steps) ? mergedPlan.steps : [],
+                    operator_id: rootPlan.operator_id || null,
+                    station: rootPlan.station || '',
+                    process_name: rootPlan.process_name || '',
+                    process_status: rootPlan.process_status || 'por_iniciar',
+                    start_at: rootPlan.start_at || null,
+                    timer_started_at: rootPlan.timer_started_at || null,
+                    elapsed_seconds: Number(rootPlan.elapsed_seconds || 0),
+                    duration_hours: Number(rootPlan.duration_hours || 0),
+                    machine_icon: rootPlan.machine_icon || '🏭',
+                    steps: Array.isArray(rootPlan.steps) ? rootPlan.steps : [],
                     plans: plans,
                     notas: order.notas || '',
                 };
@@ -942,7 +958,7 @@
 
                     order.plan = {
                         ...plan,
-                        ...mergedPlan,
+                        ...rootPlan,
                         plans: plans,
                     };
                     selectedOrderId = Number(order.id);
