@@ -358,6 +358,30 @@
             box-shadow: inset 0 0 0 1px rgba(42, 122, 191, 0.25);
         }
 
+        .mye-drop-preview-target {
+            box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85), 0 0 0 2px rgba(34, 197, 94, 0.5);
+        }
+
+        .mye-drop-preview-before {
+            box-shadow: inset 3px 0 0 rgba(255, 255, 255, 0.95), 0 0 0 2px rgba(34, 197, 94, 0.5);
+        }
+
+        .mye-drop-preview-after {
+            box-shadow: inset -3px 0 0 rgba(255, 255, 255, 0.95), 0 0 0 2px rgba(34, 197, 94, 0.5);
+        }
+
+        .mye-drop-preview-line {
+            position: absolute;
+            top: 86px;
+            height: 46px;
+            width: 2px;
+            background: #16a34a;
+            box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.25);
+            border-radius: 2px;
+            pointer-events: none;
+            z-index: 40;
+        }
+
         .mye-schedule-wrap {
             background: var(--mye-panel);
             border: 1px solid var(--mye-border);
@@ -674,6 +698,7 @@
             const processMap = new Map((MYE_PROCESSES || []).map(p => [Number(p.id), p]));
             let selectedOrderId = MYE_ORDERS.length ? Number(MYE_ORDERS[0].id) : null;
             let draggedOrderId = null;
+            let draggedPayload = null;
             let scale = 'hours';
 
             function nowLocalInput() {
@@ -776,6 +801,7 @@
 
             function setDragPayload(e, payload, fallbackText) {
                 if (!e || !e.dataTransfer) return;
+                draggedPayload = payload || null;
                 const serialized = JSON.stringify(payload || {});
                 try {
                     e.dataTransfer.setData('application/json', serialized);
@@ -809,7 +835,7 @@
                 if (orderId > 0) {
                     return { type: 'order', orderId: orderId };
                 }
-                return null;
+                return draggedPayload || null;
             }
 
             function statusById(id) {
@@ -1120,7 +1146,7 @@
                 });
             }
 
-            async function reorderProcessStep(order, opId, fromIdx, toIdx) {
+            async function reorderProcessStep(order, opId, fromIdx, toIdx, placeAfter) {
                 if (!order || !opId) return false;
                 const targetPlan = getPlanForOperator(order, opId);
                 if (!targetPlan) return false;
@@ -1128,13 +1154,14 @@
                 const src = Number(fromIdx);
                 const dstInput = Number(toIdx);
                 if (!Number.isInteger(src) || src < 0 || src >= steps.length) return false;
-                let dst = Number.isInteger(dstInput) ? dstInput : (steps.length - 1);
-                dst = Math.max(0, Math.min(dst, steps.length - 1));
-                if (src === dst) return true;
+                let insertIdx = Number.isInteger(dstInput) ? dstInput : (steps.length - 1);
+                insertIdx = placeAfter ? (insertIdx + 1) : insertIdx;
+                insertIdx = Math.max(0, Math.min(insertIdx, steps.length));
 
                 const [moved] = steps.splice(src, 1);
-                const adjustedDst = src < dst ? (dst - 1) : dst;
-                steps.splice(adjustedDst, 0, moved);
+                if (src < insertIdx) insertIdx -= 1;
+                insertIdx = Math.max(0, Math.min(insertIdx, steps.length));
+                steps.splice(insertIdx, 0, moved);
 
                 return saveOrderPlan(order, {
                     operator_id: Number(opId),
@@ -1537,10 +1564,10 @@
                             const stepLeft = ((stepCursor - rowBaseMs) / totalRange) * 100;
                             const stepWidth = (stepDurMs / totalRange) * 100;
                             const stepClampedLeft = Math.max(0, stepLeft);
-                            const stepReadableWidth = Math.min(100 - stepClampedLeft, Math.max(stepWidth, 10));
+                            const stepReadableWidth = Math.min(100 - stepClampedLeft, Math.max(stepWidth, 1.2));
                             const gapPct = 0.22;
                             const stepVisualLeft = Math.min(100, stepClampedLeft + (gapPct / 2));
-                            const stepVisualWidth = Math.max(8, stepReadableWidth - gapPct);
+                            const stepVisualWidth = Math.max(1, stepReadableWidth - gapPct);
 
                             // Progreso: si tiene started_at, calcular cuánto se ha consumido
                             const stepStartedMs = toDateSafe(step.started_at) ? toDateSafe(step.started_at).getTime() : null;
@@ -1608,15 +1635,34 @@
                     });
                     node.addEventListener('dragend', function() {
                         draggedOrderId = null;
+                        draggedPayload = null;
                         document.querySelectorAll('.mye-drop-target').forEach(el => el.classList.remove('mye-drop-target'));
+                        document.querySelectorAll('.mye-drop-preview-target,.mye-drop-preview-before,.mye-drop-preview-after').forEach(el => {
+                            el.classList.remove('mye-drop-preview-target', 'mye-drop-preview-before', 'mye-drop-preview-after');
+                        });
+                        document.querySelectorAll('.mye-drop-preview-line').forEach(el => el.remove());
                     });
 
                     node.addEventListener('dragover', function(e) {
                         e.preventDefault();
                         node.classList.add('mye-drop-target');
+                        const payload = getDragPayload(e);
+                        if (!payload || payload.type !== 'plan_component' || String(payload.compType || '') !== 'process') return;
+                        const srcOrderId = Number(payload.orderId || 0);
+                        const srcOpId = Number(payload.operatorId || 0);
+                        const nodeOrderId = Number(node.getAttribute('data-order-id') || 0);
+                        const nodeOpId = Number(node.getAttribute('data-plan-op-id') || 0);
+                        const nodeCompType = String(node.getAttribute('data-comp-type') || '');
+                        if (srcOrderId !== nodeOrderId || srcOpId !== nodeOpId || nodeCompType !== 'process') return;
+                        const rect = node.getBoundingClientRect();
+                        const isAfter = (e.clientX - rect.left) > (rect.width / 2);
+                        node.classList.add('mye-drop-preview-target');
+                        node.classList.toggle('mye-drop-preview-after', isAfter);
+                        node.classList.toggle('mye-drop-preview-before', !isAfter);
                     });
                     node.addEventListener('dragleave', function() {
                         node.classList.remove('mye-drop-target');
+                        node.classList.remove('mye-drop-preview-target', 'mye-drop-preview-before', 'mye-drop-preview-after');
                     });
                     node.addEventListener('drop', function(e) {
                         e.preventDefault();
@@ -1654,11 +1700,13 @@
                             const targetCompType = String(node.getAttribute('data-comp-type') || '');
                             const targetStepIdx = Number(node.getAttribute('data-step-idx') || 0);
                             if (srcCompType === 'process' && srcOrderId === Number(order.id) && srcOpId === opId) {
+                                const rect = node.getBoundingClientRect();
+                                const placeAfter = (e.clientX - rect.left) > (rect.width / 2);
                                 let toIdx = targetStepIdx;
                                 if (targetCompType !== 'process') {
                                     toIdx = 0;
                                 }
-                                reorderProcessStep(order, opId, srcStepIdx, toIdx);
+                                reorderProcessStep(order, opId, srcStepIdx, toIdx, placeAfter);
                                 return;
                             }
                             showMessage('Para ordenar procesos, suelta el bloque verde dentro de la misma OT.', true);
@@ -1676,9 +1724,27 @@
                     node.addEventListener('dragover', function(e) {
                         e.preventDefault();
                         node.classList.add('mye-drop-target');
+                        const payload = getDragPayload(e);
+                        if (!payload || payload.type !== 'plan_component' || String(payload.compType || '') !== 'process') {
+                            document.querySelectorAll('.mye-drop-preview-line').forEach(el => el.remove());
+                            return;
+                        }
+                        const srcOrderId = Number(payload.orderId || 0);
+                        const srcOpId = Number(payload.operatorId || 0);
+                        if (!srcOrderId || srcOpId !== opId) return;
+                        let line = node.querySelector('.mye-drop-preview-line');
+                        if (!line) {
+                            line = document.createElement('div');
+                            line.className = 'mye-drop-preview-line';
+                            node.appendChild(line);
+                        }
+                        const rect = node.getBoundingClientRect();
+                        const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+                        line.style.left = `${Math.max(0, x - 1)}px`;
                     });
                     node.addEventListener('dragleave', function() {
                         node.classList.remove('mye-drop-target');
+                        node.querySelectorAll('.mye-drop-preview-line').forEach(el => el.remove());
                     });
                     node.addEventListener('drop', function(e) {
                         e.preventDefault();
@@ -1726,15 +1792,17 @@
                                 .sort((a, b) => a.left - b.left);
 
                             let toIdx = ordered[ordered.length - 1].idx;
+                            let placeAfter = true;
                             for (const item of ordered) {
                                 const center = item.left + (item.width / 2);
                                 if (xPct <= center) {
                                     toIdx = item.idx;
+                                    placeAfter = false;
                                     break;
                                 }
                             }
 
-                            reorderProcessStep(targetOrder, opId, srcStepIdx, toIdx);
+                            reorderProcessStep(targetOrder, opId, srcStepIdx, toIdx, placeAfter);
                             return;
                         }
 
