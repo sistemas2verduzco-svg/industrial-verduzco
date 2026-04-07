@@ -435,7 +435,7 @@
             top: 4px;
             min-height: 26px;
             border-radius: 6px;
-            padding: 3px 6px;
+            padding: 3px 20px 3px 6px;
             color: #000;
             font-size: 11px;
             line-height: 1.25;
@@ -449,6 +449,28 @@
         .mye-block-machine { top: 4px; }
         .mye-block-process { top: 36px; }
         .mye-block-ot      { top: 68px; }
+
+        .mye-block-remove {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 14px;
+            height: 14px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.22);
+            color: #fff;
+            font-size: 10px;
+            font-weight: 700;
+            line-height: 1;
+            cursor: pointer;
+            z-index: 5;
+            padding: 0;
+        }
+
+        .mye-block-remove:hover {
+            background: rgba(0, 0, 0, 0.35);
+        }
 
         .mye-block-line {
             display: block;
@@ -852,6 +874,7 @@
                 const opts = options || {};
                 const contextOpId = Number(opts.operator_id_context || patch.operator_id || plan.operator_id || 0) || null;
                 const opRef = contextOpId ? operatorMap.get(contextOpId) : null;
+                const explicitPlans = Array.isArray(opts.replacePlans) ? opts.replacePlans.slice() : null;
                 const basePlan = contextOpId
                     ? (getPlanForOperator(order, contextOpId) || {
                         operator_id: contextOpId,
@@ -884,7 +907,10 @@
                 };
 
                 const plans = getOrderPlans(order).slice();
-                if (contextOpId) {
+                if (explicitPlans) {
+                    plans.length = 0;
+                    explicitPlans.forEach(p => plans.push(p));
+                } else if (contextOpId) {
                     const idx = plans.findIndex(p => Number(p.operator_id || 0) === contextOpId);
                     if (idx >= 0) plans[idx] = mergedPlan;
                     else plans.push(mergedPlan);
@@ -1007,6 +1033,61 @@
                 }
 
                 return false;
+            }
+
+            async function removePlanComponent(order, opId, compType, stepIdx) {
+                if (!order || !opId || !compType) return false;
+                const plans = getOrderPlans(order).slice();
+                const idx = plans.findIndex(p => Number(p.operator_id || 0) === Number(opId));
+                if (idx < 0) return false;
+
+                const target = { ...plans[idx] };
+                const steps = Array.isArray(target.steps) ? target.steps.slice() : [];
+
+                if (compType === 'machine') {
+                    target.station = '';
+                    target.machine_icon = '🏭';
+                } else if (compType === 'process') {
+                    const sIdx = Number(stepIdx);
+                    if (Number.isInteger(sIdx) && sIdx >= 0 && sIdx < steps.length) {
+                        steps.splice(sIdx, 1);
+                    } else {
+                        steps.length = 0;
+                    }
+                    target.steps = steps;
+                    target.process_name = steps.map(s => s.name).join(', ');
+                    target.duration_hours = steps.reduce((acc, s) => acc + Math.max(0.5, Number(s.duration_hours || 1)), 0);
+                    if (!steps.length) {
+                        target.timer_started_at = null;
+                        target.elapsed_seconds = 0;
+                        if (target.process_status === 'en_proceso' || target.process_status === 'pausado') {
+                            target.process_status = 'configuracion';
+                        }
+                    }
+                } else if (compType === 'ot') {
+                    plans.splice(idx, 1);
+                    return saveOrderPlan(order, {
+                        operator_id: Number(opId),
+                        process_status: 'por_iniciar',
+                        station: '',
+                        process_name: '',
+                        steps: [],
+                        duration_hours: 0,
+                        start_at: null,
+                        timer_started_at: null,
+                        elapsed_seconds: 0,
+                        machine_icon: '🏭',
+                    }, `OT ${order.folio_ot || order.id} retirada de ${opId}`, {
+                        operator_id_context: Number(opId),
+                        replacePlans: plans,
+                    });
+                }
+
+                plans[idx] = target;
+                return saveOrderPlan(order, target, `Asignacion removida (${compType}) en OT ${order.folio_ot || order.id}`, {
+                    operator_id_context: Number(opId),
+                    replacePlans: plans,
+                });
             }
 
             function pickTrackOrderByPosition(trackNode, opId, event) {
@@ -1354,12 +1435,19 @@
 
                 const rows = (MYE_OPERATORS || []).map(op => {
                     const opOrders = (MYE_ORDERS || []).filter(o => !!getPlanForOperator(o, op.id));
+                    const rowStartMs = opOrders.reduce((minMs, o) => {
+                        const p = getPlanForOperator(o, op.id) || {};
+                        const pStart = toDateSafe(p.start_at);
+                        const ms = pStart ? pStart.getTime() : startDate.getTime();
+                        return Math.min(minMs, ms);
+                    }, Number.POSITIVE_INFINITY);
+                    const rowBaseMs = Number.isFinite(rowStartMs) ? rowStartMs : startDate.getTime();
 
                     const cards = opOrders.flatMap(o => {
                         const plan = getPlanForOperator(o, op.id) || {};
                         const startMs = toDateSafe(plan.start_at) ? toDateSafe(plan.start_at).getTime() : startDate.getTime();
                         const totalDuration = Math.max(0.5, Number(plan.duration_hours || 1));
-                        const left = ((startMs - startDate.getTime()) / totalRange) * 100;
+                        const left = ((startMs - rowBaseMs) / totalRange) * 100;
                         const totalWidth = ((totalDuration * 3600000) / totalRange) * 100;
 
                         if (left > 100 || left + totalWidth < 0) return [];
@@ -1374,6 +1462,7 @@
                                 <div class="mye-block mye-block-machine" data-order-id="${o.id}" data-plan-op-id="${op.id}" data-comp-type="machine"
                                     style="left:${clampedLeft}%; width:${readableWidth}%; background:#f97316;"
                                     draggable="true" title="Máquina: ${textSafe(plan.station)}">
+                                    <button type="button" class="mye-block-remove" data-remove-comp="machine" data-order-id="${o.id}" data-plan-op-id="${op.id}" title="Quitar máquina">x</button>
                                     <span class="mye-block-line">${textSafe(plan.machine_icon || '🏭')} ${textSafe(plan.station)}</span>
                                 </div>`);
                         }
@@ -1383,7 +1472,7 @@
                         let stepCursor = startMs;
                         steps.forEach((step, idx) => {
                             const stepDurMs = Math.max(0.5, Number(step.duration_hours || 1)) * 3600000;
-                            const stepLeft = ((stepCursor - startDate.getTime()) / totalRange) * 100;
+                            const stepLeft = ((stepCursor - rowBaseMs) / totalRange) * 100;
                             const stepWidth = (stepDurMs / totalRange) * 100;
                             const stepClampedLeft = Math.max(0, stepLeft);
                             const stepReadableWidth = Math.min(100 - stepClampedLeft, Math.max(stepWidth, 6));
@@ -1399,6 +1488,7 @@
                                 <div class="mye-block mye-block-process" data-order-id="${o.id}" data-plan-op-id="${op.id}" data-step-idx="${idx}" data-comp-type="process"
                                     style="left:${stepClampedLeft}%; width:${stepReadableWidth}%; background:#22c55e;"
                                     draggable="true" title="Proceso: ${textSafe(step.name)} (${formatHHMM(step.duration_hours || 1)})">
+                                    <button type="button" class="mye-block-remove" data-remove-comp="process" data-order-id="${o.id}" data-plan-op-id="${op.id}" data-step-idx="${idx}" title="Quitar proceso">x</button>
                                     <div class="mye-step-remain" style="position:absolute;right:0;top:0;height:100%;width:${remainWidth.toFixed(1)}%;background:rgba(0,0,0,0.18);border-radius:0 6px 6px 0;pointer-events:none;"></div>
                                     <span class="mye-block-line" style="position:relative;z-index:2;">${textSafe(step.name)}</span>
                                     <span class="mye-block-line mye-step-time" data-order-id="${o.id}" data-step-idx="${idx}" style="position:relative;z-index:2;">${formatHHMM(Math.max(0, (stepDurMs - stepElapsed) / 3600000))}</span>
@@ -1414,6 +1504,7 @@
                             <div class="mye-block mye-block-ot" data-order-id="${o.id}" data-plan-op-id="${op.id}" data-comp-type="ot"
                                 style="left:${clampedLeft}%; width:${readableWidth}%; background:#fbbf24;"
                                 draggable="true" title="${textSafe(o.folio_ot)}">
+                                <button type="button" class="mye-block-remove" data-remove-comp="ot" data-order-id="${o.id}" data-plan-op-id="${op.id}" title="Quitar OT de este operador">x</button>
                                 <span class="mye-block-line">${textSafe(o.folio_ot)}</span>
                                 <span class="mye-block-line">O:${hasOp ? 'OK' : '--'} I:${hasInt ? 'OK' : '--'} P:${hasProc ? 'OK' : '--'}</span>
                             </div>`);
@@ -1430,6 +1521,20 @@
                 }).join('');
 
                 timelineEl.innerHTML = rows || '<div class="mye-order-meta" style="padding:10px;">No hay datos para mostrar en timeline.</div>';
+
+                timelineEl.querySelectorAll('.mye-block-remove').forEach(btn => {
+                    btn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const orderId = Number(btn.getAttribute('data-order-id') || 0);
+                        const opId = Number(btn.getAttribute('data-plan-op-id') || 0);
+                        const comp = String(btn.getAttribute('data-remove-comp') || '');
+                        const stepIdx = Number(btn.getAttribute('data-step-idx') || -1);
+                        const order = getOrder(orderId);
+                        if (!order || !opId || !comp) return;
+                        removePlanComponent(order, opId, comp, stepIdx);
+                    });
+                });
 
                 timelineEl.querySelectorAll('.mye-block').forEach(node => {
                     node.addEventListener('click', () => {
