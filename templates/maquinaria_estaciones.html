@@ -405,7 +405,7 @@
             display: grid;
             grid-template-columns: 180px 1fr;
             border-bottom: 1px solid #edf2f8;
-            height: 100px;
+            height: 118px;
         }
 
         .mye-row-name {
@@ -419,7 +419,7 @@
 
         .mye-row-track {
             position: relative;
-            height: 100px;
+            height: 118px;
             overflow: hidden;
             background-image: repeating-linear-gradient(
                 to right,
@@ -433,9 +433,9 @@
         .mye-block {
             position: absolute;
             top: 4px;
-            min-height: 26px;
+            min-height: 30px;
             border-radius: 6px;
-            padding: 3px 6px;
+            padding: 4px 6px;
             color: #000;
             font-size: 11px;
             line-height: 1.25;
@@ -447,8 +447,8 @@
             z-index: 10;
         }
         .mye-block-ot      { top: 4px; }
-        .mye-block-machine { top: 36px; }
-        .mye-block-process { top: 68px; }
+        .mye-block-machine { top: 42px; }
+        .mye-block-process { top: 80px; }
 
         .mye-unassign-drop {
             margin-top: 8px;
@@ -467,9 +467,10 @@
             display: block;
             font-size: 10px;
             line-height: 1.1;
-            margin: 1px 0;
-            word-break: break-word;
-            white-space: normal;
+            margin: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .mye-processes {
@@ -1487,7 +1488,7 @@
                             const stepLeft = ((stepCursor - rowBaseMs) / totalRange) * 100;
                             const stepWidth = (stepDurMs / totalRange) * 100;
                             const stepClampedLeft = Math.max(0, stepLeft);
-                            const stepReadableWidth = Math.min(100 - stepClampedLeft, Math.max(stepWidth, 6));
+                            const stepReadableWidth = Math.min(100 - stepClampedLeft, Math.max(stepWidth, 10));
 
                             // Progreso: si tiene started_at, calcular cuánto se ha consumido
                             const stepStartedMs = toDateSafe(step.started_at) ? toDateSafe(step.started_at).getTime() : null;
@@ -1501,8 +1502,7 @@
                                     style="left:${stepClampedLeft}%; width:${stepReadableWidth}%; background:#22c55e;"
                                     draggable="true" title="Proceso: ${textSafe(step.name)} (${formatHHMM(step.duration_hours || 1)})">
                                     <div class="mye-step-remain" style="position:absolute;right:0;top:0;height:100%;width:${remainWidth.toFixed(1)}%;background:rgba(0,0,0,0.18);border-radius:0 6px 6px 0;pointer-events:none;"></div>
-                                    <span class="mye-block-line" style="position:relative;z-index:2;">${textSafe(step.name)}</span>
-                                    <span class="mye-block-line mye-step-time" data-order-id="${o.id}" data-step-idx="${idx}" style="position:relative;z-index:2;">${formatHHMM(Math.max(0, (stepDurMs - stepElapsed) / 3600000))}</span>
+                                    <span class="mye-block-line mye-step-time" data-order-id="${o.id}" data-step-idx="${idx}" style="position:relative;z-index:2;">${textSafe(step.name)} ${formatHHMM(Math.max(0, (stepDurMs - stepElapsed) / 3600000))}</span>
                                 </div>`);
                             stepCursor += stepDurMs;
                         });
