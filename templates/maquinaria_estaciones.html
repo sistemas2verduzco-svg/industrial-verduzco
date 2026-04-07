@@ -877,11 +877,13 @@
                 if (!order || !payload) return false;
                 const opts = options || {};
                 const forcedStartAt = Object.prototype.hasOwnProperty.call(opts, 'start_at') ? opts.start_at : undefined;
+                const forcedOperatorId = Number(opts.operator_id || 0) || null;
 
                 if (payload.type === 'machine') {
                     const machineKey = String(payload.machineKey || '').toLowerCase();
                     const machine = machineMap.get(machineKey);
                     saveOrderPlan(order, {
+                        operator_id: forcedOperatorId || Number(order.plan && order.plan.operator_id) || null,
                         station: machine ? (machine.clave_maquina || '') : (payload.machineKey || ''),
                         machine_icon: machine ? (machine.icon || '🏭') : '🏭',
                         process_status: 'configuracion',
@@ -895,6 +897,7 @@
                     const procId = Number(payload.processId || 0);
                     const proc = processMap.get(procId);
                     saveOrderPlan(order, {
+                        operator_id: forcedOperatorId || Number(order.plan && order.plan.operator_id) || null,
                         process_name: proc ? (proc.nombre || '') : '',
                         process_status: 'configuracion',
                         duration_hours: proc ? Number(proc.duracion_default || 1) : Number((order.plan && order.plan.duration_hours) || 1),
@@ -905,7 +908,7 @@
                 }
 
                 if (payload.type === 'operator') {
-                    const opId = Number(payload.operatorId || fallbackOperatorId || 0);
+                    const opId = Number(forcedOperatorId || payload.operatorId || fallbackOperatorId || 0);
                     if (!opId) return false;
                     const op = operatorMap.get(opId);
                     saveOrderPlan(order, {
@@ -1399,13 +1402,18 @@
                             target = rowOrders[0];
                         }
 
+                        // If the line has no OT yet, use the currently selected OT and move it here.
+                        if (!target && selectedOrderId) {
+                            target = getOrder(selectedOrderId);
+                        }
+
                         if (!target) {
                             showMessage('No se encontro OT destino en esa linea. Suelta encima del bloque o mas cerca del bloque deseado.', true);
                             return;
                         }
 
                         const droppedStartAt = startAtFromTrackDrop(node, e, startDate, cfg);
-                        const ok = applyPayloadToOrder(target, payload, opId, { start_at: droppedStartAt });
+                        const ok = applyPayloadToOrder(target, payload, opId, { start_at: droppedStartAt, operator_id: opId });
                         if (!ok) {
                             showMessage('Ese tipo de elemento no se puede asignar en la barra.', true);
                         }
