@@ -533,6 +533,7 @@ def _mye_upsert_plan_state_block(text, state_payload):
         'operator_id': int(payload.get('operator_id')) if str(payload.get('operator_id') or '').isdigit() else None,
         'operator_username': (str(payload.get('operator_username') or '').strip() or None),
         'station': (str(payload.get('station') or '').strip() or None),
+        'process_name': (str(payload.get('process_name') or '').strip() or None),
         'process_status': (str(payload.get('process_status') or '').strip() or None),
         'start_at': (str(payload.get('start_at') or '').strip() or None),
         'duration_hours': float(payload.get('duration_hours') or 0),

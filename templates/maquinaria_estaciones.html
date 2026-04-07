@@ -405,7 +405,7 @@
             display: grid;
             grid-template-columns: 180px 1fr;
             border-bottom: 1px solid #edf2f8;
-            min-height: 80px;
+            min-height: 100px;
         }
 
         .mye-row-name {
@@ -431,19 +431,22 @@
         .mye-block {
             position: absolute;
             top: 4px;
-            min-height: 70px;
-            border-radius: 9px;
-            padding: 4px 6px;
+            min-height: 26px;
+            border-radius: 6px;
+            padding: 3px 6px;
             color: #000;
             font-size: 11px;
             line-height: 1.25;
-            overflow: visible;
-            box-shadow: 0 3px 8px rgba(15, 58, 95, 0.2);
+            overflow: hidden;
+            box-shadow: 0 2px 5px rgba(15, 58, 95, 0.2);
             cursor: pointer;
             font-weight: 700;
             background-clip: border-box;
             z-index: 10;
         }
+        .mye-block-machine { top: 4px; }
+        .mye-block-process { top: 36px; }
+        .mye-block-ot      { top: 68px; }
 
         .mye-block-line {
             display: block;
