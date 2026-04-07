@@ -22,6 +22,7 @@ import re
 import subprocess
 import sys
 import threading
+import requests
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
@@ -52,6 +53,79 @@ _MACHINE_SCHEDULE_INIT = False
 _MACHINE_SCHEDULE_STOP = threading.Event()
 MYE_CATALOG_FILE = os.path.join('uploads', 'maquinaria_estaciones_catalogo.json')
 _MYE_CATALOG_LOCK = threading.Lock()
+
+WHATSAPP_ALERTS_ENABLED = os.getenv('WHATSAPP_ALERTS_ENABLED', '0').strip().lower() in ('1', 'true', 'yes', 'on')
+WHATSAPP_ALERT_TYPES = {
+    x.strip().lower() for x in (os.getenv('WHATSAPP_ALERT_TYPES') or '').split(',') if x.strip()
+}
+TWILIO_ACCOUNT_SID = (os.getenv('TWILIO_ACCOUNT_SID') or '').strip()
+TWILIO_AUTH_TOKEN = (os.getenv('TWILIO_AUTH_TOKEN') or '').strip()
+TWILIO_WHATSAPP_FROM = (os.getenv('TWILIO_WHATSAPP_FROM') or '').strip()
+WHATSAPP_SUPERVISOR_TO = (os.getenv('WHATSAPP_SUPERVISOR_TO') or '').strip()
+
+
+def _normalize_whatsapp_address(value):
+    raw = (value or '').strip()
+    if not raw:
+        return ''
+    if raw.startswith('whatsapp:'):
+        return raw
+    if raw.startswith('+'):
+        return f'whatsapp:{raw}'
+    return ''
+
+
+def _send_whatsapp_message(body_text):
+    if not WHATSAPP_ALERTS_ENABLED:
+        return False, 'disabled'
+
+    from_addr = _normalize_whatsapp_address(TWILIO_WHATSAPP_FROM)
+    to_addr = _normalize_whatsapp_address(WHATSAPP_SUPERVISOR_TO)
+    if not (TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN and from_addr and to_addr):
+        return False, 'missing_config'
+
+    url = f'https://api.twilio.com/2010-04-01/Accounts/{TWILIO_ACCOUNT_SID}/Messages.json'
+    payload = {
+        'From': from_addr,
+        'To': to_addr,
+        'Body': (body_text or '').strip()[:1500],
+    }
+
+    try:
+        response = requests.post(
+            url,
+            data=payload,
+            auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN),
+            timeout=15,
+        )
+        if 200 <= response.status_code < 300:
+            return True, 'sent'
+        logger.warning(f'WhatsApp Twilio error {response.status_code}: {response.text[:500]}')
+        return False, f'http_{response.status_code}'
+    except Exception as exc:
+        logger.warning(f'WhatsApp send exception: {exc}')
+        return False, 'exception'
+
+
+def _send_alerta_whatsapp_if_enabled(alerta_item):
+    if not alerta_item:
+        return
+    if not WHATSAPP_ALERTS_ENABLED:
+        return
+    tipo = (alerta_item.tipo or '').strip().lower()
+    if WHATSAPP_ALERT_TYPES and tipo and tipo not in WHATSAPP_ALERT_TYPES:
+        return
+
+    body = (
+        f"ALERTA SISTEMA\n"
+        f"Tipo: {alerta_item.tipo or '-'}\n"
+        f"Titulo: {alerta_item.titulo or '-'}\n"
+        f"Mensaje: {alerta_item.mensaje or '-'}\n"
+        f"Fecha: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC"
+    )
+    ok, reason = _send_whatsapp_message(body)
+    if not ok:
+        logger.info(f'WhatsApp alert not sent ({reason}) for alerta id={getattr(alerta_item, "id", None)}')
 
 
 def _procesos_import_job_path(job_id):
@@ -1211,6 +1285,7 @@ def _crear_alerta_buzon(
         db.session.add(alerta)
         if commit:
             db.session.commit()
+            _send_alerta_whatsapp_if_enabled(alerta)
         return alerta
     except Exception as exc:
         db.session.rollback()
@@ -4253,6 +4328,20 @@ def api_alertas_buzon_atender_todas():
         alerta.nota_atencion = nota
     db.session.commit()
     return jsonify({'ok': True, 'updated': len(q)})
+
+
+@app.route('/api/alertas_buzon/test_whatsapp', methods=['POST'])
+@login_required
+@requires_permission('alertas_buzon', 'view')
+def api_alertas_buzon_test_whatsapp():
+    data = request.get_json(silent=True) or {}
+    mensaje = (data.get('mensaje') or '').strip()
+    if not mensaje:
+        mensaje = f"Prueba WhatsApp alertas desde sistema ({datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC)"
+
+    ok, reason = _send_whatsapp_message(mensaje)
+    code = 200 if ok else 400
+    return jsonify({'ok': ok, 'reason': reason}), code
 
 
 @app.route('/hojas_ruta_entregas_form')
