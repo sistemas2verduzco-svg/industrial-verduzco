@@ -405,7 +405,7 @@
             display: grid;
             grid-template-columns: 180px 1fr;
             border-bottom: 1px solid #edf2f8;
-            height: 118px;
+            height: 136px;
         }
 
         .mye-row-name {
@@ -419,7 +419,7 @@
 
         .mye-row-track {
             position: relative;
-            height: 118px;
+            height: 136px;
             overflow: hidden;
             background-image: repeating-linear-gradient(
                 to right,
@@ -433,7 +433,7 @@
         .mye-block {
             position: absolute;
             top: 4px;
-            min-height: 30px;
+            min-height: 32px;
             border-radius: 6px;
             padding: 4px 6px;
             color: #000;
@@ -447,8 +447,8 @@
             z-index: 10;
         }
         .mye-block-ot      { top: 4px; }
-        .mye-block-machine { top: 42px; }
-        .mye-block-process { top: 80px; }
+        .mye-block-machine { top: 46px; }
+        .mye-block-process { top: 88px; min-height: 42px; }
 
         .mye-unassign-drop {
             margin-top: 8px;
@@ -471,6 +471,11 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+        }
+
+        .mye-block-process .mye-block-line {
+            white-space: normal;
+            line-height: 1.05;
         }
 
         .mye-processes {
@@ -1502,7 +1507,8 @@
                                     style="left:${stepClampedLeft}%; width:${stepReadableWidth}%; background:#22c55e;"
                                     draggable="true" title="Proceso: ${textSafe(step.name)} (${formatHHMM(step.duration_hours || 1)})">
                                     <div class="mye-step-remain" style="position:absolute;right:0;top:0;height:100%;width:${remainWidth.toFixed(1)}%;background:rgba(0,0,0,0.18);border-radius:0 6px 6px 0;pointer-events:none;"></div>
-                                    <span class="mye-block-line mye-step-time" data-order-id="${o.id}" data-step-idx="${idx}" style="position:relative;z-index:2;">${textSafe(step.name)} ${formatHHMM(Math.max(0, (stepDurMs - stepElapsed) / 3600000))}</span>
+                                    <span class="mye-block-line" style="position:relative;z-index:2;">${textSafe(step.name)}</span>
+                                    <span class="mye-block-line mye-step-time" data-order-id="${o.id}" data-step-idx="${idx}" style="position:relative;z-index:2;">${formatHHMM(Math.max(0, (stepDurMs - stepElapsed) / 3600000))}</span>
                                 </div>`);
                             stepCursor += stepDurMs;
                         });
