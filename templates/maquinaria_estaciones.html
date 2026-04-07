@@ -1267,46 +1267,50 @@
                 const rows = (MYE_OPERATORS || []).map(op => {
                     const opOrders = (MYE_ORDERS || []).filter(o => Number(o.plan && o.plan.operator_id) === Number(op.id));
 
-                    // Sequential positioning: OTs with explicit start_at keep it;
-                    // OTs without start_at are queued one after another from scheduleStart.
-                    let seqCursor = startDate.getTime();
-                    const orderStartMs = new Map();
-                    opOrders.forEach(o => {
-                        const explicit = toDateSafe(o.plan && o.plan.start_at);
-                        if (explicit) {
-                            orderStartMs.set(o.id, explicit.getTime());
-                        } else {
-                            orderStartMs.set(o.id, seqCursor);
-                            seqCursor += Math.max(0.5, Number((o.plan && o.plan.duration_hours) || 1)) * 3600000;
-                        }
-                    });
-
-                    const cards = opOrders.map(o => {
-                        const st = statusById((o.plan && o.plan.process_status) || 'por_iniciar');
-                        const startMs = orderStartMs.get(o.id) || startDate.getTime();
-                        const duration = Math.max(0.5, Number((o.plan && o.plan.duration_hours) || 1));
-                        const hasOperator = Number((o.plan && o.plan.operator_id) || 0) > 0;
-                        const hasIntervention = !!String((o.plan && o.plan.station) || '').trim();
-                        const hasProcess = !!String((o.plan && o.plan.process_name) || '').trim();
+                    // Render each OT as separate component blocks: machine, process, full-OT
+                    const cards = opOrders.flatMap(o => {
+                        const plan = o.plan || {};
+                        const startMs = toDateSafe(plan.start_at) ? toDateSafe(plan.start_at).getTime() : startDate.getTime();
+                        const duration = Math.max(0.5, Number(plan.duration_hours || 1));
                         const left = ((startMs - startDate.getTime()) / totalRange) * 100;
                         const width = ((duration * 3600000) / totalRange) * 100;
-                        if (left > 100 || left + width < 0) return '';
+                        
+                        if (left > 100 || left + width < 0) return [];
                         const clampedLeft = Math.max(0, left);
                         const clampedWidth = Math.max(4, Math.min(100 - clampedLeft, width));
                         const readableWidth = Math.min(100 - clampedLeft, Math.max(clampedWidth, 12));
-                        const line2 = (o.plan && o.plan.process_name) || (o.plan && o.plan.station) || o.clave_maquina || '-';
-                        const elapsed = getOrderElapsedText(o);
-                        const showElapsed = (o.plan && o.plan.process_status) === 'en_proceso';
-                        const plannedLabel = formatHHMM(duration);
-                        const assignmentLabel = `O:${hasOperator ? 'OK' : '--'} I:${hasIntervention ? 'OK' : '--'} P:${hasProcess ? 'OK' : '--'}`;
-                        return `
-                            <div class="mye-block" data-order-id="${o.id}" style="left:${clampedLeft}%; width:${readableWidth}%; background:${st.color};" draggable="true" title="${textSafe(o.folio_ot)} | ${textSafe(line2)} | ${assignmentLabel}">
-                                <span class="mye-block-line">${textSafe((o.plan && o.plan.machine_icon) || '🏭')} ${textSafe(o.folio_ot)} (${plannedLabel})</span>
-                                <span class="mye-block-line">${textSafe(line2)}</span>
-                                <span class="mye-block-line">${assignmentLabel}</span>
-                                ${showElapsed ? `<span class="mye-block-line" data-order-elapsed-id="${o.id}">${elapsed}</span>` : ''}
+
+                        const blocks = [];
+
+                        // 1) Machine/Intervention block (naranja)
+                        if (String(plan.station || '').trim()) {
+                            blocks.push(`
+                                <div class="mye-block mye-block-machine" data-order-id="${o.id}" data-comp-type="machine" style="left:${clampedLeft}%; width:${readableWidth}%; background:#f97316;" draggable="true" title="Máquina: ${textSafe(plan.station)}">
+                                    <span class="mye-block-line">${textSafe((plan.machine_icon) || '🏭')} ${textSafe(plan.station)}</span>
+                                </div>
+                            `);
+                        }
+
+                        // 2) Process block (verde)
+                        if (String(plan.process_name || '').trim()) {
+                            const procDuration = formatHHMM(duration);
+                            blocks.push(`
+                                <div class="mye-block mye-block-process" data-order-id="${o.id}" data-comp-type="process" style="left:${clampedLeft}%; width:${readableWidth}%; background:#22c55e;" draggable="true" title="Proceso: ${textSafe(plan.process_name)} (${procDuration})">
+                                    <span class="mye-block-line">${textSafe(plan.process_name)}</span>
+                                    <span class="mye-block-line">(${procDuration})</span>
+                                </div>
+                            `);
+                        }
+
+                        // 3) Full OT summary block (amarillo)
+                        blocks.push(`
+                            <div class="mye-block mye-block-ot" data-order-id="${o.id}" data-comp-type="ot" style="left:${clampedLeft}%; width:${readableWidth}%; background:#fbbf24;" draggable="true" title="${textSafe(o.folio_ot)} | ${textSafe(plan.station)} | ${textSafe(plan.process_name)}">
+                                <span class="mye-block-line">${textSafe(o.folio_ot)}</span>
+                                <span class="mye-block-line">O:${Number(plan.operator_id || 0) > 0 ? 'OK' : '--'} I:${String(plan.station || '').trim() ? 'OK' : '--'} P:${String(plan.process_name || '').trim() ? 'OK' : '--'}</span>
                             </div>
-                        `;
+                        `);
+
+                        return blocks;
                     }).join('');
 
                     return `
