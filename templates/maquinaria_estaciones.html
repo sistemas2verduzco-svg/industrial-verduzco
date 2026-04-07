@@ -1109,6 +1109,36 @@
                 });
             }
 
+            async function reorderProcessStep(order, opId, fromIdx, toIdx) {
+                if (!order || !opId) return false;
+                const targetPlan = getPlanForOperator(order, opId);
+                if (!targetPlan) return false;
+                const steps = Array.isArray(targetPlan.steps) ? targetPlan.steps.slice() : [];
+                const src = Number(fromIdx);
+                const dstInput = Number(toIdx);
+                if (!Number.isInteger(src) || src < 0 || src >= steps.length) return false;
+                let dst = Number.isInteger(dstInput) ? dstInput : (steps.length - 1);
+                dst = Math.max(0, Math.min(dst, steps.length - 1));
+                if (src === dst) return true;
+
+                const [moved] = steps.splice(src, 1);
+                const adjustedDst = src < dst ? (dst - 1) : dst;
+                steps.splice(adjustedDst, 0, moved);
+
+                return saveOrderPlan(order, {
+                    operator_id: Number(opId),
+                    steps: steps,
+                    process_name: steps.map(s => s.name).join(', '),
+                    duration_hours: steps.reduce((acc, s) => acc + Math.max(0.5, Number(s.duration_hours || 1)), 0),
+                    process_status: targetPlan.process_status || 'configuracion',
+                    start_at: targetPlan.start_at || nowLocalInput(),
+                    timer_started_at: targetPlan.timer_started_at || null,
+                    elapsed_seconds: Number(targetPlan.elapsed_seconds || 0),
+                }, `Procesos reordenados en OT ${order.folio_ot || order.id}`, {
+                    operator_id_context: Number(opId),
+                });
+            }
+
             function pickTrackOrderByPosition(trackNode, opId, event) {
                 if (!trackNode) return null;
 
@@ -1601,6 +1631,21 @@
                         }
 
                         if (payload.type === 'plan_component') {
+                            const srcOrderId = Number(payload.orderId || 0);
+                            const srcOpId = Number(payload.operatorId || 0);
+                            const srcCompType = String(payload.compType || '');
+                            const srcStepIdx = Number(payload.stepIdx || 0);
+                            const targetCompType = String(node.getAttribute('data-comp-type') || '');
+                            const targetStepIdx = Number(node.getAttribute('data-step-idx') || 0);
+                            if (srcCompType === 'process' && srcOrderId === Number(order.id) && srcOpId === opId) {
+                                let toIdx = targetStepIdx;
+                                if (targetCompType !== 'process') {
+                                    toIdx = 0;
+                                }
+                                reorderProcessStep(order, opId, srcStepIdx, toIdx);
+                                return;
+                            }
+                            showMessage('Para ordenar procesos, suelta el bloque verde dentro de la misma OT.', true);
                             return;
                         }
 
@@ -1637,6 +1682,43 @@
                                 start_at: droppedStartAt,
                                 timer_started_at: null,
                             }, `OT ${order.folio_ot || order.id} movida al timeline de ${op ? op.username : opId}`, { operator_id_context: opId });
+                            return;
+                        }
+
+                        if (payload.type === 'plan_component' && String(payload.compType || '') === 'process') {
+                            const srcOrderId = Number(payload.orderId || 0);
+                            const srcOpId = Number(payload.operatorId || 0);
+                            const srcStepIdx = Number(payload.stepIdx || 0);
+                            const targetOrder = getOrder(srcOrderId);
+                            if (!targetOrder || srcOpId !== opId) {
+                                showMessage('Solo puedes reordenar procesos dentro de la misma OT y operador.', true);
+                                return;
+                            }
+
+                            const stepBlocks = Array.from(node.querySelectorAll(`.mye-block-process[data-order-id="${srcOrderId}"][data-plan-op-id="${opId}"]`));
+                            if (!stepBlocks.length) return;
+                            const rect = node.getBoundingClientRect();
+                            const xRatio = rect.width > 0 ? ((e.clientX - rect.left) / rect.width) : 0;
+                            const xPct = Math.max(0, Math.min(100, xRatio * 100));
+
+                            const ordered = stepBlocks
+                                .map(el => ({
+                                    idx: Number(el.getAttribute('data-step-idx') || 0),
+                                    left: parseFloat(String(el.style.left || '0').replace('%', '')) || 0,
+                                    width: parseFloat(String(el.style.width || '0').replace('%', '')) || 0,
+                                }))
+                                .sort((a, b) => a.left - b.left);
+
+                            let toIdx = ordered[ordered.length - 1].idx;
+                            for (const item of ordered) {
+                                const center = item.left + (item.width / 2);
+                                if (xPct <= center) {
+                                    toIdx = item.idx;
+                                    break;
+                                }
+                            }
+
+                            reorderProcessStep(targetOrder, opId, srcStepIdx, toIdx);
                             return;
                         }
 
