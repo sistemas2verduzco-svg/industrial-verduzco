@@ -128,6 +128,56 @@ def _send_alerta_whatsapp_if_enabled(alerta_item):
         logger.info(f'WhatsApp alert not sent ({reason}) for alerta id={getattr(alerta_item, "id", None)}')
 
 
+TELEGRAM_ALERTS_ENABLED = os.getenv('TELEGRAM_ALERTS_ENABLED', '0').strip().lower() in ('1', 'true', 'yes', 'on')
+TELEGRAM_ALERT_TYPES = {
+    x.strip().lower() for x in (os.getenv('TELEGRAM_ALERT_TYPES') or '').split(',') if x.strip()
+}
+TELEGRAM_BOT_TOKEN = (os.getenv('TELEGRAM_BOT_TOKEN') or '').strip()
+TELEGRAM_CHAT_ID = (os.getenv('TELEGRAM_CHAT_ID') or '').strip()
+
+
+def _send_telegram_message(body_text):
+    if not TELEGRAM_ALERTS_ENABLED:
+        return False, 'disabled'
+    if not (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID):
+        return False, 'missing_config'
+    url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'
+    payload = {
+        'chat_id': TELEGRAM_CHAT_ID,
+        'text': (body_text or '').strip()[:4000],
+        'parse_mode': 'Markdown',
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=15)
+        if 200 <= response.status_code < 300:
+            return True, 'sent'
+        logger.warning(f'Telegram error {response.status_code}: {response.text[:500]}')
+        return False, f'http_{response.status_code}'
+    except Exception as exc:
+        logger.warning(f'Telegram send exception: {exc}')
+        return False, 'exception'
+
+
+def _send_alerta_telegram_if_enabled(alerta_item):
+    if not alerta_item:
+        return
+    if not TELEGRAM_ALERTS_ENABLED:
+        return
+    tipo = (alerta_item.tipo or '').strip().lower()
+    if TELEGRAM_ALERT_TYPES and tipo and tipo not in TELEGRAM_ALERT_TYPES:
+        return
+    body = (
+        f"*ALERTA SISTEMA*\n"
+        f"Tipo: {alerta_item.tipo or '-'}\n"
+        f"Titulo: {alerta_item.titulo or '-'}\n"
+        f"Mensaje: {alerta_item.mensaje or '-'}\n"
+        f"Fecha: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC"
+    )
+    ok, reason = _send_telegram_message(body)
+    if not ok:
+        logger.info(f'Telegram alert not sent ({reason}) for alerta id={getattr(alerta_item, "id", None)}')
+
+
 def _procesos_import_job_path(job_id):
     safe = re.sub(r'[^a-zA-Z0-9_-]', '', str(job_id or ''))
     return os.path.join(PROCESOS_IMPORT_DIR, f'{safe}.json')
@@ -1286,6 +1336,7 @@ def _crear_alerta_buzon(
         if commit:
             db.session.commit()
             _send_alerta_whatsapp_if_enabled(alerta)
+            _send_alerta_telegram_if_enabled(alerta)
         return alerta
     except Exception as exc:
         db.session.rollback()
@@ -4340,6 +4391,20 @@ def api_alertas_buzon_test_whatsapp():
         mensaje = f"Prueba WhatsApp alertas desde sistema ({datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC)"
 
     ok, reason = _send_whatsapp_message(mensaje)
+    code = 200 if ok else 400
+    return jsonify({'ok': ok, 'reason': reason}), code
+
+
+@app.route('/api/alertas_buzon/test_telegram', methods=['POST'])
+@login_required
+@requires_permission('alertas_buzon', 'view')
+def api_alertas_buzon_test_telegram():
+    data = request.get_json(silent=True) or {}
+    mensaje = (data.get('mensaje') or '').strip()
+    if not mensaje:
+        mensaje = f"Prueba Telegram alertas desde sistema ({datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC)"
+
+    ok, reason = _send_telegram_message(mensaje)
     code = 200 if ok else 400
     return jsonify({'ok': ok, 'reason': reason}), code
 
