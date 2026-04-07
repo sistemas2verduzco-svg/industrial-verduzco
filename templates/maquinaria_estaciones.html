@@ -728,9 +728,9 @@
             function getOperatorElapsedMs(operatorId) {
                 const opId = Number(operatorId || 0);
                 return (MYE_ORDERS || []).reduce((acc, ot) => {
-                    const plan = ot && ot.plan ? ot.plan : {};
-                    if (Number(plan.operator_id || 0) !== opId) return acc;
-                    return acc + elapsedMsFromPlan(plan);
+                    const opPlan = getPlanForOperator(ot, opId);
+                    if (!opPlan) return acc;
+                    return acc + elapsedMsFromPlan(opPlan);
                 }, 0);
             }
 
@@ -799,6 +799,34 @@
                 return order.plan;
             }
 
+            function getOrderPlans(order) {
+                const plan = ensureOrderPlan(order);
+                let plans = Array.isArray(plan.plans) ? plan.plans.filter(p => p && typeof p === 'object') : [];
+                if (!plans.length && Number(plan.operator_id || 0) > 0) {
+                    plans = [{
+                        operator_id: Number(plan.operator_id || 0),
+                        operator_username: plan.operator_username || '',
+                        station: plan.station || '',
+                        process_name: plan.process_name || '',
+                        process_status: plan.process_status || 'por_iniciar',
+                        start_at: plan.start_at || null,
+                        timer_started_at: plan.timer_started_at || null,
+                        elapsed_seconds: Number(plan.elapsed_seconds || 0),
+                        duration_hours: Number(plan.duration_hours || 0),
+                        machine_icon: plan.machine_icon || '🏭',
+                        steps: Array.isArray(plan.steps) ? plan.steps : [],
+                    }];
+                    plan.plans = plans;
+                }
+                return plans;
+            }
+
+            function getPlanForOperator(order, operatorId) {
+                const opId = Number(operatorId || 0);
+                if (!opId) return null;
+                return getOrderPlans(order).find(p => Number(p.operator_id || 0) === opId) || null;
+            }
+
             function withDropHandlers(element, onDropOrder) {
                 if (!element) return;
                 element.addEventListener('dragover', function(e) {
@@ -822,18 +850,60 @@
             async function saveOrderPlan(order, patch, okMessage, options) {
                 const plan = ensureOrderPlan(order);
                 const opts = options || {};
+                const contextOpId = Number(opts.operator_id_context || patch.operator_id || plan.operator_id || 0) || null;
+                const opRef = contextOpId ? operatorMap.get(contextOpId) : null;
+                const basePlan = contextOpId
+                    ? (getPlanForOperator(order, contextOpId) || {
+                        operator_id: contextOpId,
+                        operator_username: opRef ? (opRef.username || '') : '',
+                        station: '',
+                        process_name: '',
+                        process_status: 'por_iniciar',
+                        start_at: null,
+                        timer_started_at: null,
+                        elapsed_seconds: 0,
+                        duration_hours: 0,
+                        machine_icon: '🏭',
+                        steps: [],
+                    })
+                    : plan;
+
+                const mergedPlan = {
+                    ...basePlan,
+                    operator_id: Object.prototype.hasOwnProperty.call(patch, 'operator_id') ? patch.operator_id : (basePlan.operator_id || null),
+                    operator_username: basePlan.operator_username || (opRef ? (opRef.username || '') : ''),
+                    station: Object.prototype.hasOwnProperty.call(patch, 'station') ? (patch.station || '') : (basePlan.station || ''),
+                    process_name: Object.prototype.hasOwnProperty.call(patch, 'process_name') ? (patch.process_name || '') : (basePlan.process_name || ''),
+                    process_status: Object.prototype.hasOwnProperty.call(patch, 'process_status') ? (patch.process_status || 'por_iniciar') : (basePlan.process_status || 'por_iniciar'),
+                    start_at: Object.prototype.hasOwnProperty.call(patch, 'start_at') ? (patch.start_at || null) : (basePlan.start_at || null),
+                    timer_started_at: Object.prototype.hasOwnProperty.call(patch, 'timer_started_at') ? (patch.timer_started_at || null) : (basePlan.timer_started_at || null),
+                    elapsed_seconds: Object.prototype.hasOwnProperty.call(patch, 'elapsed_seconds') ? Number(patch.elapsed_seconds || 0) : Number(basePlan.elapsed_seconds || 0),
+                    duration_hours: Object.prototype.hasOwnProperty.call(patch, 'duration_hours') ? Number(patch.duration_hours || 0) : Number(basePlan.duration_hours || 0),
+                    machine_icon: Object.prototype.hasOwnProperty.call(patch, 'machine_icon') ? (patch.machine_icon || '🏭') : (basePlan.machine_icon || '🏭'),
+                    steps: Object.prototype.hasOwnProperty.call(patch, 'steps') ? (Array.isArray(patch.steps) ? patch.steps : []) : (Array.isArray(basePlan.steps) ? basePlan.steps : []),
+                };
+
+                const plans = getOrderPlans(order).slice();
+                if (contextOpId) {
+                    const idx = plans.findIndex(p => Number(p.operator_id || 0) === contextOpId);
+                    if (idx >= 0) plans[idx] = mergedPlan;
+                    else plans.push(mergedPlan);
+                }
+
                 const payload = {
                     action: 'save',
                     ot_id: Number(order.id),
-                    operator_id: Object.prototype.hasOwnProperty.call(patch, 'operator_id') ? patch.operator_id : (plan.operator_id || null),
-                    station: Object.prototype.hasOwnProperty.call(patch, 'station') ? (patch.station || '') : (plan.station || ''),
-                    process_name: Object.prototype.hasOwnProperty.call(patch, 'process_name') ? (patch.process_name || '') : (plan.process_name || ''),
-                    process_status: Object.prototype.hasOwnProperty.call(patch, 'process_status') ? (patch.process_status || 'por_iniciar') : (plan.process_status || 'por_iniciar'),
-                    start_at: Object.prototype.hasOwnProperty.call(patch, 'start_at') ? (patch.start_at || null) : (plan.start_at || null),
-                    timer_started_at: Object.prototype.hasOwnProperty.call(patch, 'timer_started_at') ? (patch.timer_started_at || null) : (plan.timer_started_at || null),
-                    elapsed_seconds: Object.prototype.hasOwnProperty.call(patch, 'elapsed_seconds') ? Number(patch.elapsed_seconds || 0) : Number(plan.elapsed_seconds || 0),
-                    duration_hours: Object.prototype.hasOwnProperty.call(patch, 'duration_hours') ? Number(patch.duration_hours || 0) : Number(plan.duration_hours || 0),
-                    machine_icon: Object.prototype.hasOwnProperty.call(patch, 'machine_icon') ? (patch.machine_icon || '🏭') : (plan.machine_icon || '🏭'),
+                    operator_id: mergedPlan.operator_id || null,
+                    station: mergedPlan.station || '',
+                    process_name: mergedPlan.process_name || '',
+                    process_status: mergedPlan.process_status || 'por_iniciar',
+                    start_at: mergedPlan.start_at || null,
+                    timer_started_at: mergedPlan.timer_started_at || null,
+                    elapsed_seconds: Number(mergedPlan.elapsed_seconds || 0),
+                    duration_hours: Number(mergedPlan.duration_hours || 0),
+                    machine_icon: mergedPlan.machine_icon || '🏭',
+                    steps: Array.isArray(mergedPlan.steps) ? mergedPlan.steps : [],
+                    plans: plans,
                     notas: order.notas || '',
                 };
 
@@ -847,19 +917,10 @@
                     const data = await res.json();
                     if (!res.ok || !data.ok) throw new Error(data.message || 'No se pudo guardar');
 
-                    const opId = payload.operator_id ? Number(payload.operator_id) : null;
-                    const opRef = opId ? operatorMap.get(opId) : null;
                     order.plan = {
-                        operator_id: opId,
-                        operator_username: opRef ? (opRef.username || '') : '',
-                        station: payload.station || '',
-                        process_name: payload.process_name || '',
-                        process_status: payload.process_status || 'por_iniciar',
-                        start_at: payload.start_at || null,
-                        timer_started_at: payload.timer_started_at || null,
-                        elapsed_seconds: Number(payload.elapsed_seconds || 0),
-                        duration_hours: Number(payload.duration_hours || 0),
-                        machine_icon: payload.machine_icon || '🏭',
+                        ...plan,
+                        ...mergedPlan,
+                        plans: plans,
                     };
                     selectedOrderId = Number(order.id);
 
@@ -891,15 +952,17 @@
                 if (payload.type === 'machine') {
                     const machineKey = String(payload.machineKey || '').toLowerCase();
                     const machine = machineMap.get(machineKey);
-                    const existingStartAt = (order.plan && order.plan.start_at) || null;
+                    const opCtx = forcedOperatorId || Number(order.plan && order.plan.operator_id) || null;
+                    const targetPlan = opCtx ? (getPlanForOperator(order, opCtx) || {}) : (order.plan || {});
+                    const existingStartAt = targetPlan.start_at || null;
                     saveOrderPlan(order, {
-                        operator_id: forcedOperatorId || Number(order.plan && order.plan.operator_id) || null,
+                        operator_id: opCtx,
                         station: machine ? (machine.clave_maquina || '') : (payload.machineKey || ''),
                         machine_icon: machine ? (machine.icon || '🏭') : '🏭',
-                        process_status: (order.plan && order.plan.process_status) || 'configuracion',
+                        process_status: targetPlan.process_status || 'configuracion',
                         start_at: existingStartAt || forcedStartAt || nowLocalInput(),
-                        timer_started_at: (order.plan && order.plan.timer_started_at) || null,
-                    }, `OT ${order.folio_ot || order.id} actualizada con maquina ${machine ? machine.clave_maquina : payload.machineKey}`);
+                        timer_started_at: targetPlan.timer_started_at || null,
+                    }, `OT ${order.folio_ot || order.id} actualizada con maquina ${machine ? machine.clave_maquina : payload.machineKey}`, { operator_id_context: opCtx });
                     return true;
                 }
 
@@ -909,21 +972,22 @@
                     const procName = proc ? (proc.nombre || '') : '';
                     const procHours = proc ? Number(proc.duracion_default || 1) : 1;
                     if (!procName) return false;
-                    const plan = ensureOrderPlan(order);
-                    const steps = Array.isArray(plan.steps) ? plan.steps.slice() : [];
+                    const opCtx = forcedOperatorId || Number(order.plan && order.plan.operator_id) || null;
+                    const targetPlan = opCtx ? (getPlanForOperator(order, opCtx) || {}) : ensureOrderPlan(order);
+                    const steps = Array.isArray(targetPlan.steps) ? targetPlan.steps.slice() : [];
                     // Avoid duplicate step names
                     if (!steps.find(s => s.name === procName)) {
                         steps.push({ name: procName, duration_hours: procHours, started_at: null, elapsed_seconds: 0 });
                     }
                     saveOrderPlan(order, {
-                        operator_id: forcedOperatorId || Number(plan.operator_id) || null,
+                        operator_id: opCtx,
                         process_name: steps.map(s => s.name).join(', '),
-                        process_status: plan.process_status || 'configuracion',
+                        process_status: targetPlan.process_status || 'configuracion',
                         duration_hours: steps.reduce((acc, s) => acc + Number(s.duration_hours || 1), 0),
-                        start_at: plan.start_at || forcedStartAt || nowLocalInput(),
-                        timer_started_at: plan.timer_started_at || null,
+                        start_at: targetPlan.start_at || forcedStartAt || nowLocalInput(),
+                        timer_started_at: targetPlan.timer_started_at || null,
                         steps: steps,
-                    }, `OT ${order.folio_ot || order.id} proceso agregado: ${procName}`);
+                    }, `OT ${order.folio_ot || order.id} proceso agregado: ${procName}`, { operator_id_context: opCtx });
                     return true;
                 }
 
@@ -931,13 +995,14 @@
                     const opId = Number(forcedOperatorId || payload.operatorId || fallbackOperatorId || 0);
                     if (!opId) return false;
                     const op = operatorMap.get(opId);
-                    const existingStartAt = (order.plan && order.plan.start_at) || null;
+                    const targetPlan = getPlanForOperator(order, opId) || {};
+                    const existingStartAt = targetPlan.start_at || null;
                     saveOrderPlan(order, {
                         operator_id: opId,
-                        process_status: (order.plan && order.plan.process_status) || 'configuracion',
+                        process_status: targetPlan.process_status || 'configuracion',
                         start_at: existingStartAt || forcedStartAt || nowLocalInput(),
-                        timer_started_at: (order.plan && order.plan.timer_started_at) || null,
-                    }, `OT ${order.folio_ot || order.id} reasignada a ${op ? op.username : opId}`);
+                        timer_started_at: targetPlan.timer_started_at || null,
+                    }, `OT ${order.folio_ot || order.id} reasignada a ${op ? op.username : opId}`, { operator_id_context: opId });
                     return true;
                 }
 
@@ -947,7 +1012,7 @@
             function pickTrackOrderByPosition(trackNode, opId, event) {
                 if (!trackNode) return null;
 
-                const rowOrders = (MYE_ORDERS || []).filter(o => Number(o.plan && o.plan.operator_id) === Number(opId));
+                const rowOrders = (MYE_ORDERS || []).filter(o => !!getPlanForOperator(o, opId));
                 if (!rowOrders.length) return null;
                 if (rowOrders.length === 1) return rowOrders[0];
 
@@ -1120,20 +1185,20 @@
                 const operator = operatorMap.get(Number(opId));
                 if (!operator) return;
 
-                const allAssigned = (MYE_ORDERS || []).filter(o => Number(o.plan && o.plan.operator_id) === Number(opId));
-                const eligible = allAssigned.filter(o => {
-                    const p = o.plan || {};
+                const assignedEntries = (MYE_ORDERS || []).map(o => ({ order: o, plan: getPlanForOperator(o, opId) })).filter(x => !!x.plan);
+                const eligible = assignedEntries.filter(x => {
+                    const p = x.plan || {};
                     return !!String(p.station || '').trim() && !!String(p.process_name || '').trim() && Number(p.operator_id || 0) > 0;
                 });
 
                 let targets = [];
                 if (actionType === 'pause') {
-                    targets = eligible.filter(o => String((o.plan && o.plan.process_status) || '') === 'en_proceso');
+                    targets = eligible.filter(x => String((x.plan && x.plan.process_status) || '') === 'en_proceso');
                 } else if (actionType === 'resume') {
-                    targets = eligible.filter(o => String((o.plan && o.plan.process_status) || '') === 'pausado');
+                    targets = eligible.filter(x => String((x.plan && x.plan.process_status) || '') === 'pausado');
                 } else {
-                    const ready = eligible.find(o => {
-                        const st = String((o.plan && o.plan.process_status) || 'por_iniciar');
+                    const ready = eligible.find(x => {
+                        const st = String((x.plan && x.plan.process_status) || 'por_iniciar');
                         return st !== 'en_proceso' && st !== 'terminado' && st !== 'pausado';
                     });
                     targets = ready ? [ready] : [];
@@ -1145,8 +1210,9 @@
                 }
 
                 let updated = 0;
-                for (const order of targets) {
-                    const plan = ensureOrderPlan(order);
+                for (const target of targets) {
+                    const order = target.order;
+                    const plan = target.plan || {};
                     const nowRef = nowLocalInput();
                     let patch = {};
                     if (actionType === 'pause') {
@@ -1172,7 +1238,11 @@
                         };
                     }
 
-                    const ok = await saveOrderPlan(order, patch, '', { skipRender: true, skipMessage: true });
+                    const ok = await saveOrderPlan(order, patch, '', {
+                        skipRender: true,
+                        skipMessage: true,
+                        operator_id_context: Number(opId),
+                    });
                     if (ok) updated += 1;
                 }
 
@@ -1191,24 +1261,24 @@
                 } else if (actionType === 'resume') {
                     showMessage(`Labor reanudada para ${operator.username} (${updated} OTs).`, false);
                 } else {
-                    showMessage(`Labor iniciada para ${operator.username} (OT ${targets[0].folio_ot || targets[0].id}).`, false);
+                    showMessage(`Labor iniciada para ${operator.username} (OT ${targets[0].order.folio_ot || targets[0].order.id}).`, false);
                 }
             }
 
             function renderOperators() {
                 operatorsEl.innerHTML = (MYE_OPERATORS || []).map(op => {
-                    const assignedOrders = (MYE_ORDERS || []).filter(o => Number(o.plan && o.plan.operator_id) === Number(op.id));
-                    const assigned = assignedOrders.length;
+                    const assignedEntries = (MYE_ORDERS || []).map(o => ({ order: o, plan: getPlanForOperator(o, op.id) })).filter(x => !!x.plan);
+                    const assigned = assignedEntries.length;
                     const activeMs = getOperatorElapsedMs(op.id);
 
-                    const eligible = assignedOrders.filter(o => {
-                        const p = o.plan || {};
+                    const eligible = assignedEntries.filter(x => {
+                        const p = x.plan || {};
                         return !!String(p.station || '').trim() && !!String(p.process_name || '').trim() && Number(p.operator_id || 0) > 0;
                     });
-                    const activeCount = eligible.filter(o => String((o.plan && o.plan.process_status) || '') === 'en_proceso').length;
-                    const pausedCount = eligible.filter(o => String((o.plan && o.plan.process_status) || '') === 'pausado').length;
-                    const readyCount = eligible.filter(o => {
-                        const st = String((o.plan && o.plan.process_status) || 'por_iniciar');
+                    const activeCount = eligible.filter(x => String((x.plan && x.plan.process_status) || '') === 'en_proceso').length;
+                    const pausedCount = eligible.filter(x => String((x.plan && x.plan.process_status) || '') === 'pausado').length;
+                    const readyCount = eligible.filter(x => {
+                        const st = String((x.plan && x.plan.process_status) || 'por_iniciar');
                         return st !== 'en_proceso' && st !== 'terminado' && st !== 'pausado';
                     }).length;
 
@@ -1254,7 +1324,7 @@
                             operator_id: opId,
                             process_status: 'configuracion',
                             timer_started_at: null,
-                        }, `OT ${order.folio_ot || order.id} asignada a operador ${op ? op.username : opId}`);
+                        }, `OT ${order.folio_ot || order.id} asignada a operador ${op ? op.username : opId}`, { operator_id_context: opId });
                     });
                 });
 
@@ -1283,10 +1353,10 @@
                 const nowMs = Date.now();
 
                 const rows = (MYE_OPERATORS || []).map(op => {
-                    const opOrders = (MYE_ORDERS || []).filter(o => Number(o.plan && o.plan.operator_id) === Number(op.id));
+                    const opOrders = (MYE_ORDERS || []).filter(o => !!getPlanForOperator(o, op.id));
 
                     const cards = opOrders.flatMap(o => {
-                        const plan = o.plan || {};
+                        const plan = getPlanForOperator(o, op.id) || {};
                         const startMs = toDateSafe(plan.start_at) ? toDateSafe(plan.start_at).getTime() : startDate.getTime();
                         const totalDuration = Math.max(0.5, Number(plan.duration_hours || 1));
                         const left = ((startMs - startDate.getTime()) / totalRange) * 100;
@@ -1301,7 +1371,7 @@
                         // Bloque naranja: Máquina/Intervención
                         if (String(plan.station || '').trim()) {
                             blocks.push(`
-                                <div class="mye-block mye-block-machine" data-order-id="${o.id}" data-comp-type="machine"
+                                <div class="mye-block mye-block-machine" data-order-id="${o.id}" data-plan-op-id="${op.id}" data-comp-type="machine"
                                     style="left:${clampedLeft}%; width:${readableWidth}%; background:#f97316;"
                                     draggable="true" title="Máquina: ${textSafe(plan.station)}">
                                     <span class="mye-block-line">${textSafe(plan.machine_icon || '🏭')} ${textSafe(plan.station)}</span>
@@ -1326,7 +1396,7 @@
                             const consumedWidth = stepReadableWidth * stepProgress;
 
                             blocks.push(`
-                                <div class="mye-block mye-block-process" data-order-id="${o.id}" data-step-idx="${idx}" data-comp-type="process"
+                                <div class="mye-block mye-block-process" data-order-id="${o.id}" data-plan-op-id="${op.id}" data-step-idx="${idx}" data-comp-type="process"
                                     style="left:${stepClampedLeft}%; width:${stepReadableWidth}%; background:#22c55e;"
                                     draggable="true" title="Proceso: ${textSafe(step.name)} (${formatHHMM(step.duration_hours || 1)})">
                                     <div class="mye-step-remain" style="position:absolute;right:0;top:0;height:100%;width:${remainWidth.toFixed(1)}%;background:rgba(0,0,0,0.18);border-radius:0 6px 6px 0;pointer-events:none;"></div>
@@ -1341,7 +1411,7 @@
                         const hasInt = !!String(plan.station || '').trim();
                         const hasProc = steps.length > 0;
                         blocks.push(`
-                            <div class="mye-block mye-block-ot" data-order-id="${o.id}" data-comp-type="ot"
+                            <div class="mye-block mye-block-ot" data-order-id="${o.id}" data-plan-op-id="${op.id}" data-comp-type="ot"
                                 style="left:${clampedLeft}%; width:${readableWidth}%; background:#fbbf24;"
                                 draggable="true" title="${textSafe(o.folio_ot)}">
                                 <span class="mye-block-line">${textSafe(o.folio_ot)}</span>
@@ -1399,8 +1469,10 @@
                         if (!order) return;
 
                         const trackNode = node.closest('[data-track-op-id]');
-                        const opId = Number((trackNode && trackNode.getAttribute('data-track-op-id')) || (order.plan && order.plan.operator_id) || 0);
-                        const droppedStartAt = trackNode ? startAtFromTrackDrop(trackNode, e, startDate, cfg) : ((order.plan && order.plan.start_at) || nowLocalInput());
+                        const nodePlanOpId = Number(node.getAttribute('data-plan-op-id') || 0);
+                        const opId = Number((trackNode && trackNode.getAttribute('data-track-op-id')) || nodePlanOpId || (order.plan && order.plan.operator_id) || 0);
+                        const targetPlan = getPlanForOperator(order, opId) || order.plan || {};
+                        const droppedStartAt = trackNode ? startAtFromTrackDrop(trackNode, e, startDate, cfg) : (targetPlan.start_at || nowLocalInput());
 
                         if (payload.type === 'order') {
                             saveOrderPlan(order, {
@@ -1408,7 +1480,7 @@
                                 process_status: 'configuracion',
                                 start_at: droppedStartAt,
                                 timer_started_at: null,
-                            }, `OT ${order.folio_ot || order.id} movida al timeline de ${opId || '-'}`);
+                            }, `OT ${order.folio_ot || order.id} movida al timeline de ${opId || '-'}`, { operator_id_context: opId });
                             return;
                         }
 
@@ -1444,17 +1516,17 @@
                                 process_status: 'configuracion',
                                 start_at: droppedStartAt,
                                 timer_started_at: null,
-                            }, `OT ${order.folio_ot || order.id} movida al timeline de ${op ? op.username : opId}`);
+                            }, `OT ${order.folio_ot || order.id} movida al timeline de ${op ? op.username : opId}`, { operator_id_context: opId });
                             return;
                         }
 
-                        const rowOrders = (MYE_ORDERS || []).filter(o => Number(o.plan && o.plan.operator_id) === opId);
+                        const rowOrders = (MYE_ORDERS || []).filter(o => !!getPlanForOperator(o, opId));
                         let target = pickTrackOrderByPosition(node, opId, e);
 
                         // Secondary fallback to selected order in same line.
                         if (!target && selectedOrderId) {
                             const selected = getOrder(selectedOrderId);
-                            if (selected && Number(selected.plan && selected.plan.operator_id) === opId) {
+                            if (selected && getPlanForOperator(selected, opId)) {
                                 target = selected;
                             }
                         }
@@ -1656,17 +1728,15 @@
 
             // Actualiza en tiempo real la barra de progreso y tiempo restante de cada step
             setInterval(function tickStepProgress() {
-                const cfg = getScaleConfig();
-                const startDate = new Date(scheduleStartInput.value || nowLocalInput());
-                const totalRange = cfg.totalSlots * cfg.slotHours * 3600000;
                 const nowMs = Date.now();
 
                 document.querySelectorAll('.mye-block-process[data-order-id]').forEach(blockEl => {
                     const orderId = Number(blockEl.getAttribute('data-order-id'));
+                    const opId = Number(blockEl.getAttribute('data-plan-op-id') || 0);
                     const stepIdx = Number(blockEl.getAttribute('data-step-idx') || 0);
                     const order = getOrder(orderId);
                     if (!order) return;
-                    const plan = order.plan || {};
+                    const plan = getPlanForOperator(order, opId) || order.plan || {};
                     const steps = Array.isArray(plan.steps) && plan.steps.length ? plan.steps : (String(plan.process_name || '').trim() ? [{ name: plan.process_name, duration_hours: plan.duration_hours || 1, started_at: plan.timer_started_at, elapsed_seconds: plan.elapsed_seconds || 0 }] : []);
                     const step = steps[stepIdx];
                     if (!step) return;

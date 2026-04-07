@@ -531,6 +531,8 @@ def _mye_upsert_plan_state_block(text, state_payload):
     payload = state_payload if isinstance(state_payload, dict) else {}
     steps_raw = payload.get('steps')
     steps = steps_raw if isinstance(steps_raw, list) else None
+    plans_raw = payload.get('plans')
+    plans = plans_raw if isinstance(plans_raw, list) else None
 
     compact = {
         'operator_id': int(payload.get('operator_id')) if str(payload.get('operator_id') or '').isdigit() else None,
@@ -542,6 +544,7 @@ def _mye_upsert_plan_state_block(text, state_payload):
         'duration_hours': float(payload.get('duration_hours') or 0),
         'machine_icon': (str(payload.get('machine_icon') or '').strip() or None),
         'steps': steps,
+        'plans': plans,
     }
     compact = {
         k: v for k, v in compact.items()
@@ -9482,6 +9485,7 @@ def maquinaria_estaciones_page():
                 'duration_hours': float(plan.get('duration_hours') or 0),
                 'machine_icon': plan.get('machine_icon') or _mye_machine_icon(o.clave_maquina),
                 'steps': plan.get('steps') or [],
+                'plans': plan.get('plans') or [],
             },
         })
 
@@ -9566,6 +9570,8 @@ def api_maquinaria_estaciones_plan_update():
 
     steps_raw = data.get('steps')
     steps = steps_raw if isinstance(steps_raw, list) else None
+    plans_raw = data.get('plans')
+    plans = plans_raw if isinstance(plans_raw, list) else None
 
     current_state = _mye_parse_plan_state(orden.notas)
     current_state.update({
@@ -9582,6 +9588,8 @@ def api_maquinaria_estaciones_plan_update():
     })
     if steps is not None:
         current_state['steps'] = steps
+    if plans is not None:
+        current_state['plans'] = plans
 
     notes_src = base_notes if base_notes is not None else _mye_strip_plan_state_block(orden.notas)
     orden.notas = _mye_upsert_plan_state_block(notes_src, current_state)
