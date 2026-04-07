@@ -9489,7 +9489,7 @@ def maquinaria_estaciones_page():
             },
         })
 
-    return render_template(
+    resp = make_response(render_template(
         'maquinaria_estaciones.html',
         setup_required=not ready,
         missing_tables=missing,
@@ -9500,7 +9500,12 @@ def maquinaria_estaciones_page():
         procesos=procesos_payload,
         status_catalogo=status_catalogo,
         ordenes=ordenes_payload,
-    )
+    ))
+    # Force fresh HTML for this highly interactive board to avoid stale JS/template cache.
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
 
 
 @app.route('/api/maquinaria/estaciones/plan/update', methods=['POST'])
