@@ -86,13 +86,18 @@
 
         .mye-inline-form {
             display: none;
-            grid-template-columns: 1fr 1fr auto;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
             gap: 6px;
             margin-bottom: 8px;
             padding: 8px;
             background: #f9fbfd;
             border: 1px solid #dbe5f1;
             border-radius: 8px;
+            align-items: center;
+        }
+
+        .mye-inline-form > * {
+            min-width: 0;
         }
 
         .mye-inline-form input {
@@ -113,6 +118,8 @@
             padding: 7px 10px;
             cursor: pointer;
             white-space: nowrap;
+            grid-column: 1 / -1;
+            justify-self: end;
             align-self: center;
         }
 
@@ -618,6 +625,13 @@
             .mye-row {
                 grid-template-columns: 140px 1fr;
             }
+            .mye-inline-form {
+                grid-template-columns: 1fr;
+            }
+            .mye-inline-form button {
+                width: 100%;
+                justify-self: stretch;
+            }
         }
     </style>
 </head>
@@ -657,11 +671,6 @@
                 <div id="myeUnassignMachine" class="mye-unassign-drop">Soltar bloque naranja aqui para quitar estacion</div>
             </article>
 
-            <article class="mye-panel">
-                <h3 class="mye-panel-title">Estatus del Proceso</h3>
-                <div id="myeStatusGrid" class="mye-status-grid"></div>
-            </article>
-
             <article class="mye-processes">
                 <div class="mye-panel-head">
                     <h3 class="mye-panel-title" style="margin:0;">Procesos</h3>
@@ -669,11 +678,16 @@
                 </div>
                 <div id="myeProcessForm" class="mye-inline-form">
                     <input id="myeNewProcessName" type="text" placeholder="Nombre proceso" />
-                    <input id="myeNewProcessDuration" type="text" placeholder="Duración HH:MM (ej: 02:30)" value="01:00" style="max-width:160px;" title="Tiempo estimado del proceso en horas y minutos. Este tiempo se usa para la línea del tiempo." required />
+                    <input id="myeNewProcessDuration" type="text" placeholder="Duración HH:MM:SS (ej: 02:30:00)" value="01:00:00" title="Tiempo estimado del proceso en horas, minutos y segundos. Este tiempo se usa para la línea del tiempo." required />
                     <button id="myeSaveProcessBtn" type="button">Guardar</button>
                 </div>
                 <div id="myeProcessList" class="mye-process-list"></div>
                 <div id="myeUnassignProcess" class="mye-unassign-drop">Soltar bloque verde aqui para quitar proceso</div>
+            </article>
+
+            <article class="mye-panel">
+                <h3 class="mye-panel-title">Estatus del Proceso</h3>
+                <div id="myeStatusGrid" class="mye-status-grid"></div>
             </article>
         </section>
 
@@ -790,7 +804,7 @@
                 return formatElapsed(elapsedMsFromPlan(order && order.plan ? order.plan : null));
             }
 
-            /** Parse "HH:MM" or decimal-hours string → float hours */
+            /** Parse "HH:MM[:SS]" or decimal-hours string → float hours */
             function parseHHMM(val) {
                 if (!val && val !== 0) return 1;
                 const str = String(val).trim();
@@ -798,7 +812,8 @@
                     const parts = str.split(':');
                     const h = Math.max(0, Number(parts[0]) || 0);
                     const m = Math.max(0, Math.min(59, Number(parts[1]) || 0));
-                    return h + m / 60;
+                    const s = Math.max(0, Math.min(59, Number(parts[2]) || 0));
+                    return h + (m / 60) + (s / 3600);
                 }
                 const n = parseFloat(str);
                 return Number.isFinite(n) && n > 0 ? n : 1;
@@ -813,12 +828,13 @@
                 return Number.isFinite(n) && n > 0 ? n : fb;
             }
 
-            /** Convert float hours → "HH:MM" string */
+            /** Convert float hours → "HH:MM:SS" string */
             function formatHHMM(hours) {
-                const totalMin = Math.round(Math.max(0, Number(hours) || 0) * 60);
-                const h = Math.floor(totalMin / 60);
-                const m = totalMin % 60;
-                return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                const totalSec = Math.round(Math.max(0, Number(hours) || 0) * 3600);
+                const h = Math.floor(totalSec / 3600);
+                const m = Math.floor((totalSec % 3600) / 60);
+                const s = totalSec % 60;
+                return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
             }
 
             function isLightHexColor(hex) {
@@ -1556,8 +1572,8 @@
             }
 
             function getScaleConfig() {
-                if (scale === 'weeks') return { slotHours: 24 * 7, totalSlots: 8 };
-                if (scale === 'days') return { slotHours: 24, totalSlots: 14 };
+                if (scale === 'weeks') return { slotHours: 24 * 7, totalSlots: 4 };
+                if (scale === 'days') return { slotHours: 24, totalSlots: 7 };
                 return { slotHours: 1, totalSlots: 24 };
             }
 
@@ -1568,7 +1584,7 @@
                 const totalRange = cfg.totalSlots * msSlot;
                 const nowMs = Date.now();
 
-                const gridPx = scale === 'hours' ? 42 : (scale === 'days' ? 26 : 14);
+                const gridPx = scale === 'hours' ? 42 : (scale === 'days' ? 64 : 96);
                 timelineEl.style.setProperty('--mye-grid-step', `${gridPx}px`);
 
                 const slots = Array.from({ length: cfg.totalSlots }).map((_, i) => {
@@ -1577,10 +1593,10 @@
                     if (scale === 'hours') {
                         label = `${String(dt.getHours()).padStart(2, '0')}:00`;
                     } else if (scale === 'days') {
-                        label = `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}`;
+                        label = `Dia ${i + 1} · ${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}`;
                     } else {
                         const end = new Date(dt.getTime() + (6 * 24 * 3600000));
-                        label = `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')} - ${String(end.getDate()).padStart(2, '0')}/${String(end.getMonth() + 1).padStart(2, '0')}`;
+                        label = `Semana ${i + 1} · ${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')} - ${String(end.getDate()).padStart(2, '0')}/${String(end.getMonth() + 1).padStart(2, '0')}`;
                     }
                     return `<div class="mye-scale-slot" style="left:${(i / cfg.totalSlots) * 100}%; width:${100 / cfg.totalSlots}%">${textSafe(label)}</div>`;
                 }).join('');
@@ -2025,13 +2041,13 @@
 
             async function createProcess() {
                 const nombre = (newProcessName && newProcessName.value || '').trim();
-                const duracion = parseHHMM((newProcessDuration && newProcessDuration.value) || '01:00');
+                const duracion = parseHHMM((newProcessDuration && newProcessDuration.value) || '01:00:00');
                 if (!nombre) {
                     showMessage('Escribe el nombre del proceso.', true);
                     return;
                 }
                 if (!duracion || duracion <= 0) {
-                    showMessage('La duración del proceso es obligatoria. Formato: HH:MM (ej: 02:30).', true);
+                    showMessage('La duración del proceso es obligatoria. Formato: HH:MM:SS (ej: 02:30:00).', true);
                     return;
                 }
 
@@ -2058,7 +2074,7 @@
                     renderProcesses();
                     showMessage(data.message || 'Proceso creado', false);
                     if (newProcessName) newProcessName.value = '';
-                    if (newProcessDuration) newProcessDuration.value = '01:00';
+                    if (newProcessDuration) newProcessDuration.value = '01:00:00';
                 } catch (err) {
                     showMessage(err.message || 'Error al crear proceso', true);
                 }
