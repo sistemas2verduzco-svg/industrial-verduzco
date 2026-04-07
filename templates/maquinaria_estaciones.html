@@ -731,6 +731,15 @@
                 return Number.isFinite(n) && n > 0 ? n : 1;
             }
 
+            function durationHoursSafe(value, fallback) {
+                const fb = Number.isFinite(Number(fallback)) && Number(fallback) > 0 ? Number(fallback) : 1;
+                if (typeof value === 'string' && value.includes(':')) {
+                    return parseHHMM(value);
+                }
+                const n = Number(value);
+                return Number.isFinite(n) && n > 0 ? n : fb;
+            }
+
             /** Convert float hours → "HH:MM" string */
             function formatHHMM(hours) {
                 const totalMin = Math.round(Math.max(0, Number(hours) || 0) * 60);
@@ -904,7 +913,9 @@
                     start_at: Object.prototype.hasOwnProperty.call(patch, 'start_at') ? (patch.start_at || null) : (basePlan.start_at || null),
                     timer_started_at: Object.prototype.hasOwnProperty.call(patch, 'timer_started_at') ? (patch.timer_started_at || null) : (basePlan.timer_started_at || null),
                     elapsed_seconds: Object.prototype.hasOwnProperty.call(patch, 'elapsed_seconds') ? Number(patch.elapsed_seconds || 0) : Number(basePlan.elapsed_seconds || 0),
-                    duration_hours: Object.prototype.hasOwnProperty.call(patch, 'duration_hours') ? Number(patch.duration_hours || 0) : Number(basePlan.duration_hours || 0),
+                    duration_hours: Object.prototype.hasOwnProperty.call(patch, 'duration_hours')
+                        ? durationHoursSafe(patch.duration_hours, 0)
+                        : durationHoursSafe(basePlan.duration_hours, 0),
                     machine_icon: Object.prototype.hasOwnProperty.call(patch, 'machine_icon') ? (patch.machine_icon || '🏭') : (basePlan.machine_icon || '🏭'),
                     steps: Object.prototype.hasOwnProperty.call(patch, 'steps') ? (Array.isArray(patch.steps) ? patch.steps : []) : (Array.isArray(basePlan.steps) ? basePlan.steps : []),
                 };
@@ -1028,7 +1039,7 @@
                         operator_id: opCtx,
                         process_name: steps.map(s => s.name).join(', '),
                         process_status: targetPlan.process_status || 'configuracion',
-                        duration_hours: steps.reduce((acc, s) => acc + Number(s.duration_hours || 1), 0),
+                        duration_hours: steps.reduce((acc, s) => acc + durationHoursSafe(s.duration_hours, 1), 0),
                         start_at: targetPlan.start_at || forcedStartAt || nowLocalInput(),
                         timer_started_at: targetPlan.timer_started_at || null,
                         steps: steps,
@@ -1075,7 +1086,7 @@
                     }
                     target.steps = steps;
                     target.process_name = steps.map(s => s.name).join(', ');
-                    target.duration_hours = steps.reduce((acc, s) => acc + Math.max(0.5, Number(s.duration_hours || 1)), 0);
+                    target.duration_hours = steps.reduce((acc, s) => acc + durationHoursSafe(s.duration_hours, 1), 0);
                     if (!steps.length) {
                         target.timer_started_at = null;
                         target.elapsed_seconds = 0;
@@ -1129,7 +1140,7 @@
                     operator_id: Number(opId),
                     steps: steps,
                     process_name: steps.map(s => s.name).join(', '),
-                    duration_hours: steps.reduce((acc, s) => acc + Math.max(0.5, Number(s.duration_hours || 1)), 0),
+                    duration_hours: steps.reduce((acc, s) => acc + durationHoursSafe(s.duration_hours, 1), 0),
                     process_status: targetPlan.process_status || 'configuracion',
                     start_at: targetPlan.start_at || nowLocalInput(),
                     timer_started_at: targetPlan.timer_started_at || null,
@@ -1495,7 +1506,9 @@
                     const cards = opOrders.flatMap(o => {
                         const plan = getPlanForOperator(o, op.id) || {};
                         const startMs = toDateSafe(plan.start_at) ? toDateSafe(plan.start_at).getTime() : startDate.getTime();
-                        const totalDuration = Math.max(0.5, Number(plan.duration_hours || 1));
+                        const totalDuration = Array.isArray(plan.steps) && plan.steps.length
+                            ? plan.steps.reduce((acc, s) => acc + durationHoursSafe(s.duration_hours, 1), 0)
+                            : durationHoursSafe(plan.duration_hours, 1);
                         const left = ((startMs - rowBaseMs) / totalRange) * 100;
                         const totalWidth = ((totalDuration * 3600000) / totalRange) * 100;
 
@@ -1519,22 +1532,25 @@
                         const steps = Array.isArray(plan.steps) && plan.steps.length ? plan.steps : (String(plan.process_name || '').trim() ? [{ name: plan.process_name, duration_hours: totalDuration, started_at: plan.timer_started_at, elapsed_seconds: plan.elapsed_seconds || 0 }] : []);
                         let stepCursor = startMs;
                         steps.forEach((step, idx) => {
-                            const stepDurMs = Math.max(0.5, Number(step.duration_hours || 1)) * 3600000;
+                            const stepHours = durationHoursSafe(step.duration_hours, 1);
+                            const stepDurMs = stepHours * 3600000;
                             const stepLeft = ((stepCursor - rowBaseMs) / totalRange) * 100;
                             const stepWidth = (stepDurMs / totalRange) * 100;
                             const stepClampedLeft = Math.max(0, stepLeft);
                             const stepReadableWidth = Math.min(100 - stepClampedLeft, Math.max(stepWidth, 10));
+                            const gapPct = 0.22;
+                            const stepVisualLeft = Math.min(100, stepClampedLeft + (gapPct / 2));
+                            const stepVisualWidth = Math.max(8, stepReadableWidth - gapPct);
 
                             // Progreso: si tiene started_at, calcular cuánto se ha consumido
                             const stepStartedMs = toDateSafe(step.started_at) ? toDateSafe(step.started_at).getTime() : null;
                             const stepElapsed = Number(step.elapsed_seconds || 0) * 1000 + (stepStartedMs ? Math.max(0, nowMs - stepStartedMs) : 0);
                             const stepProgress = Math.min(1, stepElapsed / stepDurMs);
-                            const remainWidth = stepReadableWidth * (1 - stepProgress);
-                            const consumedWidth = stepReadableWidth * stepProgress;
+                            const remainWidth = Math.max(0, 100 * (1 - stepProgress));
 
                             blocks.push(`
                                 <div class="mye-block mye-block-process" data-order-id="${o.id}" data-plan-op-id="${op.id}" data-step-idx="${idx}" data-comp-type="process"
-                                    style="left:${stepClampedLeft}%; width:${stepReadableWidth}%; background:#22c55e;"
+                                    style="left:${stepVisualLeft}%; width:${stepVisualWidth}%; background:#22c55e; border-left:1px solid rgba(255,255,255,0.5); border-right:1px solid rgba(255,255,255,0.5);"
                                     draggable="true" title="Proceso: ${textSafe(step.name)} (${formatHHMM(step.duration_hours || 1)})">
                                     <div class="mye-step-remain" style="position:absolute;right:0;top:0;height:100%;width:${remainWidth.toFixed(1)}%;background:rgba(0,0,0,0.18);border-radius:0 6px 6px 0;pointer-events:none;"></div>
                                     <span class="mye-block-line" style="position:relative;z-index:2;">${textSafe(step.name)}</span>
@@ -1958,7 +1974,7 @@
                     const step = steps[stepIdx];
                     if (!step) return;
 
-                    const stepDurMs = Math.max(0.5, Number(step.duration_hours || 1)) * 3600000;
+                    const stepDurMs = durationHoursSafe(step.duration_hours, 1) * 3600000;
                     const stepStartedMs = toDateSafe(step.started_at) ? toDateSafe(step.started_at).getTime() : null;
                     const stepElapsed = Number(step.elapsed_seconds || 0) * 1000 + (stepStartedMs ? Math.max(0, nowMs - stepStartedMs) : 0);
                     const stepProgress = Math.min(1, stepElapsed / stepDurMs);
