@@ -889,13 +889,14 @@
                 if (payload.type === 'machine') {
                     const machineKey = String(payload.machineKey || '').toLowerCase();
                     const machine = machineMap.get(machineKey);
+                    const existingStartAt = (order.plan && order.plan.start_at) || null;
                     saveOrderPlan(order, {
                         operator_id: forcedOperatorId || Number(order.plan && order.plan.operator_id) || null,
                         station: machine ? (machine.clave_maquina || '') : (payload.machineKey || ''),
                         machine_icon: machine ? (machine.icon || '🏭') : '🏭',
-                        process_status: 'configuracion',
-                        start_at: forcedStartAt !== undefined ? forcedStartAt : ((order.plan && order.plan.start_at) || nowLocalInput()),
-                        timer_started_at: null,
+                        process_status: (order.plan && order.plan.process_status) || 'configuracion',
+                        start_at: existingStartAt || forcedStartAt || nowLocalInput(),
+                        timer_started_at: (order.plan && order.plan.timer_started_at) || null,
                     }, `OT ${order.folio_ot || order.id} actualizada con maquina ${machine ? machine.clave_maquina : payload.machineKey}`);
                     return true;
                 }
@@ -903,14 +904,24 @@
                 if (payload.type === 'process') {
                     const procId = Number(payload.processId || 0);
                     const proc = processMap.get(procId);
+                    const procName = proc ? (proc.nombre || '') : '';
+                    const procHours = proc ? Number(proc.duracion_default || 1) : 1;
+                    if (!procName) return false;
+                    const plan = ensureOrderPlan(order);
+                    const steps = Array.isArray(plan.steps) ? plan.steps.slice() : [];
+                    // Avoid duplicate step names
+                    if (!steps.find(s => s.name === procName)) {
+                        steps.push({ name: procName, duration_hours: procHours, started_at: null, elapsed_seconds: 0 });
+                    }
                     saveOrderPlan(order, {
-                        operator_id: forcedOperatorId || Number(order.plan && order.plan.operator_id) || null,
-                        process_name: proc ? (proc.nombre || '') : '',
-                        process_status: 'configuracion',
-                        duration_hours: proc ? Number(proc.duracion_default || 1) : Number((order.plan && order.plan.duration_hours) || 1),
-                        start_at: forcedStartAt !== undefined ? forcedStartAt : ((order.plan && order.plan.start_at) || nowLocalInput()),
-                        timer_started_at: null,
-                    }, `OT ${order.folio_ot || order.id} actualizada con proceso ${proc ? proc.nombre : procId}`);
+                        operator_id: forcedOperatorId || Number(plan.operator_id) || null,
+                        process_name: steps.map(s => s.name).join(', '),
+                        process_status: plan.process_status || 'configuracion',
+                        duration_hours: steps.reduce((acc, s) => acc + Number(s.duration_hours || 1), 0),
+                        start_at: plan.start_at || forcedStartAt || nowLocalInput(),
+                        timer_started_at: plan.timer_started_at || null,
+                        steps: steps,
+                    }, `OT ${order.folio_ot || order.id} proceso agregado: ${procName}`);
                     return true;
                 }
 
@@ -918,11 +929,12 @@
                     const opId = Number(forcedOperatorId || payload.operatorId || fallbackOperatorId || 0);
                     if (!opId) return false;
                     const op = operatorMap.get(opId);
+                    const existingStartAt = (order.plan && order.plan.start_at) || null;
                     saveOrderPlan(order, {
                         operator_id: opId,
-                        process_status: 'configuracion',
-                        start_at: forcedStartAt !== undefined ? forcedStartAt : ((order.plan && order.plan.start_at) || nowLocalInput()),
-                        timer_started_at: null,
+                        process_status: (order.plan && order.plan.process_status) || 'configuracion',
+                        start_at: existingStartAt || forcedStartAt || nowLocalInput(),
+                        timer_started_at: (order.plan && order.plan.timer_started_at) || null,
                     }, `OT ${order.folio_ot || order.id} reasignada a ${op ? op.username : opId}`);
                     return true;
                 }
@@ -1266,52 +1278,73 @@
                 const startDate = new Date(scheduleStartInput.value || nowLocalInput());
                 const msSlot = cfg.slotHours * 3600000;
                 const totalRange = cfg.totalSlots * msSlot;
+                const nowMs = Date.now();
 
                 const rows = (MYE_OPERATORS || []).map(op => {
                     const opOrders = (MYE_ORDERS || []).filter(o => Number(o.plan && o.plan.operator_id) === Number(op.id));
 
-                    // Render each OT as separate component blocks: machine, process, full-OT
                     const cards = opOrders.flatMap(o => {
                         const plan = o.plan || {};
                         const startMs = toDateSafe(plan.start_at) ? toDateSafe(plan.start_at).getTime() : startDate.getTime();
-                        const duration = Math.max(0.5, Number(plan.duration_hours || 1));
+                        const totalDuration = Math.max(0.5, Number(plan.duration_hours || 1));
                         const left = ((startMs - startDate.getTime()) / totalRange) * 100;
-                        const width = ((duration * 3600000) / totalRange) * 100;
-                        
-                        if (left > 100 || left + width < 0) return [];
+                        const totalWidth = ((totalDuration * 3600000) / totalRange) * 100;
+
+                        if (left > 100 || left + totalWidth < 0) return [];
                         const clampedLeft = Math.max(0, left);
-                        const clampedWidth = Math.max(4, Math.min(100 - clampedLeft, width));
-                        const readableWidth = Math.min(100 - clampedLeft, Math.max(clampedWidth, 12));
+                        const readableWidth = Math.min(100 - clampedLeft, Math.max(totalWidth, 8));
 
                         const blocks = [];
 
-                        // 1) Machine/Intervention block (naranja)
+                        // Bloque naranja: Máquina/Intervención
                         if (String(plan.station || '').trim()) {
                             blocks.push(`
-                                <div class="mye-block mye-block-machine" data-order-id="${o.id}" data-comp-type="machine" style="left:${clampedLeft}%; width:${readableWidth}%; background:#f97316;" draggable="true" title="Máquina: ${textSafe(plan.station)}">
-                                    <span class="mye-block-line">${textSafe((plan.machine_icon) || '🏭')} ${textSafe(plan.station)}</span>
-                                </div>
-                            `);
+                                <div class="mye-block mye-block-machine" data-order-id="${o.id}" data-comp-type="machine"
+                                    style="left:${clampedLeft}%; width:${readableWidth}%; background:#f97316;"
+                                    draggable="true" title="Máquina: ${textSafe(plan.station)}">
+                                    <span class="mye-block-line">${textSafe(plan.machine_icon || '🏭')} ${textSafe(plan.station)}</span>
+                                </div>`);
                         }
 
-                        // 2) Process block (verde)
-                        if (String(plan.process_name || '').trim()) {
-                            const procDuration = formatHHMM(duration);
+                        // Bloques verdes: uno por cada step (proceso)
+                        const steps = Array.isArray(plan.steps) && plan.steps.length ? plan.steps : (String(plan.process_name || '').trim() ? [{ name: plan.process_name, duration_hours: totalDuration, started_at: plan.timer_started_at, elapsed_seconds: plan.elapsed_seconds || 0 }] : []);
+                        let stepCursor = startMs;
+                        steps.forEach((step, idx) => {
+                            const stepDurMs = Math.max(0.5, Number(step.duration_hours || 1)) * 3600000;
+                            const stepLeft = ((stepCursor - startDate.getTime()) / totalRange) * 100;
+                            const stepWidth = (stepDurMs / totalRange) * 100;
+                            const stepClampedLeft = Math.max(0, stepLeft);
+                            const stepReadableWidth = Math.min(100 - stepClampedLeft, Math.max(stepWidth, 6));
+
+                            // Progreso: si tiene started_at, calcular cuánto se ha consumido
+                            const stepStartedMs = toDateSafe(step.started_at) ? toDateSafe(step.started_at).getTime() : null;
+                            const stepElapsed = Number(step.elapsed_seconds || 0) * 1000 + (stepStartedMs ? Math.max(0, nowMs - stepStartedMs) : 0);
+                            const stepProgress = Math.min(1, stepElapsed / stepDurMs);
+                            const remainWidth = stepReadableWidth * (1 - stepProgress);
+                            const consumedWidth = stepReadableWidth * stepProgress;
+
                             blocks.push(`
-                                <div class="mye-block mye-block-process" data-order-id="${o.id}" data-comp-type="process" style="left:${clampedLeft}%; width:${readableWidth}%; background:#22c55e;" draggable="true" title="Proceso: ${textSafe(plan.process_name)} (${procDuration})">
-                                    <span class="mye-block-line">${textSafe(plan.process_name)}</span>
-                                    <span class="mye-block-line">(${procDuration})</span>
-                                </div>
-                            `);
-                        }
+                                <div class="mye-block mye-block-process" data-order-id="${o.id}" data-step-idx="${idx}" data-comp-type="process"
+                                    style="left:${stepClampedLeft}%; width:${stepReadableWidth}%; background:#22c55e;"
+                                    draggable="true" title="Proceso: ${textSafe(step.name)} (${formatHHMM(step.duration_hours || 1)})">
+                                    <div class="mye-step-remain" style="position:absolute;right:0;top:0;height:100%;width:${remainWidth.toFixed(1)}%;background:rgba(0,0,0,0.18);border-radius:0 6px 6px 0;pointer-events:none;"></div>
+                                    <span class="mye-block-line" style="position:relative;z-index:2;">${textSafe(step.name)}</span>
+                                    <span class="mye-block-line mye-step-time" data-order-id="${o.id}" data-step-idx="${idx}" style="position:relative;z-index:2;">${formatHHMM(Math.max(0, (stepDurMs - stepElapsed) / 3600000))}</span>
+                                </div>`);
+                            stepCursor += stepDurMs;
+                        });
 
-                        // 3) Full OT summary block (amarillo)
+                        // Bloque amarillo: resumen OT
+                        const hasOp = Number(plan.operator_id || 0) > 0;
+                        const hasInt = !!String(plan.station || '').trim();
+                        const hasProc = steps.length > 0;
                         blocks.push(`
-                            <div class="mye-block mye-block-ot" data-order-id="${o.id}" data-comp-type="ot" style="left:${clampedLeft}%; width:${readableWidth}%; background:#fbbf24;" draggable="true" title="${textSafe(o.folio_ot)} | ${textSafe(plan.station)} | ${textSafe(plan.process_name)}">
+                            <div class="mye-block mye-block-ot" data-order-id="${o.id}" data-comp-type="ot"
+                                style="left:${clampedLeft}%; width:${readableWidth}%; background:#fbbf24;"
+                                draggable="true" title="${textSafe(o.folio_ot)}">
                                 <span class="mye-block-line">${textSafe(o.folio_ot)}</span>
-                                <span class="mye-block-line">O:${Number(plan.operator_id || 0) > 0 ? 'OK' : '--'} I:${String(plan.station || '').trim() ? 'OK' : '--'} P:${String(plan.process_name || '').trim() ? 'OK' : '--'}</span>
-                            </div>
-                        `);
+                                <span class="mye-block-line">O:${hasOp ? 'OK' : '--'} I:${hasInt ? 'OK' : '--'} P:${hasProc ? 'OK' : '--'}</span>
+                            </div>`);
 
                         return blocks;
                     }).join('');
@@ -1618,6 +1651,39 @@
             scheduleStartInput.value = nowLocalInput();
             renderTimeline();
             setInterval(refreshElapsedDisplays, 1000);
+
+            // Actualiza en tiempo real la barra de progreso y tiempo restante de cada step
+            setInterval(function tickStepProgress() {
+                const cfg = getScaleConfig();
+                const startDate = new Date(scheduleStartInput.value || nowLocalInput());
+                const totalRange = cfg.totalSlots * cfg.slotHours * 3600000;
+                const nowMs = Date.now();
+
+                document.querySelectorAll('.mye-block-process[data-order-id]').forEach(blockEl => {
+                    const orderId = Number(blockEl.getAttribute('data-order-id'));
+                    const stepIdx = Number(blockEl.getAttribute('data-step-idx') || 0);
+                    const order = getOrder(orderId);
+                    if (!order) return;
+                    const plan = order.plan || {};
+                    const steps = Array.isArray(plan.steps) && plan.steps.length ? plan.steps : (String(plan.process_name || '').trim() ? [{ name: plan.process_name, duration_hours: plan.duration_hours || 1, started_at: plan.timer_started_at, elapsed_seconds: plan.elapsed_seconds || 0 }] : []);
+                    const step = steps[stepIdx];
+                    if (!step) return;
+
+                    const stepDurMs = Math.max(0.5, Number(step.duration_hours || 1)) * 3600000;
+                    const stepStartedMs = toDateSafe(step.started_at) ? toDateSafe(step.started_at).getTime() : null;
+                    const stepElapsed = Number(step.elapsed_seconds || 0) * 1000 + (stepStartedMs ? Math.max(0, nowMs - stepStartedMs) : 0);
+                    const stepProgress = Math.min(1, stepElapsed / stepDurMs);
+
+                    const blockWidth = parseFloat(blockEl.style.width) || 10;
+                    const remainWidth = blockWidth * (1 - stepProgress);
+
+                    const remainEl = blockEl.querySelector('.mye-step-remain');
+                    if (remainEl) remainEl.style.width = remainWidth.toFixed(1) + '%';
+
+                    const timeEl = blockEl.querySelector('.mye-step-time');
+                    if (timeEl) timeEl.textContent = formatHHMM(Math.max(0, (stepDurMs - stepElapsed) / 3600000));
+                });
+            }, 1000);
 
             scaleBtns.forEach(btn => {
                 btn.addEventListener('click', function() {

@@ -529,6 +529,9 @@ def _mye_parse_plan_state(text):
 def _mye_upsert_plan_state_block(text, state_payload):
     base = _mye_strip_plan_state_block(text)
     payload = state_payload if isinstance(state_payload, dict) else {}
+    steps_raw = payload.get('steps')
+    steps = steps_raw if isinstance(steps_raw, list) else None
+
     compact = {
         'operator_id': int(payload.get('operator_id')) if str(payload.get('operator_id') or '').isdigit() else None,
         'operator_username': (str(payload.get('operator_username') or '').strip() or None),
@@ -538,6 +541,7 @@ def _mye_upsert_plan_state_block(text, state_payload):
         'start_at': (str(payload.get('start_at') or '').strip() or None),
         'duration_hours': float(payload.get('duration_hours') or 0),
         'machine_icon': (str(payload.get('machine_icon') or '').strip() or None),
+        'steps': steps,
     }
     compact = {
         k: v for k, v in compact.items()
@@ -9477,6 +9481,7 @@ def maquinaria_estaciones_page():
                 'elapsed_seconds': float(plan.get('elapsed_seconds') or 0),
                 'duration_hours': float(plan.get('duration_hours') or 0),
                 'machine_icon': plan.get('machine_icon') or _mye_machine_icon(o.clave_maquina),
+                'steps': plan.get('steps') or [],
             },
         })
 
@@ -9559,6 +9564,9 @@ def api_maquinaria_estaciones_plan_update():
     except Exception:
         elapsed_seconds = 0.0
 
+    steps_raw = data.get('steps')
+    steps = steps_raw if isinstance(steps_raw, list) else None
+
     current_state = _mye_parse_plan_state(orden.notas)
     current_state.update({
         'operator_id': operator_id,
@@ -9572,6 +9580,8 @@ def api_maquinaria_estaciones_plan_update():
         'duration_hours': duration_hours,
         'machine_icon': machine_icon,
     })
+    if steps is not None:
+        current_state['steps'] = steps
 
     notes_src = base_notes if base_notes is not None else _mye_strip_plan_state_block(orden.notas)
     orden.notas = _mye_upsert_plan_state_block(notes_src, current_state)
