@@ -1343,15 +1343,31 @@
                     });
                     node.addEventListener('drop', function(e) {
                         e.preventDefault();
+                        e.stopPropagation();
                         node.classList.remove('mye-drop-target');
+
+                        const payload = getDragPayload(e);
+                        if (!payload) return;
 
                         const targetOrderId = Number(node.getAttribute('data-order-id') || 0);
                         const order = getOrder(targetOrderId);
                         if (!order) return;
 
-                        const payload = getDragPayload(e);
-                        if (!payload || payload.type === 'order') return;
-                        applyPayloadToOrder(order, payload, Number(order.plan && order.plan.operator_id));
+                        const trackNode = node.closest('[data-track-op-id]');
+                        const opId = Number((trackNode && trackNode.getAttribute('data-track-op-id')) || (order.plan && order.plan.operator_id) || 0);
+                        const droppedStartAt = trackNode ? startAtFromTrackDrop(trackNode, e, startDate, cfg) : ((order.plan && order.plan.start_at) || nowLocalInput());
+
+                        if (payload.type === 'order') {
+                            saveOrderPlan(order, {
+                                operator_id: opId || Number(order.plan && order.plan.operator_id) || null,
+                                process_status: 'configuracion',
+                                start_at: droppedStartAt,
+                                timer_started_at: null,
+                            }, `OT ${order.folio_ot || order.id} movida al timeline de ${opId || '-'}`);
+                            return;
+                        }
+
+                        applyPayloadToOrder(order, payload, opId, { start_at: droppedStartAt, operator_id: opId });
                     });
                 });
 
