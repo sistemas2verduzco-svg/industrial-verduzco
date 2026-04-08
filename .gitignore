@@ -1,5 +1,10 @@
 encryption.key
 
+# Local environment secrets
+.env
+.env.*
+!.env.example
+
 # Temporary Office lock files (Windows)
 ~$*
 data/~$*
