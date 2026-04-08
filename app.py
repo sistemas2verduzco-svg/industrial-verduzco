@@ -1889,7 +1889,9 @@ def _upsert_maquinaria_contpaq_data(payload):
 
 
 def _contpaq_norm_text(value):
-    return str(value or '').strip().upper()
+    raw = str(value or '').upper().strip()
+    # Tolerate inconsistent spacing from CONTPAQ titles, e.g. "25   AL   31".
+    return re.sub(r'\s+', ' ', raw)
 
 
 def _contpaq_norm_qty(value):
