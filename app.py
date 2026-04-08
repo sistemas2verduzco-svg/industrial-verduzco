@@ -134,25 +134,52 @@ TELEGRAM_ALERT_TYPES = {
 }
 TELEGRAM_BOT_TOKEN = (os.getenv('TELEGRAM_BOT_TOKEN') or '').strip()
 TELEGRAM_CHAT_ID = (os.getenv('TELEGRAM_CHAT_ID') or '').strip()
+TELEGRAM_CHAT_IDS = [
+    x.strip() for x in (os.getenv('TELEGRAM_CHAT_IDS') or '').split(',') if x.strip()
+]
+
+
+def _telegram_destinations():
+    if TELEGRAM_CHAT_IDS:
+        return list(dict.fromkeys(TELEGRAM_CHAT_IDS))
+    if TELEGRAM_CHAT_ID:
+        return [TELEGRAM_CHAT_ID]
+    return []
 
 
 def _send_telegram_message(body_text):
     if not TELEGRAM_ALERTS_ENABLED:
         return False, 'disabled'
-    if not (TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID):
+    destinations = _telegram_destinations()
+    if not (TELEGRAM_BOT_TOKEN and destinations):
         return False, 'missing_config'
     url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'
-    payload = {
-        'chat_id': TELEGRAM_CHAT_ID,
-        'text': (body_text or '').strip()[:4000],
-        'parse_mode': 'Markdown',
-    }
+
     try:
-        response = requests.post(url, json=payload, timeout=15)
-        if 200 <= response.status_code < 300:
-            return True, 'sent'
-        logger.warning(f'Telegram error {response.status_code}: {response.text[:500]}')
-        return False, f'http_{response.status_code}'
+        total = len(destinations)
+        sent = 0
+        first_error = None
+        text_value = (body_text or '').strip()[:4000]
+
+        for chat_id in destinations:
+            payload = {
+                'chat_id': chat_id,
+                'text': text_value,
+                'parse_mode': 'Markdown',
+            }
+            response = requests.post(url, json=payload, timeout=15)
+            if 200 <= response.status_code < 300:
+                sent += 1
+                continue
+            logger.warning(f'Telegram error {response.status_code} to chat_id={chat_id}: {response.text[:500]}')
+            if first_error is None:
+                first_error = f'http_{response.status_code}'
+
+        if sent == total:
+            return True, f'sent_{sent}'
+        if sent > 0:
+            return False, f'partial_{sent}_of_{total}'
+        return False, first_error or 'send_failed'
     except Exception as exc:
         logger.warning(f'Telegram send exception: {exc}')
         return False, 'exception'
@@ -6481,7 +6508,7 @@ def test_telegram():
     return jsonify({
         'ok': success,
         'reason': reason,
-        'message': 'Mensaje enviado a Moisés' if success else f'Error: {reason}'
+        'message': 'Mensaje de prueba enviado a Telegram' if success else f'Error: {reason}'
     })
 
 
