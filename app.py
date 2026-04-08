@@ -1707,8 +1707,8 @@ def _upsert_contpaq_data(payload):
         pedido.serie = _serie_from_folio(pedido.doc_folio)
         pedido.cliente = str(row.get('BusinessEntityName') or '').strip()
         pedido.sucursal = str(row.get('Sucursal') or '').strip()
-        pedido.titulo = str(row.get('Title') or '').strip()
-        pedido.periodo_semana = str(row.get('PeriodWeek') or '').strip()
+        pedido.titulo = _contpaq_norm_text(row.get('Title'))
+        pedido.periodo_semana = _contpaq_norm_text(row.get('PeriodWeek'))
         pedido.fecha_documento = _parse_datetime(row.get('DateDocument'))
         pedido.updated_at = datetime.utcnow()
         pedidos_map[doc_id] = pedido

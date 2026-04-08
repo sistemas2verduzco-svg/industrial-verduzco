@@ -199,7 +199,8 @@ def main():
 
     cloud_url = os.getenv('CONTPAQ_CLOUD_PUSH_URL', '').strip()
     api_key = os.getenv('SYNC_API_KEY', '').strip()
-    customer = os.getenv('CONTPAQ_CUSTOMER_NAME', 'RUTH VERDUZCO SANTOS').strip()
+    customers_raw = os.getenv('CONTPAQ_CUSTOMER_NAME', 'RUTH VERDUZCO SANTOS').strip()
+    customers = [c.strip() for c in customers_raw.split(',') if c.strip()]
     start_date = parse_iso_date(os.getenv('CONTPAQ_START_DATE', '2025-01-01'), 'CONTPAQ_START_DATE')
     end_date = parse_iso_date(os.getenv('CONTPAQ_END_DATE'), 'CONTPAQ_END_DATE', date.today().isoformat())
     chunk_days = max(1, int(os.getenv('CONTPAQ_CHUNK_DAYS', '31') or '31'))
@@ -209,6 +210,8 @@ def main():
         raise RuntimeError('Falta CONTPAQ_CLOUD_PUSH_URL.')
     if not api_key:
         raise RuntimeError('Falta SYNC_API_KEY para autenticacion con nube.')
+    if not customers:
+        raise RuntimeError('Falta CONTPAQ_CUSTOMER_NAME.')
 
     if end_date < start_date:
         raise RuntimeError('CONTPAQ_END_DATE no puede ser menor que CONTPAQ_START_DATE.')
@@ -223,36 +226,38 @@ def main():
             'remisiones_detalle': 0,
         }
 
-        for window_start, window_end in iterate_windows(start_date, end_date, chunk_days):
-            total_windows += 1
-            payload = build_payload(conn, customer, window_start, window_end)
-            counts = {key: len(value) for key, value in payload.items()}
+        for customer in customers:
+            print(f'--- Sincronizando cliente: {customer} ---')
+            for window_start, window_end in iterate_windows(start_date, end_date, chunk_days):
+                total_windows += 1
+                payload = build_payload(conn, customer, window_start, window_end)
+                counts = {key: len(value) for key, value in payload.items()}
 
-            print(
-                'Ventana',
-                f'{window_start.isoformat()} -> {window_end.isoformat()}:',
-                json.dumps(counts, ensure_ascii=False)
-            )
+                print(
+                    'Ventana',
+                    f'{window_start.isoformat()} -> {window_end.isoformat()}:',
+                    json.dumps(counts, ensure_ascii=False)
+                )
 
-            if not any(counts.values()):
-                print('Sin datos en esta ventana, se omite push.')
-                continue
+                if not any(counts.values()):
+                    print('Sin datos en esta ventana, se omite push.')
+                    continue
 
-            response = requests.post(
-                cloud_url,
-                headers={'Content-Type': 'application/json', 'X-API-KEY': api_key},
-                data=json.dumps(payload),
-                timeout=request_timeout,
-            )
+                response = requests.post(
+                    cloud_url,
+                    headers={'Content-Type': 'application/json', 'X-API-KEY': api_key},
+                    data=json.dumps(payload),
+                    timeout=request_timeout,
+                )
 
-            if response.status_code >= 400:
-                print('Error push:', response.status_code, response.text)
-                return 1
+                if response.status_code >= 400:
+                    print('Error push:', response.status_code, response.text)
+                    return 1
 
-            for key, value in counts.items():
-                total_sent[key] += value
+                for key, value in counts.items():
+                    total_sent[key] += value
 
-            print('Push exitoso ventana:', response.text)
+                print('Push exitoso ventana:', response.text)
     finally:
         conn.close()
 
@@ -262,6 +267,7 @@ def main():
             {
                 'desde': start_date.isoformat(),
                 'hasta': end_date.isoformat(),
+                'clientes': customers,
                 'ventanas': total_windows,
                 **total_sent,
             },
