@@ -23,6 +23,7 @@
             <button id="btn-refresh" class="btn btn-secondary">🔄 Refrescar</button>
             {% if current_user and current_user.es_admin %}
             <button id="btn-delete-nonadmin" class="btn btn-danger" style="margin-left:10px;">🗑️ Borrar todos excepto admin</button>
+            <button id="btn-test-telegram" class="btn btn-success" style="margin-left:10px;">📨 Probar Telegram</button>
             {% endif %}
             {% if can_manage_roles_permissions %}
             <button id="btn-manage-roles" class="btn btn-primary" style="margin-left:10px;">⚙️ Gestionar Roles/Permisos</button>
@@ -310,6 +311,36 @@ if(btnDeleteNonAdmin){
             document.getElementById('mensaje').textContent = txt;
             await loadUsers();
         }catch(e){ alert('Error: '+e.message); }
+    });
+}
+
+const btnTestTelegram = document.getElementById('btn-test-telegram');
+if(btnTestTelegram){
+    btnTestTelegram.addEventListener('click', async ()=>{
+        const msg = document.getElementById('mensaje');
+        try{
+            btnTestTelegram.disabled = true;
+            if(msg){
+                msg.style.color = '#334155';
+                msg.textContent = 'Enviando prueba de Telegram...';
+            }
+            const data = await fetchJson('/admin/test-telegram', {method:'POST'});
+            if(msg){
+                msg.style.color = data.ok ? '#166534' : '#991b1b';
+                msg.textContent = data.message || (data.ok ? 'Mensaje enviado' : 'No se pudo enviar');
+            }
+            if(!data.ok){
+                alert('No se pudo enviar la prueba: ' + (data.reason || 'error')); 
+            }
+        }catch(e){
+            if(msg){
+                msg.style.color = '#991b1b';
+                msg.textContent = 'Error enviando prueba de Telegram';
+            }
+            alert('Error: ' + e.message);
+        }finally{
+            btnTestTelegram.disabled = false;
+        }
     });
 }
 
