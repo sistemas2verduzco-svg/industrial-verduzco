@@ -6462,6 +6462,29 @@ def delete_nonadmin_users():
     db.session.commit()
     return f"Usuarios eliminados: {deleted}", 200
 
+
+@app.route('/admin/test-telegram', methods=['POST'])
+@login_required
+def test_telegram():
+    """Envía un mensaje de prueba a Telegram. Solo admin."""
+    if not is_admin_user():
+        return jsonify({'error': 'Permiso denegado'}), 403
+    
+    mensaje_prueba = (
+        "🎉 *Bienvenido al Portal de Notificaciones* 🎉\n\n"
+        "Laboratorio Grupo Industrial Verduzco - Control de Calidad\n\n"
+        "✅ Integración de alertas de Telegram activada correctamente.\n"
+        "Este es un mensaje de prueba enviado desde la plataforma.\n\n"
+        f"Fecha: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC"
+    )
+    success, reason = _send_telegram_message(mensaje_prueba)
+    return jsonify({
+        'ok': success,
+        'reason': reason,
+        'message': 'Mensaje enviado a Moisés' if success else f'Error: {reason}'
+    })
+
+
 @app.route('/proveedores')
 @login_required
 @requires_permission('catalog', 'view')
