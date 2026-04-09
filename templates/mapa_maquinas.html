@@ -180,6 +180,13 @@
             box-shadow: inset 0 0 0 1px rgba(149, 164, 181, 0.25);
         }
 
+        .state-paro {
+            box-shadow: inset 0 0 0 2px rgba(200, 60, 60, 0.5);
+            border-color: rgba(180, 50, 50, 0.5);
+            background: linear-gradient(180deg, rgba(60, 15, 15, 0.92), rgba(40, 10, 10, 0.88));
+            opacity: 0.75;
+        }
+
         .machine-head {
             display: flex;
             gap: 8px;
@@ -258,6 +265,11 @@
         .badge-sin_hoja {
             color: #c2cfdd;
             background: rgba(149, 164, 181, 0.16);
+        }
+
+        .badge-paro {
+            color: #f5b0b0;
+            background: rgba(200, 60, 60, 0.20);
         }
 
         .machine-meta {
@@ -731,6 +743,10 @@
                         <span class="k">Sin hoja</span>
                         <span class="v" id="countSinHoja">0</span>
                     </div>
+                    <div class="split-box">
+                        <span class="k">Paro</span>
+                        <span class="v" id="countParo">0</span>
+                    </div>
                 </div>
 
                 <div class="progress-wrap">
@@ -746,6 +762,7 @@
                     <div class="legend-item"><span class="dot" style="background:var(--ok);"></span> Produciendo</div>
                     <div class="legend-item"><span class="dot" style="background:var(--warn);"></span> Activa sin estacion</div>
                     <div class="legend-item"><span class="dot" style="background:var(--idle);"></span> Sin hoja activa</div>
+                    <div class="legend-item"><span class="dot" style="background:rgba(200,60,60,0.8);"></span> Paro de turno / mantenimiento</div>
                 </div>
             </section>
 
@@ -993,6 +1010,7 @@
 
             const mover = maquinas.filter(m => m.estado_code === 'mover');
             const produciendo = maquinas.filter(m => m.estado_code === 'produciendo');
+            const paro = maquinas.filter(m => m.estado_code === 'paro');
             const conHoja = maquinas.filter(m => m.estado_code === 'produciendo' || m.estado_code === 'activa' || m.estado_code === 'mover');
             const sinHoja = maquinas.filter(m => m.estado_code === 'sin_hoja');
 
@@ -1042,12 +1060,14 @@
             const produciendo = maquinas.filter(m => m.estado_code === 'produciendo').length;
             const activa = maquinas.filter(m => m.estado_code === 'activa').length;
             const sinHoja = maquinas.filter(m => m.estado_code === 'sin_hoja').length;
+            const paro = maquinas.filter(m => m.estado_code === 'paro').length;
 
             document.getElementById('totalMaquinas').textContent = String(total);
             document.getElementById('countMover').textContent = String(mover);
             document.getElementById('countProduciendo').textContent = String(produciendo);
             document.getElementById('countActiva').textContent = String(activa);
             document.getElementById('countSinHoja').textContent = String(sinHoja);
+            document.getElementById('countParo').textContent = String(paro);
 
             const pct = total ? Math.round((produciendo * 100) / total) : 0;
             const ring = document.getElementById('prodRing');

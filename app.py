@@ -4388,7 +4388,6 @@ def api_mapa_maquinas():
             if estacion_actual:
                 estado_code = 'produciendo'
                 estado_label = 'En curso'
-                producing_count += 1
             else:
                 estado_code = 'activa'
                 estado_label = 'Activa'
@@ -4419,6 +4418,14 @@ def api_mapa_maquinas():
                 alertas_buzon_nuevas = True
                 alertas_buzon_pendientes_envio.append(alerta)
 
+        # Máquina inactiva → estado PARO (MOVER tiene prioridad)
+        if not bool(getattr(maq, 'activo', False)) and estado_code != 'mover':
+            estado_code = 'paro'
+            estado_label = 'Paro de turno' if not schedule_window['active'] else 'Paro'
+
+        if estado_code == 'produciendo':
+            producing_count += 1
+
         data.append({
             'id': maq.id,
             'nombre': maq.nombre,
@@ -4448,7 +4455,8 @@ def api_mapa_maquinas():
         'mover': 0,
         'produciendo': 1,
         'activa': 2,
-        'sin_hoja': 3,
+        'paro': 3,
+        'sin_hoja': 4,
     }
     data.sort(
         key=lambda item: (
