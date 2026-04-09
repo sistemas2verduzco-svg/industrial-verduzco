@@ -4397,6 +4397,8 @@ def api_mapa_maquinas():
             estado_label = 'Sin hoja'
 
         if proceso_culminado and hoja_activa:
+            estado_code = 'mover'
+            estado_label = 'MOVER'
             origen_modulo = 'mapa_maquinas'
             tipo_alerta = 'proceso_culminado'
             hoja_modulo = 'mp' if isinstance(hoja_activa, HojaRutaNueva) else 'entregas'
@@ -4443,9 +4445,10 @@ def api_mapa_maquinas():
         })
 
     estado_priority = {
-        'produciendo': 0,
-        'activa': 1,
-        'sin_hoja': 2,
+        'mover': 0,
+        'produciendo': 1,
+        'activa': 2,
+        'sin_hoja': 3,
     }
     data.sort(
         key=lambda item: (

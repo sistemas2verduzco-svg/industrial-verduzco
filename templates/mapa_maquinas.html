@@ -170,6 +170,12 @@
             box-shadow: inset 0 0 0 1px rgba(244, 180, 0, 0.35);
         }
 
+        .state-mover {
+            box-shadow: inset 0 0 0 2px rgba(255, 153, 0, 0.85);
+            border-color: rgba(255, 153, 0, 0.7);
+            background: linear-gradient(180deg, rgba(96, 58, 12, 0.92), rgba(74, 43, 7, 0.9));
+        }
+
         .state-sin_hoja {
             box-shadow: inset 0 0 0 1px rgba(149, 164, 181, 0.25);
         }
@@ -242,6 +248,11 @@
         .badge-activa {
             color: #ffe093;
             background: rgba(244, 180, 0, 0.15);
+        }
+
+        .badge-mover {
+            color: #ffe7bf;
+            background: rgba(255, 153, 0, 0.24);
         }
 
         .badge-sin_hoja {
@@ -709,6 +720,10 @@
                         <span class="v" id="countProduciendo">0</span>
                     </div>
                     <div class="split-box">
+                        <span class="k">Mover</span>
+                        <span class="v" id="countMover">0</span>
+                    </div>
+                    <div class="split-box">
                         <span class="k">Activa</span>
                         <span class="v" id="countActiva">0</span>
                     </div>
@@ -727,6 +742,7 @@
             <section class="panel stat-card">
                 <div class="stat-title">Leyenda de Estado</div>
                 <div class="legend" style="margin-top:8px;">
+                    <div class="legend-item"><span class="dot" style="background:#ff9900;"></span> MOVER (proceso culminado)</div>
                     <div class="legend-item"><span class="dot" style="background:var(--ok);"></span> Produciendo</div>
                     <div class="legend-item"><span class="dot" style="background:var(--warn);"></span> Activa sin estacion</div>
                     <div class="legend-item"><span class="dot" style="background:var(--idle);"></span> Sin hoja activa</div>
@@ -930,7 +946,7 @@
             meta.appendChild(makeMetaRow('Restante', machine.tiempo_restante_proceso || 'N/A'));
             meta.appendChild(makeMetaRow('Termino', machine.fecha_termino ? new Date(machine.fecha_termino).toLocaleString() : 'N/A'));
             if (machine.proceso_culminado) {
-                meta.appendChild(makeMetaRow('Estado proceso', 'CULMINADO'));
+                meta.appendChild(makeMetaRow('Estado proceso', 'CULMINADO - MOVER PIEZAS'));
             }
 
             const link = document.createElement('a');
@@ -975,8 +991,9 @@
             primary.innerHTML = '';
             secondary.innerHTML = '';
 
+            const mover = maquinas.filter(m => m.estado_code === 'mover');
             const produciendo = maquinas.filter(m => m.estado_code === 'produciendo');
-            const conHoja = maquinas.filter(m => m.estado_code === 'produciendo' || m.estado_code === 'activa');
+            const conHoja = maquinas.filter(m => m.estado_code === 'produciendo' || m.estado_code === 'activa' || m.estado_code === 'mover');
             const sinHoja = maquinas.filter(m => m.estado_code === 'sin_hoja');
 
             // Actualizar contadores en botones
@@ -987,14 +1004,14 @@
             let topList = [];
             let bottomList = [];
             if (currentFilter === 'con_hoja') {
-                topList = produciendo;
+                topList = mover.concat(produciendo);
                 bottomList = maquinas.filter(m => m.estado_code === 'activa');
             } else if (currentFilter === 'sin_hoja') {
                 topList = [];
                 bottomList = sinHoja;
             } else {
-                topList = produciendo;
-                bottomList = maquinas.filter(m => m.estado_code !== 'produciendo');
+                topList = mover.concat(produciendo);
+                bottomList = maquinas.filter(m => m.estado_code !== 'produciendo' && m.estado_code !== 'mover');
             }
 
             if (!topList.length) {
@@ -1021,11 +1038,13 @@
 
         function renderStats(maquinas) {
             const total = maquinas.length;
+            const mover = maquinas.filter(m => m.estado_code === 'mover').length;
             const produciendo = maquinas.filter(m => m.estado_code === 'produciendo').length;
             const activa = maquinas.filter(m => m.estado_code === 'activa').length;
             const sinHoja = maquinas.filter(m => m.estado_code === 'sin_hoja').length;
 
             document.getElementById('totalMaquinas').textContent = String(total);
+            document.getElementById('countMover').textContent = String(mover);
             document.getElementById('countProduciendo').textContent = String(produciendo);
             document.getElementById('countActiva').textContent = String(activa);
             document.getElementById('countSinHoja').textContent = String(sinHoja);
