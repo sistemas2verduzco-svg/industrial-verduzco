@@ -165,7 +165,6 @@ def _send_telegram_message(body_text):
             payload = {
                 'chat_id': chat_id,
                 'text': text_value,
-                'parse_mode': 'Markdown',
             }
             response = requests.post(url, json=payload, timeout=15)
             if 200 <= response.status_code < 300:
@@ -173,7 +172,15 @@ def _send_telegram_message(body_text):
                 continue
             logger.warning(f'Telegram error {response.status_code} to chat_id={chat_id}: {response.text[:500]}')
             if first_error is None:
-                first_error = f'http_{response.status_code}'
+                error_suffix = ''
+                try:
+                    err_payload = response.json() or {}
+                    err_desc = str(err_payload.get('description') or '').strip()
+                    if err_desc:
+                        error_suffix = ':' + err_desc[:160]
+                except Exception:
+                    pass
+                first_error = f'http_{response.status_code}{error_suffix}'
 
         if sent == total:
             return True, f'sent_{sent}'
