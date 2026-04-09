@@ -4636,6 +4636,27 @@ def api_alertas_buzon_test_telegram():
     return jsonify({'ok': ok, 'reason': reason}), code
 
 
+@app.route('/api/alertas_buzon/<int:alerta_id>/reenviar_telegram', methods=['POST'])
+@login_required
+@requires_permission('alertas_buzon', 'view')
+def api_alertas_buzon_reenviar_telegram(alerta_id):
+    if not _ensure_alertas_buzon_table():
+        return jsonify({'error': 'No se pudo acceder al buzón de alertas'}), 500
+
+    alerta = AlertaBuzonGeneral.query.get_or_404(alerta_id)
+    body = (
+        f"*ALERTA SISTEMA*\n"
+        f"Tipo: {alerta.tipo or '-'}\n"
+        f"Titulo: {alerta.titulo or '-'}\n"
+        f"Mensaje: {alerta.mensaje or '-'}\n"
+        f"Fecha: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC"
+    )
+
+    ok, reason = _send_telegram_message(body)
+    code = 200 if ok else 400
+    return jsonify({'ok': ok, 'reason': reason, 'alerta_id': alerta.id}), code
+
+
 @app.route('/hojas_ruta_entregas_form')
 @login_required
 @requires_any_permission([('hojas_entregas', 'view'), ('hojas', 'view'), ('catalog', 'view')])
