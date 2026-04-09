@@ -55,7 +55,6 @@
             <div style="display:flex; gap:8px; align-items:center;">
                 <button id="btnPendientes" type="button" onclick="setAlertFilter('pendientes')" style="border:1px solid #0f766e; background:#0f766e; color:#fff; border-radius:8px; padding:8px 12px; font-weight:700;">Pendientes</button>
                 <button id="btnTodas" type="button" onclick="setAlertFilter('all')" style="border:1px solid #cbd5e1; background:#fff; color:#0f172a; border-radius:8px; padding:8px 12px; font-weight:700;">Todas</button>
-                <button type="button" onclick="probarTelegram()" style="border:1px solid #1d4ed8; background:#fff; color:#1d4ed8; border-radius:8px; padding:8px 12px; font-weight:700;">Probar Telegram</button>
                 <button type="button" onclick="abrirModalTodas()" style="border:1px solid #1d4ed8; background:#1d4ed8; color:#fff; border-radius:8px; padding:8px 12px; font-weight:700;">Atender todas</button>
             </div>
         </div>
@@ -126,44 +125,6 @@
             document.getElementById('btnTodas').style.background = filter === 'all' ? '#0f766e' : '#fff';
             document.getElementById('btnTodas').style.color = filter === 'all' ? '#fff' : '#0f172a';
             loadAlerts();
-        }
-
-        async function probarTelegram() {
-            try {
-                const res = await fetch('/api/alertas_buzon/test_telegram', {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({})
-                });
-                const data = await res.json();
-                if (!res.ok || !data.ok) {
-                    alert('Fallo prueba Telegram: ' + (data.reason || data.error || 'desconocido'));
-                    return;
-                }
-                alert('Prueba Telegram enviada correctamente. Detalle: ' + (data.reason || 'sent'));
-            } catch (err) {
-                alert('Error de red en prueba Telegram: ' + err.message);
-            }
-        }
-
-        async function reenviarTelegram(alertaId) {
-            try {
-                const res = await fetch('/api/alertas_buzon/' + alertaId + '/reenviar_telegram', {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({})
-                });
-                const data = await res.json();
-                if (!res.ok || !data.ok) {
-                    alert('No se pudo reenviar alerta #' + alertaId + ': ' + (data.reason || data.error || 'desconocido'));
-                    return;
-                }
-                alert('Alerta #' + alertaId + ' reenviada a Telegram. Detalle: ' + (data.reason || 'sent'));
-            } catch (err) {
-                alert('Error de red al reenviar alerta: ' + err.message);
-            }
         }
 
         /* ---- Modal ---- */
@@ -289,9 +250,6 @@
                             `<button type="button" onclick="abrirModal(${item.id})"
                                 style="border:1px solid #2563eb;background:#2563eb;color:#fff;border-radius:6px;padding:5px 11px;font-size:12px;font-weight:700;white-space:nowrap;">
                                 ✔ Atender</button>`;
-                        const btnReenviar = `<button type="button" onclick="reenviarTelegram(${item.id})"
-                                style="margin-left:6px;border:1px solid #0f766e;background:#fff;color:#0f766e;border-radius:6px;padding:5px 11px;font-size:12px;font-weight:700;white-space:nowrap;">
-                                ↻ Telegram</button>`;
 
                         return `<tr style="${item.atendida ? 'opacity:0.72;' : ''}">
                             <td style="padding:9px;border-bottom:1px solid #eef2f7;white-space:nowrap;">${fmtDate(item.created_at)}</td>
@@ -301,7 +259,7 @@
                             <td style="padding:9px;border-bottom:1px solid #eef2f7;max-width:260px;">${escHtml(item.mensaje)}</td>
                             <td style="padding:9px;border-bottom:1px solid #eef2f7;">${estadoHtml}</td>
                             <td style="padding:9px;border-bottom:1px solid #eef2f7;max-width:220px;">${accionColHtml}</td>
-                            <td style="padding:9px;border-bottom:1px solid #eef2f7;">${btnAtender}${btnReenviar}</td>
+                            <td style="padding:9px;border-bottom:1px solid #eef2f7;">${btnAtender}</td>
                         </tr>`;
                     }).join('');
                 }
