@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice, ContpaqPrecioPublico, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, AlertaBuzonGeneral
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, AlertaBuzonGeneral
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -1708,6 +1708,50 @@ WHERE i.DeletedOn IS NULL
 """
 
 
+CONTPAQ_SUPPLIER_OT_QUERY = """
+SELECT
+        dbo.docDocument.DocumentID,
+        ISNULL(dbo.docDocument.FolioPrefix, N'') + ISNULL(dbo.docDocument.Folio, N'') AS DocFolio,
+        dbo.vwLBSBusinessEntityList.OfficialName AS BusinessEntityName,
+        COALESCE(depotDoc.DepotName, dbo.orgDepot.DepotName, '') AS DepotName,
+        dbo.docDocument.DateDocument,
+        dbo.docDocument.DateDocDelivery,
+        dbo.docDocument.Title,
+        dbo.docDocument.Comments
+FROM dbo.docDocumentExtra
+RIGHT OUTER JOIN dbo.docDocument ON dbo.docDocumentExtra.DocumentID = dbo.docDocument.DocumentID
+LEFT OUTER JOIN dbo.orgDepot ON dbo.docDocument.DepotID = dbo.orgDepot.DepotID
+LEFT OUTER JOIN dbo.vwLBSBusinessEntityList ON dbo.docDocument.BusinessEntityID = dbo.vwLBSBusinessEntityList.BusinessEntityID
+LEFT OUTER JOIN dbo.orgDepot AS depotDoc ON dbo.docDocumentExtra.BusinessEntityDepotID = depotDoc.DepotID
+WHERE dbo.docDocument.ModuleID = 183
+    AND dbo.docDocument.DateDocument >= ?
+    AND (ISNULL(dbo.docDocument.FolioPrefix, N'') + ISNULL(dbo.docDocument.Folio, N'')) LIKE 'OT%'
+"""
+
+
+CONTPAQ_SUPPLIER_OT_DETALLE_QUERY = """
+SELECT
+        dbo.vwLBSDocSupplierPOAllModules.DocumentID,
+        dbo.vwLBSDocSupplierPOAllModules.DocFolio,
+        dbo.vwLBSDocSupplierPOAllModules.BusinessEntityName,
+        dbo.vwLBSDocSupplierPOAllModules.DepotName,
+        dbo.vwLBSDocSupplierPOAllModules.DateDocument,
+        dbo.vwLBSDocSupplierPOAllModules.Title,
+        dbo.vwLBSProductsToDeliver.ProductID,
+        dbo.vwLBSProductsToDeliver.ProductKey,
+        dbo.vwLBSProductsToDeliver.ProductName,
+        dbo.vwLBSProductsToDeliver.QtyOrdered,
+        dbo.vwLBSProductsToDeliver.QtyDelivered,
+        dbo.vwLBSProductsToDeliver.QtyToBeDelivered
+FROM dbo.vwLBSDocSupplierPOAllModules
+INNER JOIN dbo.vwLBSProductsToDeliver ON dbo.vwLBSDocSupplierPOAllModules.DocumentID = dbo.vwLBSProductsToDeliver.DocumentID
+WHERE dbo.vwLBSProductsToDeliver.QtyToBeDelivered > 0
+    AND dbo.vwLBSDocSupplierPOAllModules.ModuleID = 183
+    AND dbo.vwLBSDocSupplierPOAllModules.DateDocument >= ?
+    AND dbo.vwLBSDocSupplierPOAllModules.DocFolio LIKE 'OT%'
+"""
+
+
 def _upsert_contpaq_data(payload):
     pedidos = payload.get('pedidos') or []
     pedidos_detalle = payload.get('pedidos_detalle') or []
@@ -1808,6 +1852,155 @@ def _upsert_contpaq_data(payload):
         stats['remision_detalles_upserted'] += 1
 
     return stats
+
+
+def _upsert_contpaq_supplier_ot_data(payload):
+    ot_headers = payload.get('supplier_purchase_orders') or []
+    ot_details = payload.get('supplier_purchase_order_details') or []
+
+    stats = {
+        'supplier_ots_upserted': 0,
+        'supplier_ot_detalles_upserted': 0,
+    }
+
+    headers_map = {}
+    for row in ot_headers:
+        doc_id = int(row.get('DocumentID') or 0)
+        if doc_id <= 0:
+            continue
+        header = ContpaqSupplierOT.query.filter_by(document_id=doc_id).first()
+        if not header:
+            header = ContpaqSupplierOT(document_id=doc_id)
+            db.session.add(header)
+        header.doc_folio = str(row.get('DocFolio') or '').strip().upper()
+        header.serie = _serie_from_folio(header.doc_folio)
+        header.proveedor = str(row.get('BusinessEntityName') or '').strip()
+        header.sucursal = str(row.get('DepotName') or '').strip()
+        header.titulo = _contpaq_norm_text(row.get('Title'))
+        header.fecha_documento = _parse_datetime(row.get('DateDocument'))
+        header.fecha_entrega = _parse_datetime(row.get('DateDocDelivery'))
+        header.comentarios = str(row.get('Comments') or '').strip() or None
+        header.updated_at = datetime.utcnow()
+        headers_map[doc_id] = header
+        stats['supplier_ots_upserted'] += 1
+
+    db.session.flush()
+
+    for row in ot_details:
+        doc_id = int(row.get('DocumentID') or 0)
+        if doc_id <= 0:
+            continue
+        header = headers_map.get(doc_id) or ContpaqSupplierOT.query.filter_by(document_id=doc_id).first()
+        if not header:
+            continue
+        product_id = row.get('ProductID')
+        try:
+            product_id = int(product_id) if product_id is not None else None
+        except Exception:
+            product_id = None
+        product_key = str(row.get('ProductKey') or '').strip().upper()[:120]
+        if not product_key:
+            continue
+
+        detail = ContpaqSupplierOTDetalle.query.filter_by(document_id=doc_id, product_key=product_key).first()
+
+        if not detail:
+            detail = ContpaqSupplierOTDetalle(document_id=doc_id, product_id=product_id)
+            db.session.add(detail)
+
+        detail.ot_id = header.id
+        detail.product_id = product_id
+        detail.product_key = product_key
+        detail.product_name = str(row.get('ProductName') or '').strip() or str(row.get('Description') or '').strip() or None
+        detail.qty_ordered = _to_float(row.get('QtyOrdered'))
+        detail.qty_delivered = _to_float(row.get('QtyDelivered'))
+        detail.qty_to_receive = _to_float(row.get('QtyToBeDelivered'))
+        detail.updated_at = datetime.utcnow()
+        stats['supplier_ot_detalles_upserted'] += 1
+
+    return stats
+
+
+def _contpaq_supplier_ot_reserved_map(detail_ids):
+    ids = [int(x) for x in (detail_ids or []) if x]
+    if not ids:
+        return {}
+    rows = (
+        db.session.query(
+            HojaRutaEntregaOTAsignacion.supplier_ot_detalle_id,
+            func.coalesce(func.sum(HojaRutaEntregaOTAsignacion.qty_assigned), 0),
+        )
+        .filter(
+            HojaRutaEntregaOTAsignacion.status == 'active',
+            HojaRutaEntregaOTAsignacion.supplier_ot_detalle_id.in_(ids),
+        )
+        .group_by(HojaRutaEntregaOTAsignacion.supplier_ot_detalle_id)
+        .all()
+    )
+    return {int(detail_id): float(total or 0) for detail_id, total in rows}
+
+
+def _contpaq_supplier_ot_options_for_product_key(product_key, requested_qty=None):
+    clave = str(product_key or '').strip().upper()
+    if not clave:
+        return []
+
+    details = (
+        ContpaqSupplierOTDetalle.query
+        .join(ContpaqSupplierOT, ContpaqSupplierOT.id == ContpaqSupplierOTDetalle.ot_id)
+        .filter(ContpaqSupplierOTDetalle.product_key == clave)
+        .order_by(ContpaqSupplierOT.fecha_documento.asc(), ContpaqSupplierOT.doc_folio.asc())
+        .all()
+    )
+    reserved_map = _contpaq_supplier_ot_reserved_map([d.id for d in details])
+    requested = None
+    try:
+        requested = float(requested_qty) if requested_qty is not None else None
+    except Exception:
+        requested = None
+
+    options = []
+    for detail in details:
+        pendiente = float(detail.qty_to_receive or 0)
+        reserved = float(reserved_map.get(detail.id, 0))
+        available = max(pendiente - reserved, 0)
+        if available <= 0:
+            continue
+        header = detail.ot
+        options.append({
+            'detail_id': detail.id,
+            'document_id': detail.document_id,
+            'doc_folio': header.doc_folio if header else None,
+            'serie': header.serie if header else None,
+            'proveedor': header.proveedor if header else None,
+            'sucursal': header.sucursal if header else None,
+            'titulo': header.titulo if header else None,
+            'fecha_documento': header.fecha_documento.isoformat() if header and header.fecha_documento else None,
+            'product_key': detail.product_key,
+            'product_name': detail.product_name,
+            'qty_ordered': float(detail.qty_ordered or 0),
+            'qty_delivered': float(detail.qty_delivered or 0),
+            'qty_to_receive': pendiente,
+            'qty_reserved': reserved,
+            'qty_available': available,
+            'fits_requested_qty': requested is None or requested <= available,
+        })
+    return options
+
+
+def _create_hoja_entrega_ot_assignment(hoja, detail, qty_assigned, created_by=None):
+    assignment = HojaRutaEntregaOTAsignacion(
+        hoja_ruta_id=hoja.id,
+        supplier_ot_detalle_id=detail.id,
+        document_id=detail.document_id,
+        doc_folio=(detail.ot.doc_folio if detail.ot else '') or '',
+        product_key=detail.product_key,
+        qty_assigned=float(qty_assigned or 0),
+        status='active',
+        created_by=(created_by or '').strip() or None,
+    )
+    db.session.add(assignment)
+    return assignment
 
 
 def _upsert_maquinaria_contpaq_data(payload):
@@ -4812,6 +5005,7 @@ def api_crear_hoja_ruta():
     almacen = (data.get('almacen') or '').strip()
     orden_trabajo = (data.get('orden_trabajo') or '').strip()
     comentarios = (data.get('comentarios') or '').strip()
+    contpaq_ot_detail_id = data.get('contpaq_ot_detail_id')
     firma_ing_jose = (data.get('firma_ing_jose') or '').strip()
     firma_ing_rodrigo = (data.get('firma_ing_rodrigo') or '').strip()
     cantidad_piezas = data.get('cantidad_piezas')
@@ -4898,6 +5092,28 @@ def api_crear_hoja_ruta():
     if not procesos:
         return jsonify({'error': 'La clave seleccionada no tiene procesos definidos'}), 400
 
+    supplier_ot_detail = None
+    if contpaq_ot_detail_id not in (None, '', 0, '0'):
+        try:
+            supplier_ot_detail = ContpaqSupplierOTDetalle.query.get(int(contpaq_ot_detail_id))
+        except Exception:
+            supplier_ot_detail = None
+        if not supplier_ot_detail:
+            return jsonify({'error': 'La OT seleccionada ya no existe.', 'code': 'ot_not_found'}), 404
+        if (supplier_ot_detail.product_key or '').strip().upper() != (clave.clave or '').strip().upper():
+            return jsonify({'error': 'La OT seleccionada no corresponde a la clave capturada.', 'code': 'ot_clave_mismatch'}), 409
+        options = _contpaq_supplier_ot_options_for_product_key(clave.clave, requested_qty=cantidad_piezas)
+        selected_option = next((item for item in options if int(item.get('detail_id') or 0) == int(supplier_ot_detail.id)), None)
+        if not selected_option:
+            return jsonify({'error': 'La OT seleccionada ya no tiene disponibilidad.', 'code': 'ot_not_available'}), 409
+        if not selected_option.get('fits_requested_qty'):
+            return jsonify({
+                'error': 'La OT seleccionada no tiene cantidad suficiente disponible.',
+                'code': 'ot_insufficient_qty',
+                'qty_available': selected_option.get('qty_available') or 0,
+            }), 409
+        orden_trabajo = (selected_option.get('doc_folio') or '').strip() or orden_trabajo
+
     try:
         fecha_actual = datetime.utcnow()
         maquina = Máquina.query.get(int(data.get('maquina_id'))) if data.get('maquina_id') else None
@@ -4967,6 +5183,13 @@ def api_crear_hoja_ruta():
             fallback_total_time=hoja.total_tiempo,
         )
         _registrar_carga_piezas_hoja(hoja, 0, int(cantidad_piezas), audit_username, origen='creacion')
+        if supplier_ot_detail:
+            _create_hoja_entrega_ot_assignment(
+                hoja,
+                supplier_ot_detail,
+                qty_assigned=int(cantidad_piezas),
+                created_by=audit_username,
+            )
 
         db.session.commit()
         logger.info(
@@ -4975,6 +5198,13 @@ def api_crear_hoja_ruta():
         result = hoja.to_dict()
         result['ya_paso_por_maquina'] = veces_previas_maquina > 0
         result['veces_previas_maquina'] = veces_previas_maquina
+        if supplier_ot_detail and supplier_ot_detail.ot:
+            result['ot_asignada'] = {
+                'detail_id': supplier_ot_detail.id,
+                'document_id': supplier_ot_detail.document_id,
+                'doc_folio': supplier_ot_detail.ot.doc_folio,
+                'qty_assigned': int(cantidad_piezas),
+            }
         return jsonify(result), 201
     except Exception as e:
         db.session.rollback()
@@ -9223,6 +9453,40 @@ def api_contpaq_sync_push():
             db.session.add(run)
             db.session.commit()
         return jsonify({'ok': False, 'error': str(exc), 'run_id': sync_run.id}), 500
+
+
+@app.route('/api/contpaq/supplier_ot/sync/push', methods=['POST'])
+def api_contpaq_supplier_ot_sync_push():
+    """Recibe OTs de compra pendientes desde un agente local independiente."""
+    ok, err = _require_sync_key()
+    if not ok:
+        return err
+
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify({'error': 'Payload invalido'}), 400
+
+    try:
+        stats = _upsert_contpaq_supplier_ot_data(payload)
+        db.session.commit()
+        return jsonify({'ok': True, 'stats': stats}), 200
+    except Exception as exc:
+        db.session.rollback()
+        logger.error(f'[CONTPAQ-OT] Error de sincronizacion: {exc}', exc_info=True)
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/contpaq/supplier_ot/disponibles', methods=['GET'])
+@login_required
+@requires_any_permission([('hojas_entregas', 'view'), ('hojas', 'view'), ('catalog', 'view')])
+def api_contpaq_supplier_ot_disponibles():
+    clave = (request.args.get('clave') or '').strip().upper()
+    cantidad = request.args.get('cantidad')
+    if not clave:
+        return jsonify({'items': []})
+
+    items = _contpaq_supplier_ot_options_for_product_key(clave, requested_qty=cantidad)
+    return jsonify({'items': items, 'total': len(items)})
 
 
 @app.route('/api/contpaq/maquinaria/sync/push', methods=['POST'])

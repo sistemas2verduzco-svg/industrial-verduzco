@@ -1210,6 +1210,106 @@ class ContpaqPrecioPublico(db.Model):
         }
 
 
+class ContpaqSupplierOT(db.Model):
+    __tablename__ = 'contpaq_supplier_ots'
+
+    id = db.Column(db.Integer, primary_key=True)
+    document_id = db.Column(db.BigInteger, nullable=False, unique=True, index=True)
+    doc_folio = db.Column(db.String(80), nullable=False, index=True)
+    serie = db.Column(db.String(20), nullable=True, index=True)
+    proveedor = db.Column(db.String(255), nullable=True, index=True)
+    sucursal = db.Column(db.String(255), nullable=True, index=True)
+    titulo = db.Column(db.String(255), nullable=True)
+    fecha_documento = db.Column(db.DateTime, nullable=True, index=True)
+    fecha_entrega = db.Column(db.DateTime, nullable=True)
+    comentarios = db.Column(db.Text, nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    detalles = db.relationship('ContpaqSupplierOTDetalle', backref='ot', lazy=True, cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'document_id': self.document_id,
+            'doc_folio': self.doc_folio,
+            'serie': self.serie,
+            'proveedor': self.proveedor,
+            'sucursal': self.sucursal,
+            'titulo': self.titulo,
+            'fecha_documento': self.fecha_documento.isoformat() if self.fecha_documento else None,
+            'fecha_entrega': self.fecha_entrega.isoformat() if self.fecha_entrega else None,
+            'comentarios': self.comentarios,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class ContpaqSupplierOTDetalle(db.Model):
+    __tablename__ = 'contpaq_supplier_ots_detalle'
+
+    id = db.Column(db.Integer, primary_key=True)
+    ot_id = db.Column(db.Integer, db.ForeignKey('contpaq_supplier_ots.id'), nullable=False, index=True)
+    document_id = db.Column(db.BigInteger, nullable=False, index=True)
+    product_id = db.Column(db.BigInteger, nullable=True, index=True)
+    product_key = db.Column(db.String(120), nullable=False, index=True)
+    product_name = db.Column(db.Text, nullable=True)
+    qty_ordered = db.Column(db.Float, nullable=True)
+    qty_delivered = db.Column(db.Float, nullable=True)
+    qty_to_receive = db.Column(db.Float, nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('document_id', 'product_key', name='uq_contpaq_supplier_ot_clave'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'ot_id': self.ot_id,
+            'document_id': self.document_id,
+            'product_id': self.product_id,
+            'product_key': self.product_key,
+            'product_name': self.product_name,
+            'qty_ordered': self.qty_ordered,
+            'qty_delivered': self.qty_delivered,
+            'qty_to_receive': self.qty_to_receive,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class HojaRutaEntregaOTAsignacion(db.Model):
+    __tablename__ = 'hojas_ruta_entrega_ot_asignaciones'
+
+    id = db.Column(db.Integer, primary_key=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_entrega.id'), nullable=False, index=True)
+    supplier_ot_detalle_id = db.Column(db.Integer, db.ForeignKey('contpaq_supplier_ots_detalle.id'), nullable=False, index=True)
+    document_id = db.Column(db.BigInteger, nullable=False, index=True)
+    doc_folio = db.Column(db.String(80), nullable=False, index=True)
+    product_key = db.Column(db.String(120), nullable=False, index=True)
+    qty_assigned = db.Column(db.Float, nullable=False, default=0)
+    status = db.Column(db.String(20), nullable=False, default='active', index=True)
+    created_by = db.Column(db.String(120), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    released_at = db.Column(db.DateTime, nullable=True)
+
+    hoja_ruta = db.relationship('HojaRutaEntrega', backref=db.backref('ot_asignaciones', lazy=True, cascade='all, delete-orphan'))
+    supplier_ot_detalle = db.relationship('ContpaqSupplierOTDetalle', backref='asignaciones_hoja')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'hoja_ruta_id': self.hoja_ruta_id,
+            'supplier_ot_detalle_id': self.supplier_ot_detalle_id,
+            'document_id': self.document_id,
+            'doc_folio': self.doc_folio,
+            'product_key': self.product_key,
+            'qty_assigned': self.qty_assigned,
+            'status': self.status,
+            'created_by': self.created_by,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'released_at': self.released_at.isoformat() if self.released_at else None,
+        }
+
+
 class MaquinariaPedido(db.Model):
     __tablename__ = 'maquinaria_pedidos'
 
