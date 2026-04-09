@@ -4078,6 +4078,7 @@ def api_mapa_maquinas():
     ritmo_sum = 0.0
     ritmo_count = 0
     alertas_buzon_nuevas = False
+    alertas_buzon_pendientes_envio = []
 
     def _bounded_seconds(start_dt, end_dt, window_start, window_end):
         if not start_dt or not end_dt:
@@ -4214,6 +4215,7 @@ def api_mapa_maquinas():
             )
             if alerta is not None and alerta in db.session.new:
                 alertas_buzon_nuevas = True
+                alertas_buzon_pendientes_envio.append(alerta)
 
         data.append({
             'id': maq.id,
@@ -4277,6 +4279,9 @@ def api_mapa_maquinas():
     if alertas_buzon_nuevas:
         try:
             db.session.commit()
+            for alerta in alertas_buzon_pendientes_envio:
+                _send_alerta_whatsapp_if_enabled(alerta)
+                _send_alerta_telegram_if_enabled(alerta)
         except Exception:
             db.session.rollback()
 
@@ -5404,6 +5409,8 @@ def api_check_proceso_estacion(estacion_id):
     data = request.get_json() or {}
     completada = bool(data.get('completada', False))
 
+    alertas_pendientes_envio = []
+
     try:
         ahora = datetime.utcnow()
 
@@ -5414,7 +5421,7 @@ def api_check_proceso_estacion(estacion_id):
             estacion.fecha_finalizacion = ahora
 
             evento_clave_est = f"estaciones_t:estacion:{estacion.id}:hoja:{hoja.id}:fin:{ahora.strftime('%Y%m%d%H%M%S')}"
-            _crear_alerta_buzon(
+            alerta_est = _crear_alerta_buzon(
                 evento_clave=evento_clave_est,
                 origen='estaciones_t',
                 tipo='estacion_completada',
@@ -5425,6 +5432,8 @@ def api_check_proceso_estacion(estacion_id):
                 estacion_id=estacion.id,
                 commit=False,
             )
+            if alerta_est is not None and alerta_est in db.session.new:
+                alertas_pendientes_envio.append(alerta_est)
 
             # Limpiar cualquier en_curso previo para mantener un solo proceso activo.
             otras_en_curso = EstacionTrabajo.query.filter(
@@ -5475,7 +5484,7 @@ def api_check_proceso_estacion(estacion_id):
 
         if (hoja.estado or '').lower() == 'completada':
             evento_clave_hoja = f"estaciones_t:hoja:{hoja.id}:completada:{(hoja.fecha_termino or ahora).strftime('%Y%m%d%H%M%S')}"
-            _crear_alerta_buzon(
+            alerta_hoja = _crear_alerta_buzon(
                 evento_clave=evento_clave_hoja,
                 origen='estaciones_t',
                 tipo='hoja_completada',
@@ -5486,8 +5495,13 @@ def api_check_proceso_estacion(estacion_id):
                 estacion_id=None,
                 commit=False,
             )
+            if alerta_hoja is not None and alerta_hoja in db.session.new:
+                alertas_pendientes_envio.append(alerta_hoja)
 
         db.session.commit()
+        for alerta in alertas_pendientes_envio:
+            _send_alerta_whatsapp_if_enabled(alerta)
+            _send_alerta_telegram_if_enabled(alerta)
 
         pendientes = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id, estado='pendiente').count()
         completadas = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id, estado='completada').count()
