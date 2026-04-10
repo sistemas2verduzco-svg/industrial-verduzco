@@ -6,6 +6,20 @@
     <title>Maquinaria y Ensamble - Pedidos</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <style>
+        .pedidos-page {
+            max-width: none;
+            width: auto;
+            padding-left: 10px;
+            padding-right: 10px;
+        }
+
+        @media (max-width: 980px) {
+            .pedidos-page {
+                padding-left: 12px;
+                padding-right: 12px;
+            }
+        }
+
         .pedido-action-btn {
             border: 1px solid rgba(255,255,255,0.35);
             background: rgba(255,255,255,0.16);
@@ -32,7 +46,7 @@
 </head>
 <body>
     {% include '_sidebar.html' %}
-    <div class="container" style="padding-top:20px;">
+    <div class="container pedidos-page" style="padding-top:20px;">
         <h2 style="margin:0 0 6px 0;">Maquinaria y Ensamble - Pedidos</h2>
         <div style="color:#64748b; font-size:13px; margin-bottom:14px;">Consulta pedidos de maquinaria CONTPAQ serie E no entregados desde junio 2025 y genera pedidos internos para maquinaria.</div>
 
