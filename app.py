@@ -4804,6 +4804,8 @@ def hojas_ruta_entregas_form():
         'hojas_ruta_form.html',
         hojas=hojas_data,
         almacenes=almacenes,
+        allow_tipo_switch=True,
+        default_tipo_hoja='entrega',
         modulo_titulo='HOJAS DE RUTA ENTREGAS',
         companion_modulo_titulo='HOJAS DE RUTA MP',
         companion_hojas=companion_hojas,

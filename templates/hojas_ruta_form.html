@@ -583,6 +583,15 @@
         <div class="card">
             <form id="hojaForm">
                 <div class="grid">
+                    {% if allow_tipo_switch %}
+                    <div>
+                        <label>Tipo de hoja *</label>
+                        <select id="tipo_hoja" name="tipo_hoja" required>
+                            <option value="entrega" {% if (default_tipo_hoja or 'entrega') == 'entrega' %}selected{% endif %}>Produccion / Entrega</option>
+                            <option value="mp" {% if (default_tipo_hoja or '') == 'mp' %}selected{% endif %}>Acondicionamiento de Materia Prima</option>
+                        </select>
+                    </div>
+                    {% endif %}
                     <div>
                         <label>Clave *</label>
                         <select id="clave_id" name="clave_id" required>
@@ -623,7 +632,7 @@
                         <input id="orden_trabajo" name="orden_trabajo" type="text" placeholder="Ej: OT-2026-015">
                     </div>
                     {% if not nuevo_modulo %}
-                    <div>
+                    <div id="contpaq_ot_field">
                         <label>OT pendiente CONTPAQ (auto por clave)</label>
                         <select id="contpaq_ot_detail_id" name="contpaq_ot_detail_id">
                             <option value="">Sin sugerencia</option>
@@ -1043,7 +1052,10 @@
 
     <script>
         const API_HOJAS_BASE = {{ (api_hojas_base or '/api/hojas_ruta')|tojson }};
+        const API_HOJAS_ENTREGA = '/api/hojas_ruta';
+        const API_HOJAS_MP = '/api/hojas_ruta_nuevo';
         const IS_ENTREGAS_FORM = API_HOJAS_BASE === '/api/hojas_ruta';
+        const ALLOW_TIPO_SWITCH = {{ (allow_tipo_switch or false)|tojson }};
         let clavesData = [];
         const hojasReporteData = {{ hojas|tojson }};
         const hojasDataById = new Map(hojasReporteData.map((item) => [String(item.id), item]));
@@ -1267,13 +1279,61 @@
                 document.getElementById('serie_preview').value = '';
                 return;
             }
+            const tipoHojaEl = document.getElementById('tipo_hoja');
+            const tipoHoja = String(tipoHojaEl && tipoHojaEl.value ? tipoHojaEl.value : 'entrega').toLowerCase();
+            const prefijo = tipoHoja === 'mp' ? 'HRN' : 'HR';
             const d = new Date();
             const ymd = d.getFullYear().toString() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
-            document.getElementById('serie_preview').value = `HR-${ymd}-${claveTxt}-XXXX`;
+            document.getElementById('serie_preview').value = `${prefijo}-${ymd}-${claveTxt}-XXXX`;
+        }
+
+        function getTipoHojaActual() {
+            if (!ALLOW_TIPO_SWITCH) return 'entrega';
+            const tipoEl = document.getElementById('tipo_hoja');
+            const tipo = String(tipoEl && tipoEl.value ? tipoEl.value : 'entrega').toLowerCase();
+            return tipo === 'mp' ? 'mp' : 'entrega';
+        }
+
+        function getCreateApiByTipo(tipoHoja) {
+            return tipoHoja === 'mp' ? API_HOJAS_MP : API_HOJAS_ENTREGA;
+        }
+
+        function syncFormByTipo() {
+            const tipoHoja = getTipoHojaActual();
+            const isEntrega = tipoHoja === 'entrega';
+            const otField = document.getElementById('contpaq_ot_field');
+            const otSelect = document.getElementById('contpaq_ot_detail_id');
+            const otHint = document.getElementById('contpaq_ot_hint');
+            const ordenTrabajoInput = document.getElementById('orden_trabajo');
+
+            if (otField) {
+                otField.style.display = isEntrega ? '' : 'none';
+            }
+
+            if (otSelect) {
+                otSelect.disabled = !isEntrega;
+                if (!isEntrega) {
+                    otSelect.value = '';
+                    otSelect.innerHTML = '<option value="">Sin sugerencia</option>';
+                }
+            }
+
+            if (otHint && !isEntrega) {
+                otHint.textContent = 'Las OTs de CONTPAQ aplican solo para hojas de Produccion / Entrega.';
+            }
+
+            if (!isEntrega && ordenTrabajoInput && ordenTrabajoInput.value && ordenTrabajoInput.value.startsWith('OT-')) {
+                // Mantener campo editable, pero limpiar sugerencias arrastradas de CONTPAQ al cambiar a MP.
+                ordenTrabajoInput.value = '';
+            }
+
+            updateSeriePreview();
+            refreshContpaqOtOptions();
         }
 
         async function refreshContpaqOtOptions() {
             if (!IS_ENTREGAS_FORM) return;
+            if (getTipoHojaActual() !== 'entrega') return;
             const otSelect = document.getElementById('contpaq_ot_detail_id');
             const otHint = document.getElementById('contpaq_ot_hint');
             const claveSelect = document.getElementById('clave_id');
@@ -1532,8 +1592,17 @@
             });
         }
 
+        const tipoHojaEl = document.getElementById('tipo_hoja');
+        if (tipoHojaEl) {
+            tipoHojaEl.addEventListener('change', () => {
+                syncFormByTipo();
+            });
+        }
+
         document.getElementById('hojaForm').addEventListener('submit', async (e) => {
             e.preventDefault();
+            const tipoHoja = getTipoHojaActual();
+            const apiCrear = getCreateApiByTipo(tipoHoja);
             const payload = {
                 clave_id: parseInt(document.getElementById('clave_id').value, 10),
                 calidad: document.getElementById('calidad').value,
@@ -1543,7 +1612,7 @@
                 comentarios: document.getElementById('comentarios').value.trim()
             };
 
-            if (IS_ENTREGAS_FORM) {
+            if (IS_ENTREGAS_FORM && tipoHoja === 'entrega') {
                 const otSel = document.getElementById('contpaq_ot_detail_id');
                 if (otSel && otSel.value) {
                     payload.contpaq_ot_detail_id = parseInt(otSel.value, 10);
@@ -1556,7 +1625,7 @@
             }
 
             try {
-                const res = await fetch(API_HOJAS_BASE, {
+                const res = await fetch(apiCrear, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'same-origin',
@@ -1583,7 +1652,7 @@
                     throw new Error(data.error || 'No se pudo crear la hoja');
                 }
 
-                let msg = 'Hoja creada: ' + (data.nombre || 'OK');
+                let msg = 'Hoja creada (' + (tipoHoja === 'mp' ? 'Acondicionamiento MP' : 'Produccion / Entrega') + '): ' + (data.nombre || 'OK');
                 if (data.ot_asignada && data.ot_asignada.doc_folio) {
                     msg += '\nOT asignada: ' + data.ot_asignada.doc_folio + ' (' + (data.ot_asignada.qty_assigned || 0) + ' pzas)';
                 }
@@ -1602,7 +1671,7 @@
         setInterval(renderNow, 60000);
         initHojasRecientesSearch();
         loadClaves();
-        refreshContpaqOtOptions();
+        syncFormByTipo();
 
         function abrirModalEdicion(btn) {
             document.getElementById('edit_hoja_id').value = btn.dataset.hojaId || '';
