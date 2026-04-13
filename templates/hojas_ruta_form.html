@@ -1288,7 +1288,7 @@
         }
 
         function getTipoHojaActual() {
-            if (!ALLOW_TIPO_SWITCH) return 'entrega';
+            if (!ALLOW_TIPO_SWITCH) return IS_ENTREGAS_FORM ? 'entrega' : 'mp';
             const tipoEl = document.getElementById('tipo_hoja');
             const tipo = String(tipoEl && tipoEl.value ? tipoEl.value : 'entrega').toLowerCase();
             return tipo === 'mp' ? 'mp' : 'entrega';
