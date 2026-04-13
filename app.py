@@ -1995,6 +1995,73 @@ def _contpaq_supplier_ot_options_for_product_key(product_key, requested_qty=None
     return options
 
 
+def _contpaq_supplier_ot_key_status(product_key):
+    clave = str(product_key or '').strip().upper()
+    if not clave:
+        return {
+            'exists': False,
+            'rows': 0,
+            'total_pending': 0.0,
+            'total_reserved': 0.0,
+            'total_available': 0.0,
+        }
+
+    details = ContpaqSupplierOTDetalle.query.filter_by(product_key=clave).all()
+    if not details:
+        return {
+            'exists': False,
+            'rows': 0,
+            'total_pending': 0.0,
+            'total_reserved': 0.0,
+            'total_available': 0.0,
+        }
+
+    reserved_map = _contpaq_supplier_ot_reserved_map([d.id for d in details])
+    total_pending = 0.0
+    total_reserved = 0.0
+    total_available = 0.0
+
+    for detail in details:
+        pendiente = float(detail.qty_to_receive or 0)
+        reservado = float(reserved_map.get(detail.id, 0))
+        disponible = max(pendiente - reservado, 0)
+        total_pending += pendiente
+        total_reserved += reservado
+        total_available += disponible
+
+    return {
+        'exists': True,
+        'rows': len(details),
+        'total_pending': total_pending,
+        'total_reserved': total_reserved,
+        'total_available': total_available,
+    }
+
+
+def _contpaq_supplier_ot_top_keys(limit=10):
+    rows = (
+        db.session.query(
+            ContpaqSupplierOTDetalle.product_key,
+            func.count(ContpaqSupplierOTDetalle.id),
+            func.coalesce(func.sum(ContpaqSupplierOTDetalle.qty_to_receive), 0),
+        )
+        .group_by(ContpaqSupplierOTDetalle.product_key)
+        .order_by(func.coalesce(func.sum(ContpaqSupplierOTDetalle.qty_to_receive), 0).desc())
+        .limit(max(1, int(limit or 10)))
+        .all()
+    )
+
+    return [
+        {
+            'product_key': product_key,
+            'rows': int(rows_count or 0),
+            'qty_to_receive_total': float(total_qty or 0),
+        }
+        for product_key, rows_count, total_qty in rows
+        if product_key
+    ]
+
+
 def _create_hoja_entrega_ot_assignment(hoja, detail, qty_assigned, created_by=None):
     assignment = HojaRutaEntregaOTAsignacion(
         hoja_ruta_id=hoja.id,
@@ -9527,7 +9594,14 @@ def api_contpaq_supplier_ot_disponibles():
         return jsonify({'items': []})
 
     items = _contpaq_supplier_ot_options_for_product_key(clave, requested_qty=cantidad)
-    return jsonify({'items': items, 'total': len(items)})
+    response = {
+        'items': items,
+        'total': len(items),
+        'key_status': _contpaq_supplier_ot_key_status(clave),
+    }
+    if not items:
+        response['suggested_keys'] = _contpaq_supplier_ot_top_keys(limit=10)
+    return jsonify(response)
 
 
 @app.route('/api/contpaq/maquinaria/sync/push', methods=['POST'])

@@ -1365,7 +1365,19 @@
                 const items = Array.isArray(data.items) ? data.items : [];
                 if (!items.length) {
                     if (otHint) {
-                        otHint.textContent = `No hay OTs pendientes con disponibilidad para clave ${clave}.`;
+                        const keyStatus = data && data.key_status ? data.key_status : null;
+                        const suggested = Array.isArray(data && data.suggested_keys) ? data.suggested_keys : [];
+                        if (keyStatus && keyStatus.exists) {
+                            const disp = Number(keyStatus.total_available || 0);
+                            const pend = Number(keyStatus.total_pending || 0);
+                            const resv = Number(keyStatus.total_reserved || 0);
+                            otHint.textContent = `La clave ${clave} existe en OTs, pero no tiene disponibilidad (pendiente: ${pend}, reservado: ${resv}, disponible: ${disp}).`;
+                        } else {
+                            const top = suggested.slice(0, 5).map(k => k.product_key).filter(Boolean).join(', ');
+                            otHint.textContent = top
+                                ? `No hay OTs para la clave ${clave}. Prueba con una clave con OT: ${top}.`
+                                : `No hay OTs pendientes con disponibilidad para clave ${clave}.`;
+                        }
                     }
                     return;
                 }
