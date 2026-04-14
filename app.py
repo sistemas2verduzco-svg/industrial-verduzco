@@ -1133,6 +1133,13 @@ def _build_mp_virtual_estaciones_by_pn(pn_value, completed_process_ids=None):
             or _clean_nullable_text(getattr(getattr(cp, 'proceso', None), 'nombre', None))
             or f'Proceso {idx}'
         )
+        t_e = _clean_nullable_text(getattr(cp, 't_e', None))
+        t_tct = _clean_nullable_text(getattr(cp, 't_tct', None))
+        t_tco = _clean_nullable_text(getattr(cp, 't_tco', None))
+        t_to = _clean_nullable_text(getattr(cp, 't_to', None))
+        if not t_e:
+            t_e = _clean_nullable_text(getattr(cp, 'tiempo_estimado', None)) or _clean_nullable_text(getattr(getattr(cp, 'proceso', None), 'tiempo_estimado', None))
+
         virtual.append({
             'id': cp.id,
             'orden': cp.orden or idx,
@@ -1140,6 +1147,10 @@ def _build_mp_virtual_estaciones_by_pn(pn_value, completed_process_ids=None):
             'operacion': operacion,
             'centro_trabajo': _clean_nullable_text(getattr(cp, 'centro_trabajo', None))
                              or _clean_nullable_text(getattr(getattr(cp, 'proceso', None), 'centro_trabajo', None)),
+            't_e': t_e or '',
+            't_tct': t_tct or '',
+            't_tco': t_tco or '',
+            't_to': t_to or '',
             'estado': 'completada' if cp.id in completed else 'pendiente',
             'origen': 'clave_proceso_mp',
         })
@@ -4168,6 +4179,12 @@ def hojas_ruta_entregas_list():
                 hoja_activa.pn,
                 _mp_parse_completed_process_ids(hoja_activa.materia_prima),
             )
+            if not hoja_activa_dict.get('total_tiempo'):
+                hoja_activa_dict['total_tiempo'] = _compute_mp_total_time_preview_by_pn(
+                    hoja_activa.pn,
+                    hoja_activa.cantidad_piezas,
+                    hoja_activa.total_tiempo,
+                )
 
         estacion_actual = 'Sin produccion'
         tiempo_real = '00:00:00'
@@ -4359,6 +4376,7 @@ def api_mapa_maquinas():
 
     for idx, maq in enumerate(maquinas):
         hoja_activa = hoja_activa_por_maquina.get(maq.id)
+        hoja_total_tiempo = None
         hoja_modulo = 'entregas'
         estacion_actual = None
         tiempo_objetivo = None
@@ -4373,6 +4391,11 @@ def api_mapa_maquinas():
             is_mp_hoja = isinstance(hoja_activa, HojaRutaNueva)
             if is_mp_hoja:
                 hoja_modulo = 'mp'
+                hoja_total_tiempo = hoja_activa.total_tiempo or _compute_mp_total_time_preview_by_pn(
+                    hoja_activa.pn,
+                    hoja_activa.cantidad_piezas,
+                    hoja_activa.total_tiempo,
+                )
                 # MP: proceso actual viene de ClaveProceso virtual, no de EstacionTrabajo
                 completed_ids = _mp_parse_completed_process_ids(hoja_activa.materia_prima)
                 virtual_ests = _build_mp_virtual_estaciones_by_pn(hoja_activa.pn, completed_ids)
@@ -4409,6 +4432,7 @@ def api_mapa_maquinas():
                             if projection['objetivo_sec'] > 0:
                                 progreso_pct = min(100, int((projection['transcurrido_sec'] * 100) / projection['objetivo_sec']))
             else:
+                hoja_total_tiempo = hoja_activa.total_tiempo
                 estacion_actual = EstacionTrabajo.query.filter_by(
                     hoja_ruta_id=hoja_activa.id,
                     estado='en_curso'
@@ -4513,7 +4537,7 @@ def api_mapa_maquinas():
             'estacion_actual': estacion_actual.nombre if estacion_actual else None,
             'hoja_serie': hoja_activa.nombre if hoja_activa else None,
             'pieza': hoja_activa.pn if hoja_activa else None,
-            'tiempo_total': hoja_activa.total_tiempo if hoja_activa else None,
+            'tiempo_total': hoja_total_tiempo if hoja_activa else None,
             'fecha_termino': hoja_activa.fecha_termino.isoformat() if (hoja_activa and hoja_activa.fecha_termino) else None,
             'tiempo_proceso_pieza': tiempo_proceso_pieza,
             'tiempo_objetivo_proceso': tiempo_objetivo,
