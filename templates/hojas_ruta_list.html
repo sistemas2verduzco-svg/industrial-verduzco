@@ -994,7 +994,7 @@
 
     function extractJsonVarFromHtml(html, varName) {
         try {
-            const rx = new RegExp(`const\\s+${varName}\\s*=\\s*([\\s\\S]*?);`);
+            const rx = new RegExp(`(?:const|let|var)\\s+${varName}\\s*=\\s*([\\s\\S]*?);`);
             const m = html.match(rx);
             if (!m || !m[1]) return null;
             return JSON.parse(m[1]);
