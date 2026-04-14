@@ -4359,6 +4359,7 @@ def api_mapa_maquinas():
 
     for idx, maq in enumerate(maquinas):
         hoja_activa = hoja_activa_por_maquina.get(maq.id)
+        hoja_modulo = 'entregas'
         estacion_actual = None
         tiempo_objetivo = None
         tiempo_transcurrido = None
@@ -4371,6 +4372,7 @@ def api_mapa_maquinas():
         if hoja_activa:
             is_mp_hoja = isinstance(hoja_activa, HojaRutaNueva)
             if is_mp_hoja:
+                hoja_modulo = 'mp'
                 # MP: proceso actual viene de ClaveProceso virtual, no de EstacionTrabajo
                 completed_ids = _mp_parse_completed_process_ids(hoja_activa.materia_prima)
                 virtual_ests = _build_mp_virtual_estaciones_by_pn(hoja_activa.pn, completed_ids)
@@ -4381,6 +4383,9 @@ def api_mapa_maquinas():
                         nombre=est_mp.get('operacion') or est_mp.get('nombre') or 'Proceso',
                     )
                     inicio = hoja_activa.fecha_salida
+                    sec_por_pieza_mp = _mp_process_seconds(ClaveProceso.query.get(est_mp['id']))
+                    if sec_por_pieza_mp > 0:
+                        tiempo_proceso_pieza = _format_seconds_to_hms(sec_por_pieza_mp)
                     if inicio:
                         # Considerar paros: si está pausada, contar hasta fecha_actualizacion
                         if hoja_activa.estado == 'pausada' and hoja_activa.fecha_actualizacion:
@@ -4517,6 +4522,8 @@ def api_mapa_maquinas():
             'proceso_culminado': proceso_culminado,
             'progreso_proceso_pct': progreso_pct,
             'estacion_actual_id': estacion_actual.id if estacion_actual else None,
+            'hoja_modulo': hoja_modulo,
+            'detalle_url': f"/hojas_ruta_nuevo/{maq.id}" if hoja_modulo == 'mp' else f"/hojas_ruta/{maq.id}",
         })
 
     estado_priority = {

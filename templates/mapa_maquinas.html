@@ -968,7 +968,7 @@
 
             const link = document.createElement('a');
             link.className = 'machine-link';
-            link.href = '/hojas_ruta/' + machine.id;
+            link.href = safeText(machine.detalle_url, '/hojas_ruta/' + machine.id);
             link.textContent = 'Abrir detalle >';
 
             card.appendChild(head);
