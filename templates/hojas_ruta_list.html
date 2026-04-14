@@ -717,7 +717,11 @@
         .then(r => r.json())
         .then(data => {
             if (data && (data.ok || data.success)) {
-                window.location.reload();
+                if (typeof softRefreshBoard === 'function') {
+                    softRefreshBoard();
+                } else {
+                    window.location.reload();
+                }
             } else {
                 alert('❌ Error: respuesta inválida');
             }
@@ -958,10 +962,11 @@
     <script src="https://unpkg.com/html5-qrcode" defer></script>
 
     <script>
-    const hojasPendientes = {{ hojas_pendientes|tojson }};
-    const maquinasCatalogo = {{ maquinas|tojson }};
+    let hojasPendientes = {{ hojas_pendientes|tojson }};
+    let maquinasCatalogo = {{ maquinas|tojson }};
     let qrScannerAsignacion = null;
     let emergencyShownKey = null;
+    let realtimeClockIntervalId = null;
 
     function parseHmsToSeconds(hms) {
         if (!hms || typeof hms !== 'string') return 0;
@@ -985,6 +990,75 @@
 
     function getHojaPendienteById(hojaId) {
         return hojasPendientes.find(h => Number(h.id) === Number(hojaId));
+    }
+
+    function extractJsonVarFromHtml(html, varName) {
+        try {
+            const rx = new RegExp(`const\\s+${varName}\\s*=\\s*([\\s\\S]*?);`);
+            const m = html.match(rx);
+            if (!m || !m[1]) return null;
+            return JSON.parse(m[1]);
+        } catch (_) {
+            return null;
+        }
+    }
+
+    async function softRefreshBoard() {
+        const maqTerm = filtroMaq ? filtroMaq.value : '';
+        const hojaTerm = filtroHoja ? filtroHoja.value : '';
+        const soloActivas = !!(filtroActivas && filtroActivas.checked);
+        const pendingPanel = document.querySelector('.pending-panel');
+        const pendingCollapsed = !!(pendingPanel && pendingPanel.classList.contains('collapsed'));
+
+        const res = await fetch(window.location.pathname + window.location.search, {
+            credentials: 'same-origin',
+            cache: 'no-store',
+        });
+        if (!res.ok) {
+            throw new Error('No se pudo refrescar tablero');
+        }
+        const html = await res.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+
+        const newStats = doc.querySelector('.stats-row');
+        const curStats = document.querySelector('.stats-row');
+        if (newStats && curStats) {
+            curStats.replaceWith(newStats);
+        }
+
+        const newList = doc.getElementById('listContainer');
+        const curList = document.getElementById('listContainer');
+        if (newList && curList) {
+            curList.replaceWith(newList);
+        }
+
+        const newPending = doc.querySelector('.pending-panel');
+        const curPending = document.querySelector('.pending-panel');
+        if (newPending && curPending) {
+            curPending.replaceWith(newPending);
+        }
+
+        const parsedHojas = extractJsonVarFromHtml(html, 'hojasPendientes');
+        if (Array.isArray(parsedHojas)) {
+            hojasPendientes = parsedHojas;
+        }
+        const parsedMaquinas = extractJsonVarFromHtml(html, 'maquinasCatalogo');
+        if (Array.isArray(parsedMaquinas)) {
+            maquinasCatalogo = parsedMaquinas;
+        }
+
+        if (filtroMaq) filtroMaq.value = maqTerm;
+        if (filtroHoja) filtroHoja.value = hojaTerm;
+        if (filtroActivas) filtroActivas.checked = soloActivas;
+        aplicarFiltros();
+
+        if (pendingCollapsed) {
+            const panel = document.querySelector('.pending-panel');
+            if (panel) panel.classList.add('collapsed');
+        }
+
+        applyResponsivePendingBehavior();
+        initRealtimeClocks();
     }
 
     function renderProcesoInicioOptions(hojaId) {
@@ -1016,6 +1090,10 @@
     }
 
     function initRealtimeClocks() {
+        if (realtimeClockIntervalId) {
+            clearInterval(realtimeClockIntervalId);
+            realtimeClockIntervalId = null;
+        }
         const clocks = Array.from(document.querySelectorAll('.js-tiempo-reloj'));
         if (!clocks.length) return;
 
@@ -1044,7 +1122,7 @@
         };
 
         render();
-        setInterval(() => {
+        realtimeClockIntervalId = setInterval(() => {
             tick += 1;
             render();
         }, 1000);
@@ -1332,8 +1410,8 @@
             if (!res.ok) {
                 throw new Error(data.error || 'No se pudo asignar la hoja');
             }
-            alert('Hoja asignada correctamente a la máquina.');
-            window.location.reload();
+            cerrarModalAsignar();
+            await softRefreshBoard();
         } catch (err) {
             alert('Error: ' + err.message);
         }
@@ -1349,8 +1427,7 @@
             if (!res.ok) {
                 throw new Error(data.error || 'No se pudo aplicar paro por mantenimiento');
             }
-            alert('Máquina en paro por mantenimiento.');
-            window.location.reload();
+            await softRefreshBoard();
         } catch (err) {
             alert('Error: ' + err.message);
         }
@@ -1366,8 +1443,7 @@
             if (!res.ok) {
                 throw new Error(data.error || 'No se pudo aplicar paro de máquina');
             }
-            alert('Máquina en paro.');
-            window.location.reload();
+            await softRefreshBoard();
         } catch (err) {
             alert('Error: ' + err.message);
         }
@@ -1388,8 +1464,7 @@
             if (!res.ok) {
                 throw new Error(data.error || 'No se pudo retirar la hoja');
             }
-            alert('Hoja retirada/desasignada correctamente.');
-            window.location.reload();
+            await softRefreshBoard();
         } catch (err) {
             alert('Error: ' + err.message);
         }
@@ -1411,11 +1486,9 @@
             if (data.hoja && data.hoja.estado === 'completada') {
                 alert('Todos los procesos de la hoja se completaron.');
             }
-
-            window.location.reload();
+            await softRefreshBoard();
         } catch (err) {
             alert('Error: ' + err.message);
-            window.location.reload();
         }
     }
 
@@ -1431,10 +1504,9 @@
             if (!res.ok) {
                 throw new Error(data.error || 'No se pudo actualizar el proceso MP');
             }
-            window.location.reload();
+            await softRefreshBoard();
         } catch (err) {
             alert('Error: ' + err.message);
-            window.location.reload();
         }
     }
 
@@ -1452,8 +1524,7 @@
             if (!res.ok) {
                 throw new Error(data.error || 'No se pudo eliminar la hoja');
             }
-            alert('Hoja eliminada correctamente.');
-            window.location.reload();
+            await softRefreshBoard();
         } catch (err) {
             alert('Error: ' + err.message);
         }
