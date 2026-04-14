@@ -461,6 +461,114 @@
             nativeReload();
         };
 
+        let platformRefreshScheduled = false;
+        let platformLastRefreshAt = 0;
+
+        function schedulePlatformRefresh() {
+            const now = Date.now();
+            // Evita tormenta de refresh al encadenar varias acciones rápidas.
+            if (platformRefreshScheduled || (now - platformLastRefreshAt) < 500) {
+                return;
+            }
+            platformRefreshScheduled = true;
+            setTimeout(function() {
+                platformRefreshScheduled = false;
+                platformLastRefreshAt = Date.now();
+                if (typeof window.platformRefreshNow === 'function') {
+                    window.platformRefreshNow();
+                } else {
+                    nativeReload();
+                }
+            }, 120);
+        }
+
+        window.platformRequestRefresh = schedulePlatformRefresh;
+
+        function isMutatingMethod(method) {
+            const m = String(method || 'GET').toUpperCase();
+            return m === 'POST' || m === 'PUT' || m === 'PATCH' || m === 'DELETE';
+        }
+
+        function isSameOriginUrl(url) {
+            try {
+                const u = new URL(url, window.location.origin);
+                return u.origin === window.location.origin;
+            } catch (_) {
+                return true;
+            }
+        }
+
+        function hasNoRefreshHeader(headers) {
+            if (!headers) return false;
+            try {
+                if (headers instanceof Headers) {
+                    return String(headers.get('X-Platform-No-Refresh') || '').toLowerCase() === '1';
+                }
+                if (Array.isArray(headers)) {
+                    return headers.some(function(pair) {
+                        return String(pair && pair[0] || '').toLowerCase() === 'x-platform-no-refresh' && String(pair && pair[1] || '') === '1';
+                    });
+                }
+                return String(headers['X-Platform-No-Refresh'] || headers['x-platform-no-refresh'] || '') === '1';
+            } catch (_) {
+                return false;
+            }
+        }
+
+        // Auto-refresh global para acciones mutantes vía fetch.
+        if (typeof window.fetch === 'function' && !window.__platformFetchWrapped) {
+            const nativeFetch = window.fetch.bind(window);
+            window.fetch = function(input, init) {
+                const method = (init && init.method) || (input && input.method) || 'GET';
+                const url = (typeof input === 'string') ? input : (input && input.url) || window.location.href;
+                const skipRefresh = hasNoRefreshHeader(init && init.headers);
+
+                return nativeFetch(input, init).then(function(resp) {
+                    try {
+                        if (!skipRefresh && isMutatingMethod(method) && resp && resp.ok && isSameOriginUrl(url)) {
+                            schedulePlatformRefresh();
+                        }
+                    } catch (_) {
+                        // noop
+                    }
+                    return resp;
+                });
+            };
+            window.__platformFetchWrapped = true;
+        }
+
+        // Auto-refresh global para acciones mutantes vía XHR.
+        if (window.XMLHttpRequest && !window.__platformXhrWrapped) {
+            const originalOpen = XMLHttpRequest.prototype.open;
+            const originalSend = XMLHttpRequest.prototype.send;
+
+            XMLHttpRequest.prototype.open = function(method, url) {
+                this.__platformMethod = method;
+                this.__platformUrl = url;
+                return originalOpen.apply(this, arguments);
+            };
+
+            XMLHttpRequest.prototype.send = function() {
+                this.addEventListener('load', function() {
+                    try {
+                        if (
+                            isMutatingMethod(this.__platformMethod)
+                            && this.status >= 200
+                            && this.status < 300
+                            && isSameOriginUrl(this.__platformUrl)
+                        ) {
+                            schedulePlatformRefresh();
+                        }
+                    } catch (_) {
+                        // noop
+                    }
+                });
+                return originalSend.apply(this, arguments);
+            };
+
+            window.__platformXhrWrapped = true;
+        }
+
         // Global policy: cualquier reload explícito usa el flujo centralizado.
         // Esto aplica de forma transversal en todos los módulos que cargan sidebar.
         try {
