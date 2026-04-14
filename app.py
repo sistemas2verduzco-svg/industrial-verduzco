@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, AlertaBuzonGeneral
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, AlertaBuzonGeneral
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -9690,6 +9690,28 @@ def _maquinaria_tables_status():
         return False, MAQUINARIA_TABLES
 
 
+def _ensure_maquinaria_ordenes_extension_tables():
+    """Asegura tablas extendidas de OT (snapshot BOM + procesos OT) sin depender de migración manual."""
+    try:
+        MaquinariaOrdenBOMItem.__table__.create(bind=db.engine, checkfirst=True)
+        MaquinariaOrdenProceso.__table__.create(bind=db.engine, checkfirst=True)
+        return True
+    except Exception as exc:
+        logger.error(f"No se pudieron asegurar tablas OT extensión: {exc}", exc_info=True)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return False
+
+
+def _maquinaria_bom_for_clave(clave_maquina):
+    clave_norm = (clave_maquina or '').strip().upper()
+    if not clave_norm:
+        return None
+    return MaquinariaBOM.query.filter(func.upper(func.trim(MaquinariaBOM.clave_maquina)) == clave_norm).first()
+
+
 @app.route('/maquinaria/pedidos')
 @login_required
 @requires_any_permission([('maquinaria_pedidos', 'view'), ('maquinaria_pedidos', 'edit'), ('maquinaria_pedidos', 'create'), ('maquinaria_pedidos', 'update'), ('maquinaria_pedidos', 'delete')])
@@ -9775,6 +9797,8 @@ def maquinaria_pedidos_create():
 @requires_any_permission([('maquinaria_ordenes', 'view'), ('maquinaria_ordenes', 'edit'), ('maquinaria_ordenes', 'create'), ('maquinaria_ordenes', 'update'), ('maquinaria_ordenes', 'delete')])
 def maquinaria_ordenes_page():
     ready, missing = _maquinaria_tables_status()
+    if ready:
+        _ensure_maquinaria_ordenes_extension_tables()
     ordenes = MaquinariaOrdenTrabajo.query.order_by(MaquinariaOrdenTrabajo.id.desc()).limit(60).all() if ready else []
     pedidos = MaquinariaPedido.query.order_by(MaquinariaPedido.id.desc()).limit(80).all() if ready else []
     pedidos_selector_data = []
@@ -9825,8 +9849,6 @@ def maquinaria_ordenes_page():
 
         pedidos_selector_data = list(grouped.values())
         pedidos_selector_data.sort(key=lambda g: g.get('source_pedido_id', 0), reverse=True)
-    claves = ClaveProducto.query.filter_by(activo=True).order_by(ClaveProducto.clave.asc()).limit(120).all()
-    procesos = ProcesoCatalogo.query.filter_by(activo=True).order_by(ProcesoCatalogo.nombre.asc()).limit(120).all()
     return render_template(
         'maquinaria_ordenes_trabajo.html',
         setup_required=not ready,
@@ -9834,9 +9856,39 @@ def maquinaria_ordenes_page():
         ordenes=ordenes,
         pedidos=pedidos,
         pedidos_selector_data=pedidos_selector_data,
-        claves=claves,
-        procesos=procesos,
     )
+
+
+@app.route('/api/maquinaria/boms/by-clave/<string:clave_maquina>')
+@login_required
+@requires_any_permission([('maquinaria_ordenes', 'view'), ('maquinaria_boms', 'view'), ('maquinaria_ordenes', 'edit'), ('maquinaria_ordenes', 'create')])
+def api_maquinaria_bom_by_clave(clave_maquina):
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return jsonify({'found': False, 'error': 'Tablas de Maquinaria no disponibles'}), 503
+
+    bom = _maquinaria_bom_for_clave(clave_maquina)
+    if not bom:
+        return jsonify({'found': False, 'clave_maquina': (clave_maquina or '').strip().upper(), 'bom': None, 'componentes': []})
+
+    componentes = [c.to_dict() for c in sorted((bom.componentes or []), key=lambda x: x.id)]
+    return jsonify({'found': True, 'clave_maquina': bom.clave_maquina, 'bom': bom.to_dict(), 'componentes': componentes})
+
+
+@app.route('/api/maquinaria/ordenes-trabajo/<int:orden_id>')
+@login_required
+@requires_any_permission([('maquinaria_ordenes', 'view'), ('maquinaria_ordenes', 'edit'), ('maquinaria_ordenes', 'create')])
+def api_maquinaria_orden_detalle(orden_id):
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return jsonify({'error': 'Tablas de Maquinaria no disponibles'}), 503
+
+    _ensure_maquinaria_ordenes_extension_tables()
+
+    orden = MaquinariaOrdenTrabajo.query.get_or_404(orden_id)
+    bom_items = [i.to_dict() for i in sorted((orden.bom_items_ot or []), key=lambda x: x.id)]
+    procesos = [p.to_dict() for p in sorted((orden.procesos_ot or []), key=lambda x: (x.orden or 0, x.id or 0))]
+    return jsonify({'ok': True, 'orden': orden.to_dict(), 'bom_items': bom_items, 'procesos': procesos})
 
 
 @app.route('/maquinaria/ordenes-trabajo/create', methods=['POST'])
@@ -9846,6 +9898,8 @@ def maquinaria_ordenes_create():
     ready, _missing = _maquinaria_tables_status()
     if not ready:
         return redirect(url_for('maquinaria_ordenes_page'))
+
+    _ensure_maquinaria_ordenes_extension_tables()
 
     def _new_ot_folio(suffix_idx=None):
         base = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
@@ -9871,6 +9925,16 @@ def maquinaria_ordenes_create():
                 continue
     if not fecha_objetivo:
         fecha_objetivo = datetime.utcnow()
+
+    procesos_json_raw = _clean_nullable_text(request.form.get('procesos_json', ''))
+    procesos_payload = []
+    if procesos_json_raw:
+        try:
+            parsed = json.loads(procesos_json_raw)
+            if isinstance(parsed, list):
+                procesos_payload = parsed
+        except Exception:
+            procesos_payload = []
 
     pedido_id = request.form.get('pedido_id', type=int)
     lineas_a_crear = []
@@ -9944,6 +10008,39 @@ def maquinaria_ordenes_create():
             created_by=session.get('user'),
         )
         db.session.add(orden)
+        db.session.flush()
+
+        bom_match = _maquinaria_bom_for_clave(line.get('clave', ''))
+        if bom_match:
+            for comp in (bom_match.componentes or []):
+                db.session.add(MaquinariaOrdenBOMItem(
+                    orden_trabajo_id=orden.id,
+                    bom_id=bom_match.id,
+                    codigo_componente=_clean_nullable_text(comp.codigo_componente or ''),
+                    nombre_componente=_clean_nullable_text(comp.nombre_componente or ''),
+                    cantidad=float(comp.cantidad or 0),
+                    unidad=_clean_nullable_text(comp.unidad or ''),
+                    proceso_base=_clean_nullable_text(comp.proceso_base or ''),
+                    notas=_clean_nullable_text(comp.notas or ''),
+                ))
+
+        for p_idx, proc in enumerate(procesos_payload, start=1):
+            nombre = _clean_nullable_text((proc or {}).get('nombre', ''))
+            if not nombre:
+                continue
+            db.session.add(MaquinariaOrdenProceso(
+                orden_trabajo_id=orden.id,
+                orden=max(1, int((proc or {}).get('orden') or p_idx)),
+                nombre=nombre,
+                centro_trabajo=_clean_nullable_text((proc or {}).get('centro_trabajo', '')),
+                operacion=_clean_nullable_text((proc or {}).get('operacion', '')),
+                t_e=_clean_nullable_text((proc or {}).get('t_e', '')),
+                t_tct=_clean_nullable_text((proc or {}).get('t_tct', '')),
+                t_tco=_clean_nullable_text((proc or {}).get('t_tco', '')),
+                t_to=_clean_nullable_text((proc or {}).get('t_to', '')),
+                notas=_clean_nullable_text((proc or {}).get('notas', '')),
+                estado='pendiente',
+            ))
 
     db.session.commit()
     return redirect(url_for('maquinaria_ordenes_page'))

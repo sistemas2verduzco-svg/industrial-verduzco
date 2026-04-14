@@ -6,47 +6,28 @@
     <title>Maquinaria y Ensamble - Ordenes de Trabajo</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <style>
-        .ot-page {
-            display: grid;
-            gap: 12px;
-        }
-        .ot-top-grid {
-            display: grid;
-            grid-template-columns: minmax(420px, 0.9fr) minmax(560px, 1.35fr);
-            gap: 12px;
-            align-items: start;
-        }
-        .ot-panel {
-            background: #fff;
-            border: 1px solid #e5e7eb;
-            border-radius: 10px;
-            padding: 12px;
-        }
-        .ot-ref-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 12px;
-        }
-        .ot-preview-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 12px;
-        }
-        .ot-preview-table th,
-        .ot-preview-table td {
-            padding: 7px;
-            border-bottom: 1px solid #e5e7eb;
-            text-align: left;
-            vertical-align: top;
-        }
-        .ot-preview-table th {
-            background: #eef2ff;
-        }
-        @media (max-width: 1100px) {
-            .ot-top-grid,
-            .ot-ref-grid {
-                grid-template-columns: 1fr;
-            }
+        .ot-page { display:grid; gap:12px; }
+        .ot-grid-top { display:grid; grid-template-columns: minmax(420px, 0.9fr) minmax(560px, 1.35fr); gap:12px; align-items:start; }
+        .ot-panel { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px; }
+        .ot-columns { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:12px; }
+        .ot-table { width:100%; border-collapse:collapse; font-size:12px; }
+        .ot-table th, .ot-table td { padding:7px; border-bottom:1px solid #e5e7eb; text-align:left; vertical-align:top; }
+        .ot-table th { background:#eef2ff; }
+        .ot-muted { color:#64748b; font-size:12px; }
+        .chip { display:inline-flex; align-items:center; border-radius:999px; padding:2px 8px; font-size:11px; font-weight:700; }
+        .chip-ok { background:#dcfce7; color:#166534; border:1px solid #86efac; }
+        .chip-empty { background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; }
+        .proc-row { display:grid; grid-template-columns: 1.1fr 0.9fr 1.2fr repeat(4, 110px) 90px; gap:6px; align-items:center; margin-bottom:6px; }
+        .proc-row input { padding:7px; border:1px solid #d1d5db; border-radius:6px; }
+        .btn-mini { border:1px solid #d1d5db; border-radius:6px; background:#fff; cursor:pointer; padding:7px 8px; font-size:12px; }
+        .btn-mini:hover { background:#f8fafc; }
+        .btn-danger { border-color:#fecaca; background:#fff1f2; color:#b91c1c; }
+        .hidden { display:none !important; }
+        .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.45); display:none; align-items:center; justify-content:center; z-index:70; }
+        .modal-card { width:min(1100px, 95vw); max-height:85vh; overflow:auto; background:#fff; border-radius:12px; border:1px solid #dbe1ea; padding:12px; }
+        @media (max-width: 1200px) {
+            .ot-grid-top, .ot-columns { grid-template-columns:1fr; }
+            .proc-row { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -54,7 +35,7 @@
     {% include '_sidebar.html' %}
     <div class="container ot-page" style="padding-top:20px; max-width:none; padding-left:10px; padding-right:10px;">
         <h2 style="margin:0 0 6px 0;">Maquinaria y Ensamble - Orden de Trabajo</h2>
-        <div style="color:#64748b; font-size:13px; margin-bottom:14px;">Se genera a partir de pedido y puede consultar claves/procesos de Produccion.</div>
+        <div class="ot-muted" style="margin-bottom:12px;">OT independiente del modulo MP: crea hoja de trabajo de maquinaria con su BOM y procesos propios.</div>
 
         {% if setup_required %}
         <div style="background:#fff3cd; border:1px solid #ffe69c; color:#664d03; border-radius:8px; padding:10px; margin-bottom:12px;">
@@ -62,239 +43,459 @@
         </div>
         {% endif %}
 
-        <div class="ot-top-grid">
+        <div class="ot-grid-top">
             <div class="ot-panel">
-                <h3 style="margin:0 0 8px 0; font-size:16px;">Crear orden de trabajo</h3>
-                <form method="post" action="/maquinaria/ordenes-trabajo/create" style="display:grid; gap:8px;">
-                    <input type="text" name="folio_ot" value="AUTO" readonly style="padding:8px; border:1px solid #d1d5db; border-radius:6px; background:#f8fafc; color:#64748b; font-weight:700;">
+                <h3 style="margin:0 0 8px 0; font-size:16px;">Crear OT (hoja de ruta de maquinaria)</h3>
+                <form id="otForm" method="post" action="/maquinaria/ordenes-trabajo/create" style="display:grid; gap:8px;">
+                    <input type="text" value="AUTO" readonly style="padding:8px; border:1px solid #d1d5db; border-radius:6px; background:#f8fafc; color:#64748b; font-weight:700;">
                     <select id="pedidoSelectorOT" name="pedido_id" onchange="onPedidoChangeOT()" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
                         <option value="">Pedido relacionado (opcional)</option>
                         {% for p in pedidos_selector_data %}
                         <option value="{{ p.source_pedido_id }}">{{ p.folio_interno or ('Pedido ' ~ p.source_pedido_id) }} | {{ p.cliente or '-' }} | Lineas {{ p.lineas|length }}</option>
                         {% endfor %}
                     </select>
-                    <div id="pedidoLinesWrapOT" style="display:none; border:1px solid #e2e8f0; border-radius:8px; padding:8px; max-height:180px; overflow:auto; background:#f8fafc;"></div>
+
+                    <div id="pedidoLinesFormOT" class="hidden" style="border:1px solid #e2e8f0; border-radius:8px; padding:8px; max-height:180px; overflow:auto; background:#f8fafc;"></div>
+
                     <input id="claveMaquinaOT" type="text" name="clave_maquina" placeholder="Clave de maquina" required style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
                     <input id="cantidadOT" type="number" name="cantidad" min="1" value="1" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
                     <input id="fechaObjetivoOT" type="datetime-local" name="fecha_objetivo" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
                     <input id="selectedLineNumbersOT" type="hidden" name="selected_line_numbers" value="">
-                    <textarea id="notasOT" name="notas" placeholder="Refacciones y piezas planeadas" rows="3" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;"></textarea>
+                    <input id="procesosJsonOT" type="hidden" name="procesos_json" value="[]">
+                    <textarea id="notasOT" name="notas" placeholder="Notas de planeacion / materiales" rows="3" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;"></textarea>
+
                     {% if has_permission('maquinaria_ordenes', 'create') or has_permission('maquinaria_ordenes', 'edit') or current_user.es_admin %}
                     <button type="submit" style="border:0; background:#0f766e; color:#fff; font-weight:700; border-radius:6px; padding:9px;">Guardar OT</button>
                     {% endif %}
                 </form>
-                <div style="margin-top:8px; color:#64748b; font-size:12px;">Cuando selecciones pedido, se generan OTs para todas las claves y cantidades.</div>
+                <div class="ot-muted" style="margin-top:8px;">La OT guarda snapshot de BOM por clave y procesos definidos aqui mismo.</div>
             </div>
+
             <div class="ot-panel" id="pedidoPreviewPanelOT">
-                <h3 style="margin:0 0 8px 0; font-size:16px;">Vista previa completa del pedido</h3>
-                <div id="pedidoPreviewSummaryOT" style="color:#64748b; font-size:13px; margin-bottom:10px;">Selecciona un pedido para ver todas sus claves, cantidades y datos de generación.</div>
-                <div id="pedidoLinesWrapOT" style="display:none; border:1px solid #e2e8f0; border-radius:8px; padding:8px; max-height:430px; overflow:auto; background:#f8fafc;"></div>
+                <h3 style="margin:0 0 8px 0; font-size:16px;">Vista previa del pedido</h3>
+                <div id="pedidoPreviewSummaryOT" class="ot-muted" style="margin-bottom:10px;">Selecciona un pedido para ver partidas de clave/cantidad.</div>
+                <div id="pedidoLinesPreviewOT" class="hidden" style="border:1px solid #e2e8f0; border-radius:8px; padding:8px; max-height:300px; overflow:auto; background:#f8fafc;"></div>
             </div>
         </div>
 
-        <div class="ot-ref-grid">
+        <div class="ot-columns">
             <div class="ot-panel">
-                <h3 style="margin:0 0 8px 0; font-size:16px;">Claves de Produccion (consulta)</h3>
-                <div style="max-height:220px; overflow:auto; font-size:13px;">
-                    {% for c in claves %}
-                    <div style="padding:6px 0; border-bottom:1px solid #eef2f7;">{{ c.clave }} - {{ c.nombre or '-' }}</div>
-                    {% else %}
-                    <div style="color:#64748b;">Sin claves.</div>
-                    {% endfor %}
+                <h3 style="margin:0 0 8px 0; font-size:16px;">BOM de la clave seleccionada</h3>
+                <div id="bomStatusOT" class="ot-muted" style="margin-bottom:8px;">Captura/selecciona una clave para cargar su BOM.</div>
+                <div id="bomTableWrapOT" class="hidden" style="max-height:300px; overflow:auto; border:1px solid #e2e8f0; border-radius:8px;">
+                    <table class="ot-table">
+                        <thead>
+                            <tr>
+                                <th>Codigo</th>
+                                <th>Componente</th>
+                                <th>Cantidad</th>
+                                <th>Unidad</th>
+                                <th>Proceso base</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bomTableBodyOT"></tbody>
+                    </table>
                 </div>
             </div>
+
             <div class="ot-panel">
-                <h3 style="margin:0 0 8px 0; font-size:16px;">Procesos de Produccion (consulta)</h3>
-                <div style="max-height:220px; overflow:auto; font-size:13px;">
-                    {% for p in procesos %}
-                    <div style="padding:6px 0; border-bottom:1px solid #eef2f7;">{{ p.nombre }}</div>
-                    {% else %}
-                    <div style="color:#64748b;">Sin procesos.</div>
-                    {% endfor %}
+                <h3 style="margin:0 0 8px 0; font-size:16px;">Procesos de esta OT (independiente)</h3>
+                <div class="ot-muted" style="margin-bottom:8px;">Agrega los procesos que deseas trabajar en estaciones para esta OT.</div>
+
+                <div class="proc-row" style="font-weight:700; color:#334155; margin-bottom:8px;">
+                    <div>Nombre</div>
+                    <div>Centro trabajo</div>
+                    <div>Operacion</div>
+                    <div>T/E</div>
+                    <div>T/CT</div>
+                    <div>T/CO</div>
+                    <div>T/O</div>
+                    <div>Accion</div>
                 </div>
+
+                <div class="proc-row">
+                    <input id="procNombreOT" type="text" placeholder="Proceso">
+                    <input id="procCentroOT" type="text" placeholder="Centro">
+                    <input id="procOperacionOT" type="text" placeholder="Operacion">
+                    <input id="procTeOT" type="text" placeholder="00:00:00">
+                    <input id="procTctOT" type="text" placeholder="00:00:00">
+                    <input id="procTcoOT" type="text" placeholder="00:00:00">
+                    <input id="procToOT" type="text" placeholder="00:00:00">
+                    <button class="btn-mini" type="button" onclick="agregarProcesoOT()">Agregar</button>
+                </div>
+
+                <div id="procesosListOT" style="margin-top:8px;"></div>
+                <div id="procEmptyOT" class="ot-muted" style="margin-top:8px;">Sin procesos agregados aun.</div>
             </div>
         </div>
 
         <div class="ot-panel">
             <h3 style="margin:0 0 8px 0; font-size:16px;">Ordenes de trabajo recientes</h3>
-            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <table class="ot-table" style="font-size:13px;">
                 <thead>
-                    <tr style="background:#f8fafc; text-align:left;">
-                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Folio OT</th>
-                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Clave</th>
-                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Cantidad</th>
-                        <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Estado</th>
+                    <tr>
+                        <th>Folio OT</th>
+                        <th>Clave</th>
+                        <th>Cantidad</th>
+                        <th>Estado</th>
+                        <th>BOM</th>
+                        <th>Procesos</th>
+                        <th>Accion</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for o in ordenes %}
                     <tr>
-                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ o.folio_ot }}</td>
-                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ o.clave_maquina }}</td>
-                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ o.cantidad }}</td>
-                        <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ o.estado }}</td>
+                        <td>{{ o.folio_ot }}</td>
+                        <td>{{ o.clave_maquina }}</td>
+                        <td>{{ o.cantidad }}</td>
+                        <td>{{ o.estado }}</td>
+                        <td>
+                            {% if o.bom_items_ot|length > 0 %}
+                            <span class="chip chip-ok">{{ o.bom_items_ot|length }} componentes</span>
+                            {% else %}
+                            <span class="chip chip-empty">Sin BOM</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if o.procesos_ot|length > 0 %}
+                            <span class="chip chip-ok">{{ o.procesos_ot|length }} procesos</span>
+                            {% else %}
+                            <span class="chip chip-empty">Sin procesos</span>
+                            {% endif %}
+                        </td>
+                        <td><button class="btn-mini" type="button" onclick="verDetalleOT({{ o.id }})">Ver detalle</button></td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="4" style="padding:8px; color:#64748b;">Sin ordenes registradas.</td></tr>
+                    <tr><td colspan="7" class="ot-muted">Sin ordenes registradas.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
+    </div>
 
-        <script>
-            const PEDIDOS_OT = {{ pedidos_selector_data|tojson }};
-            const PEDIDOS_OT_MAP = new Map(PEDIDOS_OT.map(p => [Number(p.source_pedido_id), p]));
+    <div id="otDetalleModal" class="modal-backdrop">
+        <div class="modal-card">
+            <div style="display:flex; justify-content:space-between; gap:10px; align-items:center; margin-bottom:8px;">
+                <h3 id="otDetalleTitulo" style="margin:0; font-size:18px;">Detalle OT</h3>
+                <button class="btn-mini" type="button" onclick="cerrarDetalleOT()">Cerrar</button>
+            </div>
+            <div id="otDetalleBody" class="ot-muted">Cargando...</div>
+        </div>
+    </div>
 
-            function setNowFechaObjetivoOT() {
-                const fechaEl = document.getElementById('fechaObjetivoOT');
-                if (!fechaEl || fechaEl.value) return;
-                const now = new Date();
-                const tzOffset = now.getTimezoneOffset() * 60000;
-                const localISO = new Date(now.getTime() - tzOffset).toISOString().slice(0, 16);
-                fechaEl.value = localISO;
+    <script>
+        const PEDIDOS_OT = {{ pedidos_selector_data|tojson }};
+        const PEDIDOS_OT_MAP = new Map(PEDIDOS_OT.map(p => [Number(p.source_pedido_id), p]));
+
+        let procesosOtDraft = [];
+
+        function setNowFechaObjetivoOT() {
+            const fechaEl = document.getElementById('fechaObjetivoOT');
+            if (!fechaEl || fechaEl.value) return;
+            const now = new Date();
+            const tzOffset = now.getTimezoneOffset() * 60000;
+            fechaEl.value = new Date(now.getTime() - tzOffset).toISOString().slice(0, 16);
+        }
+
+        function renderPedidoLinesOT(group) {
+            const formWrap = document.getElementById('pedidoLinesFormOT');
+            const previewWrap = document.getElementById('pedidoLinesPreviewOT');
+            const summary = document.getElementById('pedidoPreviewSummaryOT');
+            const selectedLinesInput = document.getElementById('selectedLineNumbersOT');
+
+            if (!group || !Array.isArray(group.lineas) || !group.lineas.length) {
+                formWrap.classList.add('hidden');
+                previewWrap.classList.add('hidden');
+                formWrap.innerHTML = '';
+                previewWrap.innerHTML = '';
+                summary.textContent = 'Selecciona un pedido para ver partidas de clave/cantidad.';
+                selectedLinesInput.value = '';
+                return;
             }
 
-            function renderPedidoLinesOT(group) {
-                const wrap = document.getElementById('pedidoLinesWrapOT');
-                const summary = document.getElementById('pedidoPreviewSummaryOT');
-                const selectedLinesInput = document.getElementById('selectedLineNumbersOT');
-                if (!wrap) return;
-                if (!group || !Array.isArray(group.lineas) || !group.lineas.length) {
-                    wrap.style.display = 'none';
-                    wrap.innerHTML = '';
-                    if (selectedLinesInput) {
-                        selectedLinesInput.value = '';
-                    }
-                    if (summary) {
-                        summary.textContent = 'Selecciona un pedido para ver todas sus claves, cantidades y datos de generación.';
-                    }
-                    return;
-                }
+            const rows = group.lineas.map((ln, idx) => {
+                const displayLine = Number(ln.line_number) > 0 ? Number(ln.line_number) : (idx + 1);
+                return `
+                <tr>
+                    <td><input type="checkbox" class="ot-line-check" data-line-number="${displayLine}" checked></td>
+                    <td>${displayLine}</td>
+                    <td>${ln.clave_maquina || '-'}</td>
+                    <td>${ln.descripcion_maquina || '-'}</td>
+                    <td>${ln.cantidad || 1}</td>
+                </tr>`;
+            }).join('');
 
-                const rows = group.lineas.map((ln, idx) => {
-                    const displayLine = Number(ln.line_number) > 0 ? Number(ln.line_number) : (idx + 1);
-                    return `
-                    <tr>
-                        <td><input type="checkbox" class="ot-line-check" data-line-number="${displayLine}" checked></td>
-                        <td style="padding:6px; border-bottom:1px solid #e5e7eb;">${displayLine}</td>
-                        <td style="padding:6px; border-bottom:1px solid #e5e7eb;">${ln.clave_maquina || '-'}</td>
-                        <td style="padding:6px; border-bottom:1px solid #e5e7eb;">${ln.descripcion_maquina || '-'}</td>
-                        <td style="padding:6px; border-bottom:1px solid #e5e7eb;">${ln.cantidad || 1}</td>
-                    </tr>
-                `;
-                }).join('');
+            const tableHtml = `
+                <table class="ot-table">
+                    <thead>
+                        <tr>
+                            <th style="width:42px;">Sel</th>
+                            <th>#</th>
+                            <th>Clave</th>
+                            <th>Descripcion</th>
+                            <th>Cantidad</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
 
-                if (summary) {
-                    summary.innerHTML = `
-                        <div><b>Pedido:</b> ${group.folio_interno || '-'}</div>
-                        <div><b>Cliente:</b> ${group.cliente || '-'}</div>
-                        <div><b>DocID CONTPAQ:</b> ${group.contpaq_document_id || '-'}</div>
-                        <div><b>Fecha OT:</b> ${document.getElementById('fechaObjetivoOT')?.value || '-'}</div>
-                        <div><b>OTs a generar:</b> ${group.lineas.length}</div>
-                    `;
-                }
+            const toolsHtml = `
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
+                    <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#1e293b; font-weight:700;">
+                        <input type="checkbox" id="otSelectAllLines" checked>
+                        Seleccionar todas las partidas
+                    </label>
+                    <span id="otSelectedCount" class="ot-muted">Seleccionadas: ${group.lineas.length}</span>
+                </div>`;
 
-                wrap.innerHTML = `
-                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
-                        <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#1e293b; font-weight:700;">
-                            <input type="checkbox" id="otSelectAllLines" checked>
-                            Seleccionar todas las partidas
-                        </label>
-                        <span id="otSelectedCount" style="font-size:12px; color:#334155;">Seleccionadas: ${group.lineas.length}</span>
-                    </div>
-                    <table class="ot-preview-table">
-                        <thead>
-                            <tr>
-                                <th style="width:42px;">Sel</th>
-                                <th>#</th>
-                                <th>Clave</th>
-                                <th>Descripcion</th>
-                                <th>Cantidad</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                `;
-                wrap.style.display = 'block';
+            formWrap.innerHTML = toolsHtml + tableHtml;
+            previewWrap.innerHTML = tableHtml;
+            formWrap.classList.remove('hidden');
+            previewWrap.classList.remove('hidden');
 
-                const checkboxes = Array.from(wrap.querySelectorAll('.ot-line-check'));
-                const selectAll = document.getElementById('otSelectAllLines');
-                const selectedCount = document.getElementById('otSelectedCount');
+            summary.innerHTML = `
+                <div><b>Pedido:</b> ${group.folio_interno || '-'}</div>
+                <div><b>Cliente:</b> ${group.cliente || '-'}</div>
+                <div><b>DocID CONTPAQ:</b> ${group.contpaq_document_id || '-'}</div>
+                <div><b>OTs a generar:</b> ${group.lineas.length}</div>`;
 
-                function syncSelectedLines() {
-                    const picked = checkboxes
-                        .filter(cb => cb.checked)
-                        .map(cb => Number(cb.getAttribute('data-line-number')))
-                        .filter(n => Number.isFinite(n) && n > 0);
+            const checkboxes = Array.from(formWrap.querySelectorAll('.ot-line-check'));
+            const selectAll = document.getElementById('otSelectAllLines');
+            const selectedCount = document.getElementById('otSelectedCount');
 
-                    if (selectedLinesInput) {
-                        selectedLinesInput.value = picked.join(',');
-                    }
-                    if (selectedCount) {
-                        selectedCount.textContent = `Seleccionadas: ${picked.length}`;
-                    }
-                    if (selectAll) {
-                        selectAll.checked = picked.length === checkboxes.length;
-                    }
+            function syncSelectedLines() {
+                const picked = checkboxes
+                    .filter(cb => cb.checked)
+                    .map(cb => Number(cb.getAttribute('data-line-number')))
+                    .filter(n => Number.isFinite(n) && n > 0);
 
-                    const firstPickedIdx = picked.length ? (picked[0] - 1) : 0;
-                    const first = group.lineas[firstPickedIdx] || group.lineas[0] || {};
-                    const claveEl = document.getElementById('claveMaquinaOT');
-                    const qtyEl = document.getElementById('cantidadOT');
-                    if (claveEl && first.clave_maquina) {
-                        claveEl.value = first.clave_maquina;
-                    }
-                    if (qtyEl && first.cantidad) {
-                        qtyEl.value = Math.max(1, Number(first.cantidad || 1));
-                    }
-                }
+                selectedLinesInput.value = picked.join(',');
+                selectedCount.textContent = `Seleccionadas: ${picked.length}`;
+                if (selectAll) selectAll.checked = picked.length === checkboxes.length;
 
-                checkboxes.forEach(cb => cb.addEventListener('change', syncSelectedLines));
-                if (selectAll) {
-                    selectAll.addEventListener('change', () => {
-                        checkboxes.forEach(cb => {
-                            cb.checked = !!selectAll.checked;
-                        });
-                        syncSelectedLines();
-                    });
-                }
-                syncSelectedLines();
-            }
-
-            function onPedidoChangeOT() {
-                const sel = document.getElementById('pedidoSelectorOT');
+                const firstPickedIdx = picked.length ? (picked[0] - 1) : 0;
+                const first = group.lineas[firstPickedIdx] || group.lineas[0] || {};
                 const claveEl = document.getElementById('claveMaquinaOT');
                 const qtyEl = document.getElementById('cantidadOT');
-                const notasEl = document.getElementById('notasOT');
-                if (!sel || !claveEl || !qtyEl || !notasEl) return;
+                if (claveEl && first.clave_maquina) claveEl.value = first.clave_maquina;
+                if (qtyEl && first.cantidad) qtyEl.value = Math.max(1, Number(first.cantidad || 1));
+                refreshBomByClave();
+            }
 
-                const group = PEDIDOS_OT_MAP.get(Number(sel.value));
-                if (!group) {
-                    renderPedidoLinesOT(null);
-                    claveEl.readOnly = false;
-                    qtyEl.readOnly = false;
+            checkboxes.forEach(cb => cb.addEventListener('change', syncSelectedLines));
+            if (selectAll) {
+                selectAll.addEventListener('change', () => {
+                    checkboxes.forEach(cb => { cb.checked = !!selectAll.checked; });
+                    syncSelectedLines();
+                });
+            }
+            syncSelectedLines();
+        }
+
+        async function refreshBomByClave() {
+            const claveEl = document.getElementById('claveMaquinaOT');
+            const status = document.getElementById('bomStatusOT');
+            const wrap = document.getElementById('bomTableWrapOT');
+            const body = document.getElementById('bomTableBodyOT');
+            const clave = String(claveEl && claveEl.value ? claveEl.value : '').trim().toUpperCase();
+
+            wrap.classList.add('hidden');
+            body.innerHTML = '';
+            if (!clave) {
+                status.textContent = 'Captura/selecciona una clave para cargar su BOM.';
+                return;
+            }
+
+            status.textContent = 'Consultando BOM de ' + clave + '...';
+            try {
+                const res = await fetch('/api/maquinaria/boms/by-clave/' + encodeURIComponent(clave), { credentials: 'same-origin' });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'No se pudo consultar BOM');
+
+                if (!data.found || !Array.isArray(data.componentes) || !data.componentes.length) {
+                    status.textContent = 'No hay BOM registrada para la clave ' + clave + '.';
                     return;
                 }
 
-                renderPedidoLinesOT(group);
-                const first = group.lineas[0] || {};
-                claveEl.value = first.clave_maquina || '';
-                qtyEl.value = Math.max(1, Number(first.cantidad || 1));
-                claveEl.readOnly = true;
-                qtyEl.readOnly = true;
+                status.textContent = `BOM encontrada: ${data.bom.nombre_maquina || clave} (${data.componentes.length} componentes)`;
+                body.innerHTML = data.componentes.map(c => `
+                    <tr>
+                        <td>${c.codigo_componente || ''}</td>
+                        <td>${c.nombre_componente || ''}</td>
+                        <td>${c.cantidad || 0}</td>
+                        <td>${c.unidad || ''}</td>
+                        <td>${c.proceso_base || ''}</td>
+                    </tr>`).join('');
+                wrap.classList.remove('hidden');
+            } catch (err) {
+                status.textContent = 'Error cargando BOM: ' + err.message;
+            }
+        }
 
-                const tags = [
-                    group.folio_interno ? `Pedido: ${group.folio_interno}` : '',
-                    group.cliente ? `Cliente: ${group.cliente}` : '',
-                    group.contpaq_document_id ? `CONTPAQ DocID: ${group.contpaq_document_id}` : '',
-                    `Lineas OT: ${group.lineas.length}`,
-                ].filter(Boolean).join('\n');
-                notasEl.value = tags;
+        function syncProcesosJsonOT() {
+            const hidden = document.getElementById('procesosJsonOT');
+            hidden.value = JSON.stringify(procesosOtDraft);
+            document.getElementById('procEmptyOT').style.display = procesosOtDraft.length ? 'none' : '';
+        }
+
+        function renderProcesosOT() {
+            const list = document.getElementById('procesosListOT');
+            list.innerHTML = '';
+            procesosOtDraft
+                .sort((a, b) => Number(a.orden || 0) - Number(b.orden || 0))
+                .forEach((p, idx) => {
+                    const row = document.createElement('div');
+                    row.className = 'proc-row';
+                    row.innerHTML = `
+                        <input type="text" value="${p.nombre || ''}" readonly>
+                        <input type="text" value="${p.centro_trabajo || ''}" readonly>
+                        <input type="text" value="${p.operacion || ''}" readonly>
+                        <input type="text" value="${p.t_e || ''}" readonly>
+                        <input type="text" value="${p.t_tct || ''}" readonly>
+                        <input type="text" value="${p.t_tco || ''}" readonly>
+                        <input type="text" value="${p.t_to || ''}" readonly>
+                        <button type="button" class="btn-mini btn-danger" data-idx="${idx}">Quitar</button>`;
+                    row.querySelector('button').addEventListener('click', (e) => {
+                        const i = Number(e.currentTarget.getAttribute('data-idx'));
+                        procesosOtDraft.splice(i, 1);
+                        renderProcesosOT();
+                        syncProcesosJsonOT();
+                    });
+                    list.appendChild(row);
+                });
+        }
+
+        function agregarProcesoOT() {
+            const nombre = String(document.getElementById('procNombreOT').value || '').trim();
+            if (!nombre) {
+                alert('Captura nombre del proceso');
+                return;
+            }
+            const nuevo = {
+                orden: procesosOtDraft.length + 1,
+                nombre,
+                centro_trabajo: String(document.getElementById('procCentroOT').value || '').trim(),
+                operacion: String(document.getElementById('procOperacionOT').value || '').trim(),
+                t_e: String(document.getElementById('procTeOT').value || '').trim(),
+                t_tct: String(document.getElementById('procTctOT').value || '').trim(),
+                t_tco: String(document.getElementById('procTcoOT').value || '').trim(),
+                t_to: String(document.getElementById('procToOT').value || '').trim(),
+            };
+            procesosOtDraft.push(nuevo);
+            document.getElementById('procNombreOT').value = '';
+            document.getElementById('procCentroOT').value = '';
+            document.getElementById('procOperacionOT').value = '';
+            document.getElementById('procTeOT').value = '';
+            document.getElementById('procTctOT').value = '';
+            document.getElementById('procTcoOT').value = '';
+            document.getElementById('procToOT').value = '';
+            renderProcesosOT();
+            syncProcesosJsonOT();
+        }
+
+        function onPedidoChangeOT() {
+            const sel = document.getElementById('pedidoSelectorOT');
+            const claveEl = document.getElementById('claveMaquinaOT');
+            const qtyEl = document.getElementById('cantidadOT');
+            const notasEl = document.getElementById('notasOT');
+
+            const group = PEDIDOS_OT_MAP.get(Number(sel.value));
+            if (!group) {
+                renderPedidoLinesOT(null);
+                claveEl.readOnly = false;
+                qtyEl.readOnly = false;
+                refreshBomByClave();
+                return;
             }
 
-            window.onPedidoChangeOT = onPedidoChangeOT;
-            setNowFechaObjetivoOT();
-        </script>
-    </div>
+            renderPedidoLinesOT(group);
+            const first = group.lineas[0] || {};
+            claveEl.value = first.clave_maquina || '';
+            qtyEl.value = Math.max(1, Number(first.cantidad || 1));
+            claveEl.readOnly = true;
+            qtyEl.readOnly = true;
+            notasEl.value = [
+                group.folio_interno ? `Pedido: ${group.folio_interno}` : '',
+                group.cliente ? `Cliente: ${group.cliente}` : '',
+                group.contpaq_document_id ? `CONTPAQ DocID: ${group.contpaq_document_id}` : '',
+                `Lineas OT: ${group.lineas.length}`,
+            ].filter(Boolean).join('\n');
+            refreshBomByClave();
+        }
+
+        async function verDetalleOT(ordenId) {
+            const modal = document.getElementById('otDetalleModal');
+            const titulo = document.getElementById('otDetalleTitulo');
+            const body = document.getElementById('otDetalleBody');
+            modal.style.display = 'flex';
+            titulo.textContent = 'Detalle OT #' + ordenId;
+            body.textContent = 'Cargando...';
+
+            try {
+                const res = await fetch('/api/maquinaria/ordenes-trabajo/' + ordenId, { credentials: 'same-origin' });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'No se pudo cargar detalle');
+
+                const o = data.orden || {};
+                const bomItems = Array.isArray(data.bom_items) ? data.bom_items : [];
+                const procesos = Array.isArray(data.procesos) ? data.procesos : [];
+
+                const bomRows = bomItems.length
+                    ? bomItems.map(i => `<tr><td>${i.codigo_componente || ''}</td><td>${i.nombre_componente || ''}</td><td>${i.cantidad || 0}</td><td>${i.unidad || ''}</td><td>${i.proceso_base || ''}</td></tr>`).join('')
+                    : '<tr><td colspan="5" class="ot-muted">Sin BOM snapshot</td></tr>';
+
+                const procRows = procesos.length
+                    ? procesos.map(p => `<tr><td>${p.orden || ''}</td><td>${p.nombre || ''}</td><td>${p.centro_trabajo || ''}</td><td>${p.operacion || ''}</td><td>${p.t_e || ''}</td><td>${p.t_tct || ''}</td><td>${p.t_tco || ''}</td><td>${p.t_to || ''}</td><td>${p.estado || ''}</td></tr>`).join('')
+                    : '<tr><td colspan="9" class="ot-muted">Sin procesos capturados</td></tr>';
+
+                body.innerHTML = `
+                    <div style="display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:8px; margin-bottom:12px;">
+                        <div><b>Folio:</b> ${o.folio_ot || '-'}</div>
+                        <div><b>Clave:</b> ${o.clave_maquina || '-'}</div>
+                        <div><b>Cantidad:</b> ${o.cantidad || 1}</div>
+                        <div><b>Estado:</b> ${o.estado || '-'}</div>
+                        <div><b>Fecha objetivo:</b> ${o.fecha_objetivo || '-'}</div>
+                        <div><b>Creado por:</b> ${o.created_by || '-'}</div>
+                    </div>
+                    <h4 style="margin:10px 0 6px 0;">BOM snapshot OT</h4>
+                    <table class="ot-table"><thead><tr><th>Codigo</th><th>Componente</th><th>Cantidad</th><th>Unidad</th><th>Proceso base</th></tr></thead><tbody>${bomRows}</tbody></table>
+                    <h4 style="margin:10px 0 6px 0;">Procesos OT</h4>
+                    <table class="ot-table"><thead><tr><th>#</th><th>Nombre</th><th>Centro</th><th>Operacion</th><th>T/E</th><th>T/CT</th><th>T/CO</th><th>T/O</th><th>Estado</th></tr></thead><tbody>${procRows}</tbody></table>`;
+            } catch (err) {
+                body.textContent = 'Error: ' + err.message;
+            }
+        }
+
+        function cerrarDetalleOT() {
+            document.getElementById('otDetalleModal').style.display = 'none';
+        }
+
+        document.getElementById('claveMaquinaOT').addEventListener('input', refreshBomByClave);
+        document.getElementById('otForm').addEventListener('submit', function(e) {
+            syncProcesosJsonOT();
+            if (!procesosOtDraft.length) {
+                const ok = confirm('No agregaste procesos para esta OT. ¿Deseas continuar sin procesos?');
+                if (!ok) {
+                    e.preventDefault();
+                    return;
+                }
+            }
+        });
+
+        document.getElementById('otDetalleModal').addEventListener('click', function(e) {
+            if (e.target.id === 'otDetalleModal') cerrarDetalleOT();
+        });
+
+        setNowFechaObjetivoOT();
+        syncProcesosJsonOT();
+        renderProcesosOT();
+        refreshBomByClave();
+
+        window.onPedidoChangeOT = onPedidoChangeOT;
+        window.agregarProcesoOT = agregarProcesoOT;
+        window.verDetalleOT = verDetalleOT;
+        window.cerrarDetalleOT = cerrarDetalleOT;
+    </script>
 </body>
 </html>

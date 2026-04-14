@@ -1561,6 +1561,77 @@ class MaquinariaOrdenTrabajo(db.Model):
         }
 
 
+class MaquinariaOrdenBOMItem(db.Model):
+    __tablename__ = 'maquinaria_orden_bom_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    orden_trabajo_id = db.Column(db.Integer, db.ForeignKey('maquinaria_ordenes_trabajo.id'), nullable=False, index=True)
+    bom_id = db.Column(db.Integer, db.ForeignKey('maquinaria_boms.id'), nullable=True, index=True)
+    codigo_componente = db.Column(db.String(120), nullable=False, index=True)
+    nombre_componente = db.Column(db.String(255), nullable=False)
+    cantidad = db.Column(db.Float, nullable=False, default=1)
+    unidad = db.Column(db.String(30), nullable=True)
+    proceso_base = db.Column(db.String(120), nullable=True)
+    notas = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    orden_trabajo = db.relationship('MaquinariaOrdenTrabajo', backref=db.backref('bom_items_ot', lazy=True, cascade='all, delete-orphan'))
+    bom = db.relationship('MaquinariaBOM', backref='ordenes_snapshot')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'orden_trabajo_id': self.orden_trabajo_id,
+            'bom_id': self.bom_id,
+            'codigo_componente': self.codigo_componente,
+            'nombre_componente': self.nombre_componente,
+            'cantidad': self.cantidad,
+            'unidad': self.unidad,
+            'proceso_base': self.proceso_base,
+            'notas': self.notas,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class MaquinariaOrdenProceso(db.Model):
+    __tablename__ = 'maquinaria_orden_procesos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    orden_trabajo_id = db.Column(db.Integer, db.ForeignKey('maquinaria_ordenes_trabajo.id'), nullable=False, index=True)
+    orden = db.Column(db.Integer, nullable=False, default=1)
+    nombre = db.Column(db.String(180), nullable=False)
+    centro_trabajo = db.Column(db.String(120), nullable=True)
+    operacion = db.Column(db.Text, nullable=True)
+    t_e = db.Column(db.String(20), nullable=True)
+    t_tct = db.Column(db.String(20), nullable=True)
+    t_tco = db.Column(db.String(20), nullable=True)
+    t_to = db.Column(db.String(20), nullable=True)
+    estado = db.Column(db.String(30), nullable=False, default='pendiente', index=True)
+    notas = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    orden_trabajo = db.relationship('MaquinariaOrdenTrabajo', backref=db.backref('procesos_ot', lazy=True, cascade='all, delete-orphan'))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'orden_trabajo_id': self.orden_trabajo_id,
+            'orden': self.orden,
+            'nombre': self.nombre,
+            'centro_trabajo': self.centro_trabajo,
+            'operacion': self.operacion,
+            't_e': self.t_e,
+            't_tct': self.t_tct,
+            't_tco': self.t_tco,
+            't_to': self.t_to,
+            'estado': self.estado,
+            'notas': self.notas,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class MaquinariaCalidadRegistro(db.Model):
     __tablename__ = 'maquinaria_calidad_registros'
 
