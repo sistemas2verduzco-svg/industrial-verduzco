@@ -421,6 +421,12 @@
 
 <script>
     (function() {
+        const nativeReload = window.location && typeof window.location.reload === 'function'
+            ? window.location.reload.bind(window.location)
+            : function() { window.location.href = window.location.href; };
+
+        window.__platformNativeReload = nativeReload;
+
         window.platformRefreshNow = function() {
             try {
                 const hooks = [
@@ -452,8 +458,18 @@
             } catch (_) {
                 // noop
             }
-            window.location.reload();
+            nativeReload();
         };
+
+        // Global policy: cualquier reload explícito usa el flujo centralizado.
+        // Esto aplica de forma transversal en todos los módulos que cargan sidebar.
+        try {
+            window.location.reload = function platformReloadProxy() {
+                window.platformRefreshNow();
+            };
+        } catch (_) {
+            // En algunos navegadores reload puede ser read-only; se mantiene fallback nativo.
+        }
 
         try {
             const key = 'platform:scroll:' + (window.location.pathname || '/');
