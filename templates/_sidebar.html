@@ -421,6 +421,56 @@
 
 <script>
     (function() {
+        window.platformRefreshNow = function() {
+            try {
+                const hooks = [
+                    window.softRefreshBoard,
+                    window.softRefreshPage,
+                    window.softRefreshEntregas,
+                    window.softRefreshModule,
+                ];
+                for (const hook of hooks) {
+                    if (typeof hook === 'function') {
+                        Promise.resolve(hook()).catch(() => {
+                            window.location.reload();
+                        });
+                        return;
+                    }
+                }
+            } catch (_) {
+                // noop
+            }
+
+            try {
+                const key = 'platform:scroll:' + (window.location.pathname || '/');
+                const payload = {
+                    x: window.scrollX || 0,
+                    y: window.scrollY || 0,
+                    t: Date.now(),
+                };
+                sessionStorage.setItem(key, JSON.stringify(payload));
+            } catch (_) {
+                // noop
+            }
+            window.location.reload();
+        };
+
+        try {
+            const key = 'platform:scroll:' + (window.location.pathname || '/');
+            const raw = sessionStorage.getItem(key);
+            if (raw) {
+                sessionStorage.removeItem(key);
+                const data = JSON.parse(raw);
+                if (data && (Date.now() - Number(data.t || 0)) < 120000) {
+                    window.requestAnimationFrame(() => {
+                        window.scrollTo(Number(data.x || 0), Number(data.y || 0));
+                    });
+                }
+            }
+        } catch (_) {
+            // noop
+        }
+
         document.body.classList.add('with-sidebar');
 
         const sidebar = document.getElementById('appSidebar');

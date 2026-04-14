@@ -1672,7 +1672,11 @@
                     msg += '\nAviso: esta clave ya habia pasado por esta maquina ' + data.veces_previas_maquina + ' vez/veces.';
                 }
                 alert(msg);
-                window.location.reload();
+                if (window.platformRefreshNow) {
+                    window.platformRefreshNow();
+                } else {
+                    window.location.reload();
+                }
             } catch (err) {
                 console.error(err);
                 alert('Error: ' + err.message);
@@ -1752,7 +1756,11 @@
                 }
 
                 alert('Hoja actualizada correctamente');
-                window.location.reload();
+                if (window.platformRefreshNow) {
+                    window.platformRefreshNow();
+                } else {
+                    window.location.reload();
+                }
             } catch (err) {
                 console.error(err);
                 alert('Error: ' + err.message);
@@ -1775,7 +1783,11 @@
                 }
 
                 alert('Hoja eliminada correctamente');
-                window.location.reload();
+                if (window.platformRefreshNow) {
+                    window.platformRefreshNow();
+                } else {
+                    window.location.reload();
+                }
             } catch (err) {
                 console.error(err);
                 alert('Error: ' + err.message);

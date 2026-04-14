@@ -286,7 +286,11 @@
                             throw new Error(data.error || 'No se pudo registrar entrega');
                         }
                         cerrarModalEntregaParcial();
-                        window.location.reload();
+                        if (window.platformRefreshNow) {
+                            window.platformRefreshNow();
+                        } else {
+                            window.location.reload();
+                        }
                     } catch (err) {
                         alert('Error: ' + (err.message || err));
                     }
@@ -305,7 +309,11 @@
                         if (!res.ok) {
                             throw new Error(data.error || 'No se pudo eliminar');
                         }
-                        window.location.reload();
+                        if (window.platformRefreshNow) {
+                            window.platformRefreshNow();
+                        } else {
+                            window.location.reload();
+                        }
                     } catch (err) {
                         alert('Error: ' + (err.message || err));
                     }
@@ -333,7 +341,11 @@
                 });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'No se pudo agregar');
-                window.location.reload();
+                if (window.platformRefreshNow) {
+                    window.platformRefreshNow();
+                } else {
+                    window.location.reload();
+                }
             } catch (err) {
                 alert(err.message || err);
             }

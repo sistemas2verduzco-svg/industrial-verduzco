@@ -166,7 +166,11 @@
             const data = await res.json();
             if (data.success) {
                 alert('QC guardado');
-                window.location.reload();
+                if (window.platformRefreshNow) {
+                    window.platformRefreshNow();
+                } else {
+                    window.location.reload();
+                }
             } else {
                 alert('Error: ' + (data.error || 'No se pudo guardar'));
             }

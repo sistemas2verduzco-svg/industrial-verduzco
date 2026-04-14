@@ -710,7 +710,11 @@
 
             if (stData.status === 'success') {
               alert('Importación de procesos completada. Se recargará la vista.');
-              window.location.reload();
+              if (window.platformRefreshNow) {
+                window.platformRefreshNow();
+              } else {
+                window.location.reload();
+              }
               break;
             }
 

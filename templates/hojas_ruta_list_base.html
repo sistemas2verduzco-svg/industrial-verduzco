@@ -236,7 +236,7 @@
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
             })
             .then(res => res.json())
-            .then(r => { if (r.success) { alert('Plantilla actualizada'); window.location.reload(); } else alert('Error: ' + (r.error || 'no se pudo actualizar')); })
+            .then(r => { if (r.success) { alert('Plantilla actualizada'); if (window.platformRefreshNow) { window.platformRefreshNow(); } else { window.location.reload(); } } else alert('Error: ' + (r.error || 'no se pudo actualizar')); })
             .catch(err => { console.error(err); alert('Error al conectar con el servidor'); });
         })
         .catch(err => { console.error(err); alert('No se pudieron cargar plantillas'); });
@@ -297,7 +297,7 @@
         .then(data => {
             if (data && (data.ok || data.success)) {
                 alert('OT aprobada. Puedes activar la máquina.');
-                window.location.reload();
+                if (window.platformRefreshNow) { window.platformRefreshNow(); } else { window.location.reload(); }
             } else {
                 alert('Error al aprobar OT');
             }
@@ -309,7 +309,7 @@
         const url = '/api/maquinas/' + maquinaId + (activar ? '/activar' : '/desactivar');
         fetch(url, { method: 'POST' })
         .then(res => res.json())
-        .then(data => { if (data && (data.ok || data.success)) window.location.reload(); else alert('Error al actualizar estado'); })
+        .then(data => { if (data && (data.ok || data.success)) { if (window.platformRefreshNow) { window.platformRefreshNow(); } else { window.location.reload(); } } else alert('Error al actualizar estado'); })
         .catch(err => { console.error(err); alert('Error al conectar'); });
     }
 
