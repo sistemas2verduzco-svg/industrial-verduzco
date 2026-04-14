@@ -1050,6 +1050,7 @@ def _mp_process_seconds(cp):
         getattr(cp, 't_tct', None),
         getattr(cp, 't_tco', None),
         getattr(cp, 't_to', None),
+        getattr(cp, 'tiempo_estimado', None),
         getattr(getattr(cp, 'proceso', None), 'tiempo_estimado', None),
     ):
         sec = _parse_time_to_seconds(raw)
@@ -1158,7 +1159,7 @@ def _build_mp_time_estaciones_by_clave_id(clave_id):
     for idx, cp in enumerate(procesos, start=1):
         estaciones.append(SimpleNamespace(
             orden=cp.orden or idx,
-            t_e=cp.t_e or (cp.proceso.tiempo_estimado if getattr(cp, 'proceso', None) else None) or '',
+            t_e=cp.t_e or cp.tiempo_estimado or (cp.proceso.tiempo_estimado if getattr(cp, 'proceso', None) else None) or '',
             t_tct=cp.t_tct or '',
             t_tco=cp.t_tco or '',
             t_to=cp.t_to or '',
@@ -5918,7 +5919,8 @@ def api_crear_hoja_ruta_nuevo():
             producto=clave.nombre,
             calidad=calidad,
             pn=clave.clave,
-            fecha_salida=fecha_actual,
+            # El reloj de producción inicia al asignar a máquina, no al crear pendiente.
+            fecha_salida=None,
             cantidad_piezas=int(cantidad_piezas),
             orden_trabajo_hr=orden_trabajo or None,
             almacen=almacen,
@@ -6159,8 +6161,9 @@ def api_asignar_hoja_maquina_nuevo(maquina_id):
 
     hoja.maquina_id = maq.id
     hoja.estado = 'activa'
-    if not hoja.fecha_salida:
-        hoja.fecha_salida = datetime.utcnow()
+    # Reiniciar inicio al momento real de asignación para evitar arrastre de tiempo previo.
+    hoja.fecha_salida = datetime.utcnow()
+    _recompute_mp_time_plan(hoja)
     maq.activo = True
     db.session.commit()
     return jsonify({'success': True, 'hoja': hoja.to_dict()}), 200
