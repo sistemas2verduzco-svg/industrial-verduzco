@@ -6,28 +6,32 @@
     <title>Maquinaria y Ensamble - Ordenes de Trabajo</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <style>
-        .ot-page { display:grid; gap:12px; }
-        .ot-grid-top { display:grid; grid-template-columns: minmax(420px, 0.9fr) minmax(560px, 1.35fr); gap:12px; align-items:start; }
-        .ot-panel { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px; }
-        .ot-columns { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:12px; }
+        .ot-page { display:grid; gap:14px; }
+        .ot-grid-top { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:14px; align-items:start; }
+        .ot-panel { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:16px; }
         .ot-table { width:100%; border-collapse:collapse; font-size:12px; }
-        .ot-table th, .ot-table td { padding:7px; border-bottom:1px solid #e5e7eb; text-align:left; vertical-align:top; }
-        .ot-table th { background:#eef2ff; }
+        .ot-table th, .ot-table td { padding:7px 10px; border-bottom:1px solid #e5e7eb; text-align:left; vertical-align:top; }
+        .ot-table th { background:#eef2ff; font-size:12px; white-space:nowrap; }
         .ot-muted { color:#64748b; font-size:12px; }
         .chip { display:inline-flex; align-items:center; border-radius:999px; padding:2px 8px; font-size:11px; font-weight:700; }
         .chip-ok { background:#dcfce7; color:#166534; border:1px solid #86efac; }
         .chip-empty { background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; }
-        .proc-row { display:grid; grid-template-columns: 1.1fr 0.9fr 1.2fr repeat(4, 110px) 90px; gap:6px; align-items:center; margin-bottom:6px; }
-        .proc-row input { padding:7px; border:1px solid #d1d5db; border-radius:6px; }
-        .btn-mini { border:1px solid #d1d5db; border-radius:6px; background:#fff; cursor:pointer; padding:7px 8px; font-size:12px; }
+        .proc-header { display:grid; grid-template-columns: 2fr 1.3fr 1.6fr repeat(4, 100px) 86px; gap:6px; align-items:center; padding:6px 2px; font-weight:700; color:#334155; font-size:12px; border-bottom:2px solid #e2e8f0; margin-bottom:8px; }
+        .proc-row { display:grid; grid-template-columns: 2fr 1.3fr 1.6fr repeat(4, 100px) 86px; gap:6px; align-items:center; margin-bottom:6px; }
+        .proc-row input { padding:7px 8px; border:1px solid #d1d5db; border-radius:6px; width:100%; box-sizing:border-box; font-size:12px; }
+        .btn-mini { border:1px solid #d1d5db; border-radius:6px; background:#fff; cursor:pointer; padding:7px 10px; font-size:12px; white-space:nowrap; }
         .btn-mini:hover { background:#f8fafc; }
         .btn-danger { border-color:#fecaca; background:#fff1f2; color:#b91c1c; }
         .hidden { display:none !important; }
         .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.45); display:none; align-items:center; justify-content:center; z-index:70; }
-        .modal-card { width:min(1100px, 95vw); max-height:85vh; overflow:auto; background:#fff; border-radius:12px; border:1px solid #dbe1ea; padding:12px; }
-        @media (max-width: 1200px) {
-            .ot-grid-top, .ot-columns { grid-template-columns:1fr; }
-            .proc-row { grid-template-columns: 1fr; }
+        .modal-card { width:min(1100px, 95vw); max-height:85vh; overflow:auto; background:#fff; border-radius:12px; border:1px solid #dbe1ea; padding:20px; }
+        @media (max-width: 1400px) {
+            .ot-grid-top { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .proc-header, .proc-row { grid-template-columns: 2fr 1.2fr 1.4fr repeat(4, 90px) 80px; }
+        }
+        @media (max-width: 900px) {
+            .ot-grid-top { grid-template-columns: 1fr; }
+            .proc-header, .proc-row { grid-template-columns: 1fr 1fr; }
         }
     </style>
 </head>
@@ -45,50 +49,62 @@
 
         <div class="ot-grid-top">
             <div class="ot-panel">
-                <h3 style="margin:0 0 8px 0; font-size:16px;">Crear OT (hoja de ruta de maquinaria)</h3>
-                <form id="otForm" method="post" action="/maquinaria/ordenes-trabajo/create" style="display:grid; gap:8px;">
-                    <input type="text" value="AUTO" readonly style="padding:8px; border:1px solid #d1d5db; border-radius:6px; background:#f8fafc; color:#64748b; font-weight:700;">
-                    <select id="pedidoSelectorOT" name="pedido_id" onchange="onPedidoChangeOT()" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
-                        <option value="">Pedido relacionado (opcional)</option>
-                        {% for p in pedidos_selector_data %}
-                        <option value="{{ p.source_pedido_id }}">{{ p.folio_interno or ('Pedido ' ~ p.source_pedido_id) }} | {{ p.cliente or '-' }} | Lineas {{ p.lineas|length }}</option>
-                        {% endfor %}
-                    </select>
+                <h3 style="margin:0 0 10px 0; font-size:16px;">Crear OT (hoja de ruta de maquinaria)</h3>
+                <form id="otForm" method="post" action="/maquinaria/ordenes-trabajo/create" style="display:grid; gap:10px;">
+                    <div>
+                        <label class="ot-muted" style="display:block; margin-bottom:3px; font-weight:600;">Folio</label>
+                        <input type="text" value="AUTO" readonly style="padding:8px; border:1px solid #d1d5db; border-radius:6px; background:#f8fafc; color:#64748b; font-weight:700; width:100%; box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label class="ot-muted" style="display:block; margin-bottom:3px; font-weight:600;">Pedido relacionado</label>
+                        <select id="pedidoSelectorOT" name="pedido_id" onchange="onPedidoChangeOT()" style="padding:8px; border:1px solid #d1d5db; border-radius:6px; width:100%; box-sizing:border-box;">
+                            <option value="">— Opcional —</option>
+                            {% for p in pedidos_selector_data %}
+                            <option value="{{ p.source_pedido_id }}">{{ p.folio_interno or ('Pedido ' ~ p.source_pedido_id) }} | {{ p.cliente or '-' }} | Lineas {{ p.lineas|length }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
 
-                    <div id="pedidoLinesFormOT" class="hidden" style="border:1px solid #e2e8f0; border-radius:8px; padding:8px; max-height:180px; overflow:auto; background:#f8fafc;"></div>
+                    <div id="pedidoLinesFormOT" class="hidden" style="border:1px solid #e2e8f0; border-radius:8px; padding:8px; max-height:160px; overflow:auto; background:#f8fafc;"></div>
 
-                    <input id="claveMaquinaOT" type="text" name="clave_maquina" placeholder="Clave de maquina" required style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
-                    <input id="cantidadOT" type="number" name="cantidad" min="1" value="1" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
-                    <input id="fechaObjetivoOT" type="datetime-local" name="fecha_objetivo" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                        <div>
+                            <label class="ot-muted" style="display:block; margin-bottom:3px; font-weight:600;">Clave de maquina *</label>
+                            <input id="claveMaquinaOT" type="text" name="clave_maquina" placeholder="Ej. MOT-001" required style="padding:8px; border:1px solid #d1d5db; border-radius:6px; width:100%; box-sizing:border-box;">
+                        </div>
+                        <div>
+                            <label class="ot-muted" style="display:block; margin-bottom:3px; font-weight:600;">Cantidad</label>
+                            <input id="cantidadOT" type="number" name="cantidad" min="1" value="1" style="padding:8px; border:1px solid #d1d5db; border-radius:6px; width:100%; box-sizing:border-box;">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="ot-muted" style="display:block; margin-bottom:3px; font-weight:600;">Fecha objetivo</label>
+                        <input id="fechaObjetivoOT" type="datetime-local" name="fecha_objetivo" style="padding:8px; border:1px solid #d1d5db; border-radius:6px; width:100%; box-sizing:border-box;">
+                    </div>
                     <input id="selectedLineNumbersOT" type="hidden" name="selected_line_numbers" value="">
                     <input id="procesosJsonOT" type="hidden" name="procesos_json" value="[]">
-                    <textarea id="notasOT" name="notas" placeholder="Notas de planeacion / materiales" rows="3" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;"></textarea>
+                    <div>
+                        <label class="ot-muted" style="display:block; margin-bottom:3px; font-weight:600;">Notas de planeacion / materiales</label>
+                        <textarea id="notasOT" name="notas" rows="3" style="padding:8px; border:1px solid #d1d5db; border-radius:6px; width:100%; box-sizing:border-box; resize:vertical;"></textarea>
+                    </div>
 
                     {% if has_permission('maquinaria_ordenes', 'create') or has_permission('maquinaria_ordenes', 'edit') or current_user.es_admin %}
-                    <button type="submit" style="border:0; background:#0f766e; color:#fff; font-weight:700; border-radius:6px; padding:9px;">Guardar OT</button>
+                    <button type="submit" style="border:0; background:#0f766e; color:#fff; font-weight:700; border-radius:6px; padding:10px; font-size:14px;">Guardar OT</button>
                     {% endif %}
                 </form>
-                <div class="ot-muted" style="margin-top:8px;">La OT guarda snapshot de BOM por clave y procesos definidos aqui mismo.</div>
+                <div class="ot-muted" style="margin-top:10px; padding-top:8px; border-top:1px solid #f1f5f9;">La OT guarda snapshot de BOM por clave y procesos definidos aqui mismo.</div>
             </div>
 
-            <div class="ot-panel" id="pedidoPreviewPanelOT">
-                <h3 style="margin:0 0 8px 0; font-size:16px;">Vista previa del pedido</h3>
-                <div id="pedidoPreviewSummaryOT" class="ot-muted" style="margin-bottom:10px;">Selecciona un pedido para ver partidas de clave/cantidad.</div>
-                <div id="pedidoLinesPreviewOT" class="hidden" style="border:1px solid #e2e8f0; border-radius:8px; padding:8px; max-height:300px; overflow:auto; background:#f8fafc;"></div>
-            </div>
-        </div>
-
-        <div class="ot-columns">
             <div class="ot-panel">
-                <h3 style="margin:0 0 8px 0; font-size:16px;">BOM de la clave seleccionada</h3>
+                <h3 style="margin:0 0 10px 0; font-size:16px;">BOM de la clave seleccionada</h3>
                 <div id="bomStatusOT" class="ot-muted" style="margin-bottom:8px;">Captura/selecciona una clave para cargar su BOM.</div>
-                <div id="bomTableWrapOT" class="hidden" style="max-height:300px; overflow:auto; border:1px solid #e2e8f0; border-radius:8px;">
+                <div id="bomTableWrapOT" class="hidden" style="max-height:280px; overflow:auto; border:1px solid #e2e8f0; border-radius:8px;">
                     <table class="ot-table">
                         <thead>
                             <tr>
                                 <th>Codigo</th>
                                 <th>Componente</th>
-                                <th>Cantidad</th>
+                                <th>Cant.</th>
                                 <th>Unidad</th>
                                 <th>Proceso base</th>
                             </tr>
@@ -98,35 +114,41 @@
                 </div>
             </div>
 
-            <div class="ot-panel">
-                <h3 style="margin:0 0 8px 0; font-size:16px;">Procesos de esta OT (independiente)</h3>
-                <div class="ot-muted" style="margin-bottom:8px;">Agrega los procesos que deseas trabajar en estaciones para esta OT.</div>
-
-                <div class="proc-row" style="font-weight:700; color:#334155; margin-bottom:8px;">
-                    <div>Nombre</div>
-                    <div>Centro trabajo</div>
-                    <div>Operacion</div>
-                    <div>T/E</div>
-                    <div>T/CT</div>
-                    <div>T/CO</div>
-                    <div>T/O</div>
-                    <div>Accion</div>
-                </div>
-
-                <div class="proc-row">
-                    <input id="procNombreOT" type="text" placeholder="Proceso">
-                    <input id="procCentroOT" type="text" placeholder="Centro">
-                    <input id="procOperacionOT" type="text" placeholder="Operacion">
-                    <input id="procTeOT" type="text" placeholder="00:00:00">
-                    <input id="procTctOT" type="text" placeholder="00:00:00">
-                    <input id="procTcoOT" type="text" placeholder="00:00:00">
-                    <input id="procToOT" type="text" placeholder="00:00:00">
-                    <button class="btn-mini" type="button" onclick="agregarProcesoOT()">Agregar</button>
-                </div>
-
-                <div id="procesosListOT" style="margin-top:8px;"></div>
-                <div id="procEmptyOT" class="ot-muted" style="margin-top:8px;">Sin procesos agregados aun.</div>
+            <div class="ot-panel" id="pedidoPreviewPanelOT">
+                <h3 style="margin:0 0 10px 0; font-size:16px;">Vista previa del pedido</h3>
+                <div id="pedidoPreviewSummaryOT" class="ot-muted" style="margin-bottom:10px;">Selecciona un pedido para ver partidas de clave/cantidad.</div>
+                <div id="pedidoLinesPreviewOT" class="hidden" style="border:1px solid #e2e8f0; border-radius:8px; padding:8px; max-height:280px; overflow:auto; background:#f8fafc;"></div>
             </div>
+        </div>
+
+        <div class="ot-panel">
+            <h3 style="margin:0 0 4px 0; font-size:16px;">Procesos de esta OT <span style="font-weight:400; font-size:13px; color:#64748b;">(independiente)</span></h3>
+            <div class="ot-muted" style="margin-bottom:12px;">Agrega los procesos que deseas trabajar en estaciones para esta OT.</div>
+
+            <div class="proc-header">
+                <div>Nombre del proceso</div>
+                <div>Centro de trabajo</div>
+                <div>Operacion</div>
+                <div>T/E</div>
+                <div>T/CT</div>
+                <div>T/CO</div>
+                <div>T/O</div>
+                <div>Accion</div>
+            </div>
+
+            <div class="proc-row" style="margin-bottom:10px;">
+                <input id="procNombreOT" type="text" placeholder="Nombre del proceso">
+                <input id="procCentroOT" type="text" placeholder="Centro de trabajo">
+                <input id="procOperacionOT" type="text" placeholder="Operacion">
+                <input id="procTeOT" type="text" placeholder="00:00:00">
+                <input id="procTctOT" type="text" placeholder="00:00:00">
+                <input id="procTcoOT" type="text" placeholder="00:00:00">
+                <input id="procToOT" type="text" placeholder="00:00:00">
+                <button class="btn-mini" style="background:#0f766e; color:#fff; border-color:#0f766e; font-weight:600;" type="button" onclick="agregarProcesoOT()">+ Agregar</button>
+            </div>
+
+            <div id="procesosListOT"></div>
+            <div id="procEmptyOT" class="ot-muted" style="padding:8px 0;">Sin procesos agregados aun.</div>
         </div>
 
         <div class="ot-panel">
