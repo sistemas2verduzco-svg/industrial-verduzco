@@ -359,6 +359,28 @@
             cursor: not-allowed;
         }
 
+        .mye-op-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 6px;
+            flex-wrap: wrap;
+        }
+
+        .mye-item-delete {
+            border: 1px solid #fecaca;
+            border-radius: 7px;
+            background: #fff1f2;
+            color: #b91c1c;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 5px 8px;
+            cursor: pointer;
+        }
+
+        .mye-item-delete:hover {
+            background: #ffe4e6;
+        }
+
         .mye-drop-target {
             border-color: #2a7abf !important;
             background: #eaf4ff !important;
@@ -1385,12 +1407,29 @@
                     const linkedOt = (MYE_ORDERS || []).filter(o => String(o.clave_maquina || '').toLowerCase() === String(m.clave_maquina || '').toLowerCase()).length;
                     return `
                         <div class="mye-machine" data-machine-key="${textSafe(m.clave_maquina || '')}" title="${textSafe(m.nombre_maquina || m.clave_maquina || '-')}" draggable="true">
+                            <div style="display:flex; width:100%; justify-content:flex-end; margin-bottom:2px;">
+                                <button class="mye-item-delete" type="button" data-delete-machine-key="${textSafe(m.clave_maquina || '')}">Borrar</button>
+                            </div>
                             <div class="mye-machine-icon">${textSafe(icon)}</div>
                             <div style="font-weight:700; font-size:12px; color:#153a61; word-break:break-word;">${textSafe(m.clave_maquina || '-')}</div>
                             <div style="font-size:10px; color:#64748b;">OTs: ${linkedOt}</div>
                         </div>
                     `;
                 }).join('') || '<div class="mye-order-meta" style="grid-column:1/-1; text-align:center;">Sin maquinas cargadas.</div>';
+
+                machineGridEl.querySelectorAll('[data-delete-machine-key]').forEach(btn => {
+                    btn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const machineKey = String(btn.getAttribute('data-delete-machine-key') || '').trim();
+                        if (!machineKey) return;
+                        deleteMachine(machineKey);
+                    });
+                    btn.addEventListener('mousedown', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    });
+                });
 
                 machineGridEl.querySelectorAll('[data-machine-key]').forEach(node => {
                     const key = String(node.getAttribute('data-machine-key') || '').toLowerCase();
@@ -1536,7 +1575,10 @@
                             <div class="mye-op-name">${textSafe(op.username)}</div>
                             <div class="mye-op-role">${textSafe(op.role || 'Operador')} | OTs: ${assigned}</div>
                             <div class="mye-time-chip">Tiempo activo: <span data-op-elapsed-id="${op.id}">${formatElapsed(activeMs)}</span></div>
-                            <button class="mye-op-action-btn" type="button" data-op-action-id="${op.id}" data-op-action-type="${actionType}" ${actionDisabled ? 'disabled' : ''}>${textSafe(actionLabel)}</button>
+                            <div class="mye-op-actions">
+                                <button class="mye-op-action-btn" type="button" data-op-action-id="${op.id}" data-op-action-type="${actionType}" ${actionDisabled ? 'disabled' : ''}>${textSafe(actionLabel)}</button>
+                                <button class="mye-item-delete" type="button" data-delete-op-id="${op.id}">Borrar</button>
+                            </div>
                         </article>
                     `;
                 }).join('') || '<div class="mye-order-meta">Sin operadores activos.</div>';
@@ -1567,6 +1609,20 @@
                         const opId = Number(btn.getAttribute('data-op-action-id'));
                         const actionType = String(btn.getAttribute('data-op-action-type') || 'start');
                         applyOperatorAction(opId, actionType);
+                    });
+                });
+
+                operatorsEl.querySelectorAll('[data-delete-op-id]').forEach(btn => {
+                    btn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const opId = Number(btn.getAttribute('data-delete-op-id') || 0);
+                        if (!opId) return;
+                        deleteOperator(opId);
+                    });
+                    btn.addEventListener('mousedown', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
                     });
                 });
             }
@@ -1939,9 +1995,24 @@
                         <article class="mye-process-item" data-proc-id="${proc.id}" draggable="true">
                             <div class="mye-process-name">${textSafe(proc.nombre || '-')}</div>
                             <div class="mye-process-meta">⏱ ${textSafe(formatHHMM(proc.duracion_default || 1))} | Creado: ${textSafe(proc.created_at ? proc.created_at.slice(0, 10) : '-')}</div>
+                            <div style="margin-top:6px;"><button class="mye-item-delete" type="button" data-delete-proc-id="${proc.id}">Borrar</button></div>
                         </article>
                     `;
                 }).join('') || '<div class="mye-order-meta">Sin procesos definidos.</div>';
+
+                processListEl.querySelectorAll('[data-delete-proc-id]').forEach(btn => {
+                    btn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const procId = Number(btn.getAttribute('data-delete-proc-id') || 0);
+                        if (!procId) return;
+                        deleteProcess(procId);
+                    });
+                    btn.addEventListener('mousedown', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    });
+                });
 
                 processListEl.querySelectorAll('[data-proc-id]').forEach(node => {
                     const procId = Number(node.getAttribute('data-proc-id'));
@@ -2077,6 +2148,95 @@
                     if (newProcessDuration) newProcessDuration.value = '01:00:00';
                 } catch (err) {
                     showMessage(err.message || 'Error al crear proceso', true);
+                }
+            }
+
+            async function deleteOperator(opId) {
+                const operator = operatorMap.get(Number(opId));
+                if (!operator) {
+                    showMessage('Operador no encontrado.', true);
+                    return;
+                }
+                const ok = confirm(`Vas a borrar al operador ${operator.username}. Esta accion no se puede deshacer.`);
+                if (!ok) return;
+
+                try {
+                    const res = await fetch('/api/maquinaria/estaciones/operators/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ id: Number(opId) }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data.ok) throw new Error(data.message || 'No se pudo borrar operador');
+
+                    const idx = MYE_OPERATORS.findIndex(o => Number(o.id) === Number(opId));
+                    if (idx >= 0) MYE_OPERATORS.splice(idx, 1);
+                    operatorMap.delete(Number(opId));
+                    renderOperators();
+                    renderTimeline();
+                    showMessage(data.message || 'Operador borrado', false);
+                } catch (err) {
+                    showMessage(err.message || 'Error al borrar operador', true);
+                }
+            }
+
+            async function deleteMachine(machineKey) {
+                const key = String(machineKey || '').trim().toLowerCase();
+                const machine = machineMap.get(key);
+                if (!machine) {
+                    showMessage('Maquina no encontrada.', true);
+                    return;
+                }
+                const ok = confirm(`Vas a borrar la estacion ${machine.clave_maquina}. Esta accion no se puede deshacer.`);
+                if (!ok) return;
+
+                try {
+                    const res = await fetch('/api/maquinaria/estaciones/machines/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ clave_maquina: machine.clave_maquina }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data.ok) throw new Error(data.message || 'No se pudo borrar estacion');
+
+                    const idx = MYE_MACHINES.findIndex(m => String(m.clave_maquina || '').toLowerCase() === key);
+                    if (idx >= 0) MYE_MACHINES.splice(idx, 1);
+                    machineMap.delete(key);
+                    renderMachines();
+                    showMessage(data.message || 'Estacion borrada', false);
+                } catch (err) {
+                    showMessage(err.message || 'Error al borrar estacion', true);
+                }
+            }
+
+            async function deleteProcess(procId) {
+                const process = processMap.get(Number(procId));
+                if (!process) {
+                    showMessage('Proceso no encontrado.', true);
+                    return;
+                }
+                const ok = confirm(`Vas a borrar el proceso ${process.nombre}. Esta accion no se puede deshacer.`);
+                if (!ok) return;
+
+                try {
+                    const res = await fetch('/api/maquinaria/estaciones/processes/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ id: Number(procId) }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data.ok) throw new Error(data.message || 'No se pudo borrar proceso');
+
+                    const idx = MYE_PROCESSES.findIndex(p => Number(p.id) === Number(procId));
+                    if (idx >= 0) MYE_PROCESSES.splice(idx, 1);
+                    processMap.delete(Number(procId));
+                    renderProcesses();
+                    showMessage(data.message || 'Proceso borrado', false);
+                } catch (err) {
+                    showMessage(err.message || 'Error al borrar proceso', true);
                 }
             }
 

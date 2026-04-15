@@ -785,6 +785,60 @@ def _mye_next_id(items):
     return max_id + 1
 
 
+def _mye_order_plan_entries(order_obj):
+    state = _mye_parse_plan_state(order_obj.notas)
+    plans_raw = state.get('plans') if isinstance(state, dict) else None
+    if isinstance(plans_raw, list):
+        return [p for p in plans_raw if isinstance(p, dict)]
+
+    if isinstance(state, dict) and state:
+        return [state]
+    return []
+
+
+def _mye_catalog_in_use(kind, value):
+    hits = []
+    needle = str(value or '').strip().lower()
+    if not needle and kind in ('machine', 'process'):
+        return hits
+
+    try:
+        value_num = int(value)
+    except Exception:
+        value_num = 0
+
+    ordenes = MaquinariaOrdenTrabajo.query.order_by(MaquinariaOrdenTrabajo.id.desc()).all()
+    for orden in ordenes:
+        plans = _mye_order_plan_entries(orden)
+        for plan in plans:
+            matched = False
+            if kind == 'operator':
+                matched = int(plan.get('operator_id') or 0) == value_num and value_num > 0
+            elif kind == 'machine':
+                station = str(plan.get('station') or '').strip().lower()
+                matched = station == needle
+            elif kind == 'process':
+                process_name = str(plan.get('process_name') or '').strip().lower()
+                names = [x.strip().lower() for x in process_name.split(',') if x.strip()]
+                if needle and (needle in names or process_name == needle):
+                    matched = True
+                if not matched:
+                    steps = plan.get('steps')
+                    if isinstance(steps, list):
+                        for step in steps:
+                            if not isinstance(step, dict):
+                                continue
+                            if str(step.get('name') or '').strip().lower() == needle:
+                                matched = True
+                                break
+
+            if matched:
+                hits.append({'id': orden.id, 'folio_ot': orden.folio_ot})
+                break
+
+    return hits
+
+
 def _qc_parse_review_block(notas_text):
     notas = str(notas_text or '')
     status_match = re.search(r'STATUS=(QC_OK|QC_NOK)', notas)
@@ -10454,6 +10508,92 @@ def api_maquinaria_estaciones_processes_create():
         _mye_write_catalog(catalog)
 
     return jsonify({'ok': True, 'message': 'Proceso creado', 'process': new_process})
+
+
+@app.route('/api/maquinaria/estaciones/operators/delete', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_estaciones', 'delete'), ('maquinaria_estaciones', 'edit'), ('maquinaria_estaciones', 'update')])
+def api_maquinaria_estaciones_operators_delete():
+    data = request.get_json(silent=True) or {}
+    operator_id = int(data.get('id') or 0)
+    if operator_id <= 0:
+        return jsonify({'ok': False, 'message': 'ID de operador invalido'}), 422
+
+    in_use = _mye_catalog_in_use('operator', operator_id)
+    if in_use:
+        folio = in_use[0].get('folio_ot') or f"OT #{in_use[0].get('id')}"
+        return jsonify({'ok': False, 'message': f'No se puede borrar: operador asignado en {folio}', 'in_use': in_use[:10]}), 409
+
+    with _MYE_CATALOG_LOCK:
+        catalog = _mye_read_catalog()
+        operators = catalog.get('operators') or []
+        keep = [o for o in operators if int(o.get('id') or 0) != operator_id]
+        if len(keep) == len(operators):
+            return jsonify({'ok': False, 'message': 'Operador no encontrado'}), 404
+        catalog['operators'] = keep
+        _mye_write_catalog(catalog)
+
+    return jsonify({'ok': True, 'message': 'Operador eliminado'})
+
+
+@app.route('/api/maquinaria/estaciones/machines/delete', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_estaciones', 'delete'), ('maquinaria_estaciones', 'edit'), ('maquinaria_estaciones', 'update')])
+def api_maquinaria_estaciones_machines_delete():
+    data = request.get_json(silent=True) or {}
+    clave_maquina = _clean_nullable_text(data.get('clave_maquina'))
+    if not clave_maquina:
+        return jsonify({'ok': False, 'message': 'Clave de maquina invalida'}), 422
+
+    in_use = _mye_catalog_in_use('machine', clave_maquina)
+    if in_use:
+        folio = in_use[0].get('folio_ot') or f"OT #{in_use[0].get('id')}"
+        return jsonify({'ok': False, 'message': f'No se puede borrar: estacion asignada en {folio}', 'in_use': in_use[:10]}), 409
+
+    with _MYE_CATALOG_LOCK:
+        catalog = _mye_read_catalog()
+        machines = catalog.get('machines') or []
+        keep = [m for m in machines if str(m.get('clave_maquina') or '').strip().lower() != clave_maquina.lower()]
+        if len(keep) == len(machines):
+            return jsonify({'ok': False, 'message': 'Estacion no encontrada'}), 404
+        catalog['machines'] = keep
+        _mye_write_catalog(catalog)
+
+    return jsonify({'ok': True, 'message': 'Estacion eliminada'})
+
+
+@app.route('/api/maquinaria/estaciones/processes/delete', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_estaciones', 'delete'), ('maquinaria_estaciones', 'edit'), ('maquinaria_estaciones', 'update')])
+def api_maquinaria_estaciones_processes_delete():
+    data = request.get_json(silent=True) or {}
+    process_id = int(data.get('id') or 0)
+    if process_id <= 0:
+        return jsonify({'ok': False, 'message': 'ID de proceso invalido'}), 422
+
+    with _MYE_CATALOG_LOCK:
+        catalog = _mye_read_catalog()
+        processes = catalog.get('processes') or []
+        target = next((p for p in processes if int(p.get('id') or 0) == process_id), None)
+        if not target:
+            return jsonify({'ok': False, 'message': 'Proceso no encontrado'}), 404
+
+    process_name = _clean_nullable_text(target.get('nombre'))
+    in_use = _mye_catalog_in_use('process', process_name)
+    if in_use:
+        folio = in_use[0].get('folio_ot') or f"OT #{in_use[0].get('id')}"
+        return jsonify({'ok': False, 'message': f'No se puede borrar: proceso asignado en {folio}', 'in_use': in_use[:10]}), 409
+
+    with _MYE_CATALOG_LOCK:
+        catalog = _mye_read_catalog()
+        processes = catalog.get('processes') or []
+        keep = [p for p in processes if int(p.get('id') or 0) != process_id]
+        if len(keep) == len(processes):
+            return jsonify({'ok': False, 'message': 'Proceso no encontrado'}), 404
+        catalog['processes'] = keep
+        _mye_write_catalog(catalog)
+
+    return jsonify({'ok': True, 'message': 'Proceso eliminado'})
 
 
 @app.route('/maquinaria/calidad')
