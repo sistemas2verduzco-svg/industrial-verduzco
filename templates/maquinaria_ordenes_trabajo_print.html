@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Imprimir OT {{ orden.folio_ot }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background: #f3f4f6; color: #111827; }
+        .page { max-width: 980px; margin: 16px auto; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; margin-bottom: 12px; }
+        .title { margin: 0; font-size: 22px; }
+        .subtitle { margin: 4px 0 0 0; color: #4b5563; font-size: 12px; }
+        .meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+        .meta-item { border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; background: #f9fafb; }
+        .meta-label { font-size: 11px; color: #6b7280; margin-bottom: 2px; }
+        .meta-value { font-size: 13px; font-weight: 700; color: #111827; word-break: break-word; }
+        .section { margin-top: 14px; }
+        .section h3 { margin: 0 0 8px 0; font-size: 15px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #e5e7eb; padding: 7px; font-size: 12px; text-align: left; vertical-align: top; }
+        th { background: #f3f4f6; }
+        .notes { border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px; background: #fcfcfd; white-space: pre-wrap; min-height: 44px; font-size: 12px; }
+        .actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 10px; }
+        .btn { border: 1px solid #d1d5db; background: #fff; border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
+        .btn-primary { background: #0f766e; border-color: #0f766e; color: #fff; }
+
+        @media print {
+            body { background: #fff; }
+            .page { max-width: none; margin: 0; border: 0; border-radius: 0; padding: 0; }
+            .actions { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="actions">
+            <button class="btn" type="button" onclick="window.close()">Cerrar</button>
+            <button class="btn btn-primary" type="button" onclick="window.print()">Imprimir</button>
+        </div>
+
+        <div class="header">
+            <div>
+                <h1 class="title">Orden de Trabajo Maquinaria</h1>
+                <p class="subtitle">Formato de impresion OT independiente</p>
+            </div>
+            <div style="text-align:right;">
+                <div class="meta-label">Folio OT</div>
+                <div class="meta-value" style="font-size:18px;">{{ orden.folio_ot }}</div>
+            </div>
+        </div>
+
+        <div class="meta">
+            <div class="meta-item">
+                <div class="meta-label">Clave de maquina</div>
+                <div class="meta-value">{{ orden.clave_maquina or '-' }}</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Cantidad</div>
+                <div class="meta-value">{{ orden.cantidad or 1 }}</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Estado</div>
+                <div class="meta-value">{{ orden.estado or 'planeacion' }}</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Pedido relacionado</div>
+                <div class="meta-value">{{ orden.pedido_id or '-' }}</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Fecha objetivo</div>
+                <div class="meta-value">{{ orden.fecha_objetivo.strftime('%d/%m/%Y %I:%M %p') if orden.fecha_objetivo else '-' }}</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Creado por</div>
+                <div class="meta-value">{{ orden.created_by or '-' }}</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>Notas</h3>
+            <div class="notes">{{ orden.notas or 'Sin notas' }}</div>
+        </div>
+
+        <div class="section">
+            <h3>BOM snapshot asignado</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Codigo</th>
+                        <th>Componente</th>
+                        <th>Cantidad</th>
+                        <th>Unidad</th>
+                        <th>Proceso base</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if bom_items %}
+                        {% for i in bom_items %}
+                        <tr>
+                            <td>{{ i.codigo_componente or '' }}</td>
+                            <td>{{ i.nombre_componente or '' }}</td>
+                            <td>{{ i.cantidad or 0 }}</td>
+                            <td>{{ i.unidad or '' }}</td>
+                            <td>{{ i.proceso_base or '' }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="5" style="color:#6b7280;">Sin BOM capturada en esta OT.</td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <h3>Procesos asignados a la OT</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Nombre</th>
+                        <th>Centro trabajo</th>
+                        <th>Operacion</th>
+                        <th>T/E</th>
+                        <th>T/CT</th>
+                        <th>T/CO</th>
+                        <th>T/O</th>
+                        <th>Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if procesos %}
+                        {% for p in procesos %}
+                        <tr>
+                            <td>{{ p.orden or loop.index }}</td>
+                            <td>{{ p.nombre or '' }}</td>
+                            <td>{{ p.centro_trabajo or '' }}</td>
+                            <td>{{ p.operacion or '' }}</td>
+                            <td>{{ p.t_e or '' }}</td>
+                            <td>{{ p.t_tct or '' }}</td>
+                            <td>{{ p.t_tco or '' }}</td>
+                            <td>{{ p.t_to or '' }}</td>
+                            <td>{{ p.estado or '' }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="9" style="color:#6b7280;">Sin procesos capturados en esta OT.</td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

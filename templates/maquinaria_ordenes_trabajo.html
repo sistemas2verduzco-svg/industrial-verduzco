@@ -22,6 +22,7 @@
         .btn-mini { border:1px solid #d1d5db; border-radius:6px; background:#fff; cursor:pointer; padding:7px 10px; font-size:12px; white-space:nowrap; }
         .btn-mini:hover { background:#f8fafc; }
         .btn-danger { border-color:#fecaca; background:#fff1f2; color:#b91c1c; }
+        .btn-print { border-color:#bae6fd; background:#f0f9ff; color:#075985; }
         .hidden { display:none !important; }
         .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.45); display:none; align-items:center; justify-content:center; z-index:70; }
         .modal-card { width:min(1100px, 95vw); max-height:85vh; overflow:auto; background:#fff; border-radius:12px; border:1px solid #dbe1ea; padding:20px; }
@@ -186,7 +187,13 @@
                             <span class="chip chip-empty">Sin procesos</span>
                             {% endif %}
                         </td>
-                        <td><button class="btn-mini" type="button" onclick="verDetalleOT({{ o.id }})">Ver detalle</button></td>
+                        <td style="display:flex; gap:6px; flex-wrap:wrap;">
+                            <button class="btn-mini" type="button" onclick="verDetalleOT({{ o.id }})">Ver detalle</button>
+                            <a class="btn-mini btn-print" href="/maquinaria/ordenes-trabajo/{{ o.id }}/imprimir" target="_blank" rel="noopener">Imprimir</a>
+                            {% if has_permission('maquinaria_ordenes', 'delete') or has_permission('maquinaria_ordenes', 'edit') or current_user.es_admin %}
+                            <button class="btn-mini btn-danger js-delete-ot" type="button" data-ot-id="{{ o.id }}" data-ot-folio="{{ o.folio_ot or ('OT #' ~ o.id) }}">Borrar</button>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% else %}
                     <tr><td colspan="7" class="ot-muted">Sin ordenes registradas.</td></tr>
@@ -493,6 +500,30 @@
             document.getElementById('otDetalleModal').style.display = 'none';
         }
 
+        async function eliminarOT(ordenId, folioOt) {
+            const folio = String(folioOt || ('OT #' + ordenId));
+            const ok = confirm('Vas a borrar ' + folio + '. Esta accion no se puede deshacer.');
+            if (!ok) return;
+
+            try {
+                const res = await fetch('/api/maquinaria/ordenes-trabajo/' + ordenId + '/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ confirm: true }),
+                });
+                const data = await res.json();
+                if (!res.ok || !data.ok) throw new Error(data.message || 'No se pudo eliminar OT');
+                if (typeof window.platformRefreshNow === 'function') {
+                    window.platformRefreshNow();
+                } else {
+                    window.location.reload();
+                }
+            } catch (err) {
+                alert('Error: ' + (err.message || 'No se pudo eliminar OT'));
+            }
+        }
+
         document.getElementById('claveMaquinaOT').addEventListener('input', refreshBomByClave);
         document.getElementById('otForm').addEventListener('submit', function(e) {
             syncProcesosJsonOT();
@@ -509,6 +540,15 @@
             if (e.target.id === 'otDetalleModal') cerrarDetalleOT();
         });
 
+        document.querySelectorAll('.js-delete-ot').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                const ordenId = Number(btn.getAttribute('data-ot-id') || 0);
+                const folioOt = String(btn.getAttribute('data-ot-folio') || ('OT #' + ordenId));
+                if (!ordenId) return;
+                eliminarOT(ordenId, folioOt);
+            });
+        });
+
         setNowFechaObjetivoOT();
         syncProcesosJsonOT();
         renderProcesosOT();
@@ -518,6 +558,7 @@
         window.agregarProcesoOT = agregarProcesoOT;
         window.verDetalleOT = verDetalleOT;
         window.cerrarDetalleOT = cerrarDetalleOT;
+        window.eliminarOT = eliminarOT;
     </script>
 </body>
 </html>

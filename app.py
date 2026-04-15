@@ -9947,6 +9947,45 @@ def api_maquinaria_orden_detalle(orden_id):
     return jsonify({'ok': True, 'orden': orden.to_dict(), 'bom_items': bom_items, 'procesos': procesos})
 
 
+@app.route('/maquinaria/ordenes-trabajo/<int:orden_id>/imprimir')
+@login_required
+@requires_any_permission([('maquinaria_ordenes', 'view'), ('maquinaria_ordenes', 'edit'), ('maquinaria_ordenes', 'create')])
+def maquinaria_ordenes_print(orden_id):
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return redirect(url_for('maquinaria_ordenes_page'))
+
+    _ensure_maquinaria_ordenes_extension_tables()
+
+    orden = MaquinariaOrdenTrabajo.query.get_or_404(orden_id)
+    bom_items = sorted((orden.bom_items_ot or []), key=lambda x: x.id)
+    procesos = sorted((orden.procesos_ot or []), key=lambda x: (x.orden or 0, x.id or 0))
+    return render_template(
+        'maquinaria_ordenes_trabajo_print.html',
+        orden=orden,
+        bom_items=bom_items,
+        procesos=procesos,
+    )
+
+
+@app.route('/api/maquinaria/ordenes-trabajo/<int:orden_id>/delete', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_ordenes', 'delete'), ('maquinaria_ordenes', 'edit'), ('maquinaria_ordenes', 'update')])
+def api_maquinaria_orden_delete(orden_id):
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return jsonify({'ok': False, 'message': 'Tablas de Maquinaria no disponibles'}), 503
+
+    _ensure_maquinaria_ordenes_extension_tables()
+
+    orden = MaquinariaOrdenTrabajo.query.get_or_404(orden_id)
+    folio = orden.folio_ot or f'OT #{orden.id}'
+
+    db.session.delete(orden)
+    db.session.commit()
+    return jsonify({'ok': True, 'message': f'Orden {folio} eliminada'})
+
+
 @app.route('/maquinaria/ordenes-trabajo/create', methods=['POST'])
 @login_required
 @requires_any_permission([('maquinaria_ordenes', 'create'), ('maquinaria_ordenes', 'edit'), ('maquinaria_ordenes', 'update')])
