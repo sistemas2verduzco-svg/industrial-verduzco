@@ -9675,6 +9675,8 @@ MAQUINARIA_TABLES = [
     'maquinaria_boms',
     'maquinaria_bom_componentes',
     'maquinaria_ordenes_trabajo',
+    'maquinaria_orden_bom_items',
+    'maquinaria_orden_procesos',
     'maquinaria_calidad_registros',
     'maquinaria_series',
     'maquinaria_almacen_resguardos',
