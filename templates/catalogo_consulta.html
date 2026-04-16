@@ -63,19 +63,21 @@
             font-weight: 600;
         }
 
-            box-shadow: 0 3px 10px rgba(163, 72, 7, 0.25);
+        .consulta-search input {
+            width: 100%;
+            box-sizing: border-box;
+            font-size: 1rem;
+            padding: 0.85rem 1rem;
+            border-radius: 12px;
+            border: 1px solid var(--consulta-border);
+            background: #ffffff;
         }
 
-        .consulta-report-btn.excel {
-            border-color: #15803d;
-            background: linear-gradient(120deg, #16a34a, #22c55e);
-            box-shadow: 0 3px 10px rgba(21, 128, 61, 0.25);
-        }
-
-        .consulta-report-btn.excel-ch {
-            border-color: #1d4ed8;
-            background: linear-gradient(120deg, #1e40af, #2563eb);
-            box-shadow: 0 3px 10px rgba(37, 99, 235, 0.25);
+        .consulta-categories {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+            margin-top: 1rem;
         }
 
         .consulta-categories button {
