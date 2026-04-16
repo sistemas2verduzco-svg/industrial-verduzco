@@ -199,6 +199,48 @@
       -webkit-overflow-scrolling: touch;
     }
 
+    .qc-alert-box {
+      margin-top: 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      background: #f8fbff;
+      padding: 12px;
+    }
+
+    .qc-alert-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .qc-alert-item {
+      border: 1px solid var(--line);
+      border-left: 4px solid #94a3b8;
+      border-radius: 8px;
+      background: #fff;
+      padding: 8px;
+      font-size: 12px;
+      color: #334155;
+    }
+
+    .qc-alert-item.verde { border-left-color: #16a34a; }
+    .qc-alert-item.amarillo { border-left-color: #f59e0b; }
+    .qc-alert-item.rojo { border-left-color: #ef4444; }
+
+    .qc-pill {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 2px 7px;
+      font-size: 10px;
+      font-weight: 800;
+      border: 1px solid transparent;
+    }
+
+    .qc-pill.verde { background: #dcfce7; border-color: #86efac; color: #166534; }
+    .qc-pill.amarillo { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+    .qc-pill.rojo { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+
     table {
       width: 100%;
       min-width: 820px;
@@ -533,6 +575,7 @@ Fecha: {{ hoja.scrap_qc.fecha or 'N/A' }}</div>
                 <th>T/CO</th>
                 <th>T/O</th>
                 <th>Estado</th>
+                <th>Semáforo QC</th>
               </tr>
             </thead>
             <tbody>
@@ -548,15 +591,41 @@ Fecha: {{ hoja.scrap_qc.fecha or 'N/A' }}</div>
                   <td>{{ est.t_tco or '' }}</td>
                   <td>{{ est.t_to or '' }}</td>
                   <td>{{ est.estado or '' }}</td>
+                  <td>
+                    {% if est.qc_alert %}
+                      <span class="qc-pill {{ est.qc_alert.color }}">{{ est.qc_alert.label }}</span><br>
+                      <span style="font-size:11px; color:#64748b;">{{ est.qc_alert.cantidad_revisada or 0 }} pzas · {{ est.qc_alert.fecha or '' }}</span>
+                    {% else %}
+                      <span style="font-size:11px; color:#64748b;">Sin alerta</span>
+                    {% endif %}
+                  </td>
                 </tr>
                 {% endfor %}
               {% else %}
                 <tr>
-                  <td colspan="9" style="color:#64748b;">Esta hoja no tiene procesos cargados.</td>
+                  <td colspan="10" style="color:#64748b;">Esta hoja no tiene procesos cargados.</td>
                 </tr>
               {% endif %}
             </tbody>
           </table>
+        </div>
+
+        <div class="qc-alert-box">
+          <div class="k">Historial Semáforo QC</div>
+          {% if hoja.qc_alerts_recent %}
+          <div class="qc-alert-list">
+            {% for alert in hoja.qc_alerts_recent %}
+            <div class="qc-alert-item {{ alert.color }}">
+              <strong>{{ alert.label }}</strong> · Proceso: <strong>{{ alert.process_name or '-' }}</strong><br>
+              Piezas revisadas: <strong>{{ alert.cantidad_revisada or 0 }}</strong>
+              · Usuario: <strong>{{ alert.usuario or '-' }}</strong>
+              · Fecha: <strong>{{ alert.fecha or '' }}</strong>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="v" style="color:#64748b;">Sin alertas de semáforo QC registradas para esta hoja.</div>
+          {% endif %}
         </div>
 
         <div class="sign-row">

@@ -347,6 +347,37 @@
             font-size: 11px;
         }
 
+        .qc-process-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            border-radius: 999px;
+            font-size: 10px;
+            padding: 2px 7px;
+            font-weight: 800;
+            margin-left: 6px;
+            border: 1px solid transparent;
+            white-space: nowrap;
+        }
+
+        .qc-process-chip.verde {
+            background: #dcfce7;
+            border-color: #86efac;
+            color: #166534;
+        }
+
+        .qc-process-chip.amarillo {
+            background: #fef3c7;
+            border-color: #fcd34d;
+            color: #92400e;
+        }
+
+        .qc-process-chip.rojo {
+            background: #fee2e2;
+            border-color: #fca5a5;
+            color: #991b1b;
+        }
+
         .modal-backdrop {
             position: fixed;
             inset: 0;
@@ -443,8 +474,9 @@
             border-radius: 12px;
             box-shadow: 0 4px 12px rgba(12, 40, 73, 0.07);
             padding: 14px;
-            display: flex;
-            align-items: center;
+            display: grid;
+            grid-template-columns: 120px minmax(0, 1fr) 150px;
+            align-items: start;
             gap: 14px;
             transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
         }
@@ -479,7 +511,15 @@
             object-fit: contain;
         }
         .maquina-info {
-            flex: 1;
+            min-width: 0;
+            display: grid;
+            gap: 10px;
+        }
+
+        .maquina-summary {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: 8px;
         }
         .maquina-nombre {
             font-size: 20px;
@@ -525,7 +565,138 @@
             display: flex;
             gap: 8px;
             flex-direction: column;
-            min-width: 190px;
+            min-width: 150px;
+        }
+
+        .qc-panel {
+            margin-top: 8px;
+            border: 1px solid #d8e4ef;
+            border-radius: 10px;
+            background: #fff;
+            overflow: hidden;
+        }
+
+        .qc-panel > summary {
+            list-style: none;
+            cursor: pointer;
+            padding: 10px 12px;
+            background: linear-gradient(180deg, #f8fbff, #eef6ff);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12px;
+            font-weight: 800;
+            color: #234766;
+        }
+
+        .qc-panel > summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .qc-panel-body {
+            padding: 10px 12px 12px;
+            display: grid;
+            gap: 10px;
+        }
+
+        .qc-panel-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+            gap: 10px;
+            align-items: start;
+        }
+
+        .qc-field-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 120px;
+            gap: 8px;
+        }
+
+        .qc-field label {
+            display: block;
+            font-size: 11px;
+            font-weight: 700;
+            color: #4b647d;
+            margin-bottom: 4px;
+        }
+
+        .qc-field select,
+        .qc-field input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #c7d9ec;
+            border-radius: 8px;
+            font-size: 12px;
+            box-sizing: border-box;
+            background: #fff;
+        }
+
+        .qc-action-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .qc-alert-btn {
+            border: 0;
+            border-radius: 10px;
+            padding: 10px 8px;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            color: #fff;
+            box-shadow: 0 3px 10px rgba(15, 23, 42, 0.12);
+        }
+
+        .qc-alert-btn.verde { background: linear-gradient(120deg, #16a34a, #22c55e); }
+        .qc-alert-btn.amarillo { background: linear-gradient(120deg, #d97706, #f59e0b); }
+        .qc-alert-btn.rojo { background: linear-gradient(120deg, #dc2626, #ef4444); }
+
+        .qc-meta-note {
+            font-size: 11px;
+            color: #64748b;
+        }
+
+        .qc-history {
+            border-top: 1px solid #e5edf5;
+            padding-top: 10px;
+            display: grid;
+            gap: 6px;
+        }
+
+        .qc-history-title {
+            font-size: 11px;
+            font-weight: 800;
+            color: #234766;
+            text-transform: uppercase;
+            letter-spacing: 0.25px;
+        }
+
+        .qc-history-item {
+            border: 1px solid #e2e8f0;
+            border-left: 4px solid #94a3b8;
+            border-radius: 8px;
+            background: #f8fbff;
+            padding: 7px 8px;
+            font-size: 11px;
+            color: #42566b;
+        }
+
+        .qc-history-item.verde { border-left-color: #16a34a; }
+        .qc-history-item.amarillo { border-left-color: #f59e0b; }
+        .qc-history-item.rojo { border-left-color: #ef4444; }
+
+        .qc-history-top {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 3px;
+        }
+
+        .qc-history-empty {
+            font-size: 11px;
+            color: #708397;
         }
         .btn-small {
             padding: 10px 12px;
@@ -622,18 +793,23 @@
                 max-height: 46vh;
             }
             .maquina-card {
-                flex-direction: column;
-                align-items: stretch;
+                grid-template-columns: 1fr;
             }
             .maquina-image {
                 width: 100%;
                 height: 150px;
+                max-width: 180px;
             }
             .maquina-actions {
                 display: grid;
                 grid-template-columns: repeat(2, minmax(0, 1fr));
                 gap: 8px;
                 min-width: 0;
+            }
+            .qc-panel-grid,
+            .qc-field-grid,
+            .qc-action-grid {
+                grid-template-columns: 1fr;
             }
             .btn-small {
                 padding: 8px 9px;
@@ -785,7 +961,7 @@
                         <div class="maquina-info">
                             <div class="maquina-nombre">{{ maq.nombre }}<span class="tipo-chip">{{ maq.tipo or 'SIN TIPO' }}</span></div>
                             <div class="maquina-desc">{{ maq.descripcion }}</div>
-                            <div>
+                            <div class="maquina-summary">
                                 {% if maq.hoja_activa %}
                                     <span class="status-badge status-produciendo">🏭 Produciendo</span>
                                     <div style="margin-top: 4px; font-size: 12px; color: #666;">
@@ -814,12 +990,63 @@
                                                 >
                                                 <span>{{ est.operacion or est.nombre or ('Proceso ' ~ loop.index) }}</span>
                                                 <span class="process-chip {{ (est.estado or 'pendiente')|replace('_','-') }}">{{ est.estado or 'pendiente' }}</span>
+                                                {% if est.qc_alert %}
+                                                <span class="qc-process-chip {{ est.qc_alert.color }}">{{ est.qc_alert.label }}</span>
+                                                {% endif %}
                                             </label>
                                             {% endfor %}
                                         {% else %}
                                             <div class="process-empty">Esta hoja no tiene procesos configurados.</div>
                                         {% endif %}
                                     </div>
+
+                                    <details class="qc-panel" open>
+                                        <summary>
+                                            <span>Semáforo de calidad por proceso</span>
+                                            <span>▼</span>
+                                        </summary>
+                                        <div class="qc-panel-body">
+                                            <div class="qc-panel-grid">
+                                                <div class="qc-field-grid">
+                                                    <div class="qc-field">
+                                                        <label>Proceso revisado</label>
+                                                        <select id="qcProceso-{{ maq.id }}">
+                                                            {% for est in maq.hoja_activa.estaciones|sort(attribute='orden') %}
+                                                            <option value="{{ est.id }}" {% if est.estado == 'en_curso' %}selected{% endif %}>P{{ est.orden }} · {{ est.operacion or est.nombre or ('Proceso ' ~ loop.index) }}</option>
+                                                            {% endfor %}
+                                                        </select>
+                                                    </div>
+                                                    <div class="qc-field">
+                                                        <label>Pzas revisadas</label>
+                                                        <input id="qcCantidad-{{ maq.id }}" type="number" min="1" value="1">
+                                                    </div>
+                                                </div>
+                                                <div class="qc-action-grid">
+                                                    <button class="qc-alert-btn verde" type="button" onclick="registrarSemaforoQC({{ maq.id }}, {{ maq.hoja_activa.id }}, 'verificado')">Verificado</button>
+                                                    <button class="qc-alert-btn amarillo" type="button" onclick="registrarSemaforoQC({{ maq.id }}, {{ maq.hoja_activa.id }}, 'cuarentena')">Cuarentena</button>
+                                                    <button class="qc-alert-btn rojo" type="button" onclick="registrarSemaforoQC({{ maq.id }}, {{ maq.hoja_activa.id }}, 'scrap')">Scrap</button>
+                                                </div>
+                                            </div>
+                                            <div class="qc-meta-note">La fecha y hora se registran automaticamente al guardar. La alerta queda ligada a máquina, hoja y proceso.</div>
+                                            <div class="qc-history">
+                                                <div class="qc-history-title">Últimas alertas</div>
+                                                {% if maq.hoja_activa.qc_alerts_recent %}
+                                                    {% for alert in maq.hoja_activa.qc_alerts_recent %}
+                                                    <div class="qc-history-item {{ alert.color }}">
+                                                        <div class="qc-history-top">
+                                                            <strong>{{ alert.label }}</strong>
+                                                            <span>{{ alert.fecha or '' }}</span>
+                                                        </div>
+                                                        <div>Proceso: <strong>{{ alert.process_name or '-' }}</strong></div>
+                                                        <div>Piezas revisadas: <strong>{{ alert.cantidad_revisada or 0 }}</strong> · Usuario: <strong>{{ alert.usuario or '-' }}</strong></div>
+                                                    </div>
+                                                    {% endfor %}
+                                                {% else %}
+                                                    <div class="qc-history-empty">Sin alertas registradas para esta hoja.</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </details>
                                 {% else %}
                                     <span class="status-badge status-parado">⏸ Sin producción</span>
                                 {% endif %}
@@ -1503,6 +1730,44 @@
             const data = await res.json();
             if (!res.ok) {
                 throw new Error(data.error || 'No se pudo actualizar el proceso MP');
+            }
+            await softRefreshBoard();
+        } catch (err) {
+            alert('Error: ' + err.message);
+        }
+    }
+
+    async function registrarSemaforoQC(maquinaId, hojaMpId, alertType) {
+        const procesoSel = document.getElementById('qcProceso-' + maquinaId);
+        const cantidadInput = document.getElementById('qcCantidad-' + maquinaId);
+        const processId = parseInt(procesoSel && procesoSel.value, 10);
+        const cantidadRevisada = parseInt(cantidadInput && cantidadInput.value, 10);
+
+        if (!processId) {
+            alert('Selecciona el proceso revisado.');
+            return;
+        }
+        if (!cantidadRevisada || cantidadRevisada <= 0) {
+            alert('Captura una cantidad valida de piezas revisadas.');
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/qc_estaciones/mp_alert', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    maquina_id: maquinaId,
+                    hoja_mp_id: hojaMpId,
+                    process_id: processId,
+                    cantidad_revisada: cantidadRevisada,
+                    alert_type: alertType,
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.error || 'No se pudo registrar la alerta de calidad');
             }
             await softRefreshBoard();
         } catch (err) {

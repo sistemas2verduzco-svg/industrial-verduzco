@@ -1217,6 +1217,72 @@ def _build_mp_virtual_estaciones_by_pn(pn_value, completed_process_ids=None):
     return virtual
 
 
+def _mp_qc_alert_type_meta(alert_type):
+    normalized = (str(alert_type or '').strip().lower() or 'verificado')
+    if normalized == 'scrat':
+        normalized = 'scrap'
+    mapping = {
+        'verificado': {'label': 'Verificado', 'color': 'verde'},
+        'cuarentena': {'label': 'Cuarentena', 'color': 'amarillo'},
+        'scrap': {'label': 'Scrap', 'color': 'rojo'},
+    }
+    return normalized, mapping.get(normalized, mapping['verificado'])
+
+
+def _mp_qc_alert_payload_from_registro(registro):
+    mediciones = registro.mediciones if isinstance(registro.mediciones, dict) else {}
+    if mediciones.get('module') != 'estaciones_t_mp_qc':
+        return None
+
+    alert_type, meta = _mp_qc_alert_type_meta(mediciones.get('alert_type') or registro.resultado)
+    process_id = 0
+    try:
+        process_id = int(mediciones.get('process_id') or 0)
+    except Exception:
+        process_id = 0
+
+    hoja_mp_id = 0
+    try:
+        hoja_mp_id = int(mediciones.get('hoja_mp_id') or 0)
+    except Exception:
+        hoja_mp_id = 0
+
+    reviewed_at = registro.creado_en.isoformat() if registro.creado_en else None
+    return {
+        'id': registro.id,
+        'maquina_id': registro.maquina_id,
+        'hoja_mp_id': hoja_mp_id,
+        'process_id': process_id,
+        'process_name': mediciones.get('process_name') or '',
+        'tipo': alert_type,
+        'label': meta['label'],
+        'color': meta['color'],
+        'cantidad_revisada': int(registro.cantidad_inspeccionada or 0),
+        'usuario': registro.usuario or '',
+        'fecha': reviewed_at,
+        'maquina_nombre': mediciones.get('maquina_nombre') or '',
+        'hoja_nombre': mediciones.get('hoja_nombre') or '',
+    }
+
+
+def _group_mp_qc_alerts_by_maquina_hoja(registros):
+    grouped = {}
+    for registro in registros or []:
+        payload = _mp_qc_alert_payload_from_registro(registro)
+        if not payload:
+            continue
+
+        key = (int(payload.get('maquina_id') or 0), int(payload.get('hoja_mp_id') or 0))
+        bucket = grouped.setdefault(key, {'recent': [], 'latest_by_process': {}})
+        if len(bucket['recent']) < 8:
+            bucket['recent'].append(payload)
+
+        process_id = int(payload.get('process_id') or 0)
+        if process_id > 0 and process_id not in bucket['latest_by_process']:
+            bucket['latest_by_process'][process_id] = payload
+    return grouped
+
+
 def _build_mp_time_estaciones_by_clave_id(clave_id):
     """Construye estaciones temporales para estimar tiempos de hojas MP."""
     procesos = ClaveProceso.query.filter_by(clave_id=clave_id).order_by(ClaveProceso.orden.asc()).all()
@@ -4198,6 +4264,12 @@ def hoja_ruta_nuevo_ver(hoja_id):
     h['qr_payload'] = f"HRNID:{hoja.id};SERIE:{hoja.nombre or ''}"
     h['qr_deeplink'] = request.url_root.rstrip('/') + f"/hoja_nuevo/{hoja.id}"
     h['estaciones'] = _build_mp_virtual_estaciones_by_pn(hoja.pn, _mp_parse_completed_process_ids(hoja.materia_prima))
+    registros_qc = QCProduccionRegistro.query.filter_by(maquina_id=hoja.maquina_id).order_by(QCProduccionRegistro.creado_en.desc()).limit(120).all() if hoja.maquina_id else []
+    grouped_qc = _group_mp_qc_alerts_by_maquina_hoja(registros_qc)
+    qc_bundle = grouped_qc.get((int(hoja.maquina_id or 0), int(hoja.id)), {'recent': [], 'latest_by_process': {}})
+    for est in h['estaciones']:
+        est['qc_alert'] = qc_bundle['latest_by_process'].get(int(est.get('id') or 0))
+    h['qc_alerts_recent'] = qc_bundle['recent']
     return render_template('hoja_ruta_ver.html', hoja=h, volver_url='/hojas_ruta_nuevo_form')
 
 @app.route('/hojas_ruta')
@@ -4220,6 +4292,11 @@ def hojas_ruta_entregas_list():
         elif existing.estado != 'activa' and hoja.estado == 'activa':
             hoja_activa_por_maquina[hoja.maquina_id] = hoja
 
+    qc_registros = QCProduccionRegistro.query.filter(
+        QCProduccionRegistro.maquina_id.isnot(None)
+    ).order_by(QCProduccionRegistro.creado_en.desc()).limit(500).all()
+    qc_alerts_grouped = _group_mp_qc_alerts_by_maquina_hoja(qc_registros)
+
     maquinas_data = []
     for maq in maquinas:
         hoja_activa = hoja_activa_por_maquina.get(maq.id)
@@ -4233,6 +4310,10 @@ def hojas_ruta_entregas_list():
                 hoja_activa.pn,
                 _mp_parse_completed_process_ids(hoja_activa.materia_prima),
             )
+            qc_bundle = qc_alerts_grouped.get((int(maq.id), int(hoja_activa.id)), {'recent': [], 'latest_by_process': {}})
+            for est in hoja_activa_dict['estaciones']:
+                est['qc_alert'] = qc_bundle['latest_by_process'].get(int(est.get('id') or 0))
+            hoja_activa_dict['qc_alerts_recent'] = qc_bundle['recent']
             if not hoja_activa_dict.get('total_tiempo'):
                 hoja_activa_dict['total_tiempo'] = _compute_mp_total_time_preview_by_pn(
                     hoja_activa.pn,
@@ -6448,6 +6529,71 @@ def api_qc_estaciones_registro():
         db.session.rollback()
         logger.error(f"Error guardando QC estaciones: {e}", exc_info=True)
         return jsonify({'error': 'No se pudo guardar el control de calidad'}), 500
+
+
+@app.route('/api/qc_estaciones/mp_alert', methods=['POST'])
+@login_required
+@requires_any_permission([('calidad', 'edit'), ('estaciones', 'operate'), ('catalog', 'edit')])
+def api_qc_estaciones_mp_alert():
+    payload = request.get_json(silent=True) or request.form
+
+    try:
+        maquina_id = int(payload.get('maquina_id') or 0)
+        hoja_mp_id = int(payload.get('hoja_mp_id') or 0)
+        process_id = int(payload.get('process_id') or 0)
+        cantidad_revisada = int(payload.get('cantidad_revisada') or 0)
+    except Exception:
+        return jsonify({'error': 'Datos invalidos para registrar alerta QC'}), 422
+
+    alert_type, meta = _mp_qc_alert_type_meta(payload.get('alert_type'))
+    if maquina_id <= 0 or hoja_mp_id <= 0 or process_id <= 0 or cantidad_revisada <= 0:
+        return jsonify({'error': 'maquina_id, hoja_mp_id, process_id y cantidad_revisada son requeridos'}), 400
+
+    hoja = HojaRutaNueva.query.get_or_404(hoja_mp_id)
+    if int(hoja.maquina_id or 0) != maquina_id:
+        return jsonify({'error': 'La hoja no esta asignada a esa maquina'}), 409
+
+    procesos = _build_mp_virtual_estaciones_by_pn(hoja.pn, _mp_parse_completed_process_ids(hoja.materia_prima))
+    proceso = next((p for p in procesos if int(p.get('id') or 0) == process_id), None)
+    if not proceso:
+        return jsonify({'error': 'Proceso no encontrado para esta hoja'}), 404
+
+    maquina = Máquina.query.get(maquina_id)
+    reviewed_at = datetime.utcnow().isoformat()
+
+    try:
+        registro = QCProduccionRegistro(
+            maquina_id=maquina_id,
+            hoja_ruta_id=None,
+            clave_pieza=hoja.pn or hoja.nombre or 'SIN_CLAVE',
+            lote=hoja.nombre or None,
+            cantidad_inspeccionada=cantidad_revisada,
+            cantidad_aprobada=cantidad_revisada if alert_type == 'verificado' else 0,
+            cantidad_rechazada=cantidad_revisada if alert_type == 'scrap' else 0,
+            resultado=alert_type,
+            notas=payload.get('notas') or '',
+            mediciones={
+                'module': 'estaciones_t_mp_qc',
+                'alert_type': alert_type,
+                'alert_label': meta['label'],
+                'alert_color': meta['color'],
+                'hoja_mp_id': hoja.id,
+                'hoja_nombre': hoja.nombre or '',
+                'process_id': process_id,
+                'process_name': proceso.get('operacion') or proceso.get('nombre') or '',
+                'station_order': proceso.get('orden'),
+                'maquina_nombre': maquina.nombre if maquina else '',
+                'reviewed_at': reviewed_at,
+            },
+            usuario=session.get('user') or 'sistema',
+        )
+        db.session.add(registro)
+        db.session.commit()
+        return jsonify({'success': True, 'registro': _mp_qc_alert_payload_from_registro(registro)}), 201
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error guardando QC MP semaforo: {e}", exc_info=True)
+        return jsonify({'error': 'No se pudo guardar la alerta de calidad'}), 500
 
 
 @app.route('/api/maquinas/<int:maquina_id>/plantilla_default', methods=['POST'])
@@ -10683,7 +10829,7 @@ def maquinaria_calidad_create():
         funcionalidad_ok=request.form.get('funcionalidad_ok') == 'on',
         seguridad_ok=request.form.get('seguridad_ok') == 'on',
         acabado_ok=request.form.get('acabado_ok') == 'on',
-        observaciones=_clean_nullable_text(request.form.get('observaciones', '')),
+        observaciones=_clean_nullable_text(request  .form.get('observaciones', '')),
         evaluado_por=session.get('user'),
     )
     db.session.add(registro)
