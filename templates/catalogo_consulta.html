@@ -78,6 +78,24 @@
             margin-top: 1rem;
         }
 
+        .consulta-tools {
+            margin-top: 0.9rem;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .consulta-report-btn {
+            border: 1px solid #c77a45;
+            background: linear-gradient(120deg, #d97706, #ea580c);
+            color: #fff;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 0.96rem;
+            border-radius: 999px;
+            padding: 0.65rem 1.05rem;
+            box-shadow: 0 3px 10px rgba(163, 72, 7, 0.25);
+        }
+
         .consulta-categories button {
             border: 1px solid var(--consulta-border);
             background: #ffffff;
@@ -266,6 +284,9 @@
                 <button type="button" data-clasificacion="CH">CH</button>
                 <button type="button" data-clasificacion="VENTAS">Ventas</button>
             </div>
+            <div class="consulta-tools">
+                <a id="consulta-reporte-link" class="consulta-report-btn" href="/catalogo_consulta/reporte_compra" target="_blank" rel="noopener">Imprimir reporte de compra</a>
+            </div>
         </section>
 
         <section id="consulta-productos" class="consulta-grid">
@@ -349,7 +370,18 @@
             const clearBtn = document.getElementById('consulta-clear');
             const sugerencias = document.getElementById('consulta-sugerencias');
             const categoryButtons = document.querySelectorAll('[data-clasificacion]');
+            const reporteLink = document.getElementById('consulta-reporte-link');
             let clasificacionActual = '';
+
+            function syncReporteLink() {
+                if (!reporteLink) return;
+                const q = input.value.trim();
+                const params = new URLSearchParams();
+                if (q) params.append('q', q);
+                if (clasificacionActual) params.append('clasificacion', clasificacionActual);
+                const suffix = params.toString();
+                reporteLink.href = '/catalogo_consulta/reporte_compra' + (suffix ? ('?' + suffix) : '');
+            }
 
             function aplicarFiltros() {
                 const q = input.value.trim();
@@ -357,6 +389,7 @@
                 if (q) params.q = q;
                 if (clasificacionActual) params.clasificacion = clasificacionActual;
                 cargarProductosConsulta(params);
+                syncReporteLink();
             }
 
             categoryButtons.forEach(btn => {
@@ -367,6 +400,8 @@
                     aplicarFiltros();
                 });
             });
+
+            syncReporteLink();
 
             // Debounce helper
             let debounceTimer = null;

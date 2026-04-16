@@ -7185,6 +7185,69 @@ def _producto_sanitizado(p):
     }
 
 
+def _catalogo_productos_filtrados(query='', categoria='', clasificacion=''):
+    productos_q = Producto.query
+    q = (query or '').strip().lower()
+    cat = (categoria or '').strip().lower()
+    cla = (clasificacion or '').strip().lower()
+
+    if q:
+        productos_q = productos_q.filter(
+            db.or_(
+                Producto.nombre.ilike(f'%{q}%'),
+                Producto.descripcion.ilike(f'%{q}%'),
+                Producto.clave.ilike(f'%{q}%')
+            )
+        )
+    if cat:
+        productos_q = productos_q.filter(Producto.categoria.ilike(f'%{cat}%'))
+    if cla:
+        productos_q = productos_q.filter(Producto.clasificacion.ilike(f'%{cla}%'))
+
+    return productos_q
+
+
+@app.route('/catalogo_consulta/reporte_compra')
+def catalogo_consulta_reporte_compra():
+    """Reporte imprimible de compra por producto (clave, descripcion, proveedor, precio y divisa)."""
+    try:
+        query = request.args.get('q', '')
+        categoria = request.args.get('categoria', '')
+        clasificacion = request.args.get('clasificacion', '')
+
+        productos = _catalogo_productos_filtrados(query=query, categoria=categoria, clasificacion=clasificacion).all()
+        productos = sorted(
+            productos,
+            key=lambda p: ((p.clave or '').strip().lower(), (p.nombre or '').strip().lower())
+        )
+
+        filas = []
+        for p in productos:
+            data = _producto_sanitizado(p)
+            filas.append({
+                'clave': data.get('clave') or '',
+                'descripcion': data.get('descripcion') or data.get('nombre') or '',
+                'proveedor': data.get('proveedor_ultimo') or '',
+                'precio_compra': data.get('precio_compra_ultimo'),
+                'divisa': data.get('divisa_ultima') or '',
+                'fecha_precio': data.get('fecha_precio_ultimo')
+            })
+
+        return render_template(
+            'catalogo_consulta_reporte_compra.html',
+            filas=filas,
+            total_filas=len(filas),
+            filtros={
+                'q': query,
+                'categoria': categoria,
+                'clasificacion': clasificacion,
+            },
+            fecha_generacion=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/public/categorias', methods=['GET'])
 def public_categorias():
     """Public endpoint para obtener categorías distintas."""
@@ -7205,19 +7268,11 @@ def public_buscar_productos():
         categoria = request.args.get('categoria', '').lower()
         clasificacion = request.args.get('clasificacion', '').lower()
 
-        productos_q = Producto.query
-        if query:
-            productos_q = productos_q.filter(
-                db.or_(
-                    Producto.nombre.ilike(f'%{query}%'),
-                    Producto.descripcion.ilike(f'%{query}%'),
-                    Producto.clave.ilike(f'%{query}%')
-                )
-            )
-        if categoria:
-            productos_q = productos_q.filter(Producto.categoria.ilike(f'%{categoria}%'))
-        if clasificacion:
-            productos_q = productos_q.filter(Producto.clasificacion.ilike(f'%{clasificacion}%'))
+        productos_q = _catalogo_productos_filtrados(
+            query=query,
+            categoria=categoria,
+            clasificacion=clasificacion,
+        )
 
         productos = productos_q.all()
         return jsonify([_producto_sanitizado(p) for p in productos])
