@@ -826,6 +826,32 @@
                 return formatElapsed(elapsedMsFromPlan(order && order.plan ? order.plan : null));
             }
 
+            function getOrderProcessDefaults(order) {
+                const rawSteps = Array.isArray(order && order.default_steps) ? order.default_steps : [];
+                const steps = rawSteps
+                    .map(s => ({
+                        name: String((s && s.name) || '').trim(),
+                        duration_hours: durationHoursSafe(s && s.duration_hours, 1),
+                        started_at: null,
+                        elapsed_seconds: 0,
+                    }))
+                    .filter(s => !!s.name);
+
+                const processName = steps.length
+                    ? steps.map(s => s.name).join(', ')
+                    : String((order && order.default_process_name) || '').trim();
+
+                const durationHours = steps.length
+                    ? steps.reduce((acc, s) => acc + durationHoursSafe(s.duration_hours, 1), 0)
+                    : durationHoursSafe(order && order.default_duration_hours, 0);
+
+                return {
+                    steps: steps,
+                    processName: processName,
+                    durationHours: durationHours,
+                };
+            }
+
             /** Parse "HH:MM[:SS]" or decimal-hours string → float hours */
             function parseHHMM(val) {
                 if (!val && val !== 0) return 1;
@@ -996,6 +1022,7 @@
             async function saveOrderPlan(order, patch, okMessage, options) {
                 const plan = ensureOrderPlan(order);
                 const opts = options || {};
+                const procDefaults = getOrderProcessDefaults(order);
                 const contextOpId = Number(opts.operator_id_context || patch.operator_id || plan.operator_id || 0) || null;
                 const opRef = contextOpId ? operatorMap.get(contextOpId) : null;
                 const explicitPlans = Array.isArray(opts.replacePlans) ? opts.replacePlans.slice() : null;
@@ -1004,14 +1031,14 @@
                         operator_id: contextOpId,
                         operator_username: opRef ? (opRef.username || '') : '',
                         station: '',
-                        process_name: '',
+                        process_name: procDefaults.processName || '',
                         process_status: 'por_iniciar',
                         start_at: null,
                         timer_started_at: null,
                         elapsed_seconds: 0,
-                        duration_hours: 0,
+                        duration_hours: procDefaults.durationHours || 0,
                         machine_icon: '🏭',
-                        steps: [],
+                        steps: (procDefaults.steps || []).slice(),
                     })
                     : plan;
 
@@ -1031,6 +1058,14 @@
                     machine_icon: Object.prototype.hasOwnProperty.call(patch, 'machine_icon') ? (patch.machine_icon || '🏭') : (basePlan.machine_icon || '🏭'),
                     steps: Object.prototype.hasOwnProperty.call(patch, 'steps') ? (Array.isArray(patch.steps) ? patch.steps : []) : (Array.isArray(basePlan.steps) ? basePlan.steps : []),
                 };
+
+                if (!String(mergedPlan.process_name || '').trim() && (!Array.isArray(mergedPlan.steps) || !mergedPlan.steps.length)) {
+                    if (procDefaults.steps.length) {
+                        mergedPlan.steps = procDefaults.steps.slice();
+                        mergedPlan.process_name = procDefaults.processName || '';
+                        mergedPlan.duration_hours = durationHoursSafe(procDefaults.durationHours, mergedPlan.duration_hours || 0);
+                    }
+                }
 
                 const plans = getOrderPlans(order).slice();
                 if (explicitPlans) {
@@ -1324,10 +1359,11 @@
                     const active = Number(o.id) === Number(selectedOrderId) ? 'active' : '';
                     const st = statusById((o.plan && o.plan.process_status) || 'por_iniciar');
                     const opName = (o.plan && o.plan.operator_username) ? o.plan.operator_username : 'Sin operador';
-                    const processName = (o.plan && o.plan.process_name) ? o.plan.process_name : 'Sin proceso';
+                    const procDefaults = getOrderProcessDefaults(o);
+                    const processName = (o.plan && o.plan.process_name) ? o.plan.process_name : (procDefaults.processName || 'Sin proceso');
                     const hasOperator = Number((o.plan && o.plan.operator_id) || 0) > 0;
                     const hasIntervention = !!String((o.plan && o.plan.station) || '').trim();
-                    const hasProcess = !!String((o.plan && o.plan.process_name) || '').trim();
+                    const hasProcess = !!String((o.plan && o.plan.process_name) || procDefaults.processName || '').trim();
                     const isInProgress = st.id === 'en_proceso';
                     const hasAllAssignments = hasOperator && hasIntervention && hasProcess;
                     const missing = [

@@ -10280,6 +10280,25 @@ def maquinaria_estaciones_page():
     for o in ordenes:
         plan = _mye_parse_plan_state(o.notas)
         order_notes = _mye_strip_plan_state_block(o.notas)
+        procesos_ot = sorted((o.procesos_ot or []), key=lambda x: (x.orden or 0, x.id or 0))
+        default_steps = []
+        for proc in procesos_ot:
+            proc_name = _clean_nullable_text(proc.nombre) or ''
+            if not proc_name:
+                continue
+            dur_txt = _clean_nullable_text(proc.t_to) or _clean_nullable_text(proc.t_tct) or _clean_nullable_text(proc.t_e) or ''
+            dur_seconds = _parse_time_to_seconds(dur_txt)
+            dur_hours = round(max(1, dur_seconds) / 3600.0, 4)
+            default_steps.append({
+                'name': proc_name,
+                'duration_hours': dur_hours,
+                'started_at': None,
+                'elapsed_seconds': 0,
+            })
+
+        default_process_name = ', '.join([s.get('name') for s in default_steps if s.get('name')])
+        default_duration_hours = round(sum(float(s.get('duration_hours') or 0) for s in default_steps), 4)
+
         order_status = (o.estado or '').strip().lower() or 'planeacion'
         plan_status = (plan.get('process_status') or '').strip().lower()
         if not plan_status:
@@ -10298,18 +10317,21 @@ def maquinaria_estaciones_page():
             'estado': o.estado or 'planeacion',
             'fecha_objetivo': o.fecha_objetivo.isoformat() if o.fecha_objetivo else None,
             'notas': order_notes or '',
+            'default_process_name': default_process_name,
+            'default_duration_hours': default_duration_hours,
+            'default_steps': default_steps,
             'plan': {
                 'operator_id': plan.get('operator_id'),
                 'operator_username': plan.get('operator_username') or '',
                 'station': plan.get('station') or '',
-                'process_name': plan.get('process_name') or '',
+                'process_name': plan.get('process_name') or default_process_name,
                 'process_status': plan_status,
                 'start_at': plan.get('start_at') or None,
                 'timer_started_at': plan.get('timer_started_at') or None,
                 'elapsed_seconds': float(plan.get('elapsed_seconds') or 0),
-                'duration_hours': float(plan.get('duration_hours') or 0),
+                'duration_hours': float(plan.get('duration_hours') or default_duration_hours or 0),
                 'machine_icon': plan.get('machine_icon') or _mye_machine_icon(o.clave_maquina),
-                'steps': plan.get('steps') or [],
+                'steps': plan.get('steps') or default_steps,
                 'plans': plan.get('plans') or [],
             },
         })
