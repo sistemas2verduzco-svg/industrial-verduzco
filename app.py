@@ -7230,6 +7230,8 @@ def _catalogo_reporte_compra_data(query='', categoria='', clasificacion='', solo
     filas = []
     for p in productos:
         data = _producto_sanitizado(p)
+        clasificacion_producto = (data.get('clasificacion') or '').strip()
+        es_china = 'SI' if 'CH' in clasificacion_producto.upper() else 'NO'
         filas.append({
             'clave': data.get('clave') or '',
             'descripcion': data.get('descripcion') or data.get('nombre') or '',
@@ -7237,7 +7239,8 @@ def _catalogo_reporte_compra_data(query='', categoria='', clasificacion='', solo
             'precio_compra': data.get('precio_compra_ultimo'),
             'divisa': data.get('divisa_ultima') or '',
             'fecha_precio': data.get('fecha_precio_ultimo'),
-            'clasificacion': data.get('clasificacion') or ''
+            'clasificacion': clasificacion_producto,
+            'china': es_china,
         })
 
     return filas
@@ -7308,7 +7311,7 @@ def catalogo_consulta_reporte_compra_excel():
 
         df = pd.DataFrame(filas)
         if df.empty:
-            df = pd.DataFrame(columns=['clave', 'descripcion', 'proveedor', 'precio_compra', 'divisa', 'fecha_precio', 'clasificacion'])
+            df = pd.DataFrame(columns=['clave', 'descripcion', 'proveedor', 'precio_compra', 'divisa', 'fecha_precio', 'clasificacion', 'china'])
 
         df = df.rename(columns={
             'clave': 'CLAVE',
@@ -7318,6 +7321,7 @@ def catalogo_consulta_reporte_compra_excel():
             'divisa': 'DIVISA',
             'fecha_precio': 'FECHA_PRECIO',
             'clasificacion': 'CLASIFICACION',
+            'china': 'CHINA',
         })
 
         output = BytesIO()

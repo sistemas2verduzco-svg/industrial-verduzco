@@ -179,7 +179,8 @@
             </div>
             <div class="actions">
                 <button class="btn btn-print" onclick="window.print()">Imprimir reporte</button>
-                <a class="btn btn-print" style="background:#2563eb;" href="/catalogo_consulta/reporte_compra_excel{% if reporte_query_string %}?{{ reporte_query_string }}{% endif %}">Descargar Excel</a>
+                <a class="btn btn-print" style="background:#2563eb;" href="/catalogo_consulta/reporte_compra_excel{% if reporte_query_string %}?{{ reporte_query_string }}{% endif %}">Descargar Excel (este reporte)</a>
+                <a class="btn btn-print" style="background:#1d4ed8;" href="/catalogo_consulta/reporte_compra_excel">Descargar Excel completo</a>
                 <a class="btn btn-back" href="/catalogo_consulta">Volver a consulta</a>
             </div>
         </section>
@@ -194,6 +195,7 @@
                         <th>Proveedor</th>
                         <th class="text-right">Precio compra</th>
                         <th>Divisa</th>
+                        <th>China</th>
                         <th>Fecha precio</th>
                     </tr>
                 </thead>
@@ -211,6 +213,7 @@
                             {% endif %}
                         </td>
                         <td>{{ fila.divisa or '-' }}</td>
+                        <td>{{ fila.china or 'NO' }}</td>
                         <td>{{ fila.fecha_precio or '-' }}</td>
                     </tr>
                     {% endfor %}
