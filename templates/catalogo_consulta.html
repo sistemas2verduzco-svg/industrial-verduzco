@@ -310,6 +310,22 @@
             return `Compa: $${precio.toFixed(2)} ${divisa}`.trim();
         }
 
+        function formatProveedorCompra(producto) {
+            const proveedor = (producto.proveedor_ultimo || '').trim();
+            if (!proveedor) {
+                return 'Proveedor compra: N/A';
+            }
+            return `Proveedor compra: ${proveedor}`;
+        }
+
+        function formatFechaCompra(producto) {
+            const fecha = (producto.fecha_precio_ultimo || '').trim();
+            if (!fecha) {
+                return 'Fecha compra: N/A';
+            }
+            return `Fecha compra: ${fecha}`;
+        }
+
         function formatPrecioVenta(producto) {
             const precio = Number(producto.precio);
             if (!Number.isFinite(precio)) {
@@ -344,6 +360,8 @@
                         <p class="consulta-desc">${p.descripcion || 'Sin descripcion'}</p>
                         <div class="consulta-price">${formatPrecioVenta(p)}</div>
                         <div class="consulta-meta">${formatPrecioCompra(p)}</div>
+                        <div class="consulta-meta">${formatProveedorCompra(p)}</div>
+                        <div class="consulta-meta">${formatFechaCompra(p)}</div>
                         <div class="consulta-meta">${metaParts.join(' | ')}</div>
                     </div>
                 `;
