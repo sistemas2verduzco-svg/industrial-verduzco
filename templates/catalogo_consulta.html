@@ -82,6 +82,8 @@
             margin-top: 0.9rem;
             display: flex;
             justify-content: flex-end;
+            gap: 0.5rem;
+            flex-wrap: wrap;
         }
 
         .consulta-report-btn {
@@ -94,6 +96,18 @@
             border-radius: 999px;
             padding: 0.65rem 1.05rem;
             box-shadow: 0 3px 10px rgba(163, 72, 7, 0.25);
+        }
+
+        .consulta-report-btn.excel {
+            border-color: #15803d;
+            background: linear-gradient(120deg, #16a34a, #22c55e);
+            box-shadow: 0 3px 10px rgba(21, 128, 61, 0.25);
+        }
+
+        .consulta-report-btn.excel-ch {
+            border-color: #1d4ed8;
+            background: linear-gradient(120deg, #1e40af, #2563eb);
+            box-shadow: 0 3px 10px rgba(37, 99, 235, 0.25);
         }
 
         .consulta-categories button {
@@ -286,6 +300,8 @@
             </div>
             <div class="consulta-tools">
                 <a id="consulta-reporte-link" class="consulta-report-btn" href="/catalogo_consulta/reporte_compra" target="_blank" rel="noopener">Imprimir reporte de compra</a>
+                <a id="consulta-reporte-excel-link" class="consulta-report-btn excel" href="/catalogo_consulta/reporte_compra_excel" rel="noopener">Descargar Excel</a>
+                <a id="consulta-reporte-excel-ch-link" class="consulta-report-btn excel-ch" href="/catalogo_consulta/reporte_compra_excel?clasificacion=CH&solo_china=1" rel="noopener">Descargar Excel CH</a>
             </div>
         </section>
 
@@ -389,6 +405,8 @@
             const sugerencias = document.getElementById('consulta-sugerencias');
             const categoryButtons = document.querySelectorAll('[data-clasificacion]');
             const reporteLink = document.getElementById('consulta-reporte-link');
+            const reporteExcelLink = document.getElementById('consulta-reporte-excel-link');
+            const reporteExcelCHLink = document.getElementById('consulta-reporte-excel-ch-link');
             let clasificacionActual = '';
 
             function syncReporteLink() {
@@ -399,6 +417,18 @@
                 if (clasificacionActual) params.append('clasificacion', clasificacionActual);
                 const suffix = params.toString();
                 reporteLink.href = '/catalogo_consulta/reporte_compra' + (suffix ? ('?' + suffix) : '');
+
+                if (reporteExcelLink) {
+                    reporteExcelLink.href = '/catalogo_consulta/reporte_compra_excel' + (suffix ? ('?' + suffix) : '');
+                }
+
+                if (reporteExcelCHLink) {
+                    const paramsCH = new URLSearchParams();
+                    if (q) paramsCH.append('q', q);
+                    paramsCH.append('clasificacion', 'CH');
+                    paramsCH.append('solo_china', '1');
+                    reporteExcelCHLink.href = '/catalogo_consulta/reporte_compra_excel?' + paramsCH.toString();
+                }
             }
 
             function aplicarFiltros() {

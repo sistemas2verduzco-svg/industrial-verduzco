@@ -167,6 +167,9 @@
             <div class="head-meta">
                 <div>Generado: {{ fecha_generacion }}</div>
                 <div>Total de registros: {{ total_filas }}</div>
+                {% if filtros.solo_china %}
+                <div>Alcance: Solo CH (China)</div>
+                {% endif %}
                 <div>
                     Filtros:
                     q={{ filtros.q or 'todos' }},
@@ -176,6 +179,7 @@
             </div>
             <div class="actions">
                 <button class="btn btn-print" onclick="window.print()">Imprimir reporte</button>
+                <a class="btn btn-print" style="background:#2563eb;" href="/catalogo_consulta/reporte_compra_excel{% if reporte_query_string %}?{{ reporte_query_string }}{% endif %}">Descargar Excel</a>
                 <a class="btn btn-back" href="/catalogo_consulta">Volver a consulta</a>
             </div>
         </section>

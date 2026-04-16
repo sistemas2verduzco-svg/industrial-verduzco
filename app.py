@@ -25,6 +25,7 @@ import threading
 import requests
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
+from urllib.parse import urlencode
 
 # Configurar logging
 logging.basicConfig(
@@ -7207,6 +7208,41 @@ def _catalogo_productos_filtrados(query='', categoria='', clasificacion=''):
     return productos_q
 
 
+def _valor_bool(value):
+    return str(value or '').strip().lower() in ('1', 'true', 'yes', 'si', 'on')
+
+
+def _catalogo_reporte_compra_data(query='', categoria='', clasificacion='', solo_china=False):
+    productos_q = _catalogo_productos_filtrados(
+        query=query,
+        categoria=categoria,
+        clasificacion=clasificacion,
+    )
+    if solo_china:
+        productos_q = productos_q.filter(Producto.clasificacion.ilike('%CH%'))
+
+    productos = productos_q.all()
+    productos = sorted(
+        productos,
+        key=lambda p: ((p.clave or '').strip().lower(), (p.nombre or '').strip().lower())
+    )
+
+    filas = []
+    for p in productos:
+        data = _producto_sanitizado(p)
+        filas.append({
+            'clave': data.get('clave') or '',
+            'descripcion': data.get('descripcion') or data.get('nombre') or '',
+            'proveedor': data.get('proveedor_ultimo') or '',
+            'precio_compra': data.get('precio_compra_ultimo'),
+            'divisa': data.get('divisa_ultima') or '',
+            'fecha_precio': data.get('fecha_precio_ultimo'),
+            'clasificacion': data.get('clasificacion') or ''
+        })
+
+    return filas
+
+
 @app.route('/catalogo_consulta/reporte_compra')
 def catalogo_consulta_reporte_compra():
     """Reporte imprimible de compra por producto (clave, descripcion, proveedor, precio y divisa)."""
@@ -7214,24 +7250,26 @@ def catalogo_consulta_reporte_compra():
         query = request.args.get('q', '')
         categoria = request.args.get('categoria', '')
         clasificacion = request.args.get('clasificacion', '')
+        solo_china = _valor_bool(request.args.get('solo_china'))
+        if solo_china and not (clasificacion or '').strip():
+            clasificacion = 'CH'
 
-        productos = _catalogo_productos_filtrados(query=query, categoria=categoria, clasificacion=clasificacion).all()
-        productos = sorted(
-            productos,
-            key=lambda p: ((p.clave or '').strip().lower(), (p.nombre or '').strip().lower())
+        filas = _catalogo_reporte_compra_data(
+            query=query,
+            categoria=categoria,
+            clasificacion=clasificacion,
+            solo_china=solo_china,
         )
 
-        filas = []
-        for p in productos:
-            data = _producto_sanitizado(p)
-            filas.append({
-                'clave': data.get('clave') or '',
-                'descripcion': data.get('descripcion') or data.get('nombre') or '',
-                'proveedor': data.get('proveedor_ultimo') or '',
-                'precio_compra': data.get('precio_compra_ultimo'),
-                'divisa': data.get('divisa_ultima') or '',
-                'fecha_precio': data.get('fecha_precio_ultimo')
-            })
+        params_reporte = {}
+        if query:
+            params_reporte['q'] = query
+        if categoria:
+            params_reporte['categoria'] = categoria
+        if clasificacion:
+            params_reporte['clasificacion'] = clasificacion
+        if solo_china:
+            params_reporte['solo_china'] = '1'
 
         return render_template(
             'catalogo_consulta_reporte_compra.html',
@@ -7241,8 +7279,60 @@ def catalogo_consulta_reporte_compra():
                 'q': query,
                 'categoria': categoria,
                 'clasificacion': clasificacion,
+                'solo_china': solo_china,
             },
-            fecha_generacion=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            fecha_generacion=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            reporte_query_string=urlencode(params_reporte)
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/catalogo_consulta/reporte_compra_excel')
+def catalogo_consulta_reporte_compra_excel():
+    """Descarga en Excel del reporte de compra por producto."""
+    try:
+        query = request.args.get('q', '')
+        categoria = request.args.get('categoria', '')
+        clasificacion = request.args.get('clasificacion', '')
+        solo_china = _valor_bool(request.args.get('solo_china'))
+        if solo_china and not (clasificacion or '').strip():
+            clasificacion = 'CH'
+
+        filas = _catalogo_reporte_compra_data(
+            query=query,
+            categoria=categoria,
+            clasificacion=clasificacion,
+            solo_china=solo_china,
+        )
+
+        df = pd.DataFrame(filas)
+        if df.empty:
+            df = pd.DataFrame(columns=['clave', 'descripcion', 'proveedor', 'precio_compra', 'divisa', 'fecha_precio', 'clasificacion'])
+
+        df = df.rename(columns={
+            'clave': 'CLAVE',
+            'descripcion': 'DESCRIPCION',
+            'proveedor': 'PROVEEDOR',
+            'precio_compra': 'PRECIO_COMPRA',
+            'divisa': 'DIVISA',
+            'fecha_precio': 'FECHA_PRECIO',
+            'clasificacion': 'CLASIFICACION',
+        })
+
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='reporte_compra')
+        output.seek(0)
+
+        sufijo = 'CH_' if solo_china else ''
+        stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'reporte_compra_{sufijo}{stamp}.xlsx'
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
     except Exception as e:
         return jsonify({'error': str(e)}), 500
