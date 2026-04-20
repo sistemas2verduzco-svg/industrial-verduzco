@@ -42,6 +42,21 @@
             cursor: pointer;
         }
         .use-line-btn:hover { background:#eff6ff; }
+
+        .pedido-mini-btn {
+            border: 1px solid #cbd5e1;
+            background: #fff;
+            color: #0f172a;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 5px 8px;
+            cursor: pointer;
+        }
+
+        .pedido-mini-btn.edit { color: #1d4ed8; border-color: #bfdbfe; background: #eff6ff; }
+        .pedido-mini-btn.delete { color: #b91c1c; border-color: #fecaca; background: #fef2f2; }
+        .pedido-mini-btn.cancel { color: #475569; }
     </style>
 </head>
 <body>
@@ -60,8 +75,12 @@
         <div style="display:grid; grid-template-columns:minmax(420px, 1fr) minmax(620px, 1.55fr); gap:12px; align-items:start;">
             <div style="display:grid; gap:12px; align-content:start;">
             <div style="background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px; position:sticky; top:16px;">
-                <h3 style="margin:0 0 8px 0; font-size:16px;">Nuevo pedido interno</h3>
+                <div style="display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:8px;">
+                    <h3 id="pedidoFormTitle" style="margin:0; font-size:16px;">Nuevo pedido interno</h3>
+                    <button id="cancelEditPedidoBtn" type="button" class="pedido-mini-btn cancel" style="display:none;" onclick="resetPedidoForm()">Cancelar edicion</button>
+                </div>
                 <form method="post" action="/maquinaria/pedidos/create" style="display:grid; gap:8px;">
+                    <input id="pedidoIdField" type="hidden" name="pedido_id">
                     <div style="display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:center;">
                         <select id="pedidoSelector" style="padding:8px; border:1px solid #d1d5db; border-radius:6px; min-width:0;">
                             <option value="">Seleccionar pedido CONTPAQ...</option>
@@ -77,9 +96,15 @@
                     <input id="claveMaquinaField" type="text" name="clave_maquina" placeholder="Clave de maquina" required style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
                     <input id="descripcionMaquinaField" type="text" name="descripcion_maquina" placeholder="Descripcion" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
                     <input id="cantidadField" type="number" name="cantidad" min="1" value="1" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                    <select id="estadoField" name="estado" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;">
+                        <option value="abierto">Abierto</option>
+                        <option value="planeacion">Planeacion</option>
+                        <option value="en_proceso">En proceso</option>
+                        <option value="cerrado">Cerrado</option>
+                    </select>
                     <textarea id="notasField" name="notas" placeholder="Notas" rows="3" style="padding:8px; border:1px solid #d1d5db; border-radius:6px;"></textarea>
                     {% if has_permission('maquinaria_pedidos', 'create') or has_permission('maquinaria_pedidos', 'edit') or current_user.es_admin %}
-                    <button type="submit" style="border:0; background:#1d4ed8; color:#fff; font-weight:700; border-radius:6px; padding:9px;">Guardar pedido</button>
+                    <button id="pedidoSubmitBtn" type="submit" style="border:0; background:#1d4ed8; color:#fff; font-weight:700; border-radius:6px; padding:9px;">Guardar pedido</button>
                     {% endif %}
                 </form>
                 <div style="margin-top:10px; font-size:12px; color:#64748b;">BOMs cargados: {{ boms|length }}</div>
@@ -181,6 +206,7 @@
                             <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Clave</th>
                             <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Cantidad</th>
                             <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Estado</th>
+                            <th style="padding:8px; border-bottom:1px solid #e5e7eb;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -191,9 +217,25 @@
                             <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ p.clave_maquina }}</td>
                             <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ p.cantidad }}</td>
                             <td style="padding:8px; border-bottom:1px solid #eef2f7;">{{ p.estado }}</td>
+                            <td style="padding:8px; border-bottom:1px solid #eef2f7;">
+                                <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                                    {% if has_permission('maquinaria_pedidos', 'edit') or has_permission('maquinaria_pedidos', 'update') or current_user.es_admin %}
+                                    <button type="button" class="pedido-mini-btn edit" onclick="editPedidoInterno({{ p.id }})">Editar</button>
+                                    {% endif %}
+                                    {% if has_permission('maquinaria_pedidos', 'delete') or current_user.es_admin %}
+                                        {% if not p.ordenes_trabajo and not p.series %}
+                                        <form method="post" action="/maquinaria/pedidos/{{ p.id }}/delete" onsubmit="return confirm('¿Eliminar pedido {{ p.folio_interno }}?');" style="display:inline; margin:0;">
+                                            <button type="submit" class="pedido-mini-btn delete">Eliminar</button>
+                                        </form>
+                                        {% else %}
+                                        <span style="font-size:11px; color:#64748b;">En uso</span>
+                                        {% endif %}
+                                    {% endif %}
+                                </div>
+                            </td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="5" style="padding:8px; color:#64748b;">Sin pedidos internos.</td></tr>
+                        <tr><td colspan="6" style="padding:8px; color:#64748b;">Sin pedidos internos.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -203,6 +245,8 @@
         <script>
             const CONTPAQ_PEDIDOS = {{ pedidos_contpaq_selector_data|tojson }};
             const CONTPAQ_PEDIDOS_MAP = new Map(CONTPAQ_PEDIDOS.map(p => [Number(p.document_id), p]));
+            const PEDIDOS_INTERNOS = {{ pedidos_locales_data|tojson }};
+            const PEDIDOS_INTERNOS_MAP = new Map(PEDIDOS_INTERNOS.map(p => [Number(p.id), p]));
 
             function setValue(id, value) {
                 const el = document.getElementById(id);
@@ -214,6 +258,45 @@
                 const sel = document.getElementById('pedidoSelector');
                 if (!sel) return;
                 sel.value = docId ? String(docId) : '';
+            }
+
+            function setPedidoFormMode(isEdit) {
+                const title = document.getElementById('pedidoFormTitle');
+                const submit = document.getElementById('pedidoSubmitBtn');
+                const cancelBtn = document.getElementById('cancelEditPedidoBtn');
+                if (title) title.textContent = isEdit ? 'Editar pedido interno' : 'Nuevo pedido interno';
+                if (submit) submit.textContent = isEdit ? 'Actualizar pedido' : 'Guardar pedido';
+                if (cancelBtn) cancelBtn.style.display = isEdit ? 'inline-block' : 'none';
+            }
+
+            function resetPedidoForm() {
+                setValue('pedidoIdField', '');
+                setValue('folioInternoField', '');
+                setValue('contpaqDocumentIdField', '');
+                setValue('clienteField', '');
+                setValue('claveMaquinaField', '');
+                setValue('descripcionMaquinaField', '');
+                setValue('cantidadField', 1);
+                setValue('estadoField', 'abierto');
+                setValue('notasField', '');
+                setPedidoSelectorValue('');
+                setPedidoFormMode(false);
+            }
+
+            function editPedidoInterno(pedidoId) {
+                const pedido = PEDIDOS_INTERNOS_MAP.get(Number(pedidoId));
+                if (!pedido) return;
+                setValue('pedidoIdField', pedido.id || '');
+                setValue('folioInternoField', pedido.folio_interno || '');
+                setValue('contpaqDocumentIdField', pedido.contpaq_document_id || '');
+                setValue('clienteField', pedido.cliente || '');
+                setValue('claveMaquinaField', pedido.clave_maquina || '');
+                setValue('descripcionMaquinaField', pedido.descripcion_maquina || '');
+                setValue('cantidadField', Math.max(1, Number(pedido.cantidad || 1)));
+                setValue('estadoField', pedido.estado || 'abierto');
+                setValue('notasField', pedido.notas || '');
+                setPedidoFormMode(true);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
             }
 
             function fillPedidoHeader(pedido) {
@@ -291,6 +374,8 @@
             function selectPedidoById(docId, useFirstLine = true) {
                 const pedido = CONTPAQ_PEDIDOS_MAP.get(Number(docId));
                 if (!pedido) return;
+                setValue('pedidoIdField', '');
+                setPedidoFormMode(false);
                 setPedidoSelectorValue(pedido.document_id);
                 fillPedidoHeader(pedido);
                 renderSelectedPedido(pedido);
@@ -313,6 +398,8 @@
                 if (!pedido) return;
                 const line = (pedido.detalles || []).find(d => Number(d.line_number) === Number(lineNumber));
                 if (!line) return;
+                setValue('pedidoIdField', '');
+                setPedidoFormMode(false);
                 setPedidoSelectorValue(pedido.document_id);
                 fillPedidoHeader(pedido);
                 renderSelectedPedido(pedido);
@@ -322,6 +409,8 @@
             window.selectPedidoById = selectPedidoById;
             window.importSelectedPedido = importSelectedPedido;
             window.useLineFromCard = useLineFromCard;
+            window.editPedidoInterno = editPedidoInterno;
+            window.resetPedidoForm = resetPedidoForm;
         </script>
     </div>
 </body>

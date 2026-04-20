@@ -10071,6 +10071,7 @@ def maquinaria_pedidos_page():
     pedidos_locales = []
     if ready:
         pedidos_locales = MaquinariaPedido.query.order_by(MaquinariaPedido.id.desc()).limit(50).all()
+    pedidos_locales_data = [p.to_dict() for p in pedidos_locales]
     pedidos_contpaq = []
     if ready:
         pedidos_contpaq = MaquinariaContpaqPedido.query.filter(
@@ -10106,6 +10107,7 @@ def maquinaria_pedidos_page():
         setup_required=not ready,
         missing_tables=missing,
         pedidos_locales=pedidos_locales,
+        pedidos_locales_data=pedidos_locales_data,
         pedidos_contpaq=pedidos_contpaq,
         pedidos_contpaq_selector_data=pedidos_contpaq_selector_data,
         boms=boms,
@@ -10120,25 +10122,54 @@ def maquinaria_pedidos_create():
     if not ready:
         return redirect(url_for('maquinaria_pedidos_page'))
 
+    pedido_id = request.form.get('pedido_id', type=int)
+    pedido = MaquinariaPedido.query.get(pedido_id) if pedido_id else None
+
     folio = _clean_nullable_text(request.form.get('folio_interno', ''))
     if not folio:
-        folio = f"MEP-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}"
+        folio = pedido.folio_interno if pedido else f"MEP-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}"
 
-    pedido = MaquinariaPedido(
-        folio_interno=folio,
-        contpaq_document_id=request.form.get('contpaq_document_id', type=int),
-        cliente=_clean_nullable_text(request.form.get('cliente', '')),
-        clave_maquina=_clean_nullable_text(request.form.get('clave_maquina', '')),
-        descripcion_maquina=_clean_nullable_text(request.form.get('descripcion_maquina', '')),
-        cantidad=max(1, request.form.get('cantidad', type=int) or 1),
-        estado=_clean_nullable_text(request.form.get('estado', 'abierto')) or 'abierto',
-        notas=_clean_nullable_text(request.form.get('notas', '')),
-        created_by=session.get('user'),
-    )
-    if not pedido.clave_maquina:
+    clave_maquina = _clean_nullable_text(request.form.get('clave_maquina', ''))
+    if not clave_maquina:
         return redirect(url_for('maquinaria_pedidos_page'))
 
-    db.session.add(pedido)
+    existing = MaquinariaPedido.query.filter_by(folio_interno=folio).first()
+    if existing and (not pedido or existing.id != pedido.id):
+        return redirect(url_for('maquinaria_pedidos_page'))
+
+    if pedido is None:
+        pedido = MaquinariaPedido(
+            folio_interno=folio,
+            created_by=session.get('user'),
+        )
+        db.session.add(pedido)
+
+    pedido.folio_interno = folio
+    pedido.contpaq_document_id = request.form.get('contpaq_document_id', type=int)
+    pedido.cliente = _clean_nullable_text(request.form.get('cliente', ''))
+    pedido.clave_maquina = clave_maquina
+    pedido.descripcion_maquina = _clean_nullable_text(request.form.get('descripcion_maquina', ''))
+    pedido.cantidad = max(1, request.form.get('cantidad', type=int) or 1)
+    pedido.estado = _clean_nullable_text(request.form.get('estado', 'abierto')) or 'abierto'
+    pedido.notas = _clean_nullable_text(request.form.get('notas', ''))
+
+    db.session.commit()
+    return redirect(url_for('maquinaria_pedidos_page'))
+
+
+@app.route('/maquinaria/pedidos/<int:pedido_id>/delete', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_pedidos', 'delete'), ('maquinaria_pedidos', 'edit'), ('maquinaria_pedidos', 'update')])
+def maquinaria_pedidos_delete(pedido_id):
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return redirect(url_for('maquinaria_pedidos_page'))
+
+    pedido = MaquinariaPedido.query.get_or_404(pedido_id)
+    if pedido.ordenes_trabajo or pedido.series:
+        return redirect(url_for('maquinaria_pedidos_page'))
+
+    db.session.delete(pedido)
     db.session.commit()
     return redirect(url_for('maquinaria_pedidos_page'))
 
