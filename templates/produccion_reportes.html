@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Produccion - Reportes en tiempo real</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .reportes-page {
+            width: auto;
+            max-width: none;
+            padding-left: 12px;
+            padding-right: 12px;
+            padding-top: 18px;
+            display: grid;
+            gap: 12px;
+        }
+
+        .reportes-hero {
+            border: 1px solid #c7d2fe;
+            background: linear-gradient(135deg, #eff6ff 0%, #eef2ff 50%, #f8fafc 100%);
+            border-radius: 14px;
+            padding: 16px;
+        }
+
+        .reportes-hero h2 {
+            margin: 0;
+            color: #0f172a;
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: 0.01em;
+        }
+
+        .reportes-hero p {
+            margin: 6px 0 0;
+            color: #334155;
+            font-size: 13px;
+        }
+
+        .reportes-grid {
+            display: grid;
+            grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+            gap: 12px;
+            align-items: start;
+        }
+
+        .card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 8px 28px rgba(15, 23, 42, 0.05);
+        }
+
+        .card h3 {
+            margin: 0 0 10px;
+            font-size: 15px;
+            color: #0f172a;
+        }
+
+        .form-grid {
+            display: grid;
+            gap: 8px;
+        }
+
+        .field label {
+            display: block;
+            font-size: 12px;
+            color: #475569;
+            margin-bottom: 4px;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+        }
+
+        .field input,
+        .field select {
+            width: 100%;
+            box-sizing: border-box;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-size: 13px;
+            color: #0f172a;
+            background: #ffffff;
+        }
+
+        .field-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 4px;
+        }
+
+        .btn {
+            border: 0;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            padding: 9px 10px;
+        }
+
+        .btn-primary {
+            background: #1d4ed8;
+            color: #ffffff;
+        }
+
+        .btn-soft {
+            background: #e2e8f0;
+            color: #0f172a;
+        }
+
+        .btn-outline {
+            background: #ffffff;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+        }
+
+        .query-preview {
+            margin-top: 10px;
+            background: #0f172a;
+            color: #cbd5e1;
+            border-radius: 10px;
+            padding: 10px;
+            font-size: 12px;
+            white-space: pre-wrap;
+            line-height: 1.45;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(120px, 1fr));
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .summary-item {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .summary-k {
+            display: block;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 700;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .summary-v {
+            display: block;
+            color: #0f172a;
+            font-size: 20px;
+            font-weight: 800;
+            line-height: 1.1;
+        }
+
+        .inline-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            font-size: 12px;
+            color: #475569;
+            margin-bottom: 8px;
+        }
+
+        .table-wrap {
+            overflow: auto;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            max-height: 66vh;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1100px;
+            font-size: 12px;
+            background: #ffffff;
+        }
+
+        th,
+        td {
+            padding: 8px;
+            border-bottom: 1px solid #e2e8f0;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            position: sticky;
+            top: 0;
+            background: #f8fafc;
+            color: #334155;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            z-index: 1;
+        }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 2px 8px;
+            font-size: 11px;
+            font-weight: 800;
+            color: #ffffff;
+        }
+
+        .pill-produciendo { background: #16a34a; }
+        .pill-mover { background: #f59e0b; color: #111827; }
+        .pill-activa { background: #3b82f6; }
+        .pill-paro { background: #dc2626; }
+        .pill-sin_hoja { background: #64748b; }
+
+        .empty {
+            border: 1px dashed #cbd5e1;
+            border-radius: 10px;
+            color: #64748b;
+            text-align: center;
+            padding: 18px;
+            font-size: 13px;
+            background: #f8fafc;
+        }
+
+        @media (max-width: 1100px) {
+            .reportes-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .summary-grid {
+                grid-template-columns: repeat(2, minmax(120px, 1fr));
+            }
+
+            .table-wrap {
+                max-height: 58vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    {% include '_sidebar.html' %}
+
+    <main class="container reportes-page">
+        <section class="reportes-hero">
+            <h2>Reportes de Produccion en tiempo real</h2>
+            <p>Motor interactivo para consultas sobre el mapa de maquinas. Esta primera consulta monitorea estado operativo, progreso y tiempos del proceso actual.</p>
+        </section>
+
+        <section class="reportes-grid">
+            <article class="card">
+                <h3>Motor de consulta</h3>
+
+                <div class="form-grid">
+                    <div class="field">
+                        <label for="qSearch">Busqueda global</label>
+                        <input id="qSearch" type="text" placeholder="Maquina, hoja, pieza o estacion">
+                    </div>
+
+                    <div class="field-row">
+                        <div class="field">
+                            <label for="qEstado">Estado</label>
+                            <select id="qEstado">
+                                <option value="">Todos</option>
+                                <option value="produciendo">Produciendo</option>
+                                <option value="mover">Mover</option>
+                                <option value="activa">Activa</option>
+                                <option value="paro">Paro</option>
+                                <option value="sin_hoja">Sin hoja</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="qModulo">Modulo hoja</label>
+                            <select id="qModulo">
+                                <option value="">Todos</option>
+                                <option value="entregas">Entregas</option>
+                                <option value="mp">MP</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="field-row">
+                        <div class="field">
+                            <label for="qSort">Ordenar por</label>
+                            <select id="qSort">
+                                <option value="estado,nombre">Estado + nombre</option>
+                                <option value="nombre">Nombre</option>
+                                <option value="progreso_desc">Progreso desc</option>
+                                <option value="transcurrido_desc">Transcurrido desc</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="qLimit">Limite de filas</label>
+                            <select id="qLimit">
+                                <option value="0">Sin limite</option>
+                                <option value="20">20</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                                <option value="200">200</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="field-row">
+                        <div class="field">
+                            <label for="qRefresh">Autorefresco</label>
+                            <select id="qRefresh">
+                                <option value="5000">5 segundos</option>
+                                <option value="10000" selected>10 segundos</option>
+                                <option value="20000">20 segundos</option>
+                                <option value="30000">30 segundos</option>
+                            </select>
+                        </div>
+                        <div class="field" style="display:flex; align-items:flex-end;">
+                            <label style="display:flex; align-items:center; gap:8px; margin:0; font-size:13px; color:#0f172a; font-weight:700;">
+                                <input id="qSoloActivas" type="checkbox" style="width:auto;">
+                                Solo equipos activos
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="actions">
+                        <button class="btn btn-primary" id="btnRefresh" type="button">Actualizar ahora</button>
+                        <button class="btn btn-soft" id="btnReset" type="button">Limpiar filtros</button>
+                    </div>
+                    <button class="btn btn-outline" id="btnCsv" type="button">Exportar CSV de vista actual</button>
+                </div>
+
+                <div id="queryPreview" class="query-preview">SELECT * FROM mapa_maquinas_rt;</div>
+            </article>
+
+            <article class="card">
+                <h3>Consulta 1: Estado operativo en tiempo real</h3>
+
+                <div class="summary-grid">
+                    <div class="summary-item"><span class="summary-k">Filas</span><span class="summary-v" id="sRows">0</span></div>
+                    <div class="summary-item"><span class="summary-k">Produciendo</span><span class="summary-v" id="sProd">0</span></div>
+                    <div class="summary-item"><span class="summary-k">Mover</span><span class="summary-v" id="sMover">0</span></div>
+                    <div class="summary-item"><span class="summary-k">Progreso promedio</span><span class="summary-v" id="sAvance">0%</span></div>
+                </div>
+
+                <div class="inline-meta">
+                    <span>Ultima actualizacion: <b id="metaUpdated">-</b></span>
+                    <span>Eficiencia dia: <b id="metaEffDia">0%</b></span>
+                    <span>Utilizacion actual: <b id="metaUtil">0%</b></span>
+                    <span>Asignacion: <b id="metaAsign">0%</b></span>
+                </div>
+
+                <div id="emptyState" class="empty" style="display:none;">No hay filas para la consulta actual.</div>
+                <div class="table-wrap" id="tableWrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Maquina</th>
+                                <th>Estado</th>
+                                <th>Modulo</th>
+                                <th>Activa</th>
+                                <th>Hoja</th>
+                                <th>Pieza</th>
+                                <th>Estacion</th>
+                                <th>Obj proceso</th>
+                                <th>Transcurrido</th>
+                                <th>Restante</th>
+                                <th>Progreso</th>
+                                <th>Detalle</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rowsBody"></tbody>
+                    </table>
+                </div>
+            </article>
+        </section>
+    </main>
+
+    <script>
+        const ENDPOINT = '/api/mapa_maquinas';
+
+        const state = {
+            raw: [],
+            filtered: [],
+            eficiencia: null,
+            lastFetchAt: null,
+            timerId: null,
+            filters: {
+                q: '',
+                estado: '',
+                modulo: '',
+                sort: 'estado,nombre',
+                limit: 0,
+                soloActivas: false,
+                refreshMs: 10000,
+            },
+        };
+
+        function toSafe(v) {
+            if (v === null || v === undefined) return '';
+            return String(v);
+        }
+
+        function norm(v) {
+            return toSafe(v).trim().toLowerCase();
+        }
+
+        function hmsToSec(value) {
+            const txt = norm(value);
+            if (!txt) return 0;
+            const parts = txt.split(':').map(Number);
+            if (parts.length !== 3 || parts.some(Number.isNaN)) return 0;
+            return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+        }
+
+        function escapeCsv(v) {
+            const txt = toSafe(v).replace(/"/g, '""');
+            if (txt.includes(',') || txt.includes('\n') || txt.includes('"')) {
+                return `"${txt}"`;
+            }
+            return txt;
+        }
+
+        function statusPriority(code) {
+            const order = {
+                mover: 0,
+                produciendo: 1,
+                activa: 2,
+                paro: 3,
+                sin_hoja: 4,
+            };
+            return Object.prototype.hasOwnProperty.call(order, code) ? order[code] : 9;
+        }
+
+        function parseFiltersFromUI() {
+            state.filters.q = norm(document.getElementById('qSearch').value);
+            state.filters.estado = norm(document.getElementById('qEstado').value);
+            state.filters.modulo = norm(document.getElementById('qModulo').value);
+            state.filters.sort = norm(document.getElementById('qSort').value) || 'estado,nombre';
+            state.filters.limit = Number(document.getElementById('qLimit').value || '0') || 0;
+            state.filters.soloActivas = document.getElementById('qSoloActivas').checked;
+            state.filters.refreshMs = Number(document.getElementById('qRefresh').value || '10000') || 10000;
+        }
+
+        function resetFilters() {
+            document.getElementById('qSearch').value = '';
+            document.getElementById('qEstado').value = '';
+            document.getElementById('qModulo').value = '';
+            document.getElementById('qSort').value = 'estado,nombre';
+            document.getElementById('qLimit').value = '0';
+            document.getElementById('qSoloActivas').checked = false;
+            applyFiltersAndRender();
+        }
+
+        function filterRows(rows) {
+            const f = state.filters;
+            const filtered = rows.filter((r) => {
+                if (f.estado && norm(r.estado_code) !== f.estado) return false;
+                if (f.modulo && norm(r.hoja_modulo) !== f.modulo) return false;
+                if (f.soloActivas && !Boolean(r.activo)) return false;
+
+                if (f.q) {
+                    const haystack = [
+                        r.nombre,
+                        r.estado_label,
+                        r.hoja_serie,
+                        r.pieza,
+                        r.estacion_actual,
+                        r.hoja_modulo,
+                    ].map(norm).join(' ');
+                    if (!haystack.includes(f.q)) return false;
+                }
+                return true;
+            });
+
+            if (f.sort === 'nombre') {
+                filtered.sort((a, b) => norm(a.nombre).localeCompare(norm(b.nombre)));
+            } else if (f.sort === 'progreso_desc') {
+                filtered.sort((a, b) => Number(b.progreso_proceso_pct || 0) - Number(a.progreso_proceso_pct || 0));
+            } else if (f.sort === 'transcurrido_desc') {
+                filtered.sort((a, b) => hmsToSec(b.tiempo_transcurrido_proceso) - hmsToSec(a.tiempo_transcurrido_proceso));
+            } else {
+                filtered.sort((a, b) => {
+                    const pa = statusPriority(norm(a.estado_code));
+                    const pb = statusPriority(norm(b.estado_code));
+                    if (pa !== pb) return pa - pb;
+                    return norm(a.nombre).localeCompare(norm(b.nombre));
+                });
+            }
+
+            if (f.limit > 0) {
+                return filtered.slice(0, f.limit);
+            }
+            return filtered;
+        }
+
+        function renderQueryPreview() {
+            const f = state.filters;
+            const where = [];
+            if (f.q) where.push(`texto LIKE '%${f.q}%'`);
+            if (f.estado) where.push(`estado_code = '${f.estado}'`);
+            if (f.modulo) where.push(`hoja_modulo = '${f.modulo}'`);
+            if (f.soloActivas) where.push('activo = true');
+
+            const lines = [
+                'SELECT id, nombre, estado_code, hoja_modulo, activo, hoja_serie, pieza, estacion_actual,',
+                '       tiempo_objetivo_proceso, tiempo_transcurrido_proceso, tiempo_restante_proceso, progreso_proceso_pct',
+                'FROM mapa_maquinas_rt',
+            ];
+
+            if (where.length) {
+                lines.push('WHERE ' + where.join(' AND '));
+            }
+
+            const orderClause = {
+                'estado,nombre': 'ORDER BY estado_priority ASC, nombre ASC',
+                nombre: 'ORDER BY nombre ASC',
+                progreso_desc: 'ORDER BY progreso_proceso_pct DESC',
+                transcurrido_desc: 'ORDER BY tiempo_transcurrido_proceso DESC',
+            };
+            lines.push(orderClause[f.sort] || orderClause['estado,nombre']);
+
+            if (f.limit > 0) {
+                lines.push('LIMIT ' + f.limit);
+            }
+            lines.push(';');
+
+            document.getElementById('queryPreview').textContent = lines.join('\n');
+        }
+
+        function renderSummary(rows) {
+            const total = rows.length;
+            const prod = rows.filter((r) => norm(r.estado_code) === 'produciendo').length;
+            const mover = rows.filter((r) => norm(r.estado_code) === 'mover').length;
+
+            const progressRows = rows.filter((r) => Number(r.progreso_proceso_pct || 0) > 0);
+            const avg = progressRows.length
+                ? (progressRows.reduce((acc, r) => acc + Number(r.progreso_proceso_pct || 0), 0) / progressRows.length)
+                : 0;
+
+            document.getElementById('sRows').textContent = String(total);
+            document.getElementById('sProd').textContent = String(prod);
+            document.getElementById('sMover').textContent = String(mover);
+            document.getElementById('sAvance').textContent = `${avg.toFixed(1)}%`;
+
+            const effDia = state.eficiencia && state.eficiencia.dia ? Number(state.eficiencia.dia.porcentaje || 0) : 0;
+            const kpis = state.eficiencia && state.eficiencia.kpis ? state.eficiencia.kpis : {};
+
+            document.getElementById('metaEffDia').textContent = `${effDia.toFixed(1)}%`;
+            document.getElementById('metaUtil').textContent = `${Number(kpis.utilizacion_actual_pct || 0).toFixed(1)}%`;
+            document.getElementById('metaAsign').textContent = `${Number(kpis.asignacion_actual_pct || 0).toFixed(1)}%`;
+            document.getElementById('metaUpdated').textContent = state.lastFetchAt ? state.lastFetchAt.toLocaleTimeString() : '-';
+        }
+
+        function renderTable(rows) {
+            const body = document.getElementById('rowsBody');
+            body.innerHTML = '';
+
+            const empty = document.getElementById('emptyState');
+            const wrap = document.getElementById('tableWrap');
+            if (!rows.length) {
+                empty.style.display = 'block';
+                wrap.style.display = 'none';
+                return;
+            }
+
+            empty.style.display = 'none';
+            wrap.style.display = 'block';
+
+            rows.forEach((r) => {
+                const tr = document.createElement('tr');
+                const code = norm(r.estado_code);
+                const detailUrl = toSafe(r.detalle_url) || '/hojas_ruta';
+
+                tr.innerHTML = `
+                    <td><b>${toSafe(r.nombre) || '-'}</b></td>
+                    <td><span class="pill pill-${code}">${toSafe(r.estado_label) || '-'}</span></td>
+                    <td>${toSafe(r.hoja_modulo) || '-'}</td>
+                    <td>${r.activo ? 'SI' : 'NO'}</td>
+                    <td>${toSafe(r.hoja_serie) || '-'}</td>
+                    <td>${toSafe(r.pieza) || '-'}</td>
+                    <td>${toSafe(r.estacion_actual) || '-'}</td>
+                    <td>${toSafe(r.tiempo_objetivo_proceso) || '-'}</td>
+                    <td>${toSafe(r.tiempo_transcurrido_proceso) || '-'}</td>
+                    <td>${toSafe(r.tiempo_restante_proceso) || '-'}</td>
+                    <td>${Number(r.progreso_proceso_pct || 0)}%</td>
+                    <td><a href="${detailUrl}">Abrir</a></td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        function applyFiltersAndRender() {
+            parseFiltersFromUI();
+            renderQueryPreview();
+            state.filtered = filterRows(state.raw);
+            renderSummary(state.filtered);
+            renderTable(state.filtered);
+            restartAutoRefresh();
+        }
+
+        function downloadCurrentCsv() {
+            const headers = [
+                'id', 'nombre', 'estado_code', 'estado_label', 'hoja_modulo', 'activo', 'hoja_serie', 'pieza',
+                'estacion_actual', 'tiempo_objetivo_proceso', 'tiempo_transcurrido_proceso', 'tiempo_restante_proceso',
+                'progreso_proceso_pct', 'detalle_url',
+            ];
+
+            const lines = [headers.join(',')];
+            state.filtered.forEach((r) => {
+                const row = [
+                    r.id,
+                    r.nombre,
+                    r.estado_code,
+                    r.estado_label,
+                    r.hoja_modulo,
+                    r.activo,
+                    r.hoja_serie,
+                    r.pieza,
+                    r.estacion_actual,
+                    r.tiempo_objetivo_proceso,
+                    r.tiempo_transcurrido_proceso,
+                    r.tiempo_restante_proceso,
+                    r.progreso_proceso_pct,
+                    r.detalle_url,
+                ].map(escapeCsv).join(',');
+                lines.push(row);
+            });
+
+            const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const ts = new Date().toISOString().replace(/[:]/g, '-');
+            a.href = url;
+            a.download = `reporte_produccion_rt_${ts}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        }
+
+        async function fetchRealtimeData() {
+            try {
+                const res = await fetch(ENDPOINT, { credentials: 'same-origin' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const payload = await res.json();
+
+                state.raw = Array.isArray(payload.maquinas) ? payload.maquinas : [];
+                state.eficiencia = payload.eficiencia_planta || null;
+                state.lastFetchAt = new Date();
+                applyFiltersAndRender();
+            } catch (err) {
+                console.error('Error cargando datos de reportes de produccion:', err);
+            }
+        }
+
+        function restartAutoRefresh() {
+            if (state.timerId) {
+                clearInterval(state.timerId);
+            }
+            state.timerId = setInterval(fetchRealtimeData, state.filters.refreshMs);
+        }
+
+        function wireEvents() {
+            const ids = ['qSearch', 'qEstado', 'qModulo', 'qSort', 'qLimit', 'qSoloActivas'];
+            ids.forEach((id) => {
+                const el = document.getElementById(id);
+                const ev = id === 'qSearch' ? 'input' : 'change';
+                el.addEventListener(ev, applyFiltersAndRender);
+            });
+
+            document.getElementById('qRefresh').addEventListener('change', applyFiltersAndRender);
+            document.getElementById('btnRefresh').addEventListener('click', fetchRealtimeData);
+            document.getElementById('btnReset').addEventListener('click', resetFilters);
+            document.getElementById('btnCsv').addEventListener('click', downloadCurrentCsv);
+        }
+
+        wireEvents();
+        fetchRealtimeData();
+    </script>
+</body>
+</html>

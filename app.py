@@ -4422,6 +4422,14 @@ def mapa_maquinas():
     return render_template('mapa_maquinas.html')
 
 
+@app.route('/produccion/reportes')
+@login_required
+@requires_any_permission([('mapa', 'view'), ('estaciones', 'view'), ('catalog', 'view')])
+def produccion_reportes_page():
+    """Modulo de reportes de produccion con consultas interactivas en tiempo real."""
+    return render_template('produccion_reportes.html')
+
+
 @app.route('/api/mapa_maquinas')
 @login_required
 @requires_any_permission([('mapa', 'view'), ('catalog', 'view')])

@@ -44,6 +44,7 @@
         {% endif %}
         {% if has_permission('mapa', 'view') or current_user and current_user.es_admin %}
         <a href="/mapa_maquinas" class="sb-link sb-sub" data-base="/mapa_maquinas"><span>🗺️</span> <span>Mapa</span></a>
+        <a href="/produccion/reportes" class="sb-link sb-sub" data-base="/produccion/reportes"><span>📈</span> <span>Reportes</span></a>
         {% endif %}
         {% if has_permission('alertas_buzon', 'view') or current_user and current_user.es_admin %}
         <a href="/alertas_buzon" class="sb-link sb-sub" data-base="/alertas_buzon" id="sb-alertas-link" style="position:relative;">
