@@ -367,6 +367,7 @@
                                 <th>Activa</th>
                                 <th>Hoja</th>
                                 <th>Pieza</th>
+                                <th>Descripcion pieza</th>
                                 <th>Estacion</th>
                                 <th>Obj proceso</th>
                                 <th>Transcurrido</th>
@@ -471,6 +472,7 @@
                         r.estado_label,
                         r.hoja_serie,
                         r.pieza,
+                        r.pieza_descripcion,
                         r.estacion_actual,
                         r.hoja_modulo,
                     ].map(norm).join(' ');
@@ -509,7 +511,7 @@
             if (f.soloActivas) where.push('activo = true');
 
             const lines = [
-                'SELECT id, nombre, estado_code, hoja_modulo, activo, hoja_serie, pieza, estacion_actual,',
+                'SELECT id, nombre, estado_code, hoja_modulo, activo, hoja_serie, pieza, pieza_descripcion, estacion_actual,',
                 '       tiempo_objetivo_proceso, tiempo_transcurrido_proceso, tiempo_restante_proceso, progreso_proceso_pct',
                 'FROM mapa_maquinas_rt',
             ];
@@ -585,6 +587,7 @@
                     <td>${r.activo ? 'SI' : 'NO'}</td>
                     <td>${toSafe(r.hoja_serie) || '-'}</td>
                     <td>${toSafe(r.pieza) || '-'}</td>
+                    <td>${toSafe(r.pieza_descripcion) || '-'}</td>
                     <td>${toSafe(r.estacion_actual) || '-'}</td>
                     <td>${toSafe(r.tiempo_objetivo_proceso) || '-'}</td>
                     <td>${toSafe(r.tiempo_transcurrido_proceso) || '-'}</td>
@@ -608,6 +611,7 @@
         function downloadCurrentCsv() {
             const headers = [
                 'id', 'nombre', 'estado_code', 'estado_label', 'hoja_modulo', 'activo', 'hoja_serie', 'pieza',
+                'pieza_descripcion',
                 'estacion_actual', 'tiempo_objetivo_proceso', 'tiempo_transcurrido_proceso', 'tiempo_restante_proceso',
                 'progreso_proceso_pct', 'detalle_url',
             ];
@@ -623,6 +627,7 @@
                     r.activo,
                     r.hoja_serie,
                     r.pieza,
+                    r.pieza_descripcion,
                     r.estacion_actual,
                     r.tiempo_objetivo_proceso,
                     r.tiempo_transcurrido_proceso,

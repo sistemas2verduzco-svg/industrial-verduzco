@@ -4681,6 +4681,7 @@ def api_mapa_maquinas():
             'estacion_actual': estacion_actual.nombre if estacion_actual else None,
             'hoja_serie': hoja_activa.nombre if hoja_activa else None,
             'pieza': hoja_activa.pn if hoja_activa else None,
+            'pieza_descripcion': _resolve_clave_descripcion_by_pn(hoja_activa.pn) if hoja_activa else None,
             'tiempo_total': hoja_total_tiempo if hoja_activa else None,
             'fecha_termino': hoja_activa.fecha_termino.isoformat() if (hoja_activa and hoja_activa.fecha_termino) else None,
             'tiempo_proceso_pieza': tiempo_proceso_pieza,
