@@ -42,6 +42,12 @@
             color:#9a3412;
             font-weight:700;
         }
+        .step-chip.neutral {
+            border-color:#cbd5e1;
+            background:#f8fafc;
+            color:#475569;
+            font-weight:700;
+        }
 
         @media (max-width: 980px) {
             .layout { grid-template-columns:1fr; }
@@ -69,7 +75,7 @@
                         <div class="small">Piezas: {{ item.hoja_ruta.cantidad_piezas or 0 }} | En módulo: {{ item.estado or '-' }}</div>
                         <div class="small" style="margin-top:4px;"><a href="/hoja/{{ item.hoja_ruta.id }}" target="_blank">Ver hoja de ruta</a></div>
                         {% if has_permission('entregas', 'edit') or has_permission('catalog', 'edit') %}
-                        <form method="post" action="/entregas/quitar/{{ item.id }}" onsubmit="return confirm('¿Retirar esta hoja de Entregas?\n\nSolo se quitara del módulo de Entregas. La hoja original no se borra de Hojas de Ruta Entregas.');" style="margin-top:8px;">
+                        <form method="post" action="/entregas/quitar/{{ item.id }}" onsubmit="return confirm('¿Retirar esta hoja de Entregas?\n\nSolo se quitara del módulo de Entregas. La hoja original no se borra de Hojas de Ruta Entregas.');" style="margin-top:8px;" data-async-refresh="1">
                             <button class="btn-mini btn-del" type="submit">Retirar de Entregas</button>
                         </form>
                         {% endif %}
@@ -174,7 +180,7 @@
                             <div style="margin-top:8px; display:flex; gap:6px;">
                                                                 <button type="button" class="btn-mini btn-add" data-flujo-id="{{ item.id }}" data-total-piezas="{{ total_piezas_item }}" data-entregado="{{ entregado_item }}" onclick="abrirModalEntregaParcialDesdeBtn(this)">➕ Entregar parcial</button>
                                                                 {% if entregado_item >= total_piezas_item %}
-                                                                <form method="post" action="/entregas/mover_almacen/{{ item.id }}" style="display:inline;">
+                                                                <form method="post" action="/entregas/mover_almacen/{{ item.id }}" style="display:inline;" data-async-refresh="1">
                                                                     <button class="btn-mini btn-send" type="submit">→ Enviar a Almacén</button>
                                                                 </form>
                                                                 {% else %}
@@ -209,7 +215,7 @@
                     {% endif %}
                     {% if has_permission('entregas', 'edit') or has_permission('catalog', 'edit') %}
                     <div style="margin-top:8px; display:flex; gap:6px;">
-                        <form method="post" action="/entregas/mover_facturacion/{{ item.id }}">
+                        <form method="post" action="/entregas/mover_facturacion/{{ item.id }}" data-async-refresh="1">
                             <button class="btn-mini btn-send" type="submit">Enviar a Facturación</button>
                         </form>
                     </div>
@@ -230,16 +236,30 @@
                 {% for r in historial_entregas %}
                 <div style="padding:6px 0; border-bottom:1px solid #eef2f7;">
                     <div><strong>Hoja #{{ r.hoja_ruta_id }}</strong></div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px; align-items:center;">
+                        <span class="step-chip {{ r.estado_variant }}">{{ r.estado_label }}</span>
+                        <span class="step-chip neutral">{{ r.responsable_label }}</span>
+                        {% if r.autorizado_por %}
+                        <span class="step-chip ok">Autorizó: {{ r.autorizado_por }}</span>
+                        {% endif %}
+                    </div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;">
                         <span class="step-chip {{ 'ok' if r.check_entregas else '' }}">{{ '✓' if r.check_entregas else '○' }} Entregas</span>
                         <span class="step-chip {{ 'ok' if r.check_almacen else '' }}">{{ '✓' if r.check_almacen else '○' }} Almacén</span>
                         <span class="step-chip {{ 'ok' if r.check_lista_facturacion else '' }}">{{ '✓' if r.check_lista_facturacion else '○' }} Lista Facturación</span>
                         <span class="step-chip {{ 'ok' if r.check_facturacion else '' }}">{{ '✓' if r.check_facturacion else '○' }} Facturación</span>
-                        {% if r.check_devuelta %}
+                        <span class="step-chip {{ 'ok' if r.check_finalizada else '' }}">{{ '✓' if r.check_finalizada else '○' }} Finalizada</span>
+                        {% if r.check_devuelta_almacen %}
                         <span class="step-chip warn">↺ Devuelta desde Almacén</span>
+                        {% endif %}
+                        {% if r.check_devuelta_facturacion %}
+                        <span class="step-chip warn">↺ Devuelta desde Facturación</span>
                         {% endif %}
                     </div>
                     <div class="small">Último movimiento: {{ r.usuario or '-' }} | {{ r.fecha_ultima.strftime('%Y-%m-%d %H:%M') if r.fecha_ultima else '-' }}</div>
+                    {% if r.autorizado_en %}
+                    <div class="small">Autorización registrada: {{ r.autorizado_en.strftime('%Y-%m-%d %H:%M') if r.autorizado_en else '-' }}</div>
+                    {% endif %}
                 </div>
                 {% endfor %}
             {% else %}
@@ -356,6 +376,51 @@
                         cerrarModalEntregaParcial();
                     }
                 });
+
+        async function softRefreshModuleImpl() {
+            const res = await fetch(window.location.pathname, {
+                credentials: 'same-origin',
+                headers: { 'X-Platform-No-Refresh': '1' }
+            });
+            if (!res.ok) throw new Error('No se pudo refrescar el módulo');
+            const html = await res.text();
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            const nextContainer = doc.querySelector('.container');
+            const currentContainer = document.querySelector('.container');
+            if (!nextContainer || !currentContainer) throw new Error('No se pudo actualizar la vista');
+            currentContainer.innerHTML = nextContainer.innerHTML;
+        }
+
+        window.softRefreshModule = softRefreshModuleImpl;
+
+        document.addEventListener('submit', async function(event) {
+            const form = event.target.closest('form[data-async-refresh="1"]');
+            if (!form) return;
+
+            event.preventDefault();
+            const submitter = event.submitter;
+            if (submitter) submitter.disabled = true;
+
+            try {
+                const formData = new FormData(form);
+                const res = await fetch(form.action, {
+                    method: (form.method || 'POST').toUpperCase(),
+                    body: formData,
+                    credentials: 'same-origin',
+                    headers: { 'X-Platform-No-Refresh': '1' }
+                });
+                if (!res.ok) throw new Error('No se pudo completar la acción');
+                if (window.platformRefreshNow) {
+                    window.platformRefreshNow();
+                } else {
+                    window.location.reload();
+                }
+            } catch (err) {
+                alert('Error: ' + (err.message || err));
+            } finally {
+                if (submitter) submitter.disabled = false;
+            }
+        });
 
         const dropzone = document.getElementById('dropzoneEntregas');
         if (dropzone) {

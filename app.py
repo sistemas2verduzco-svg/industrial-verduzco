@@ -3748,6 +3748,96 @@ def _sync_flujo_parciales(flujo: HojaRutaFlujoLogistica, hoja: HojaRutaEntrega =
     flujo.estado_parciales = 'todas' if total > 0 and entregado == total else 'pendientes'
 
 
+def _build_logistica_resumen(limit=80):
+    flujos = (
+        HojaRutaFlujoLogistica.query
+        .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
+        .limit(limit)
+        .all()
+    )
+    hoja_ids = [item.hoja_ruta_id for item in flujos]
+
+    devoluciones_almacen = set()
+    devoluciones_facturacion = set()
+    llego_facturacion = set()
+    if hoja_ids:
+        entrega_logs = (
+            EntregaRegistro.query
+            .filter(EntregaRegistro.hoja_ruta_id.in_(hoja_ids))
+            .order_by(EntregaRegistro.fecha_creacion.desc())
+            .all()
+        )
+        for log in entrega_logs:
+            accion = (log.accion or '').strip().lower()
+            if accion == 'devuelta_desde_almacen':
+                devoluciones_almacen.add(log.hoja_ruta_id)
+            elif accion == 'devuelta_desde_facturacion':
+                devoluciones_facturacion.add(log.hoja_ruta_id)
+            elif accion == 'enviada_a_facturacion':
+                llego_facturacion.add(log.hoja_ruta_id)
+
+    resumen = []
+    for flujo in flujos:
+        estado = (flujo.estado or '').strip().lower()
+        hoja_id = flujo.hoja_ruta_id
+        check_almacen = (
+            estado in ('almacen', 'entregas_lista_facturacion', 'facturacion', 'finalizada')
+            or bool(flujo.almacen_validado or flujo.almacen_recepcion_id)
+        )
+        check_lista_facturacion = estado in ('entregas_lista_facturacion', 'facturacion', 'finalizada')
+        check_facturacion = estado in ('facturacion', 'finalizada') or hoja_id in llego_facturacion
+        check_finalizada = estado == 'finalizada' or bool(flujo.facturacion_aprobado)
+
+        estado_label = 'Sin flujo activo'
+        responsable_label = 'Sin responsable'
+        estado_variant = 'neutral'
+
+        if estado == 'entregas':
+            estado_label = 'En espera de Entregas'
+            responsable_label = 'Responsable: Entregas'
+            estado_variant = 'warn'
+        elif estado == 'almacen':
+            estado_label = 'En espera de Almacén'
+            responsable_label = 'Responsable: Almacén'
+            estado_variant = 'warn'
+        elif estado == 'entregas_lista_facturacion':
+            estado_label = 'Autorizada por Almacén'
+            responsable_label = 'Responsable: Entregas para enviar a Facturación'
+            estado_variant = 'ok'
+        elif estado == 'facturacion':
+            estado_label = 'En espera de Facturación'
+            responsable_label = 'Responsable: Facturación'
+            estado_variant = 'warn'
+        elif estado == 'finalizada':
+            estado_label = 'Autorizada por Facturación'
+            responsable_label = 'Proceso cerrado'
+            estado_variant = 'ok'
+
+        resumen.append({
+            'flujo_id': flujo.id,
+            'hoja_ruta_id': hoja_id,
+            'hoja_nombre': (flujo.hoja_ruta.nombre if flujo.hoja_ruta else f'HOJA #{hoja_id}'),
+            'usuario': flujo.actualizado_por or flujo.creado_por,
+            'fecha_ultima': flujo.fecha_actualizacion,
+            'check_entregas': True,
+            'check_almacen': check_almacen,
+            'check_lista_facturacion': check_lista_facturacion,
+            'check_facturacion': check_facturacion,
+            'check_finalizada': check_finalizada,
+            'check_devuelta_almacen': hoja_id in devoluciones_almacen,
+            'check_devuelta_facturacion': hoja_id in devoluciones_facturacion,
+            'estado_actual': estado,
+            'estado_label': estado_label,
+            'responsable_label': responsable_label,
+            'estado_variant': estado_variant,
+            'autorizado_por': flujo.facturacion_aprobado_por or '',
+            'autorizado_en': flujo.facturacion_aprobado_en,
+            'recepcion_id': flujo.almacen_recepcion_id or '',
+        })
+
+    return resumen
+
+
 @app.route('/entregas')
 @login_required
 @requires_any_permission([('entregas', 'view'), ('catalog', 'edit')])
@@ -3770,52 +3860,7 @@ def entregas_module():
         .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
         .all()
     )
-    historial_eventos = (
-        EntregaRegistro.query
-        .order_by(EntregaRegistro.fecha_creacion.desc())
-        .limit(400)
-        .all()
-    )
-
-    historial_map = {}
-    for ev in historial_eventos:
-        hoja_id = ev.hoja_ruta_id
-        if hoja_id not in historial_map:
-            historial_map[hoja_id] = {
-                'hoja_ruta_id': hoja_id,
-                'usuario': ev.usuario,
-                'fecha_ultima': ev.fecha_creacion,
-                'check_entregas': False,
-                'check_almacen': False,
-                'check_lista_facturacion': False,
-                'check_facturacion': False,
-                'check_devuelta': False,
-            }
-
-        item = historial_map[hoja_id]
-        accion = (ev.accion or '').strip().lower()
-
-        if accion == 'agregada_en_entregas':
-            item['check_entregas'] = True
-        elif accion == 'enviada_a_almacen':
-            item['check_almacen'] = True
-        elif accion == 'lista_para_facturacion':
-            item['check_lista_facturacion'] = True
-        elif accion == 'enviada_a_facturacion':
-            item['check_facturacion'] = True
-        elif accion == 'devuelta_desde_almacen':
-            item['check_devuelta'] = True
-
-        # Conserva la fecha/usuario del último evento por hoja.
-        if not item['fecha_ultima'] or (ev.fecha_creacion and ev.fecha_creacion > item['fecha_ultima']):
-            item['fecha_ultima'] = ev.fecha_creacion
-            item['usuario'] = ev.usuario
-
-    historial_entregas = sorted(
-        historial_map.values(),
-        key=lambda x: x['fecha_ultima'] or datetime.min,
-        reverse=True,
-    )
+    historial_entregas = _build_logistica_resumen(limit=80)
     return render_template(
         'entregas_module.html',
         hojas=hojas,
@@ -4032,12 +4077,7 @@ def almacen_module():
         .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
         .all()
     )
-    historial_almacen = (
-        AlmacenRegistro.query
-        .order_by(AlmacenRegistro.fecha_creacion.desc())
-        .limit(80)
-        .all()
-    )
+    historial_almacen = _build_logistica_resumen(limit=80)
 
     return render_template(
         'almacen_module.html',
@@ -4207,12 +4247,7 @@ def facturacion_module():
         .limit(50)
         .all()
     )
-    historial_facturacion = (
-        FacturacionRegistro.query
-        .order_by(FacturacionRegistro.fecha_creacion.desc())
-        .limit(80)
-        .all()
-    )
+    historial_facturacion = _build_logistica_resumen(limit=80)
     return render_template(
         'facturacion_module.html',
         pendientes_facturacion=pendientes_facturacion,

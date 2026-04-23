@@ -12,6 +12,22 @@
         .field { display:flex; flex-direction:column; gap:4px; }
         .field input { border:1px solid #d1d5db; border-radius:6px; padding:7px; }
         .btn-ok { border:0; border-radius:6px; padding:8px 10px; background:#0f766e; color:#fff; font-weight:700; cursor:pointer; }
+        .row { display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; }
+        .badge { display:inline-block; border-radius:999px; padding:2px 8px; font-size:11px; background:#e2e8f0; color:#475569; }
+        .step-chip {
+            display:inline-flex;
+            align-items:center;
+            gap:4px;
+            padding:2px 8px;
+            border-radius:999px;
+            font-size:11px;
+            border:1px solid #d1d5db;
+            background:#f8fafc;
+            color:#64748b;
+        }
+        .step-chip.ok { border-color:#86efac; background:#dcfce7; color:#166534; font-weight:700; }
+        .step-chip.warn { border-color:#fdba74; background:#ffedd5; color:#9a3412; font-weight:700; }
+        .step-chip.neutral { border-color:#cbd5e1; background:#f8fafc; color:#475569; font-weight:700; }
 
         @media (max-width: 980px) {
             .row-grid { grid-template-columns:1fr; }
@@ -34,7 +50,7 @@
                     <div class="small">Entregado: <strong style="color:#0f766e;">{{ item.cantidad_entregada or 0 }}</strong> / {{ item.cantidad_total_piezas or item.hoja_ruta.cantidad_piezas or 0 }} | Pendiente: <strong style="color:#b91c1c;">{{ item.cantidad_pendiente if item.cantidad_pendiente is not none else ((item.cantidad_total_piezas or item.hoja_ruta.cantidad_piezas or 0) - (item.cantidad_entregada or 0)) }}</strong></div>
                     <div class="small"><a href="/hoja/{{ item.hoja_ruta.id }}" target="_blank">Ver hoja de ruta</a></div>
 
-                    <form method="post" action="/almacen/recibir/{{ item.id }}" enctype="multipart/form-data" style="margin-top:10px;">
+                    <form method="post" action="/almacen/recibir/{{ item.id }}" enctype="multipart/form-data" style="margin-top:10px;" data-async-refresh="1">
                         <div class="row-grid">
                             <label class="field">
                                 <span>ID recepción (CONTPAQ)</span>
@@ -58,7 +74,7 @@
                     </form>
 
                     {% if has_permission('almacen', 'edit') or has_permission('catalog', 'edit') %}
-                    <form method="post" action="/almacen/regresar_entregas/{{ item.id }}" style="margin-top:8px; display:grid; gap:6px;">
+                    <form method="post" action="/almacen/regresar_entregas/{{ item.id }}" style="margin-top:8px; display:grid; gap:6px;" data-async-refresh="1">
                         <label class="field">
                             <span>Motivo de regreso a Entregas</span>
                             <input type="text" name="motivo_regreso" placeholder="Ej: recepción no corresponde, datos incompletos" required>
@@ -76,12 +92,41 @@
         </div>
 
         <div class="panel" style="margin-top:12px;">
-            <h3 style="margin:0 0 8px 0; font-size:16px;">Historial Almacén</h3>
+            <div class="row" style="margin-bottom:8px;">
+                <h3 style="margin:0; font-size:16px;">Historial Almacén</h3>
+                <span class="badge">{{ historial_almacen|length }} hojas</span>
+            </div>
             {% if historial_almacen %}
                 {% for r in historial_almacen %}
                 <div style="padding:6px 0; border-bottom:1px solid #eef2f7;">
-                    <div><strong>Hoja #{{ r.hoja_ruta_id }}</strong> | Recepción: {{ r.recepcion_id or '-' }}</div>
-                    <div class="small">Usuario: {{ r.usuario or '-' }} | Validado: {{ 'Sí' if r.validado else 'No' }} | {{ r.fecha_creacion.strftime('%Y-%m-%d %H:%M') if r.fecha_creacion else '-' }}</div>
+                    <div><strong>{{ r.hoja_nombre }}</strong></div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px; align-items:center;">
+                        <span class="step-chip {{ r.estado_variant }}">{{ r.estado_label }}</span>
+                        <span class="step-chip neutral">{{ r.responsable_label }}</span>
+                        {% if r.recepcion_id %}
+                        <span class="step-chip ok">Recepción: {{ r.recepcion_id }}</span>
+                        {% endif %}
+                        {% if r.autorizado_por %}
+                        <span class="step-chip ok">Autorizó: {{ r.autorizado_por }}</span>
+                        {% endif %}
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px;">
+                        <span class="step-chip {{ 'ok' if r.check_entregas else '' }}">{{ '✓' if r.check_entregas else '○' }} Entregas</span>
+                        <span class="step-chip {{ 'ok' if r.check_almacen else '' }}">{{ '✓' if r.check_almacen else '○' }} Almacén</span>
+                        <span class="step-chip {{ 'ok' if r.check_lista_facturacion else '' }}">{{ '✓' if r.check_lista_facturacion else '○' }} Lista Facturación</span>
+                        <span class="step-chip {{ 'ok' if r.check_facturacion else '' }}">{{ '✓' if r.check_facturacion else '○' }} Facturación</span>
+                        <span class="step-chip {{ 'ok' if r.check_finalizada else '' }}">{{ '✓' if r.check_finalizada else '○' }} Finalizada</span>
+                        {% if r.check_devuelta_almacen %}
+                        <span class="step-chip warn">↺ Devuelta desde Almacén</span>
+                        {% endif %}
+                        {% if r.check_devuelta_facturacion %}
+                        <span class="step-chip warn">↺ Devuelta desde Facturación</span>
+                        {% endif %}
+                    </div>
+                    <div class="small">Último movimiento: {{ r.usuario or '-' }} | {{ r.fecha_ultima.strftime('%Y-%m-%d %H:%M') if r.fecha_ultima else '-' }}</div>
+                    {% if r.autorizado_en %}
+                    <div class="small">Autorización registrada: {{ r.autorizado_en.strftime('%Y-%m-%d %H:%M') if r.autorizado_en else '-' }}</div>
+                    {% endif %}
                 </div>
                 {% endfor %}
             {% else %}
@@ -89,5 +134,54 @@
             {% endif %}
         </div>
     </div>
+
+    <script>
+        (function() {
+            async function softRefreshModuleImpl() {
+                const res = await fetch(window.location.pathname, {
+                    credentials: 'same-origin',
+                    headers: { 'X-Platform-No-Refresh': '1' }
+                });
+                if (!res.ok) throw new Error('No se pudo refrescar el módulo');
+                const html = await res.text();
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+                const nextContainer = doc.querySelector('.container');
+                const currentContainer = document.querySelector('.container');
+                if (!nextContainer || !currentContainer) throw new Error('No se pudo actualizar la vista');
+                currentContainer.innerHTML = nextContainer.innerHTML;
+            }
+
+            window.softRefreshModule = softRefreshModuleImpl;
+
+            document.addEventListener('submit', async function(event) {
+                const form = event.target.closest('form[data-async-refresh="1"]');
+                if (!form) return;
+
+                event.preventDefault();
+                const submitter = event.submitter;
+                if (submitter) submitter.disabled = true;
+
+                try {
+                    const formData = new FormData(form);
+                    const res = await fetch(form.action, {
+                        method: (form.method || 'POST').toUpperCase(),
+                        body: formData,
+                        credentials: 'same-origin',
+                        headers: { 'X-Platform-No-Refresh': '1' }
+                    });
+                    if (!res.ok) throw new Error('No se pudo completar la acción');
+                    if (window.platformRefreshNow) {
+                        window.platformRefreshNow();
+                    } else {
+                        window.location.reload();
+                    }
+                } catch (err) {
+                    alert(err.message || err);
+                } finally {
+                    if (submitter) submitter.disabled = false;
+                }
+            });
+        })();
+    </script>
 </body>
 </html>
