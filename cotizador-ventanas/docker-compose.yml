@@ -1,0 +1,36 @@
+services:
+  cotizador_back:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cotizador_back
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 5001
+      FRONTEND_ORIGINS: http://localhost:3001,https://cotizador.midominio.com
+      GOOGLE_SHEETS_CSV_URL: ${GOOGLE_SHEETS_CSV_URL}
+      CACHE_TTL_MS: 300000
+    ports:
+      - '5001:5001'
+    networks:
+      - cotizador_net
+
+  cotizador_front:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:5001}
+    container_name: cotizador_front
+    restart: unless-stopped
+    depends_on:
+      - cotizador_back
+    ports:
+      - '3001:80'
+    networks:
+      - cotizador_net
+
+networks:
+  cotizador_net:
+    name: cotizador_net
