@@ -140,8 +140,25 @@
             let moduleRefreshInFlight = false;
             let moduleRefreshTimerId = null;
 
-            async function softRefreshModuleImpl() {
+            function hasPendingFormEdits() {
+                const forms = Array.from(document.querySelectorAll('form[data-async-refresh="1"]'));
+                return forms.some((form) => {
+                    if (form.dataset.submitting === '1') return false;
+                    if (document.activeElement && form.contains(document.activeElement) && document.activeElement !== document.body) {
+                        return true;
+                    }
+                    return Array.from(form.elements || []).some((field) => {
+                        if (!field || field.disabled) return false;
+                        if (field.type === 'file') return !!(field.files && field.files.length);
+                        if (field.type === 'checkbox' || field.type === 'radio') return field.checked !== field.defaultChecked;
+                        return String(field.value || '') !== String(field.defaultValue || '');
+                    });
+                });
+            }
+
+            async function softRefreshModuleImpl(options = {}) {
                 if (moduleRefreshInFlight) return;
+                if (!options.force && hasPendingFormEdits()) return;
                 moduleRefreshInFlight = true;
                 const res = await fetch(window.location.pathname, {
                     credentials: 'same-origin',
@@ -186,6 +203,8 @@
                 event.preventDefault();
                 const submitter = event.submitter;
                 if (submitter) submitter.disabled = true;
+                form.dataset.submitting = '1';
+                let submitSucceeded = false;
 
                 try {
                     const formData = new FormData(form);
@@ -196,8 +215,9 @@
                         headers: { 'X-Platform-No-Refresh': '1' }
                     });
                     if (!res.ok) throw new Error('No se pudo completar la acción');
+                    submitSucceeded = true;
                     if (window.softRefreshModule) {
-                        await window.softRefreshModule();
+                        await window.softRefreshModule({ force: true });
                     } else if (window.platformRefreshNow) {
                         window.platformRefreshNow();
                     } else {
@@ -206,6 +226,9 @@
                 } catch (err) {
                     alert(err.message || err);
                 } finally {
+                    if (!submitSucceeded) {
+                        delete form.dataset.submitting;
+                    }
                     if (submitter) submitter.disabled = false;
                 }
             });
