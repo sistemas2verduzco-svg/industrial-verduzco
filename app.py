@@ -4945,7 +4945,7 @@ def api_hojas_ruta_lista_para_entregas():
             'calidad': h.calidad or '',
             'cantidad_piezas': h.cantidad_piezas or 0,
             'almacen': h.almacen or '',
-            'orden_trabajo': h.orden_trabajo or '',
+            'orden_trabajo': (h.orden_trabajo_hr or h.orden_trabajo_pt or ''),
             'estado': h.estado or '',
             'estado_flujo': estado_flujo or '',
             'fecha_creacion': h.fecha_creacion.strftime('%Y-%m-%d %H:%M') if h.fecha_creacion else '',
