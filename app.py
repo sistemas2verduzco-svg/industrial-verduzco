@@ -3770,11 +3770,51 @@ def entregas_module():
         .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
         .all()
     )
-    historial_entregas = (
+    historial_eventos = (
         EntregaRegistro.query
         .order_by(EntregaRegistro.fecha_creacion.desc())
-        .limit(80)
+        .limit(400)
         .all()
+    )
+
+    historial_map = {}
+    for ev in historial_eventos:
+        hoja_id = ev.hoja_ruta_id
+        if hoja_id not in historial_map:
+            historial_map[hoja_id] = {
+                'hoja_ruta_id': hoja_id,
+                'usuario': ev.usuario,
+                'fecha_ultima': ev.fecha_creacion,
+                'check_entregas': False,
+                'check_almacen': False,
+                'check_lista_facturacion': False,
+                'check_facturacion': False,
+                'check_devuelta': False,
+            }
+
+        item = historial_map[hoja_id]
+        accion = (ev.accion or '').strip().lower()
+
+        if accion == 'agregada_en_entregas':
+            item['check_entregas'] = True
+        elif accion == 'enviada_a_almacen':
+            item['check_almacen'] = True
+        elif accion == 'lista_para_facturacion':
+            item['check_lista_facturacion'] = True
+        elif accion == 'enviada_a_facturacion':
+            item['check_facturacion'] = True
+        elif accion == 'devuelta_desde_almacen':
+            item['check_devuelta'] = True
+
+        # Conserva la fecha/usuario del último evento por hoja.
+        if not item['fecha_ultima'] or (ev.fecha_creacion and ev.fecha_creacion > item['fecha_ultima']):
+            item['fecha_ultima'] = ev.fecha_creacion
+            item['usuario'] = ev.usuario
+
+    historial_entregas = sorted(
+        historial_map.values(),
+        key=lambda x: x['fecha_ultima'] or datetime.min,
+        reverse=True,
     )
     return render_template(
         'entregas_module.html',
