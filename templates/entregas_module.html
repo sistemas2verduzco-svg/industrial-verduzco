@@ -36,15 +36,20 @@
             <section class="panel">
                 <div class="row">
                     <strong>Hojas Enviadas desde Hojas de Ruta Entregas</strong>
-                    <span class="badge">{{ hojas|length }} enviadas</span>
+                    <span class="badge">{{ pendientes_entregas|length }} enviadas</span>
                 </div>
                 <div class="cards">
-                    {% for h in hojas %}
+                    {% for item in pendientes_entregas %}
                     <div class="hoja-card">
-                        <div><strong>{{ h.nombre or ('HOJA #' ~ h.id) }}</strong></div>
-                        <div class="small">ID: {{ h.id }} | Clave: {{ h.pn or '-' }}</div>
-                        <div class="small">Piezas: {{ h.cantidad_piezas or 0 }} | Estado: {{ h.estado or '-' }}</div>
-                        <div class="small" style="margin-top:4px;"><a href="/hoja/{{ h.id }}" target="_blank">Ver hoja de ruta</a></div>
+                        <div><strong>{{ item.hoja_ruta.nombre or ('HOJA #' ~ item.hoja_ruta.id) }}</strong></div>
+                        <div class="small">ID: {{ item.hoja_ruta.id }} | Clave: {{ item.hoja_ruta.pn or '-' }}</div>
+                        <div class="small">Piezas: {{ item.hoja_ruta.cantidad_piezas or 0 }} | En módulo: {{ item.estado or '-' }}</div>
+                        <div class="small" style="margin-top:4px;"><a href="/hoja/{{ item.hoja_ruta.id }}" target="_blank">Ver hoja de ruta</a></div>
+                        {% if has_permission('entregas', 'edit') or has_permission('catalog', 'edit') %}
+                        <form method="post" action="/entregas/quitar/{{ item.id }}" onsubmit="return confirm('¿Retirar esta hoja de Entregas?\n\nSolo se quitara del módulo de Entregas. La hoja original no se borra de Hojas de Ruta Entregas.');" style="margin-top:8px;">
+                            <button class="btn-mini btn-del" type="submit">Retirar de Entregas</button>
+                        </form>
+                        {% endif %}
 
                         <!-- Modal para Entregas Parciales -->
                         <div id="modalEntregaParcial" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:1000; justify-content:center; align-items:center;">
@@ -74,10 +79,9 @@
                             </div>
                         </div>
                     </div>
+                    {% else %}
+                    <div class="small">Aún no hay hojas enviadas a Entregas.</div>
                     {% endfor %}
-                    {% if not hojas %}
-                    <div class="small">Aún no hay hojas enviadas desde el módulo de Hojas de Ruta Entregas.</div>
-                    {% endif %}
                 </div>
             </section>
 
@@ -153,9 +157,6 @@
                                                                 {% else %}
                                                                 <button type="button" class="btn-mini" style="background:#9ca3af; color:#fff; cursor:not-allowed;" disabled title="Completa todas las entregas antes de enviar">→ Enviar a Almacén</button>
                                                                 {% endif %}
-                                <form method="post" action="/entregas/quitar/{{ item.id }}" onsubmit="return confirm('¿Quitar de bandeja temporal?');" style="display:inline;">
-                                                                        <button class="btn-mini btn-del" type="submit">Quitar</button>
-                                </form>
                             </div>
                             {% endif %}
                         </div>

@@ -3894,6 +3894,9 @@ def entregas_quitar_item(item_id):
     if item.estado == 'entregas':
         db.session.delete(item)
         db.session.commit()
+        flash('La hoja fue retirada de Entregas.', 'success')
+    else:
+        flash('Solo se pueden retirar hojas que siguen en la bandeja de Entregas.', 'error')
     return redirect(url_for('entregas_module'))
 
 
