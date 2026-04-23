@@ -3824,7 +3824,7 @@ def _build_logistica_resumen(limit=80):
             estado in ('almacen', 'entregas_lista_facturacion', 'facturacion', 'finalizada')
             or bool(flujo.almacen_validado or flujo.almacen_recepcion_id)
         )
-        check_lista_facturacion = estado in ('entregas_lista_facturacion', 'facturacion', 'finalizada')
+        check_lista_facturacion = estado in ('entregas_lista_facturacion', 'entregas_revision', 'facturacion', 'finalizada')
         check_facturacion = estado in ('facturacion', 'finalizada') or hoja_id in llego_facturacion
         check_finalizada = estado == 'finalizada' or bool(flujo.facturacion_aprobado)
 
@@ -3844,6 +3844,10 @@ def _build_logistica_resumen(limit=80):
             estado_label = 'Autorizada por Almacén'
             responsable_label = 'Responsable: Entregas para enviar a Facturación'
             estado_variant = 'ok'
+        elif estado == 'entregas_revision':
+            estado_label = 'Regresada para revisión'
+            responsable_label = 'Responsable: Entregas (revisión y reenvío)'
+            estado_variant = 'warn'
         elif estado == 'facturacion':
             estado_label = 'En espera de Facturación'
             responsable_label = 'Responsable: Facturación'
@@ -3894,9 +3898,9 @@ def entregas_module():
         .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
         .all()
     )
-    listas_facturacion = (
+    listas_revision = (
         HojaRutaFlujoLogistica.query
-        .filter_by(estado='entregas_lista_facturacion')
+        .filter(HojaRutaFlujoLogistica.estado.in_(['entregas_lista_facturacion', 'entregas_revision']))
         .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
         .all()
     )
@@ -3905,7 +3909,7 @@ def entregas_module():
         'entregas_module.html',
         hojas=hojas,
         pendientes_entregas=pendientes_entregas,
-        listas_facturacion=listas_facturacion,
+        listas_revision=listas_revision,
         historial_entregas=historial_entregas,
     )
 
@@ -4073,7 +4077,7 @@ def entregas_mover_almacen(item_id):
 
 def entregas_mover_facturacion(item_id):
     item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
-    if item.estado != 'entregas_lista_facturacion':
+    if item.estado not in ('entregas_lista_facturacion', 'entregas_revision'):
         return redirect(url_for('entregas_module'))
 
     _sync_flujo_parciales(item, hoja=item.hoja_ruta)
@@ -4087,6 +4091,32 @@ def entregas_mover_facturacion(item_id):
         flujo_id=item.id,
         accion='enviada_a_facturacion',
         usuario=_logistica_username(),
+    ))
+    db.session.commit()
+    return redirect(url_for('entregas_module'))
+
+
+@app.route('/entregas/revision/mover_almacen/<int:item_id>', methods=['POST'])
+@login_required
+@requires_any_permission([('entregas', 'edit'), ('catalog', 'edit')])
+def entregas_revision_mover_almacen(item_id):
+    item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
+    if item.estado not in ('entregas_lista_facturacion', 'entregas_revision'):
+        return redirect(url_for('entregas_module'))
+
+    _sync_flujo_parciales(item, hoja=item.hoja_ruta)
+    if item.cantidad_entregada != item.cantidad_total_piezas:
+        flash('No se puede reenviar a Almacén: faltan entregas parciales completas.', 'error')
+        return redirect(url_for('entregas_module'))
+
+    item.estado = 'almacen'
+    item.actualizado_por = _logistica_username()
+    db.session.add(EntregaRegistro(
+        hoja_ruta_id=item.hoja_ruta_id,
+        flujo_id=item.id,
+        accion='enviada_a_almacen_revision',
+        usuario=_logistica_username(),
+        notas='Reenviada a Almacén desde panel de revisión de Entregas.',
     ))
     db.session.commit()
     return redirect(url_for('entregas_module'))
@@ -4193,7 +4223,7 @@ def almacen_regresar_entregas(item_id):
     if not motivo:
         motivo = 'Datos incompletos o recepción no válida en almacén.'
 
-    item.estado = 'entregas'
+    item.estado = 'entregas_revision'
     item.actualizado_por = _logistica_username()
 
     db.session.add(AlmacenRegistro(
@@ -4285,7 +4315,7 @@ def facturacion_regresar_entregas(item_id):
     if not motivo:
         motivo = 'Documentación o recepción no corresponde para facturación.'
 
-    item.estado = 'entregas'
+    item.estado = 'entregas_revision'
     item.actualizado_por = _logistica_username()
 
     db.session.add(FacturacionRegistro(

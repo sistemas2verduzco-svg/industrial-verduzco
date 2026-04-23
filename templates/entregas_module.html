@@ -199,16 +199,21 @@
 
         <div class="panel" style="margin-top:12px;">
             <div class="row">
-                <strong>Regresadas por Almacén (Listas para Facturación)</strong>
-                <span class="badge">{{ listas_facturacion|length }} listas</span>
+                <strong>Regresadas por Almacén y/o Facturación para Revisión</strong>
+                <span class="badge">{{ listas_revision|length }} en revisión</span>
             </div>
 
-            {% if listas_facturacion %}
-                {% for item in listas_facturacion %}
+            {% if listas_revision %}
+                {% for item in listas_revision %}
                 <div class="panel" style="margin-bottom:8px; background:#fff;">
                     <div><strong>{{ item.hoja_ruta.nombre or ('HOJA #' ~ item.hoja_ruta.id) }}</strong></div>
                     <div class="small">ID hoja: {{ item.hoja_ruta.id }} | Clave: {{ item.hoja_ruta.pn or '-' }}</div>
                     <div class="small"><a href="/hoja/{{ item.hoja_ruta.id }}" target="_blank">Ver hoja de ruta</a></div>
+                    {% if item.estado == 'entregas_revision' %}
+                    <div class="small" style="color:#b45309; font-weight:700;">Estado: Regresada para revisión</div>
+                    {% else %}
+                    <div class="small" style="color:#0f766e; font-weight:700;">Estado: Lista para Facturación</div>
+                    {% endif %}
                     <div class="small">Recepción CONTPAQ: {{ item.almacen_recepcion_id or '-' }}</div>
                     {% if item.almacen_captura_path %}
                     <div class="small">Captura: <a href="/uploads/{{ item.almacen_captura_path }}" target="_blank">Ver captura</a></div>
@@ -218,12 +223,15 @@
                         <form method="post" action="/entregas/mover_facturacion/{{ item.id }}" data-async-refresh="1">
                             <button class="btn-mini btn-send" type="submit">Enviar a Facturación</button>
                         </form>
+                        <form method="post" action="/entregas/revision/mover_almacen/{{ item.id }}" data-async-refresh="1">
+                            <button class="btn-mini" style="background:#1d4ed8; color:#fff;" type="submit">Enviar a Almacén</button>
+                        </form>
                     </div>
                     {% endif %}
                 </div>
                 {% endfor %}
             {% else %}
-                <div class="small">Aún no hay hojas regresadas por Almacén.</div>
+                <div class="small">Aún no hay hojas regresadas para revisión.</div>
             {% endif %}
         </div>
 
