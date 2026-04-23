@@ -9,8 +9,7 @@
         .panel { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:12px; }
         .layout { display:grid; grid-template-columns:1.25fr 1fr; gap:12px; }
         .cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:8px; }
-        .hoja-card { border:1px solid #dbe4f0; border-radius:8px; padding:10px; background:#f8fbff; cursor:grab; }
-        .hoja-card:active { cursor:grabbing; }
+        .hoja-card { border:1px solid #dbe4f0; border-radius:8px; padding:10px; background:#f8fbff; }
         .dropzone { min-height:280px; border:2px dashed #8ab6e8; border-radius:10px; padding:10px; background:#f0f7ff; }
         .dropzone.drag-over { background:#e3f0ff; border-color:#0b74de; }
         .row { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
@@ -36,21 +35,16 @@
         <div class="layout">
             <section class="panel">
                 <div class="row">
-                    <strong>Todas las Hojas de Ruta</strong>
-                    <span class="badge">{{ hojas|length }} totales</span>
+                    <strong>Hojas Enviadas desde Hojas de Ruta Entregas</strong>
+                    <span class="badge">{{ hojas|length }} enviadas</span>
                 </div>
                 <div class="cards">
                     {% for h in hojas %}
-                    <div class="hoja-card" draggable="true" data-hoja-id="{{ h.id }}">
+                    <div class="hoja-card">
                         <div><strong>{{ h.nombre or ('HOJA #' ~ h.id) }}</strong></div>
                         <div class="small">ID: {{ h.id }} | Clave: {{ h.pn or '-' }}</div>
                         <div class="small">Piezas: {{ h.cantidad_piezas or 0 }} | Estado: {{ h.estado or '-' }}</div>
                         <div class="small" style="margin-top:4px;"><a href="/hoja/{{ h.id }}" target="_blank">Ver hoja de ruta</a></div>
-                        {% if has_permission('entregas', 'edit') or has_permission('catalog', 'edit') %}
-                        <div style="margin-top:8px;">
-                            <button class="btn-mini btn-add" type="button" data-hoja-id="{{ h.id }}" onclick="agregarAEntregas(this.dataset.hojaId)">Agregar</button>
-                        </div>
-                        {% endif %}
 
                         <!-- Modal para Entregas Parciales -->
                         <div id="modalEntregaParcial" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:1000; justify-content:center; align-items:center;">
@@ -81,6 +75,9 @@
                         </div>
                     </div>
                     {% endfor %}
+                    {% if not hojas %}
+                    <div class="small">Aún no hay hojas enviadas desde el módulo de Hojas de Ruta Entregas.</div>
+                    {% endif %}
                 </div>
             </section>
 
@@ -156,19 +153,15 @@
                                                                 {% else %}
                                                                 <button type="button" class="btn-mini" style="background:#9ca3af; color:#fff; cursor:not-allowed;" disabled title="Completa todas las entregas antes de enviar">→ Enviar a Almacén</button>
                                                                 {% endif %}
-                                <form method="post" action="/entregas/mover_almacen/{{ item.id }}">
-                                    <button class="btn-mini btn-send">Enviar a Almacén</button>
-                                </form>
                                 <form method="post" action="/entregas/quitar/{{ item.id }}" onsubmit="return confirm('¿Quitar de bandeja temporal?');" style="display:inline;">
                                                                         <button class="btn-mini btn-del" type="submit">Quitar</button>
-                                    <button class="btn-mini btn-del">Quitar</button>
                                 </form>
                             </div>
                             {% endif %}
                         </div>
                         {% endfor %}
                     {% else %}
-                        <div class="small">Arrastra aquí una hoja de ruta para agregarla a Entregas.</div>
+                        <div class="small">Sin hojas en bandeja. Envía hojas desde el módulo de Hojas de Ruta Entregas.</div>
                     {% endif %}
                 </div>
             </section>
@@ -331,50 +324,9 @@
                     }
                 });
 
-        async function agregarAEntregas(hojaId) {
-            try {
-                const res = await fetch('/api/logistica/entregas/agregar', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({ hoja_id: hojaId })
-                });
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'No se pudo agregar');
-                if (window.platformRefreshNow) {
-                    window.platformRefreshNow();
-                } else {
-                    window.location.reload();
-                }
-            } catch (err) {
-                alert(err.message || err);
-            }
-        }
-
-        let draggedHojaId = null;
-        document.querySelectorAll('.hoja-card[draggable="true"]').forEach(card => {
-            card.addEventListener('dragstart', (e) => {
-                draggedHojaId = card.dataset.hojaId;
-                e.dataTransfer.setData('text/plain', draggedHojaId);
-            });
-        });
-
         const dropzone = document.getElementById('dropzoneEntregas');
         if (dropzone) {
-            dropzone.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                dropzone.classList.add('drag-over');
-            });
-            dropzone.addEventListener('dragleave', () => {
-                dropzone.classList.remove('drag-over');
-            });
-            dropzone.addEventListener('drop', async (e) => {
-                e.preventDefault();
-                dropzone.classList.remove('drag-over');
-                const hojaId = e.dataTransfer.getData('text/plain') || draggedHojaId;
-                if (!hojaId) return;
-                await agregarAEntregas(parseInt(hojaId, 10));
-            });
+            dropzone.classList.remove('drag-over');
         }
     </script>
 </body>

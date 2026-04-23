@@ -3752,7 +3752,12 @@ def _sync_flujo_parciales(flujo: HojaRutaFlujoLogistica, hoja: HojaRutaEntrega =
 @login_required
 @requires_any_permission([('entregas', 'view'), ('catalog', 'edit')])
 def entregas_module():
-    hojas = HojaRutaEntrega.query.order_by(HojaRutaEntrega.fecha_creacion.desc()).all()
+    hojas = (
+        HojaRutaEntrega.query
+        .join(HojaRutaFlujoLogistica, HojaRutaFlujoLogistica.hoja_ruta_id == HojaRutaEntrega.id)
+        .order_by(HojaRutaFlujoLogistica.fecha_actualizacion.desc())
+        .all()
+    )
     pendientes_entregas = (
         HojaRutaFlujoLogistica.query
         .filter_by(estado='entregas')
