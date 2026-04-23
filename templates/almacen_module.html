@@ -137,21 +137,47 @@
 
     <script>
         (function() {
+            let moduleRefreshInFlight = false;
+            let moduleRefreshTimerId = null;
+
             async function softRefreshModuleImpl() {
+                if (moduleRefreshInFlight) return;
+                moduleRefreshInFlight = true;
                 const res = await fetch(window.location.pathname, {
                     credentials: 'same-origin',
                     headers: { 'X-Platform-No-Refresh': '1' }
                 });
-                if (!res.ok) throw new Error('No se pudo refrescar el módulo');
-                const html = await res.text();
-                const doc = new DOMParser().parseFromString(html, 'text/html');
-                const nextContainer = doc.querySelector('.container');
-                const currentContainer = document.querySelector('.container');
-                if (!nextContainer || !currentContainer) throw new Error('No se pudo actualizar la vista');
-                currentContainer.innerHTML = nextContainer.innerHTML;
+                try {
+                    if (!res.ok) throw new Error('No se pudo refrescar el módulo');
+                    const html = await res.text();
+                    const doc = new DOMParser().parseFromString(html, 'text/html');
+                    const nextContainer = doc.querySelector('.container');
+                    const currentContainer = document.querySelector('.container');
+                    if (!nextContainer || !currentContainer) throw new Error('No se pudo actualizar la vista');
+                    currentContainer.innerHTML = nextContainer.innerHTML;
+                } finally {
+                    moduleRefreshInFlight = false;
+                }
             }
 
             window.softRefreshModule = softRefreshModuleImpl;
+
+            function startModuleAutoRefresh() {
+                if (moduleRefreshTimerId) clearInterval(moduleRefreshTimerId);
+                moduleRefreshTimerId = setInterval(() => {
+                    if (!document.hidden) {
+                        softRefreshModuleImpl().catch(() => {});
+                    }
+                }, 8000);
+            }
+
+            startModuleAutoRefresh();
+
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) {
+                    softRefreshModuleImpl().catch(() => {});
+                }
+            });
 
             document.addEventListener('submit', async function(event) {
                 const form = event.target.closest('form[data-async-refresh="1"]');
@@ -170,7 +196,9 @@
                         headers: { 'X-Platform-No-Refresh': '1' }
                     });
                     if (!res.ok) throw new Error('No se pudo completar la acción');
-                    if (window.platformRefreshNow) {
+                    if (window.softRefreshModule) {
+                        await window.softRefreshModule();
+                    } else if (window.platformRefreshNow) {
                         window.platformRefreshNow();
                     } else {
                         window.location.reload();
