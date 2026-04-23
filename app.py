@@ -3827,6 +3827,88 @@ def api_logistica_entregas_agregar():
     return jsonify({'ok': True, 'item': item.to_dict()})
 
 
+@app.route('/api/entregas/parcial', methods=['POST'])
+@login_required
+@requires_any_permission([('entregas', 'edit'), ('catalog', 'edit')])
+def api_entregas_parcial_registrar():
+    data = request.get_json() or {}
+    flujo_id = data.get('flujo_id')
+    cantidad_entregada = data.get('cantidad_entregada')
+    notas = (data.get('notas') or '').strip()
+
+    try:
+        flujo_id = int(flujo_id)
+        cantidad_entregada = int(cantidad_entregada)
+    except Exception:
+        return jsonify({'error': 'flujo_id o cantidad_entregada inválidos'}), 400
+
+    if cantidad_entregada <= 0:
+        return jsonify({'error': 'La cantidad debe ser mayor a 0'}), 400
+
+    item = HojaRutaFlujoLogistica.query.get(flujo_id)
+    if not item:
+        return jsonify({'error': 'Flujo de entregas no encontrado'}), 404
+
+    if item.estado != 'entregas':
+        return jsonify({'error': 'Solo se permiten parciales en estado entregas'}), 409
+
+    _sync_flujo_parciales(item, hoja=item.hoja_ruta)
+    pendiente = int(item.cantidad_pendiente or 0)
+    if pendiente <= 0:
+        return jsonify({'error': 'La hoja ya no tiene piezas pendientes'}), 409
+
+    if cantidad_entregada > pendiente:
+        return jsonify({'error': f'Cantidad excede lo pendiente ({pendiente})'}), 400
+
+    parcial = EntregaParcial(
+        flujo_id=item.id,
+        hoja_ruta_id=item.hoja_ruta_id,
+        cantidad_entregada=cantidad_entregada,
+        usuario_entrega=_logistica_username(),
+        notas=notas,
+    )
+    db.session.add(parcial)
+
+    item.cantidad_entregada = int(item.cantidad_entregada or 0) + cantidad_entregada
+    item.actualizado_por = _logistica_username()
+    _sync_flujo_parciales(item, hoja=item.hoja_ruta)
+
+    db.session.commit()
+    return jsonify({'ok': True, 'parcial': parcial.to_dict(), 'flujo': item.to_dict()})
+
+
+@app.route('/api/entregas/parcial/<int:parcial_id>', methods=['DELETE'])
+@login_required
+@requires_any_permission([('entregas', 'edit'), ('catalog', 'edit')])
+def api_entregas_parcial_eliminar(parcial_id):
+    parcial = EntregaParcial.query.get(parcial_id)
+    if not parcial:
+        return jsonify({'error': 'Entrega parcial no encontrada'}), 404
+
+    item = HojaRutaFlujoLogistica.query.get(parcial.flujo_id)
+    if not item:
+        db.session.delete(parcial)
+        db.session.commit()
+        return jsonify({'ok': True, 'message': 'Parcial eliminado'})
+
+    if item.estado != 'entregas':
+        return jsonify({'error': 'Solo se pueden deshacer parciales en estado entregas'}), 409
+
+    db.session.delete(parcial)
+    db.session.flush()
+
+    nuevo_entregado = db.session.query(func.coalesce(func.sum(EntregaParcial.cantidad_entregada), 0)).filter(
+        EntregaParcial.flujo_id == item.id
+    ).scalar() or 0
+
+    item.cantidad_entregada = int(nuevo_entregado)
+    item.actualizado_por = _logistica_username()
+    _sync_flujo_parciales(item, hoja=item.hoja_ruta)
+
+    db.session.commit()
+    return jsonify({'ok': True, 'flujo': item.to_dict()})
+
+
 @app.route('/entregas/mover_almacen/<int:item_id>', methods=['POST'])
 @login_required
 @requires_any_permission([('entregas', 'edit'), ('catalog', 'edit')])
