@@ -4919,6 +4919,40 @@ def api_alertas_buzon_reenviar_telegram(alerta_id):
     return jsonify({'ok': ok, 'reason': reason, 'alerta_id': alerta.id}), code
 
 
+@app.route('/api/hojas_ruta/lista_para_entregas')
+@login_required
+@requires_any_permission([('hojas_entregas', 'view'), ('entregas', 'view'), ('catalog', 'view')])
+def api_hojas_ruta_lista_para_entregas():
+    """Devuelve todas las hojas de ruta como JSON para el selector de entregas del dia."""
+    hojas = HojaRutaEntrega.query.order_by(HojaRutaEntrega.fecha_creacion.desc()).all()
+    hoja_ids = [h.id for h in hojas]
+
+    # Hojas que ya estan en el flujo de entregas (no finalizada/facturacion)
+    flujos = HojaRutaFlujoLogistica.query.filter(
+        HojaRutaFlujoLogistica.hoja_ruta_id.in_(hoja_ids)
+    ).all() if hoja_ids else []
+    flujo_por_hoja = {f.hoja_ruta_id: f.estado for f in flujos}
+
+    result = []
+    for h in hojas:
+        descripcion = _resolve_clave_descripcion_by_pn(h.pn)
+        estado_flujo = flujo_por_hoja.get(h.id)
+        result.append({
+            'id': h.id,
+            'serie': h.nombre or '',
+            'clave': h.pn or '',
+            'descripcion': descripcion or '',
+            'calidad': h.calidad or '',
+            'cantidad_piezas': h.cantidad_piezas or 0,
+            'almacen': h.almacen or '',
+            'orden_trabajo': h.orden_trabajo or '',
+            'estado': h.estado or '',
+            'estado_flujo': estado_flujo or '',
+            'fecha_creacion': h.fecha_creacion.strftime('%Y-%m-%d %H:%M') if h.fecha_creacion else '',
+        })
+    return jsonify({'hojas': result, 'total': len(result)})
+
+
 @app.route('/hojas_ruta_entregas_form')
 @login_required
 @requires_any_permission([('hojas_entregas', 'view'), ('hojas', 'view'), ('catalog', 'view')])

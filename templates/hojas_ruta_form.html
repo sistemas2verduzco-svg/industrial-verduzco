@@ -701,6 +701,9 @@
                 <button type="button" id="hojasSearchClear" class="btn btn-secondary" style="padding:7px 10px;">Limpiar</button>
                 <button type="button" class="btn btn-secondary" style="padding:8px 10px;" onclick="abrirImpresionParcialModal()">Impresion parcial</button>
                 <button type="button" class="btn btn-secondary" style="padding:8px 10px;" onclick="abrirReportesModal()">Reportes</button>
+                {% if has_permission('entregas', 'edit') or has_permission('catalog', 'edit') or has_permission('hojas_entregas', 'view') %}
+                <button type="button" id="btnPanelEntregas" style="padding:8px 14px; background:#0f766e; color:#fff; border:none; border-radius:6px; font-weight:700; cursor:pointer; font-size:13px;" onclick="abrirPanelEntregas()">&#128661; Enviar a Entregas</button>
+                {% endif %}
             </div>
         </div>
         <div class="card hojas-recientes-wrap">
@@ -2003,6 +2006,486 @@
             if (e.target.id === 'reportesModal') {
                 cerrarReportesModal();
             }
+        });
+    </script>
+
+    <!-- ===== PANEL FLOTANTE: ENVIAR HOJAS A ENTREGAS ===== -->
+    <style>
+        #panelEntregasBackdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.52);
+            z-index: 5000;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 24px 16px;
+            overflow-y: auto;
+        }
+        #panelEntregasBackdrop.open { display: flex; }
+
+        #panelEntregasCard {
+            width: min(1120px, 97vw);
+            background: #fff;
+            border-radius: 14px;
+            border: 1px solid #d1d5db;
+            box-shadow: 0 24px 60px rgba(0,0,0,0.2);
+            display: flex;
+            flex-direction: column;
+            max-height: calc(100vh - 48px);
+            overflow: hidden;
+        }
+        #panelEntregasHead {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 16px 20px;
+            border-bottom: 1px solid #e5e7eb;
+            background: #f8fafc;
+            flex-shrink: 0;
+        }
+        #panelEntregasHead h3 { margin: 0; font-size: 16px; color: #0f172a; }
+        #panelEntregasClose {
+            border: none; background: #e5e7eb; border-radius: 6px;
+            width: 32px; height: 32px; font-size: 18px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; color: #374151;
+        }
+        #panelEntregasClose:hover { background: #d1d5db; }
+
+        #panelEntregasSearch {
+            padding: 12px 20px;
+            border-bottom: 1px solid #e5e7eb;
+            flex-shrink: 0;
+        }
+        #panelEntregasSearch input {
+            width: 100%;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            padding: 9px 12px;
+            font-size: 14px;
+            outline: none;
+        }
+        #panelEntregasSearch input:focus { border-color: #0b74de; box-shadow: 0 0 0 3px rgba(11,116,222,0.1); }
+
+        #panelEntregasBody {
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+            gap: 0;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        #panelEntregasLista {
+            border-right: 1px solid #e5e7eb;
+            overflow-y: auto;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .pe-hoja-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 8px 10px;
+            background: #f8fafc;
+            cursor: grab;
+            user-select: none;
+            transition: background 0.15s;
+        }
+        .pe-hoja-row:hover { background: #eff6ff; border-color: #93c5fd; }
+        .pe-hoja-row.drag-over-row { background: #dbeafe; }
+        .pe-hoja-row.ya-en-bandeja { opacity: 0.45; cursor: not-allowed; }
+        .pe-hoja-row.ya-en-flujo { border-left: 3px solid #0f766e; }
+        .pe-hoja-info { flex: 1; min-width: 0; }
+        .pe-hoja-serie { font-weight: 700; font-size: 13px; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .pe-hoja-meta { font-size: 11px; color: #64748b; margin-top: 2px; }
+        .pe-hoja-estado { font-size: 11px; padding: 2px 6px; border-radius: 999px; background: #e2e8f0; color: #334155; white-space: nowrap; }
+        .pe-hoja-estado.en-entregas { background: #dcfce7; color: #15803d; }
+        .pe-btn-add {
+            border: none; border-radius: 6px; padding: 5px 10px;
+            background: #0b74de; color: #fff; font-size: 12px;
+            font-weight: 700; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+        }
+        .pe-btn-add:disabled { background: #9ca3af; cursor: not-allowed; }
+        .pe-btn-add:not(:disabled):hover { background: #0960b8; }
+
+        #panelEntregasBandeja {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #panelEntregasBandejaHead {
+            padding: 12px 16px 8px;
+            border-bottom: 1px solid #e5e7eb;
+            flex-shrink: 0;
+        }
+        #panelEntregasBandejaHead strong { font-size: 14px; color: #0f172a; }
+        #panelEntregasBandejaHead .pe-hint { font-size: 12px; color: #64748b; margin-top: 3px; }
+        #panelEntregasDropzone {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 12px;
+            min-height: 160px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            border: 2px dashed #cbd5e1;
+            border-radius: 0;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        #panelEntregasDropzone.drag-active {
+            border-color: #0b74de;
+            background: #eff6ff;
+        }
+        #panelEntregasDropzonePlaceholder {
+            color: #9ca3af;
+            font-size: 13px;
+            text-align: center;
+            margin: auto;
+            padding: 24px 0;
+        }
+        .pe-bandeja-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            padding: 8px 10px;
+            background: #eff6ff;
+        }
+        .pe-bandeja-info { flex: 1; min-width: 0; }
+        .pe-bandeja-serie { font-weight: 700; font-size: 13px; color: #1e40af; }
+        .pe-bandeja-meta { font-size: 11px; color: #64748b; margin-top: 1px; }
+        .pe-btn-remove {
+            border: none; border-radius: 6px; padding: 4px 8px;
+            background: #fee2e2; color: #dc2626; font-size: 12px;
+            font-weight: 700; cursor: pointer; flex-shrink: 0;
+        }
+        .pe-btn-remove:hover { background: #fecaca; }
+        #panelEntregasBandejaFooter {
+            padding: 12px 16px;
+            border-top: 1px solid #e5e7eb;
+            flex-shrink: 0;
+        }
+        #btnEnviarAEntregas {
+            width: 100%;
+            padding: 12px;
+            background: #0f766e;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        #btnEnviarAEntregas:hover { background: #0d6660; }
+        #btnEnviarAEntregas:disabled { background: #9ca3af; cursor: not-allowed; }
+        #panelEntregasStatus {
+            font-size: 12px;
+            color: #64748b;
+            text-align: center;
+            margin-top: 6px;
+            min-height: 18px;
+        }
+
+        @media (max-width: 760px) {
+            #panelEntregasBody { grid-template-columns: 1fr; }
+            #panelEntregasLista { border-right: none; border-bottom: 1px solid #e5e7eb; max-height: 42vh; }
+        }
+    </style>
+
+    <div id="panelEntregasBackdrop">
+        <div id="panelEntregasCard">
+            <div id="panelEntregasHead">
+                <div>
+                    <h3>&#128661; Enviar hojas de ruta a Entregas del dia</h3>
+                    <div style="font-size:12px; color:#64748b; margin-top:2px;">Busca y arrastra hojas a la bandeja, luego presiona Enviar.</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span id="peContadorTotal" style="font-size:12px; color:#64748b;"></span>
+                    <button id="panelEntregasClose" type="button" onclick="cerrarPanelEntregas()" title="Cerrar">&times;</button>
+                </div>
+            </div>
+
+            <div id="panelEntregasSearch">
+                <input type="search" id="peSearchInput" placeholder="Buscar por serie, clave, descripcion, calidad, almacen, estado, OT..." autocomplete="off" oninput="peFiltrar()">
+            </div>
+
+            <div id="panelEntregasBody">
+                <!-- Lista izquierda -->
+                <div id="panelEntregasLista">
+                    <div id="peListaSpinner" style="color:#64748b; font-size:13px; padding:16px 0;">Cargando hojas...</div>
+                </div>
+
+                <!-- Bandeja derecha -->
+                <div id="panelEntregasBandeja">
+                    <div id="panelEntregasBandejaHead">
+                        <strong>Bandeja de envio <span id="peBandejaCount" style="color:#0b74de;">(0)</span></strong>
+                        <div class="pe-hint">Agrega hojas desde la lista o arrastralas aqui.</div>
+                    </div>
+
+                    <div id="panelEntregasDropzone"
+                         ondragover="event.preventDefault(); this.classList.add('drag-active')"
+                         ondragleave="this.classList.remove('drag-active')"
+                         ondrop="peOnDrop(event)">
+                        <div id="panelEntregasDropzonePlaceholder">
+                            Arrastra hojas aqui o usa el boton Agregar
+                        </div>
+                    </div>
+
+                    <div id="panelEntregasBandejaFooter">
+                        <button id="btnEnviarAEntregas" type="button" disabled onclick="peEnviarTodas()">
+                            Enviar 0 hojas a Entregas
+                        </button>
+                        <div id="panelEntregasStatus"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== PANEL ENTREGAS: DATOS Y ESTADO =====
+        const peState = {
+            todas: [],          // todas las hojas cargadas del API
+            filtradas: [],      // despues del search
+            bandeja: new Map(), // id -> hojaObj
+            cargando: false,
+            enviando: false,
+        };
+
+        function abrirPanelEntregas() {
+            document.getElementById('panelEntregasBackdrop').classList.add('open');
+            document.getElementById('peSearchInput').value = '';
+            if (!peState.cargando && peState.todas.length === 0) {
+                peCargarHojas();
+            } else {
+                peFiltrar();
+            }
+        }
+
+        function cerrarPanelEntregas() {
+            document.getElementById('panelEntregasBackdrop').classList.remove('open');
+        }
+
+        async function peCargarHojas() {
+            peState.cargando = true;
+            document.getElementById('peListaSpinner').style.display = 'block';
+            document.getElementById('peListaSpinner').textContent = 'Cargando hojas...';
+            try {
+                const res = await fetch('/api/hojas_ruta/lista_para_entregas', { credentials: 'same-origin' });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const payload = await res.json();
+                peState.todas = payload.hojas || [];
+                document.getElementById('peContadorTotal').textContent = peState.todas.length + ' hojas totales';
+            } catch (err) {
+                document.getElementById('peListaSpinner').textContent = 'Error al cargar. Cierra y vuelve a abrir.';
+                peState.cargando = false;
+                return;
+            }
+            peState.cargando = false;
+            document.getElementById('peListaSpinner').style.display = 'none';
+            peFiltrar();
+        }
+
+        function peNorm(v) {
+            return String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        }
+
+        function peFiltrar() {
+            const q = peNorm(document.getElementById('peSearchInput').value);
+            peState.filtradas = q
+                ? peState.todas.filter(h =>
+                    [h.serie, h.clave, h.descripcion, h.calidad, h.almacen, h.estado, h.orden_trabajo, String(h.id)]
+                        .map(peNorm).join(' ').includes(q))
+                : [...peState.todas];
+            peRenderLista();
+        }
+
+        function peRenderLista() {
+            const container = document.getElementById('panelEntregasLista');
+            // Limpia filas existentes (pero no el spinner)
+            Array.from(container.querySelectorAll('.pe-hoja-row')).forEach(el => el.remove());
+
+            if (!peState.filtradas.length) {
+                const msg = document.createElement('div');
+                msg.className = 'pe-hoja-row';
+                msg.style.cssText = 'color:#9ca3af; font-size:13px; cursor:default; border:none; background:transparent;';
+                msg.textContent = peState.todas.length ? 'Sin resultados para la busqueda.' : 'No hay hojas registradas.';
+                container.appendChild(msg);
+                return;
+            }
+
+            peState.filtradas.forEach(h => {
+                const enBandeja = peState.bandeja.has(h.id);
+                const enFlujoActivo = ['entregas', 'entregas_lista_facturacion', 'almacen'].includes(h.estado_flujo);
+
+                const row = document.createElement('div');
+                row.className = 'pe-hoja-row' + (enBandeja ? ' ya-en-bandeja' : '') + (enFlujoActivo ? ' ya-en-flujo' : '');
+                row.draggable = !enBandeja;
+                row.dataset.hojaId = h.id;
+
+                const estadoBadge = h.estado_flujo
+                    ? `<span class="pe-hoja-estado ${enFlujoActivo ? 'en-entregas' : ''}">${h.estado_flujo}</span>`
+                    : '';
+
+                row.innerHTML = `
+                    <div class="pe-hoja-info">
+                        <div class="pe-hoja-serie">#${h.id} &mdash; ${h.serie || '-'}</div>
+                        <div class="pe-hoja-meta">
+                            <b>${h.clave || '-'}</b>
+                            ${h.descripcion ? ' &middot; ' + h.descripcion : ''}
+                            &middot; ${h.cantidad_piezas} pzs
+                            ${h.almacen ? ' &middot; ' + h.almacen : ''}
+                            ${h.calidad ? ' &middot; Cal:' + h.calidad : ''}
+                        </div>
+                        <div class="pe-hoja-meta" style="margin-top:2px;">${h.fecha_creacion} ${estadoBadge}</div>
+                    </div>
+                    <button class="pe-btn-add" type="button" data-hoja-id="${h.id}"
+                        ${enBandeja ? 'disabled' : ''}
+                        title="${enBandeja ? 'Ya esta en la bandeja' : 'Agregar a bandeja'}">
+                        ${enBandeja ? 'En bandeja' : '+ Agregar'}
+                    </button>
+                `;
+
+                row.querySelector('.pe-btn-add').addEventListener('click', () => {
+                    if (!enBandeja) peAgregarABandeja(h);
+                });
+
+                row.addEventListener('dragstart', (e) => {
+                    if (enBandeja) { e.preventDefault(); return; }
+                    e.dataTransfer.setData('text/plain', String(h.id));
+                    e.dataTransfer.effectAllowed = 'copy';
+                });
+
+                container.appendChild(row);
+            });
+        }
+
+        function peAgregarABandeja(hoja) {
+            if (peState.bandeja.has(hoja.id)) return;
+            peState.bandeja.set(hoja.id, hoja);
+            peRenderBandeja();
+            peRenderLista();
+        }
+
+        function peQuitarDeBandeja(hojaId) {
+            peState.bandeja.delete(hojaId);
+            peRenderBandeja();
+            peRenderLista();
+        }
+
+        function peRenderBandeja() {
+            const zone = document.getElementById('panelEntregasDropzone');
+            const placeholder = document.getElementById('panelEntregasDropzonePlaceholder');
+            zone.classList.remove('drag-active');
+
+            // Limpia items existentes
+            Array.from(zone.querySelectorAll('.pe-bandeja-item')).forEach(el => el.remove());
+
+            const count = peState.bandeja.size;
+            document.getElementById('peBandejaCount').textContent = '(' + count + ')';
+
+            if (count === 0) {
+                placeholder.style.display = 'block';
+                document.getElementById('btnEnviarAEntregas').disabled = true;
+                document.getElementById('btnEnviarAEntregas').textContent = 'Enviar 0 hojas a Entregas';
+                return;
+            }
+
+            placeholder.style.display = 'none';
+            document.getElementById('btnEnviarAEntregas').disabled = peState.enviando;
+            document.getElementById('btnEnviarAEntregas').textContent =
+                'Enviar ' + count + ' hoja' + (count !== 1 ? 's' : '') + ' a Entregas';
+
+            peState.bandeja.forEach(h => {
+                const item = document.createElement('div');
+                item.className = 'pe-bandeja-item';
+                item.innerHTML = `
+                    <div class="pe-bandeja-info">
+                        <div class="pe-bandeja-serie">#${h.id} &mdash; ${h.serie || '-'}</div>
+                        <div class="pe-bandeja-meta"><b>${h.clave || '-'}</b> &middot; ${h.cantidad_piezas} pzs ${h.calidad ? '&middot; Cal:' + h.calidad : ''}</div>
+                    </div>
+                    <button class="pe-btn-remove" type="button" title="Quitar">&#10005;</button>
+                `;
+                item.querySelector('.pe-btn-remove').addEventListener('click', () => peQuitarDeBandeja(h.id));
+                zone.appendChild(item);
+            });
+        }
+
+        function peOnDrop(event) {
+            event.preventDefault();
+            document.getElementById('panelEntregasDropzone').classList.remove('drag-active');
+            const hojaId = parseInt(event.dataTransfer.getData('text/plain'), 10);
+            if (!hojaId) return;
+            const hoja = peState.todas.find(h => h.id === hojaId);
+            if (hoja) peAgregarABandeja(hoja);
+        }
+
+        async function peEnviarTodas() {
+            const hojas = Array.from(peState.bandeja.values());
+            if (!hojas.length) return;
+            if (peState.enviando) return;
+            peState.enviando = true;
+            document.getElementById('btnEnviarAEntregas').disabled = true;
+            document.getElementById('panelEntregasStatus').textContent = 'Enviando...';
+
+            const errores = [];
+            let ok = 0;
+
+            for (const h of hojas) {
+                try {
+                    const res = await fetch('/api/logistica/entregas/agregar', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ hoja_id: h.id }),
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.ok) {
+                        ok++;
+                        peState.bandeja.delete(h.id);
+                        // Marcar como en-entregas en la lista local para feedback visual
+                        const found = peState.todas.find(t => t.id === h.id);
+                        if (found) found.estado_flujo = 'entregas';
+                    } else {
+                        errores.push(`Hoja #${h.id}: ${data.error || data.message || 'Error desconocido'}`);
+                    }
+                } catch (err) {
+                    errores.push(`Hoja #${h.id}: Error de red`);
+                }
+            }
+
+            peState.enviando = false;
+            peRenderBandeja();
+            peFiltrar();
+
+            if (ok > 0 && !errores.length) {
+                document.getElementById('panelEntregasStatus').textContent =
+                    '✓ ' + ok + ' hoja' + (ok !== 1 ? 's' : '') + ' enviada' + (ok !== 1 ? 's' : '') + ' a Entregas correctamente.';
+                document.getElementById('panelEntregasStatus').style.color = '#0f766e';
+            } else if (ok > 0 && errores.length) {
+                document.getElementById('panelEntregasStatus').textContent =
+                    ok + ' enviada' + (ok !== 1 ? 's' : '') + '. Con errores: ' + errores.join('; ');
+                document.getElementById('panelEntregasStatus').style.color = '#b45309';
+            } else {
+                document.getElementById('panelEntregasStatus').textContent = 'Errores: ' + errores.join('; ');
+                document.getElementById('panelEntregasStatus').style.color = '#dc2626';
+            }
+        }
+
+        // Cerrar con clic en backdrop
+        document.getElementById('panelEntregasBackdrop').addEventListener('click', (e) => {
+            if (e.target.id === 'panelEntregasBackdrop') cerrarPanelEntregas();
+        });
+
+        // Recargar hojas si el panel ya estaba abierto al actualizar bandeja
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') cerrarPanelEntregas();
         });
     </script>
 </body>
