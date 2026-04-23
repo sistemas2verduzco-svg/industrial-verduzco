@@ -3710,6 +3710,8 @@ def control_calidad_legacy_maquina(maquina_id):
 # ==================== FLUJO TEMPORAL: ENTREGAS -> ALMACEN -> ENTREGAS(LISTA) -> FACTURACION ====================
 
 LOGISTICA_IMG_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
+LOGISTICA_MAX_IMAGE_SIDE = 1600
+LOGISTICA_WEBP_QUALITY = 80
 
 
 def _logistica_username():
@@ -3721,6 +3723,44 @@ def _logistica_allowed_image(filename):
         return False
     ext = filename.rsplit('.', 1)[-1].lower().strip()
     return ext in LOGISTICA_IMG_EXTENSIONS
+
+
+def _save_logistica_recepcion_image(file_storage, hoja_ruta_id):
+    """Normaliza y comprime capturas de recepción para ahorrar espacio en servidor."""
+    from PIL import Image, ImageOps
+
+    image = Image.open(file_storage.stream)
+    image = ImageOps.exif_transpose(image)
+
+    # WebP soporta transparencia; convertimos modos incompatibles para un guardado estable.
+    if image.mode not in ('RGB', 'RGBA'):
+        image = image.convert('RGB')
+
+    width, height = image.size
+    max_side = max(width, height)
+    if max_side > LOGISTICA_MAX_IMAGE_SIDE:
+        scale = LOGISTICA_MAX_IMAGE_SIDE / float(max_side)
+        image = image.resize(
+            (max(1, int(width * scale)), max(1, int(height * scale))),
+            Image.Resampling.LANCZOS,
+        )
+
+    nombre = secure_filename(f"recepcion_{hoja_ruta_id}_{uuid.uuid4().hex}.webp")
+    rel_dir = os.path.join('logistica_recepciones')
+    abs_dir = os.path.join(os.getcwd(), 'uploads', rel_dir)
+    os.makedirs(abs_dir, exist_ok=True)
+    abs_path = os.path.join(abs_dir, nombre)
+
+    save_kwargs = {
+        'format': 'WEBP',
+        'quality': LOGISTICA_WEBP_QUALITY,
+        'method': 6,
+    }
+    if image.mode == 'RGBA':
+        save_kwargs['lossless'] = False
+
+    image.save(abs_path, **save_kwargs)
+    return f"{rel_dir}/{nombre}".replace('\\', '/')
 
 
 def _sync_flujo_parciales(flujo: HojaRutaFlujoLogistica, hoja: HojaRutaEntrega = None):
@@ -4107,68 +4147,15 @@ def almacen_recibir_item(item_id):
     if not _logistica_allowed_image(captura.filename):
         return redirect(url_for('almacen_module'))
 
-    ext = captura.filename.rsplit('.', 1)[-1].lower().strip()
-    nombre = secure_filename(f"recepcion_{item.hoja_ruta_id}_{uuid.uuid4().hex}.{ext}")
-    rel_dir = os.path.join('logistica_recepciones')
-    abs_dir = os.path.join(app.config['UPLOAD_FOLDER'], rel_dir)
-    os.makedirs(abs_dir, exist_ok=True)
-    abs_path = os.path.join(abs_dir, nombre)
-    captura.save(abs_path)
+    try:
+        captura_path = _save_logistica_recepcion_image(captura, item.hoja_ruta_id)
+    except Exception:
+        flash('No se pudo procesar la captura de recepción. Usa una imagen JPG, PNG o WEBP válida.', 'error')
+        return redirect(url_for('almacen_module'))
 
     item.almacen_validado = True
     item.almacen_recepcion_id = recepcion_id
-    item.almacen_captura_path = f"{rel_dir}/{nombre}".replace('\\', '/')
-    # Almacén solo recepciona/libera y devuelve a Entregas como lista para enviar a Facturación.
-    item.estado = 'entregas_lista_facturacion'
-    item.actualizado_por = _logistica_username()
-
-    db.session.add(AlmacenRegistro(
-        hoja_ruta_id=item.hoja_ruta_id,
-        flujo_id=item.id,
-        recepcion_id=recepcion_id,
-        captura_path=item.almacen_captura_path,
-        validado=True,
-        usuario=_logistica_username(),
-        notas='Recepción validada en almacén y liberada para Entregas.',
-    ))
-    db.session.add(EntregaRegistro(
-        hoja_ruta_id=item.hoja_ruta_id,
-        flujo_id=item.id,
-        accion='lista_para_facturacion',
-        usuario=_logistica_username(),
-        notas=f'Recepción {recepcion_id} validada en almacén.',
-    ))
-
-    db.session.commit()
-    return redirect(url_for('almacen_module'))
-    item = HojaRutaFlujoLogistica.query.get_or_404(item_id)
-    if item.estado != 'almacen':
-        return redirect(url_for('almacen_module'))
-
-    recepcion_id = (request.form.get('recepcion_id') or '').strip()
-    entregado = request.form.get('entregado') == 'on'
-    captura = request.files.get('captura_recepcion')
-
-    if not entregado or not recepcion_id:
-        return redirect(url_for('almacen_module'))
-
-    if not captura or not captura.filename:
-        return redirect(url_for('almacen_module'))
-
-    if not _logistica_allowed_image(captura.filename):
-        return redirect(url_for('almacen_module'))
-
-    ext = captura.filename.rsplit('.', 1)[-1].lower().strip()
-    nombre = secure_filename(f"recepcion_{item.hoja_ruta_id}_{uuid.uuid4().hex}.{ext}")
-    rel_dir = os.path.join('logistica_recepciones')
-    abs_dir = os.path.join(app.config['UPLOAD_FOLDER'], rel_dir)
-    os.makedirs(abs_dir, exist_ok=True)
-    abs_path = os.path.join(abs_dir, nombre)
-    captura.save(abs_path)
-
-    item.almacen_validado = True
-    item.almacen_recepcion_id = recepcion_id
-    item.almacen_captura_path = f"{rel_dir}/{nombre}".replace('\\', '/')
+    item.almacen_captura_path = captura_path
     # Almacén solo recepciona/libera y devuelve a Entregas como lista para enviar a Facturación.
     item.estado = 'entregas_lista_facturacion'
     item.actualizado_por = _logistica_username()
