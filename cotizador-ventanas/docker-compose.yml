@@ -8,13 +8,14 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5001
-      FRONTEND_ORIGINS: http://localhost:3001,https://cotizador.midominio.com
+      FRONTEND_ORIGINS: http://localhost:3001,https://solucionesencristal.com,https://www.solucionesencristal.com
       GOOGLE_SHEETS_CSV_URL: ${GOOGLE_SHEETS_CSV_URL}
       CACHE_TTL_MS: 300000
     ports:
       - '5001:5001'
     networks:
       - cotizador_net
+      - mes_shared
 
   cotizador_front:
     build:
@@ -30,7 +31,11 @@ services:
       - '3001:80'
     networks:
       - cotizador_net
+      - mes_shared
 
 networks:
   cotizador_net:
     name: cotizador_net
+  mes_shared:
+    external: true
+    name: catalogo_network
