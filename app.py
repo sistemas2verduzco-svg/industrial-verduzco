@@ -4702,6 +4702,9 @@ def api_mapa_maquinas():
 
     for idx, maq in enumerate(maquinas):
         hoja_activa = hoja_activa_por_maquina.get(maq.id)
+        maquina_productive_hour = 0
+        maquina_productive_day = 0
+        maquina_productive_week = 0
         hoja_total_tiempo = None
         hoja_modulo = 'entregas'
         estacion_actual = None
@@ -4792,9 +4795,12 @@ def api_mapa_maquinas():
                 else:
                     interval_end = now_dt
                 if interval_end > start_ref:
-                    productive_hour += _bounded_seconds(start_ref, interval_end, window_hour_start, now_dt)
-                    productive_day += _bounded_seconds(start_ref, interval_end, window_day_start, now_dt)
-                    productive_week += _bounded_seconds(start_ref, interval_end, window_week_start, now_dt)
+                    maquina_productive_hour = _bounded_seconds(start_ref, interval_end, window_hour_start, now_dt)
+                    maquina_productive_day = _bounded_seconds(start_ref, interval_end, window_day_start, now_dt)
+                    maquina_productive_week = _bounded_seconds(start_ref, interval_end, window_week_start, now_dt)
+                    productive_hour += maquina_productive_hour
+                    productive_day += maquina_productive_day
+                    productive_week += maquina_productive_week
 
             assigned_count += 1
             if objetivo_sec_metric > 0:
@@ -4875,6 +4881,12 @@ def api_mapa_maquinas():
             'estacion_actual_id': estacion_actual.id if estacion_actual else None,
             'hoja_modulo': hoja_modulo,
             'detalle_url': f"/hojas_ruta_nuevo/{maq.id}" if hoja_modulo == 'mp' else f"/hojas_ruta/{maq.id}",
+            'tiempo_productivo_hora_sec': maquina_productive_hour,
+            'tiempo_productivo_dia_sec': maquina_productive_day,
+            'tiempo_productivo_semana_sec': maquina_productive_week,
+            'tiempo_productivo_hora_hms': _format_seconds_to_hms(maquina_productive_hour),
+            'tiempo_productivo_dia_hms': _format_seconds_to_hms(maquina_productive_day),
+            'tiempo_productivo_semana_hms': _format_seconds_to_hms(maquina_productive_week),
         })
 
     estado_priority = {

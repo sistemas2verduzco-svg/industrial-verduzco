@@ -233,6 +233,23 @@
             background: #f8fafc;
         }
 
+        .subpanel {
+            display: grid;
+            gap: 10px;
+        }
+
+        .subpanel-grid {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(120px, 1fr));
+            gap: 8px;
+        }
+
+        .subpanel-summary {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(120px, 1fr));
+            gap: 8px;
+        }
+
         @media (max-width: 1100px) {
             .reportes-grid {
                 grid-template-columns: 1fr;
@@ -244,6 +261,10 @@
 
             .table-wrap {
                 max-height: 58vh;
+            }
+
+            .subpanel-grid {
+                grid-template-columns: 1fr 1fr;
             }
         }
     </style>
@@ -381,6 +402,82 @@
                 </div>
             </article>
         </section>
+
+        <section class="card subpanel">
+            <h3>Panel de Tiempos por Máquina</h3>
+            <div class="subpanel-grid">
+                <div class="field">
+                    <label for="tScope">Periodo</label>
+                    <select id="tScope">
+                        <option value="semana" selected>Semana</option>
+                        <option value="dia">Día</option>
+                        <option value="hora">Hora</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="tMachine">Máquina</label>
+                    <select id="tMachine">
+                        <option value="">Todas</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="tEstado">Estado</label>
+                    <select id="tEstado">
+                        <option value="">Todos</option>
+                        <option value="produciendo">Produciendo</option>
+                        <option value="mover">Mover</option>
+                        <option value="activa">Activa</option>
+                        <option value="paro">Paro</option>
+                        <option value="sin_hoja">Sin hoja</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="tModulo">Módulo</label>
+                    <select id="tModulo">
+                        <option value="">Todos</option>
+                        <option value="entregas">Entregas</option>
+                        <option value="mp">MP</option>
+                    </select>
+                </div>
+                <div class="field" style="display:flex; align-items:flex-end;">
+                    <label style="display:flex; align-items:center; gap:8px; margin:0; font-size:13px; color:#0f172a; font-weight:700;">
+                        <input id="tSoloActivas" type="checkbox" style="width:auto;">
+                        Solo activas
+                    </label>
+                </div>
+            </div>
+
+            <div class="actions" style="max-width:420px;">
+                <button class="btn btn-primary" id="btnTiemposApply" type="button">Aplicar parámetros</button>
+                <button class="btn btn-outline" id="btnTiemposCsv" type="button">Exportar CSV tiempos</button>
+            </div>
+
+            <div class="subpanel-summary">
+                <div class="summary-item"><span class="summary-k">Máquinas</span><span class="summary-v" id="tRows">0</span></div>
+                <div class="summary-item"><span class="summary-k">Tiempo total</span><span class="summary-v" id="tTotalHms">00:00:00</span></div>
+                <div class="summary-item"><span class="summary-k">Promedio por máquina</span><span class="summary-v" id="tAvgHms">00:00:00</span></div>
+            </div>
+
+            <div id="tiemposEmpty" class="empty" style="display:none;">No hay datos para los parámetros seleccionados.</div>
+            <div class="table-wrap" id="tiemposWrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Máquina</th>
+                            <th>Estado</th>
+                            <th>Módulo</th>
+                            <th>Activa</th>
+                            <th>Hoja</th>
+                            <th>Pieza</th>
+                            <th>Tiempo periodo</th>
+                            <th>Tiempo día</th>
+                            <th>Tiempo semana</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tiemposRowsBody"></tbody>
+                </table>
+            </div>
+        </section>
     </main>
 
     <script>
@@ -418,6 +515,14 @@
             const parts = txt.split(':').map(Number);
             if (parts.length !== 3 || parts.some(Number.isNaN)) return 0;
             return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+        }
+
+        function secToHms(totalSeconds) {
+            const sec = Math.max(0, Number(totalSeconds || 0));
+            const h = Math.floor(sec / 3600);
+            const m = Math.floor((sec % 3600) / 60);
+            const s = sec % 60;
+            return [h, m, s].map((n) => String(n).padStart(2, '0')).join(':');
         }
 
         function escapeCsv(v) {
@@ -560,6 +665,120 @@
             document.getElementById('metaUpdated').textContent = state.lastFetchAt ? state.lastFetchAt.toLocaleTimeString() : '-';
         }
 
+        function refreshMachineSelectOptions() {
+            const select = document.getElementById('tMachine');
+            if (!select) return;
+            const current = select.value;
+            const names = Array.from(new Set(state.raw.map((r) => toSafe(r.nombre)).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+            select.innerHTML = '<option value="">Todas</option>';
+            names.forEach((name) => {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.textContent = name;
+                select.appendChild(opt);
+            });
+            if (names.includes(current)) {
+                select.value = current;
+            }
+        }
+
+        function getScopeField(scope) {
+            if (scope === 'hora') return 'tiempo_productivo_hora_sec';
+            if (scope === 'dia') return 'tiempo_productivo_dia_sec';
+            return 'tiempo_productivo_semana_sec';
+        }
+
+        function buildTimesRows() {
+            const scope = norm(document.getElementById('tScope').value || 'semana');
+            const machine = toSafe(document.getElementById('tMachine').value);
+            const estado = norm(document.getElementById('tEstado').value);
+            const modulo = norm(document.getElementById('tModulo').value);
+            const soloActivas = document.getElementById('tSoloActivas').checked;
+            const scopeField = getScopeField(scope);
+
+            const rows = state.raw.filter((r) => {
+                if (machine && toSafe(r.nombre) !== machine) return false;
+                if (estado && norm(r.estado_code) !== estado) return false;
+                if (modulo && norm(r.hoja_modulo) !== modulo) return false;
+                if (soloActivas && !Boolean(r.activo)) return false;
+                return true;
+            }).map((r) => ({
+                ...r,
+                tiempo_periodo_sec: Number(r[scopeField] || 0),
+            }));
+
+            rows.sort((a, b) => (b.tiempo_periodo_sec - a.tiempo_periodo_sec) || norm(a.nombre).localeCompare(norm(b.nombre)));
+            return rows;
+        }
+
+        function renderTimesPanel() {
+            const rows = buildTimesRows();
+            const body = document.getElementById('tiemposRowsBody');
+            body.innerHTML = '';
+
+            const totalSec = rows.reduce((acc, r) => acc + Number(r.tiempo_periodo_sec || 0), 0);
+            const avgSec = rows.length ? Math.floor(totalSec / rows.length) : 0;
+            document.getElementById('tRows').textContent = String(rows.length);
+            document.getElementById('tTotalHms').textContent = secToHms(totalSec);
+            document.getElementById('tAvgHms').textContent = secToHms(avgSec);
+
+            const empty = document.getElementById('tiemposEmpty');
+            const wrap = document.getElementById('tiemposWrap');
+            if (!rows.length) {
+                empty.style.display = 'block';
+                wrap.style.display = 'none';
+                return;
+            }
+            empty.style.display = 'none';
+            wrap.style.display = 'block';
+
+            rows.forEach((r) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><b>${toSafe(r.nombre) || '-'}</b></td>
+                    <td>${toSafe(r.estado_label) || '-'}</td>
+                    <td>${toSafe(r.hoja_modulo) || '-'}</td>
+                    <td>${r.activo ? 'SI' : 'NO'}</td>
+                    <td>${toSafe(r.hoja_serie) || '-'}</td>
+                    <td>${toSafe(r.pieza) || '-'}</td>
+                    <td><b>${secToHms(r.tiempo_periodo_sec)}</b></td>
+                    <td>${toSafe(r.tiempo_productivo_dia_hms) || '00:00:00'}</td>
+                    <td>${toSafe(r.tiempo_productivo_semana_hms) || '00:00:00'}</td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        function downloadTimesCsv() {
+            const scope = norm(document.getElementById('tScope').value || 'semana');
+            const rows = buildTimesRows();
+            const headers = ['maquina', 'estado', 'modulo', 'activa', 'hoja', 'pieza', `tiempo_${scope}_hms`, 'tiempo_dia_hms', 'tiempo_semana_hms'];
+            const lines = [headers.join(',')];
+            rows.forEach((r) => {
+                lines.push([
+                    r.nombre,
+                    r.estado_label,
+                    r.hoja_modulo,
+                    r.activo ? 'SI' : 'NO',
+                    r.hoja_serie,
+                    r.pieza,
+                    secToHms(r.tiempo_periodo_sec),
+                    r.tiempo_productivo_dia_hms,
+                    r.tiempo_productivo_semana_hms,
+                ].map(escapeCsv).join(','));
+            });
+            const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const ts = new Date().toISOString().replace(/[:]/g, '-');
+            a.href = url;
+            a.download = `reporte_tiempos_maquina_${scope}_${ts}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        }
+
         function renderTable(rows) {
             const body = document.getElementById('rowsBody');
             body.innerHTML = '';
@@ -605,6 +824,7 @@
             state.filtered = filterRows(state.raw);
             renderSummary(state.filtered);
             renderTable(state.filtered);
+            renderTimesPanel();
             restartAutoRefresh();
         }
 
@@ -659,6 +879,7 @@
                 state.raw = Array.isArray(payload.maquinas) ? payload.maquinas : [];
                 state.eficiencia = payload.eficiencia_planta || null;
                 state.lastFetchAt = new Date();
+                refreshMachineSelectOptions();
                 applyFiltersAndRender();
             } catch (err) {
                 console.error('Error cargando datos de reportes de produccion:', err);
@@ -684,6 +905,14 @@
             document.getElementById('btnRefresh').addEventListener('click', fetchRealtimeData);
             document.getElementById('btnReset').addEventListener('click', resetFilters);
             document.getElementById('btnCsv').addEventListener('click', downloadCurrentCsv);
+
+            ['tScope', 'tMachine', 'tEstado', 'tModulo', 'tSoloActivas'].forEach((id) => {
+                const el = document.getElementById(id);
+                const ev = id === 'tMachine' ? 'change' : 'change';
+                el.addEventListener(ev, renderTimesPanel);
+            });
+            document.getElementById('btnTiemposApply').addEventListener('click', renderTimesPanel);
+            document.getElementById('btnTiemposCsv').addEventListener('click', downloadTimesCsv);
         }
 
         wireEvents();

@@ -461,6 +461,11 @@
             color: #8abbe2;
         }
 
+        .eff-kpi-highlight {
+            border-color: rgba(25, 181, 255, 0.65);
+            background: rgba(6, 28, 48, 0.62);
+        }
+
         .dot {
             width: 9px;
             height: 9px;
@@ -813,6 +818,11 @@
                         <div class="eff-kpi-meta" id="effOeeMeta">Disp x ritmo</div>
                     </div>
                 </div>
+                <div class="eff-kpi eff-kpi-highlight" style="margin-top:8px;">
+                    <span class="eff-kpi-label">Tiempo semanal general</span>
+                    <span class="eff-kpi-value" id="effWeekWorked">00:00:00</span>
+                    <div class="eff-kpi-meta" id="effWeekWorkedMeta">Productivo semanal acumulado</div>
+                </div>
             </section>
         </aside>
     </main>
@@ -1097,6 +1107,8 @@
             document.getElementById('effHourMeta').textContent = `Prod ${hora.productivo_hms} / Disp ${hora.disponible_hms}`;
             document.getElementById('effDayMeta').textContent = `Prod ${dia.productivo_hms} / Disp ${dia.disponible_hms}`;
             document.getElementById('effWeekMeta').textContent = `Prod ${semana.productivo_hms} / Disp ${semana.disponible_hms}`;
+            document.getElementById('effWeekWorked').textContent = `${semana.productivo_hms}`;
+            document.getElementById('effWeekWorkedMeta').textContent = `Semana actual · ${semana.porcentaje}% de disponibilidad base`;
 
             document.getElementById('effUtilNow').textContent = `${kpis.utilizacion_actual_pct}%`;
             document.getElementById('effAssignNow').textContent = `${kpis.asignacion_actual_pct}%`;
