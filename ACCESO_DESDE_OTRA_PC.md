@@ -1,5 +1,65 @@
 # 🌐 ACCESO DESDE OTRA COMPUTADORA EN TU RED
 
+## 🔄 TRASPASO RÁPIDO DE ESTA SESIÓN (CHAT + CÓDIGO)
+
+Usa esta sección cuando cambies de máquina y quieras continuar exactamente donde nos quedamos.
+
+### 1) Estado de git ya sincronizado
+
+- Rama actual: `contpaq-mi4-integration`
+- Último commit: `d0cb246`
+- Remoto: `origin/contpaq-mi4-integration`
+
+Comandos en la otra máquina:
+
+```powershell
+git clone https://github.com/sistemas2verduzco-svg/industrial-verduzco.git
+cd industrial-verduzco
+git checkout contpaq-mi4-integration
+git pull origin contpaq-mi4-integration
+```
+
+### 2) Contexto funcional implementado (resumen)
+
+- Mapa de máquinas:
+	- Card compacto de `Tiempo semanal general` en el bloque de eficiencia.
+	- En cada tarjeta de máquina ya se muestra `Trabajado semana`.
+- API de mapa:
+	- Por máquina: productivo/disponible/eficiencia para hora, día y semana.
+	- General planta: eficiencia hora/día/semana con productivo y disponible.
+- Reportes de producción (`/produccion/reportes`):
+	- Panel extra abajo: `Panel de Tiempos por Máquina`.
+	- Filtros: periodo, máquina, estado, módulo, solo activas.
+	- Tabla por máquina con: productivo periodo, disponible periodo, eficiencia periodo, día y semana.
+	- Bloque general de planta (hora/día/semana) y export CSV con parámetros de tiempo.
+
+### 3) Commits clave de esta parte
+
+- `d0cb246` feat: tiempos por maquina y parametros generales en reportes
+- `4244d5e` feat: tiempos semanales compactos en mapa y panel de reportes
+- `bf57927` feat: agregar estado de revision para devoluciones en entregas
+
+### 4) Archivo suelto no comprometido (sin impacto en este flujo)
+
+- `migrations/add_maquinaria_ot_snapshot_tables.sql`
+
+### 5) Prompt de reanudación (copiar y pegar en el nuevo chat)
+
+```text
+Continua desde el estado actual de la rama contpaq-mi4-integration (commit d0cb246).
+Ya existe:
+1) card compacto de tiempo semanal general en /mapa_maquinas,
+2) tiempo semanal por maquina visible en cada card,
+3) panel extra de tiempos en /produccion/reportes con parametros por maquina y generales (prod/disp/eficiencia).
+
+Primero valida visualmente y por API (/api/mapa_maquinas) que los campos de tiempo estén llegando y mostrándose.
+Si algo no aparece, corrige frontend/backend y haz commit + push.
+```
+
+### 6) Nota sobre historial de chat
+
+El historial del chat puede o no aparecer en otra máquina según sesión/cuenta. Este bloque de traspaso evita depender del historial del chat.
+
 ## 📍 Tu IP de Servidor
 
 **IP de tu computadora servidor:** `192.168.0.94`
