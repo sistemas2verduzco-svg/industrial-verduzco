@@ -38,4 +38,4 @@ networks:
     name: cotizador_net
   mes_shared:
     external: true
-    name: catalogo_network
+    name: ${MES_NETWORK_NAME:-industrial-verduzco_catalogo_network}
