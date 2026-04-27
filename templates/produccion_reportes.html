@@ -250,6 +250,12 @@
             gap: 8px;
         }
 
+        .subpanel-general {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(180px, 1fr));
+            gap: 8px;
+        }
+
         @media (max-width: 1100px) {
             .reportes-grid {
                 grid-template-columns: 1fr;
@@ -458,6 +464,24 @@
                 <div class="summary-item"><span class="summary-k">Promedio por máquina</span><span class="summary-v" id="tAvgHms">00:00:00</span></div>
             </div>
 
+            <div class="subpanel-general">
+                <div class="summary-item">
+                    <span class="summary-k">General hora (planta)</span>
+                    <span class="summary-v" id="tGenHourPct">0%</span>
+                    <div style="font-size:11px; color:#475569; margin-top:4px;" id="tGenHourMeta">Prod 00:00:00 / Disp 00:00:00</div>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-k">General día (planta)</span>
+                    <span class="summary-v" id="tGenDayPct">0%</span>
+                    <div style="font-size:11px; color:#475569; margin-top:4px;" id="tGenDayMeta">Prod 00:00:00 / Disp 00:00:00</div>
+                </div>
+                <div class="summary-item">
+                    <span class="summary-k">General semana (planta)</span>
+                    <span class="summary-v" id="tGenWeekPct">0%</span>
+                    <div style="font-size:11px; color:#475569; margin-top:4px;" id="tGenWeekMeta">Prod 00:00:00 / Disp 00:00:00</div>
+                </div>
+            </div>
+
             <div id="tiemposEmpty" class="empty" style="display:none;">No hay datos para los parámetros seleccionados.</div>
             <div class="table-wrap" id="tiemposWrap">
                 <table>
@@ -469,7 +493,9 @@
                             <th>Activa</th>
                             <th>Hoja</th>
                             <th>Pieza</th>
-                            <th>Tiempo periodo</th>
+                            <th>Productivo periodo</th>
+                            <th>Disponible periodo</th>
+                            <th>Eficiencia periodo</th>
                             <th>Tiempo día</th>
                             <th>Tiempo semana</th>
                         </tr>
@@ -688,6 +714,18 @@
             return 'tiempo_productivo_semana_sec';
         }
 
+        function getScopeAvailableField(scope) {
+            if (scope === 'hora') return 'tiempo_disponible_hora_sec';
+            if (scope === 'dia') return 'tiempo_disponible_dia_sec';
+            return 'tiempo_disponible_semana_sec';
+        }
+
+        function getScopePctField(scope) {
+            if (scope === 'hora') return 'eficiencia_hora_pct';
+            if (scope === 'dia') return 'eficiencia_dia_pct';
+            return 'eficiencia_semana_pct';
+        }
+
         function buildTimesRows() {
             const scope = norm(document.getElementById('tScope').value || 'semana');
             const machine = toSafe(document.getElementById('tMachine').value);
@@ -695,6 +733,8 @@
             const modulo = norm(document.getElementById('tModulo').value);
             const soloActivas = document.getElementById('tSoloActivas').checked;
             const scopeField = getScopeField(scope);
+            const scopeAvailableField = getScopeAvailableField(scope);
+            const scopePctField = getScopePctField(scope);
 
             const rows = state.raw.filter((r) => {
                 if (machine && toSafe(r.nombre) !== machine) return false;
@@ -705,6 +745,8 @@
             }).map((r) => ({
                 ...r,
                 tiempo_periodo_sec: Number(r[scopeField] || 0),
+                tiempo_disponible_periodo_sec: Number(r[scopeAvailableField] || 0),
+                eficiencia_periodo_pct: Number(r[scopePctField] || 0),
             }));
 
             rows.sort((a, b) => (b.tiempo_periodo_sec - a.tiempo_periodo_sec) || norm(a.nombre).localeCompare(norm(b.nombre)));
@@ -715,6 +757,16 @@
             const rows = buildTimesRows();
             const body = document.getElementById('tiemposRowsBody');
             body.innerHTML = '';
+
+            const hora = state.eficiencia && state.eficiencia.hora ? state.eficiencia.hora : null;
+            const dia = state.eficiencia && state.eficiencia.dia ? state.eficiencia.dia : null;
+            const semana = state.eficiencia && state.eficiencia.semana ? state.eficiencia.semana : null;
+            document.getElementById('tGenHourPct').textContent = `${Number(hora && hora.porcentaje || 0).toFixed(1)}%`;
+            document.getElementById('tGenDayPct').textContent = `${Number(dia && dia.porcentaje || 0).toFixed(1)}%`;
+            document.getElementById('tGenWeekPct').textContent = `${Number(semana && semana.porcentaje || 0).toFixed(1)}%`;
+            document.getElementById('tGenHourMeta').textContent = `Prod ${toSafe(hora && hora.productivo_hms) || '00:00:00'} / Disp ${toSafe(hora && hora.disponible_hms) || '00:00:00'}`;
+            document.getElementById('tGenDayMeta').textContent = `Prod ${toSafe(dia && dia.productivo_hms) || '00:00:00'} / Disp ${toSafe(dia && dia.disponible_hms) || '00:00:00'}`;
+            document.getElementById('tGenWeekMeta').textContent = `Prod ${toSafe(semana && semana.productivo_hms) || '00:00:00'} / Disp ${toSafe(semana && semana.disponible_hms) || '00:00:00'}`;
 
             const totalSec = rows.reduce((acc, r) => acc + Number(r.tiempo_periodo_sec || 0), 0);
             const avgSec = rows.length ? Math.floor(totalSec / rows.length) : 0;
@@ -742,6 +794,8 @@
                     <td>${toSafe(r.hoja_serie) || '-'}</td>
                     <td>${toSafe(r.pieza) || '-'}</td>
                     <td><b>${secToHms(r.tiempo_periodo_sec)}</b></td>
+                    <td>${secToHms(r.tiempo_disponible_periodo_sec)}</td>
+                    <td>${Number(r.eficiencia_periodo_pct || 0).toFixed(1)}%</td>
                     <td>${toSafe(r.tiempo_productivo_dia_hms) || '00:00:00'}</td>
                     <td>${toSafe(r.tiempo_productivo_semana_hms) || '00:00:00'}</td>
                 `;
@@ -752,7 +806,7 @@
         function downloadTimesCsv() {
             const scope = norm(document.getElementById('tScope').value || 'semana');
             const rows = buildTimesRows();
-            const headers = ['maquina', 'estado', 'modulo', 'activa', 'hoja', 'pieza', `tiempo_${scope}_hms`, 'tiempo_dia_hms', 'tiempo_semana_hms'];
+            const headers = ['maquina', 'estado', 'modulo', 'activa', 'hoja', 'pieza', `productivo_${scope}_hms`, `disponible_${scope}_hms`, `eficiencia_${scope}_pct`, 'tiempo_dia_hms', 'tiempo_semana_hms'];
             const lines = [headers.join(',')];
             rows.forEach((r) => {
                 lines.push([
@@ -763,6 +817,8 @@
                     r.hoja_serie,
                     r.pieza,
                     secToHms(r.tiempo_periodo_sec),
+                    secToHms(r.tiempo_disponible_periodo_sec),
+                    Number(r.eficiencia_periodo_pct || 0).toFixed(1),
                     r.tiempo_productivo_dia_hms,
                     r.tiempo_productivo_semana_hms,
                 ].map(escapeCsv).join(','));

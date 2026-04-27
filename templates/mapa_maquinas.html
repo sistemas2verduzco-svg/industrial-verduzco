@@ -971,6 +971,7 @@
             meta.appendChild(makeMetaRow('Objetivo proceso', machine.tiempo_objetivo_proceso || 'N/A'));
             meta.appendChild(makeMetaRow('Transcurrido', machine.tiempo_transcurrido_proceso || 'N/A'));
             meta.appendChild(makeMetaRow('Restante', machine.tiempo_restante_proceso || 'N/A'));
+            meta.appendChild(makeMetaRow('Trabajado semana', machine.tiempo_productivo_semana_hms || '00:00:00'));
             meta.appendChild(makeMetaRow('Termino', machine.fecha_termino ? new Date(machine.fecha_termino).toLocaleString() : 'N/A'));
             if (machine.proceso_culminado) {
                 meta.appendChild(makeMetaRow('Estado proceso', 'CULMINADO - MOVER PIEZAS'));

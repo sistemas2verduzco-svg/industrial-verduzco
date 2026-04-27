@@ -4678,6 +4678,9 @@ def api_mapa_maquinas():
     window_hour_start = now_dt - timedelta(hours=1)
     window_day_start = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
     window_week_start = (window_day_start - timedelta(days=window_day_start.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    machine_available_hour = int((now_dt - window_hour_start).total_seconds())
+    machine_available_day = int((now_dt - window_day_start).total_seconds())
+    machine_available_week = int((now_dt - window_week_start).total_seconds())
 
     productive_hour = 0
     productive_day = 0
@@ -4699,6 +4702,11 @@ def api_mapa_maquinas():
         if bounded_end <= bounded_start:
             return 0
         return int((bounded_end - bounded_start).total_seconds())
+
+    def _safe_pct(prod_sec, avail_sec):
+        if avail_sec <= 0:
+            return 0.0
+        return round((float(prod_sec) * 100.0) / float(avail_sec), 1)
 
     for idx, maq in enumerate(maquinas):
         hoja_activa = hoja_activa_por_maquina.get(maq.id)
@@ -4887,6 +4895,15 @@ def api_mapa_maquinas():
             'tiempo_productivo_hora_hms': _format_seconds_to_hms(maquina_productive_hour),
             'tiempo_productivo_dia_hms': _format_seconds_to_hms(maquina_productive_day),
             'tiempo_productivo_semana_hms': _format_seconds_to_hms(maquina_productive_week),
+            'tiempo_disponible_hora_sec': machine_available_hour,
+            'tiempo_disponible_dia_sec': machine_available_day,
+            'tiempo_disponible_semana_sec': machine_available_week,
+            'tiempo_disponible_hora_hms': _format_seconds_to_hms(machine_available_hour),
+            'tiempo_disponible_dia_hms': _format_seconds_to_hms(machine_available_day),
+            'tiempo_disponible_semana_hms': _format_seconds_to_hms(machine_available_week),
+            'eficiencia_hora_pct': _safe_pct(maquina_productive_hour, machine_available_hour),
+            'eficiencia_dia_pct': _safe_pct(maquina_productive_day, machine_available_day),
+            'eficiencia_semana_pct': _safe_pct(maquina_productive_week, machine_available_week),
         })
 
     estado_priority = {
