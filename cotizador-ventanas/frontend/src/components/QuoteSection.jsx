@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useState } from 'react';
 
 const WindowViewer3D = lazy(() => import('./WindowViewer3D.jsx').then((module) => ({ default: module.WindowViewer3D })));
 
@@ -21,6 +21,8 @@ export function QuoteSection({
   error,
   meta,
 }) {
+  const [viewerMode, setViewerMode] = useState('day');
+
   return (
     <section id="cotizador" className="section-block quote-section">
       <div className="container">
@@ -116,10 +118,24 @@ export function QuoteSection({
                 <span className="eyebrow">VISTA 3D</span>
                 <h3>Representacion interactiva de la ventana</h3>
               </div>
-              <p>Orbita la camara y ajusta dimensiones o color desde el formulario.</p>
+              <div style={{ display: 'grid', gap: '8px', justifyItems: 'end' }}>
+                <p style={{ margin: 0 }}>Orbita la camara y ajusta dimensiones o color desde el formulario.</p>
+                <label style={{ fontSize: '12px', color: '#64748b', fontWeight: 700 }}>
+                  Ambiente visual
+                  <select
+                    value={viewerMode}
+                    onChange={(event) => setViewerMode(event.target.value)}
+                    style={{ marginLeft: '8px', padding: '6px 8px', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+                  >
+                    <option value="day">Dia natural</option>
+                    <option value="sunset">Atardecer</option>
+                    <option value="night">Noche elegante</option>
+                  </select>
+                </label>
+              </div>
             </div>
             <Suspense fallback={<div className="viewer-canvas viewer-loading">Cargando visor 3D...</div>}>
-              <WindowViewer3D width={form.width} height={form.height} color={form.color} />
+              <WindowViewer3D width={form.width} height={form.height} color={form.color} environment={viewerMode} />
             </Suspense>
           </article>
         </div>
