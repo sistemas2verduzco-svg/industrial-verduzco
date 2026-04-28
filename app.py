@@ -4811,7 +4811,14 @@ def api_mapa_maquinas():
         HojaRutaEntrega.estado.in_(['activa', 'pausada'])
     ).order_by(HojaRutaEntrega.fecha_creacion.desc()).all()
     hoja_activa_por_maquina: dict = {}
+    hoja_entrega_por_maquina: dict = {}
     for h in hojas_activas:
+        existing_entrega = hoja_entrega_por_maquina.get(h.maquina_id)
+        if existing_entrega is None:
+            hoja_entrega_por_maquina[h.maquina_id] = h
+        elif existing_entrega.estado != 'activa' and h.estado == 'activa':
+            hoja_entrega_por_maquina[h.maquina_id] = h
+
         existing = hoja_activa_por_maquina.get(h.maquina_id)
         if existing is None:
             hoja_activa_por_maquina[h.maquina_id] = h
@@ -4898,6 +4905,7 @@ def api_mapa_maquinas():
 
     for idx, maq in enumerate(maquinas):
         hoja_activa = hoja_activa_por_maquina.get(maq.id)
+        hoja_entrega_activa = hoja_entrega_por_maquina.get(maq.id)
         maquina_productive_hour = 0
         maquina_productive_day = 0
         maquina_productive_week = 0
@@ -5063,12 +5071,17 @@ def api_mapa_maquinas():
             'estado_code': estado_code,
             'estado_label': estado_label,
             'estacion_actual': estacion_actual.nombre if estacion_actual else None,
+            'hoja_actual_modulo': hoja_modulo if hoja_activa else None,
             'hoja_serie': hoja_activa.nombre if hoja_activa else None,
             'pieza': hoja_activa.pn if hoja_activa else None,
             'pieza_descripcion': _resolve_clave_descripcion_by_pn(hoja_activa.pn) if hoja_activa else None,
             'cantidad_piezas': int(hoja_activa.cantidad_piezas) if hoja_activa else None,
             'orden_trabajo_hr': hoja_activa.orden_trabajo_hr if hoja_activa else None,
             'orden_trabajo_pt': hoja_activa.orden_trabajo_pt if hoja_activa else None,
+            'hoja_entregas_serie': hoja_entrega_activa.nombre if hoja_entrega_activa else None,
+            'hoja_entregas_pieza': hoja_entrega_activa.pn if hoja_entrega_activa else None,
+            'hoja_entregas_ot': ((hoja_entrega_activa.orden_trabajo_hr or '') if hoja_entrega_activa else '') or ((hoja_entrega_activa.orden_trabajo_pt or '') if hoja_entrega_activa else ''),
+            'tiene_hoja_entregas': bool(hoja_entrega_activa),
             'tiempo_total': hoja_total_tiempo if hoja_activa else None,
             'fecha_termino': hoja_activa.fecha_termino.isoformat() if (hoja_activa and hoja_activa.fecha_termino) else None,
             'tiempo_proceso_pieza': tiempo_proceso_pieza,

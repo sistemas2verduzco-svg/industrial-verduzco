@@ -452,8 +452,9 @@
                 </div>
 
                 <div class="inline-meta">
-                    <span>Total entregas en linea: <b id="eTotalCount">0</b></span>
+                    <span>Maquinas con hoja activa: <b id="eTotalCount">0</b></span>
                     <span>Produciendo: <b id="eProducingCount">0</b></span>
+                    <span>Sin hoja entregas: <b id="eMissingEntregaCount">0</b></span>
                     <span>Progreso promedio: <b id="eAvgProgress">0%</b></span>
                 </div>
 
@@ -466,7 +467,9 @@
                                 <th>Estado</th>
                                 <th>Trabajando</th>
                                 <th>Activa</th>
-                                <th>Hoja (Serie)</th>
+                                <th>Hoja trabajando</th>
+                                <th>Modulo actual</th>
+                                <th>Hoja entregas</th>
                                 <th>PN (Clave)</th>
                                 <th>OT</th>
                                 <th>Cantidad piezas</th>
@@ -1126,13 +1129,21 @@
         };
 
         function filterEntregasRows() {
-            const entregas = state.raw.filter((r) => norm(r.hoja_modulo) === 'entregas');
+            const entregas = state.raw.filter((r) => Boolean(r.hoja_serie) || Boolean(r.hoja_entregas_serie));
             const f = entregasFilters;
             
             const filtered = entregas.filter((r) => {
                 if (f.estado && norm(r.estado_code) !== f.estado) return false;
                 if (f.q) {
-                    const haystack = [r.nombre, r.hoja_serie, r.pieza, r.pieza_descripcion].map(norm).join(' ');
+                    const haystack = [
+                        r.nombre,
+                        r.hoja_serie,
+                        r.hoja_entregas_serie,
+                        r.pieza,
+                        r.hoja_entregas_pieza,
+                        r.pieza_descripcion,
+                        r.hoja_actual_modulo,
+                    ].map(norm).join(' ');
                     if (!haystack.includes(f.q)) return false;
                 }
                 return true;
@@ -1163,6 +1174,7 @@
                 wrap.style.display = 'none';
                 document.getElementById('eTotalCount').textContent = '0';
                 document.getElementById('eProducingCount').textContent = '0';
+                document.getElementById('eMissingEntregaCount').textContent = '0';
                 document.getElementById('eAvgProgress').textContent = '0%';
                 return;
             }
@@ -1171,6 +1183,7 @@
             wrap.style.display = 'block';
 
             const prod = rows.filter((r) => norm(r.estado_code) === 'produciendo').length;
+            const missingEntrega = rows.filter((r) => !r.tiene_hoja_entregas).length;
             const progressRows = rows.filter((r) => Number(r.progreso_proceso_pct || 0) > 0);
             const avg = progressRows.length
                 ? (progressRows.reduce((acc, r) => acc + Number(r.progreso_proceso_pct || 0), 0) / progressRows.length)
@@ -1178,15 +1191,17 @@
 
             document.getElementById('eTotalCount').textContent = String(rows.length);
             document.getElementById('eProducingCount').textContent = String(prod);
+            document.getElementById('eMissingEntregaCount').textContent = String(missingEntrega);
             document.getElementById('eAvgProgress').textContent = `${avg.toFixed(1)}%`;
 
             rows.forEach((r) => {
                 const tr = document.createElement('tr');
                 const code = norm(r.estado_code);
                 const ot = toSafe(r.orden_trabajo_hr) || toSafe(r.orden_trabajo_pt) || '-';
-                const detailUrl = '/hojas_ruta/' + r.id;
+                const detailUrl = toSafe(r.detalle_url) || ('/hojas_ruta/' + r.id);
                 const trabajando = code === 'produciendo' ? 'SI' : 'NO';
                 const activa = r.activo ? 'SI' : 'NO';
+                const hojaEntregas = r.tiene_hoja_entregas ? toSafe(r.hoja_entregas_serie) : 'FALTA HOJA DE RUTA ENTREGAS';
 
                 tr.innerHTML = `
                     <td><b>${toSafe(r.nombre) || '-'}</b></td>
@@ -1194,6 +1209,8 @@
                     <td>${trabajando}</td>
                     <td>${activa}</td>
                     <td>${toSafe(r.hoja_serie) || '-'}</td>
+                    <td>${toSafe(r.hoja_actual_modulo) || '-'}</td>
+                    <td><b>${hojaEntregas}</b></td>
                     <td>${toSafe(r.pieza) || '-'}</td>
                     <td><b>${ot}</b></td>
                     <td>${r.cantidad_piezas || '-'}</td>
@@ -1216,7 +1233,7 @@
 
         function downloadEntregasCsv() {
             const rows = filterEntregasRows();
-            const headers = ['maquina', 'estado', 'trabajando', 'activa', 'hoja_serie', 'pn', 'ot', 'cantidad_piezas', 'estacion', 'tiempo_objetivo', 'tiempo_transcurrido', 'progreso_pct'];
+            const headers = ['maquina', 'estado', 'trabajando', 'activa', 'hoja_trabajando', 'modulo_actual', 'hoja_entregas', 'pn', 'ot', 'cantidad_piezas', 'estacion', 'tiempo_objetivo', 'tiempo_transcurrido', 'progreso_pct'];
             const lines = [headers.join(',')];
 
             rows.forEach((r) => {
@@ -1227,6 +1244,8 @@
                     norm(r.estado_code) === 'produciendo' ? 'SI' : 'NO',
                     r.activo ? 'SI' : 'NO',
                     r.hoja_serie,
+                    r.hoja_actual_modulo,
+                    r.tiene_hoja_entregas ? r.hoja_entregas_serie : 'FALTA HOJA DE RUTA ENTREGAS',
                     r.pieza,
                     ot,
                     r.cantidad_piezas,
