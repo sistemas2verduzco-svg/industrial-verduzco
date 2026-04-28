@@ -1,6 +1,7 @@
 ﻿import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -352,6 +353,26 @@ function disposeGroup(group) {
 function getEnvironmentPreset(environment) {
   const key = normalizeToken(environment);
 
+  if (key === 'photo') {
+    return {
+      background: '#d4e4f0',
+      fog: '#d6e0ea',
+      hemiSky: '#f7fbff',
+      hemiGround: '#99a6b6',
+      hemiIntensity: 0.85,
+      sunColor: '#ffe9c9',
+      sunIntensity: 1.25,
+      sunPosition: [7.7, 9.4, 6.2],
+      fillColor: '#d0e3ff',
+      fillIntensity: 0.55,
+      fillPosition: [-7.2, 4.1, -5.9],
+      exposure: 1.18,
+      skyTint: '#d2e4f2',
+      hdriUrl: 'https://threejs.org/examples/textures/equirectangular/royal_esplanade_1k.hdr',
+      envMapIntensity: 1.15,
+    };
+  }
+
   if (key === 'night') {
     return {
       background: '#1f2937',
@@ -367,6 +388,8 @@ function getEnvironmentPreset(environment) {
       fillPosition: [-6.8, 4.2, -6.2],
       exposure: 0.9,
       skyTint: '#223249',
+      hdriUrl: null,
+      envMapIntensity: 0.45,
     };
   }
 
@@ -385,6 +408,8 @@ function getEnvironmentPreset(environment) {
       fillPosition: [-8.1, 4.6, -7.1],
       exposure: 1.12,
       skyTint: '#f3caa6',
+      hdriUrl: 'https://threejs.org/examples/textures/equirectangular/venice_sunset_1k.hdr',
+      envMapIntensity: 0.95,
     };
   }
 
@@ -402,6 +427,8 @@ function getEnvironmentPreset(environment) {
     fillPosition: [-8.5, 4.8, -7.2],
     exposure: 1.05,
     skyTint: '#d5e8fb',
+    hdriUrl: 'https://threejs.org/examples/textures/equirectangular/royal_esplanade_1k.hdr',
+    envMapIntensity: 0.86,
   };
 }
 
@@ -412,6 +439,7 @@ export function WindowViewer3D({ width, height, color, environment = 'day' }) {
   const cameraRef = useRef(null);
   const controlsRef = useRef(null);
   const frameRef = useRef(null);
+  const envTextureRef = useRef(null);
   const lightsRef = useRef({ hemi: null, sun: null, fill: null, sky: null });
   const animationRef = useRef(0);
 
@@ -437,6 +465,9 @@ export function WindowViewer3D({ width, height, color, environment = 'day' }) {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = preset.exposure;
     mountNode.appendChild(renderer.domElement);
+
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    pmremGenerator.compileEquirectangularShader();
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -527,6 +558,22 @@ export function WindowViewer3D({ width, height, color, environment = 'day' }) {
 
     window.addEventListener('resize', onResize);
 
+    const applyHdri = async () => {
+      if (!preset.hdriUrl) return;
+      try {
+        const hdr = await new RGBELoader().loadAsync(preset.hdriUrl);
+        const envMap = pmremGenerator.fromEquirectangular(hdr).texture;
+        hdr.dispose();
+        envTextureRef.current = envMap;
+        scene.environment = envMap;
+      } catch (error) {
+        // Fallback to light-only rendering when remote HDRI is unavailable.
+        scene.environment = null;
+      }
+    };
+
+    applyHdri();
+
     const renderLoop = () => {
       controls.update();
       renderer.render(scene, camera);
@@ -537,6 +584,11 @@ export function WindowViewer3D({ width, height, color, environment = 'day' }) {
     return () => {
       window.cancelAnimationFrame(animationRef.current);
       window.removeEventListener('resize', onResize);
+      if (envTextureRef.current) {
+        envTextureRef.current.dispose();
+        envTextureRef.current = null;
+      }
+      pmremGenerator.dispose();
       controls.dispose();
       renderer.dispose();
       mountNode.removeChild(renderer.domElement);
@@ -569,6 +621,52 @@ export function WindowViewer3D({ width, height, color, environment = 'day' }) {
     if (lights.sky && lights.sky.material && lights.sky.material.color) {
       lights.sky.material.color.set(preset.skyTint);
     }
+
+    let cancelled = false;
+    const updateHdri = async () => {
+      if (envTextureRef.current) {
+        envTextureRef.current.dispose();
+        envTextureRef.current = null;
+      }
+
+      if (!preset.hdriUrl) {
+        scene.environment = null;
+        return;
+      }
+
+      try {
+        const pmremGenerator = new THREE.PMREMGenerator(renderer);
+        pmremGenerator.compileEquirectangularShader();
+        const hdr = await new RGBELoader().loadAsync(preset.hdriUrl);
+        if (cancelled) {
+          hdr.dispose();
+          pmremGenerator.dispose();
+          return;
+        }
+        const envMap = pmremGenerator.fromEquirectangular(hdr).texture;
+        hdr.dispose();
+        pmremGenerator.dispose();
+        envTextureRef.current = envMap;
+        scene.environment = envMap;
+      } catch (error) {
+        scene.environment = null;
+      }
+    };
+
+    updateHdri();
+
+    if (frameRef.current) {
+      frameRef.current.traverse((node) => {
+        if (node.material && node.material.isMeshPhysicalMaterial) {
+          node.material.envMapIntensity = preset.envMapIntensity || 0.85;
+          node.material.needsUpdate = true;
+        }
+      });
+    }
+
+    return () => {
+      cancelled = true;
+    };
   }, [environment]);
 
   useEffect(() => {

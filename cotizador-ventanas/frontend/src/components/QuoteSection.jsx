@@ -21,7 +21,7 @@ export function QuoteSection({
   error,
   meta,
 }) {
-  const [viewerMode, setViewerMode] = useState('day');
+  const [viewerMode, setViewerMode] = useState('photo');
 
   return (
     <section id="cotizador" className="section-block quote-section">
@@ -127,6 +127,7 @@ export function QuoteSection({
                     onChange={(event) => setViewerMode(event.target.value)}
                     style={{ marginLeft: '8px', padding: '6px 8px', borderRadius: '8px', border: '1px solid #cbd5e1' }}
                   >
+                    <option value="photo">Showroom foto</option>
                     <option value="day">Dia natural</option>
                     <option value="sunset">Atardecer</option>
                     <option value="night">Noche elegante</option>
