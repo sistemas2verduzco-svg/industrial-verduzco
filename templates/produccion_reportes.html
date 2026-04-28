@@ -489,6 +489,7 @@
                                 <th>Modulo actual</th>
                                 <th>Hoja entregas</th>
                                 <th>PN (Clave)</th>
+                                <th>Descripcion producto</th>
                                 <th>OT</th>
                                 <th>Cantidad piezas</th>
                                 <th>Estacion actual</th>
@@ -1230,6 +1231,7 @@
                     <td>${toSafe(r.hoja_actual_modulo) || '-'}</td>
                     <td><b>${hojaEntregas}</b></td>
                     <td>${toSafe(r.pieza) || '-'}</td>
+                    <td>${toSafe(r.pieza_descripcion) || '-'}</td>
                     <td><b>${ot}</b></td>
                     <td>${r.cantidad_piezas || '-'}</td>
                     <td>${toSafe(r.estacion_actual) || '-'}</td>
@@ -1251,7 +1253,7 @@
 
         function downloadEntregasCsv() {
             const rows = filterEntregasRows();
-            const headers = ['maquina', 'estado', 'trabajando', 'activa', 'hoja_trabajando', 'modulo_actual', 'hoja_entregas', 'pn', 'ot', 'cantidad_piezas', 'estacion', 'tiempo_objetivo', 'tiempo_transcurrido', 'progreso_pct'];
+            const headers = ['maquina', 'estado', 'trabajando', 'activa', 'hoja_trabajando', 'modulo_actual', 'hoja_entregas', 'pn', 'descripcion_producto', 'ot', 'cantidad_piezas', 'estacion', 'tiempo_objetivo', 'tiempo_transcurrido', 'progreso_pct'];
             const lines = [headers.join(',')];
 
             rows.forEach((r) => {
@@ -1265,6 +1267,7 @@
                     r.hoja_actual_modulo,
                     r.tiene_hoja_entregas ? r.hoja_entregas_serie : 'FALTA HOJA DE RUTA ENTREGAS',
                     r.pieza,
+                    r.pieza_descripcion,
                     ot,
                     r.cantidad_piezas,
                     r.estacion_actual,
