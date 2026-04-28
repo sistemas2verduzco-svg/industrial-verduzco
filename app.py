@@ -139,6 +139,14 @@ TELEGRAM_CHAT_IDS = [
     x.strip() for x in (os.getenv('TELEGRAM_CHAT_IDS') or '').split(',') if x.strip()
 ]
 
+GOOGLE_SHEETS_SYNC_ENABLED = os.getenv('GOOGLE_SHEETS_SYNC_ENABLED', '0').strip().lower() in ('1', 'true', 'yes', 'on')
+GOOGLE_SHEETS_WEBHOOK_URL = (os.getenv('GOOGLE_SHEETS_WEBHOOK_URL') or '').strip()
+GOOGLE_SHEETS_WEBHOOK_TOKEN = (os.getenv('GOOGLE_SHEETS_WEBHOOK_TOKEN') or '').strip()
+try:
+    GOOGLE_SHEETS_TIMEOUT_SECONDS = max(3, min(60, int(os.getenv('GOOGLE_SHEETS_TIMEOUT_SECONDS', '12') or '12')))
+except Exception:
+    GOOGLE_SHEETS_TIMEOUT_SECONDS = 12
+
 
 def _telegram_destinations():
     if TELEGRAM_CHAT_IDS:
@@ -211,6 +219,60 @@ def _send_alerta_telegram_if_enabled(alerta_item):
     ok, reason = _send_telegram_message(body)
     if not ok:
         logger.info(f'Telegram alert not sent ({reason}) for alerta id={getattr(alerta_item, "id", None)}')
+
+
+def _sync_almacen_liberacion_to_sheets(hoja, flujo, recepcion_id):
+    """Sincroniza a Google Sheets (via webhook) cuando Almacen libera una hoja."""
+    if not GOOGLE_SHEETS_SYNC_ENABLED:
+        return False, 'disabled'
+    if not GOOGLE_SHEETS_WEBHOOK_URL:
+        return False, 'missing_webhook_url'
+
+    cantidad_total = int((flujo.cantidad_total_piezas if flujo and flujo.cantidad_total_piezas is not None else 0) or 0)
+    if cantidad_total <= 0 and hoja and hoja.cantidad_piezas:
+        cantidad_total = int(hoja.cantidad_piezas or 0)
+
+    cantidad_entregada = int((flujo.cantidad_entregada if flujo and flujo.cantidad_entregada is not None else 0) or 0)
+    if cantidad_entregada < 0:
+        cantidad_entregada = 0
+    if cantidad_total > 0 and cantidad_entregada > cantidad_total:
+        cantidad_entregada = cantidad_total
+
+    payload = {
+        'source': 'controlcalidad360',
+        'event': 'almacen_liberada',
+        'timestamp_utc': datetime.utcnow().isoformat(),
+        'hoja_ruta_id': int(hoja.id if hoja else 0),
+        'flujo_id': int(flujo.id if flujo else 0),
+        'folio_hoja': (hoja.nombre if hoja else '') or '',
+        'clave': (hoja.pn if hoja else '') or '',
+        'oc_ot': ((hoja.orden_trabajo_hr if hoja else None) or (hoja.orden_trabajo_pt if hoja else '') or ''),
+        'recepcion_id': (recepcion_id or '').strip(),
+        'estado_actual': (flujo.estado if flujo else '') or '',
+        'cantidad_total_piezas': cantidad_total,
+        'cantidad_entregada': cantidad_entregada,
+        'cantidad_pendiente': max(cantidad_total - cantidad_entregada, 0),
+        'usuario': _logistica_username(),
+    }
+
+    headers = {'Content-Type': 'application/json'}
+    if GOOGLE_SHEETS_WEBHOOK_TOKEN:
+        headers['X-Webhook-Token'] = GOOGLE_SHEETS_WEBHOOK_TOKEN
+
+    try:
+        response = requests.post(
+            GOOGLE_SHEETS_WEBHOOK_URL,
+            json=payload,
+            headers=headers,
+            timeout=GOOGLE_SHEETS_TIMEOUT_SECONDS,
+        )
+        if 200 <= response.status_code < 300:
+            return True, 'sent'
+        logger.warning(f'[SHEETS_SYNC] HTTP {response.status_code} body={response.text[:500]} payload={payload}')
+        return False, f'http_{response.status_code}'
+    except Exception as exc:
+        logger.warning(f'[SHEETS_SYNC] Exception syncing almacen liberation: {exc}; payload={payload}')
+        return False, 'exception'
 
 
 def _procesos_import_job_path(job_id):
@@ -1230,7 +1292,7 @@ def _mp_qc_alert_type_meta(alert_type):
     return normalized, mapping.get(normalized, mapping['verificado'])
 
 
-def _mp_qc_alert_payload_from_registro(registro):
+def _mp_qc_alert_payload_from_registro(registro):   
     mediciones = registro.mediciones if isinstance(registro.mediciones, dict) else {}
     if mediciones.get('module') != 'estaciones_t_mp_qc':
         return None
@@ -3882,6 +3944,124 @@ def _build_logistica_resumen(limit=80):
     return resumen
 
 
+def _build_entregas_almacen_hoy(limit=200):
+    """Construye un resumen diario de hojas enviadas a Almacen con su estatus actual."""
+    now_dt = datetime.utcnow()
+    day_start = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = day_start + timedelta(days=1)
+
+    acciones_envio = ['enviada_a_almacen', 'enviada_a_almacen_revision']
+    envios_hoy = (
+        EntregaRegistro.query
+        .filter(EntregaRegistro.accion.in_(acciones_envio))
+        .filter(EntregaRegistro.fecha_creacion >= day_start)
+        .filter(EntregaRegistro.fecha_creacion < day_end)
+        .order_by(EntregaRegistro.fecha_creacion.desc())
+        .limit(limit)
+        .all()
+    )
+
+    if not envios_hoy:
+        return {
+            'rows': [],
+            'summary': {
+                'total_envios': 0,
+                'en_almacen': 0,
+                'liberadas': 0,
+                'regresadas': 0,
+            },
+            'fecha_corte': now_dt.isoformat(),
+        }
+
+    hoja_ids = sorted({int(x.hoja_ruta_id) for x in envios_hoy if x.hoja_ruta_id})
+    flujo_por_hoja = {
+        item.hoja_ruta_id: item
+        for item in HojaRutaFlujoLogistica.query.filter(HojaRutaFlujoLogistica.hoja_ruta_id.in_(hoja_ids)).all()
+    }
+
+    def _estado_meta(estado_val):
+        estado = (estado_val or '').strip().lower()
+        if estado == 'almacen':
+            return 'En espera en Almacen', 'warn'
+        if estado == 'entregas_lista_facturacion':
+            return 'Liberada por Almacen', 'ok'
+        if estado == 'entregas_revision':
+            return 'Regresada por Almacen', 'danger'
+        if estado == 'facturacion':
+            return 'En Facturacion', 'info'
+        if estado == 'finalizada':
+            return 'Finalizada', 'ok'
+        if estado == 'entregas':
+            return 'En Entregas', 'neutral'
+        return 'Sin flujo activo', 'neutral'
+
+    rows = []
+    en_almacen = 0
+    liberadas = 0
+    regresadas = 0
+
+    for mov in envios_hoy:
+        flujo = flujo_por_hoja.get(mov.hoja_ruta_id)
+        hoja = mov.hoja_ruta or (flujo.hoja_ruta if flujo else None)
+
+        total_piezas = int((flujo.cantidad_total_piezas if flujo and flujo.cantidad_total_piezas is not None else 0) or 0)
+        if total_piezas <= 0 and hoja and hoja.cantidad_piezas:
+            total_piezas = int(hoja.cantidad_piezas or 0)
+
+        entregadas = int((flujo.cantidad_entregada if flujo and flujo.cantidad_entregada is not None else 0) or 0)
+        if entregadas < 0:
+            entregadas = 0
+        if total_piezas > 0 and entregadas > total_piezas:
+            entregadas = total_piezas
+        pendientes = max(total_piezas - entregadas, 0)
+
+        estado_actual = (flujo.estado if flujo else '').strip().lower()
+        estado_label, estado_variant = _estado_meta(estado_actual)
+
+        if estado_actual == 'almacen':
+            en_almacen += 1
+        if estado_actual in ('entregas_lista_facturacion', 'facturacion', 'finalizada'):
+            liberadas += 1
+        if estado_actual == 'entregas_revision':
+            regresadas += 1
+
+        accion = (mov.accion or '').strip().lower()
+        accion_label = 'Enviada a Almacen'
+        if accion == 'enviada_a_almacen_revision':
+            accion_label = 'Reenviada a Almacen'
+
+        rows.append({
+            'movimiento_id': mov.id,
+            'hora': mov.fecha_creacion.strftime('%H:%M') if mov.fecha_creacion else '-',
+            'hoja_ruta_id': mov.hoja_ruta_id,
+            'hoja_nombre': (hoja.nombre if hoja and hoja.nombre else f'HOJA #{mov.hoja_ruta_id}'),
+            'clave': (hoja.pn if hoja else '') or '',
+            'orden_trabajo': ((hoja.orden_trabajo_hr if hoja else None) or (hoja.orden_trabajo_pt if hoja else '') or ''),
+            'cantidad_total_piezas': total_piezas,
+            'cantidad_entregada': entregadas,
+            'cantidad_pendiente': pendientes,
+            'accion': accion,
+            'accion_label': accion_label,
+            'estado_actual': estado_actual,
+            'estado_label': estado_label,
+            'estado_variant': estado_variant,
+            'recepcion_id': (flujo.almacen_recepcion_id if flujo else '') or '',
+            'usuario': mov.usuario or (flujo.actualizado_por if flujo else ''),
+            'fecha_movimiento': mov.fecha_creacion.isoformat() if mov.fecha_creacion else None,
+        })
+
+    return {
+        'rows': rows,
+        'summary': {
+            'total_envios': len(rows),
+            'en_almacen': en_almacen,
+            'liberadas': liberadas,
+            'regresadas': regresadas,
+        },
+        'fecha_corte': now_dt.isoformat(),
+    }
+
+
 @app.route('/entregas')
 @login_required
 @requires_any_permission([('entregas', 'view'), ('catalog', 'edit')])
@@ -4208,6 +4388,14 @@ def almacen_recibir_item(item_id):
     ))
 
     db.session.commit()
+
+    ok_sync, reason_sync = _sync_almacen_liberacion_to_sheets(item.hoja_ruta, item, recepcion_id)
+    if not ok_sync and reason_sync not in ('disabled', 'missing_webhook_url'):
+        logger.info(
+            f'[SHEETS_SYNC] No se pudo sincronizar hoja_ruta_id={item.hoja_ruta_id} '
+            f'recepcion_id={recepcion_id} reason={reason_sync}'
+        )
+
     return redirect(url_for('almacen_module'))
 
 
@@ -4983,7 +5171,13 @@ def api_mapa_maquinas():
         },
     }
 
-    return jsonify({'maquinas': data, 'eficiencia_planta': eficiencia_planta})
+    logistica_almacen_hoy = _build_entregas_almacen_hoy(limit=200)
+
+    return jsonify({
+        'maquinas': data,
+        'eficiencia_planta': eficiencia_planta,
+        'logistica_almacen_hoy': logistica_almacen_hoy,
+    })
 
 
 @app.route('/alertas_buzon')

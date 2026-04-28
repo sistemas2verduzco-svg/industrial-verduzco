@@ -223,6 +223,12 @@
         .pill-paro { background: #dc2626; }
         .pill-sin_hoja { background: #64748b; }
 
+        .pill-log-ok { background: #16a34a; }
+        .pill-log-warn { background: #f59e0b; color: #111827; }
+        .pill-log-danger { background: #dc2626; }
+        .pill-log-info { background: #0284c7; }
+        .pill-log-neutral { background: #64748b; }
+
         .empty {
             border: 1px dashed #cbd5e1;
             border-radius: 10px;
@@ -410,6 +416,42 @@
         </section>
 
         <section class="card subpanel">
+            <h3>Entregas a Almacen del dia</h3>
+
+            <div class="summary-grid">
+                <div class="summary-item"><span class="summary-k">Envios hoy</span><span class="summary-v" id="aTotal">0</span></div>
+                <div class="summary-item"><span class="summary-k">En Almacen</span><span class="summary-v" id="aPendientes">0</span></div>
+                <div class="summary-item"><span class="summary-k">Liberadas</span><span class="summary-v" id="aLiberadas">0</span></div>
+                <div class="summary-item"><span class="summary-k">Regresadas</span><span class="summary-v" id="aRegresadas">0</span></div>
+            </div>
+
+            <div class="inline-meta">
+                <span>Actualizado: <b id="aUpdated">-</b></span>
+                <span>Corte: <b id="aCorte">-</b></span>
+            </div>
+
+            <div id="almacenHoyEmpty" class="empty" style="display:none;">No hay envios a Almacen registrados hoy.</div>
+            <div class="table-wrap" id="almacenHoyWrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Hora</th>
+                            <th>Hoja</th>
+                            <th>Clave</th>
+                            <th>OT/OC</th>
+                            <th>Piezas</th>
+                            <th>Movimiento</th>
+                            <th>Estatus actual</th>
+                            <th>ID recepcion</th>
+                            <th>Usuario</th>
+                        </tr>
+                    </thead>
+                    <tbody id="almacenHoyBody"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card subpanel">
             <h3>Panel de Tiempos por Máquina</h3>
             <div class="subpanel-grid">
                 <div class="field">
@@ -513,6 +555,7 @@
             raw: [],
             filtered: [],
             eficiencia: null,
+            logisticaAlmacenHoy: null,
             lastFetchAt: null,
             timerId: null,
             filters: {
@@ -803,6 +846,61 @@
             });
         }
 
+        function renderAlmacenHoyPanel() {
+            const payload = state.logisticaAlmacenHoy || {};
+            const rows = Array.isArray(payload.rows) ? payload.rows : [];
+            const summary = payload.summary || {};
+
+            document.getElementById('aTotal').textContent = String(Number(summary.total_envios || 0));
+            document.getElementById('aPendientes').textContent = String(Number(summary.en_almacen || 0));
+            document.getElementById('aLiberadas').textContent = String(Number(summary.liberadas || 0));
+            document.getElementById('aRegresadas').textContent = String(Number(summary.regresadas || 0));
+
+            const updatedTxt = state.lastFetchAt ? state.lastFetchAt.toLocaleTimeString() : '-';
+            document.getElementById('aUpdated').textContent = updatedTxt;
+
+            let corteTxt = '-';
+            if (payload.fecha_corte) {
+                try {
+                    corteTxt = new Date(payload.fecha_corte).toLocaleString();
+                } catch (err) {
+                    corteTxt = toSafe(payload.fecha_corte);
+                }
+            }
+            document.getElementById('aCorte').textContent = corteTxt;
+
+            const body = document.getElementById('almacenHoyBody');
+            const empty = document.getElementById('almacenHoyEmpty');
+            const wrap = document.getElementById('almacenHoyWrap');
+            body.innerHTML = '';
+
+            if (!rows.length) {
+                empty.style.display = 'block';
+                wrap.style.display = 'none';
+                return;
+            }
+
+            empty.style.display = 'none';
+            wrap.style.display = 'block';
+
+            rows.forEach((r) => {
+                const tr = document.createElement('tr');
+                const variant = norm(r.estado_variant) || 'neutral';
+                tr.innerHTML = `
+                    <td>${toSafe(r.hora) || '-'}</td>
+                    <td><b>${toSafe(r.hoja_nombre) || '-'}</b><div class="small">ID ${toSafe(r.hoja_ruta_id) || '-'}</div></td>
+                    <td>${toSafe(r.clave) || '-'}</td>
+                    <td>${toSafe(r.orden_trabajo) || '-'}</td>
+                    <td>${Number(r.cantidad_entregada || 0)} / ${Number(r.cantidad_total_piezas || 0)}</td>
+                    <td><span class="pill pill-log-info">${toSafe(r.accion_label) || '-'}</span></td>
+                    <td><span class="pill pill-log-${variant}">${toSafe(r.estado_label) || '-'}</span></td>
+                    <td>${toSafe(r.recepcion_id) || '-'}</td>
+                    <td>${toSafe(r.usuario) || '-'}</td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
         function downloadTimesCsv() {
             const scope = norm(document.getElementById('tScope').value || 'semana');
             const rows = buildTimesRows();
@@ -881,6 +979,7 @@
             renderSummary(state.filtered);
             renderTable(state.filtered);
             renderTimesPanel();
+            renderAlmacenHoyPanel();
             restartAutoRefresh();
         }
 
@@ -934,6 +1033,7 @@
 
                 state.raw = Array.isArray(payload.maquinas) ? payload.maquinas : [];
                 state.eficiencia = payload.eficiencia_planta || null;
+                state.logisticaAlmacenHoy = payload.logistica_almacen_hoy || null;
                 state.lastFetchAt = new Date();
                 refreshMachineSelectOptions();
                 applyFiltersAndRender();
