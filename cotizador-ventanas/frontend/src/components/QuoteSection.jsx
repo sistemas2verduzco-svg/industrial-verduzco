@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState } from 'react';
+﻿import { Suspense, lazy, useState } from 'react';
 
 const WindowViewer3D = lazy(() => import('./WindowViewer3D.jsx').then((module) => ({ default: module.WindowViewer3D })));
 
@@ -22,6 +22,7 @@ export function QuoteSection({
   meta,
 }) {
   const [viewerMode, setViewerMode] = useState('photo');
+  const [cameraPreset, setCameraPreset] = useState('facade');
 
   return (
     <section id="cotizador" className="section-block quote-section">
@@ -133,10 +134,28 @@ export function QuoteSection({
                     <option value="night">Noche elegante</option>
                   </select>
                 </label>
+                <label style={{ fontSize: '12px', color: '#64748b', fontWeight: 700 }}>
+                  Angulo de camara
+                  <select
+                    value={cameraPreset}
+                    onChange={(event) => setCameraPreset(event.target.value)}
+                    style={{ marginLeft: '8px', padding: '6px 8px', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+                  >
+                    <option value="facade">Fachada comercial</option>
+                    <option value="interior">Interior acogedor</option>
+                    <option value="detail">Detalle de herraje</option>
+                  </select>
+                </label>
               </div>
             </div>
             <Suspense fallback={<div className="viewer-canvas viewer-loading">Cargando visor 3D...</div>}>
-              <WindowViewer3D width={form.width} height={form.height} color={form.color} environment={viewerMode} />
+              <WindowViewer3D
+                width={form.width}
+                height={form.height}
+                color={form.color}
+                environment={viewerMode}
+                cameraPreset={cameraPreset}
+              />
             </Suspense>
           </article>
         </div>

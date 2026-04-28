@@ -2,6 +2,10 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { SSAOPass } from 'three/examples/jsm/postprocessing/SSAOPass.js';
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -122,22 +126,22 @@ function createInstallationGroup(widthScale, heightScale, color) {
 
   const frameMaterial = new THREE.MeshStandardMaterial({
     color: frameColor,
-    roughness: 0.34,
-    metalness: 0.44,
+    roughness: 0.28,
+    metalness: 0.52,
   });
 
   const glassMaterial = new THREE.MeshPhysicalMaterial({
     color: '#e4f0ff',
-    roughness: 0.015,
-    metalness: 0.03,
-    transmission: 0.92,
+    roughness: 0.01,
+    metalness: 0.04,
+    transmission: 0.95,
     transparent: true,
-    opacity: 0.33,
-    thickness: 0.14,
-    ior: 1.48,
-    reflectivity: 0.9,
-    clearcoat: 0.85,
-    clearcoatRoughness: 0.04,
+    opacity: 0.26,
+    thickness: 0.22,
+    ior: 1.52,
+    reflectivity: 0.94,
+    clearcoat: 0.95,
+    clearcoatRoughness: 0.03,
   });
 
   const wallLeft = new THREE.Mesh(new THREE.BoxGeometry(sideWidth, wallHeight, wallDepth), wallMaterial);
@@ -198,7 +202,7 @@ function createInstallationGroup(widthScale, heightScale, color) {
   );
   railBase.position.set(0, -heightScale / 2 - 0.16, 0.18);
 
-  const handleMaterial = new THREE.MeshStandardMaterial({ color: '#a8b4c0', roughness: 0.25, metalness: 0.72 });
+  const handleMaterial = new THREE.MeshStandardMaterial({ color: '#a8b4c0', roughness: 0.2, metalness: 0.82 });
   const handleL = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.24, 0.03), handleMaterial);
   handleL.position.set(-0.05, 0.03, 0.26);
   const handleR = handleL.clone();
@@ -368,8 +372,12 @@ function getEnvironmentPreset(environment) {
       fillPosition: [-7.2, 4.1, -5.9],
       exposure: 1.18,
       skyTint: '#d2e4f2',
-      hdriUrl: 'https://threejs.org/examples/textures/equirectangular/royal_esplanade_1k.hdr',
-      envMapIntensity: 1.15,
+      hdriUrl: 'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/kloofendal_43d_clear_puresky_1k.hdr',
+      envMapIntensity: 1.22,
+      bloomStrength: 0.15,
+      bloomRadius: 0.28,
+      bloomThreshold: 0.78,
+      aoRadius: 9,
     };
   }
 
@@ -390,6 +398,10 @@ function getEnvironmentPreset(environment) {
       skyTint: '#223249',
       hdriUrl: null,
       envMapIntensity: 0.45,
+      bloomStrength: 0.2,
+      bloomRadius: 0.33,
+      bloomThreshold: 0.72,
+      aoRadius: 8,
     };
   }
 
@@ -408,8 +420,12 @@ function getEnvironmentPreset(environment) {
       fillPosition: [-8.1, 4.6, -7.1],
       exposure: 1.12,
       skyTint: '#f3caa6',
-      hdriUrl: 'https://threejs.org/examples/textures/equirectangular/venice_sunset_1k.hdr',
+      hdriUrl: 'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/kloppenheim_06_puresky_1k.hdr',
       envMapIntensity: 0.95,
+      bloomStrength: 0.16,
+      bloomRadius: 0.3,
+      bloomThreshold: 0.78,
+      aoRadius: 9,
     };
   }
 
@@ -427,17 +443,56 @@ function getEnvironmentPreset(environment) {
     fillPosition: [-8.5, 4.8, -7.2],
     exposure: 1.05,
     skyTint: '#d5e8fb',
-    hdriUrl: 'https://threejs.org/examples/textures/equirectangular/royal_esplanade_1k.hdr',
+    hdriUrl: 'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/kloofendal_43d_clear_puresky_1k.hdr',
     envMapIntensity: 0.86,
+    bloomStrength: 0.12,
+    bloomRadius: 0.24,
+    bloomThreshold: 0.82,
+    aoRadius: 8,
   };
 }
 
-export function WindowViewer3D({ width, height, color, environment = 'day' }) {
+function getCameraPreset(cameraPreset, widthScale, heightScale) {
+  const key = normalizeToken(cameraPreset);
+  const yOffset = clamp((heightScale - 1.2) * 0.14, -0.06, 0.2);
+
+  if (key === 'interior') {
+    return {
+      position: [3.3, 1.8, 5.2],
+      target: [0.1, yOffset, 0.45],
+      fov: 43,
+      minDistance: 2.6,
+      maxDistance: 11,
+    };
+  }
+
+  if (key === 'detail') {
+    return {
+      position: [2.2, 1.35, 3.15],
+      target: [0.2, 0.05, 0.25],
+      fov: 34,
+      minDistance: 1.7,
+      maxDistance: 8,
+    };
+  }
+
+  return {
+    position: [4.4, 2.15, 7.1],
+    target: [0, yOffset, 0.05],
+    fov: 40,
+    minDistance: 3.2,
+    maxDistance: 14,
+  };
+}
+
+export function WindowViewer3D({ width, height, color, environment = 'day', cameraPreset = 'facade' }) {
   const mountRef = useRef(null);
   const sceneRef = useRef(null);
   const rendererRef = useRef(null);
   const cameraRef = useRef(null);
   const controlsRef = useRef(null);
+  const composerRef = useRef(null);
+  const postRef = useRef({ bloomPass: null, ssaoPass: null });
   const frameRef = useRef(null);
   const envTextureRef = useRef(null);
   const lightsRef = useRef({ hemi: null, sun: null, fill: null, sky: null });
@@ -448,13 +503,16 @@ export function WindowViewer3D({ width, height, color, environment = 'day' }) {
     if (!mountNode) return undefined;
 
     const preset = getEnvironmentPreset(environment);
+    const widthScale = clamp((Number(width) || 160) / 100, 0.9, 3.2);
+    const heightScale = clamp((Number(height) || 120) / 100, 0.8, 2.8);
+    const cam = getCameraPreset(cameraPreset, widthScale, heightScale);
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(preset.background);
     scene.fog = new THREE.Fog(preset.fog, 16, 58);
 
-    const camera = new THREE.PerspectiveCamera(42, mountNode.clientWidth / mountNode.clientHeight, 0.1, 120);
-    camera.position.set(4.3, 2.1, 7.1);
+    const camera = new THREE.PerspectiveCamera(cam.fov, mountNode.clientWidth / mountNode.clientHeight, 0.1, 120);
+    camera.position.set(...cam.position);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -471,10 +529,10 @@ export function WindowViewer3D({ width, height, color, environment = 'day' }) {
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.minDistance = 3.4;
-    controls.maxDistance = 14;
+    controls.minDistance = cam.minDistance;
+    controls.maxDistance = cam.maxDistance;
     controls.maxPolarAngle = Math.PI / 2.03;
-    controls.target.set(0, 0.18, 0.05);
+    controls.target.set(...cam.target);
 
     const hemiLight = new THREE.HemisphereLight(preset.hemiSky, preset.hemiGround, preset.hemiIntensity);
     scene.add(hemiLight);
@@ -498,7 +556,6 @@ export function WindowViewer3D({ width, height, color, environment = 'day' }) {
 
     addEnvironment(scene);
 
-    // Add simple decor props to make the composition feel like a staged architectural shot.
     const decorMaterial = new THREE.MeshStandardMaterial({ color: '#f3f4f6', roughness: 0.92, metalness: 0.02 });
     const tableTop = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.08, 1.2), decorMaterial);
     tableTop.position.set(2.3, -0.85, 1.95);
@@ -535,6 +592,24 @@ export function WindowViewer3D({ width, height, color, environment = 'day' }) {
     lampHead.receiveShadow = true;
     scene.add(lampHead);
 
+    const composer = new EffectComposer(renderer);
+    const renderPass = new RenderPass(scene, camera);
+    composer.addPass(renderPass);
+
+    const ssaoPass = new SSAOPass(scene, camera, mountNode.clientWidth, mountNode.clientHeight);
+    ssaoPass.kernelRadius = preset.aoRadius;
+    ssaoPass.minDistance = 0.001;
+    ssaoPass.maxDistance = 0.14;
+    composer.addPass(ssaoPass);
+
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(mountNode.clientWidth, mountNode.clientHeight),
+      preset.bloomStrength,
+      preset.bloomRadius,
+      preset.bloomThreshold
+    );
+    composer.addPass(bloomPass);
+
     lightsRef.current = {
       hemi: hemiLight,
       sun: sunLight,
@@ -546,6 +621,8 @@ export function WindowViewer3D({ width, height, color, environment = 'day' }) {
     rendererRef.current = renderer;
     cameraRef.current = camera;
     controlsRef.current = controls;
+    composerRef.current = composer;
+    postRef.current = { bloomPass, ssaoPass };
 
     const onResize = () => {
       if (!mountRef.current || !rendererRef.current || !cameraRef.current) return;
@@ -554,6 +631,10 @@ export function WindowViewer3D({ width, height, color, environment = 'day' }) {
       rendererRef.current.setSize(widthValue, heightValue);
       cameraRef.current.aspect = widthValue / heightValue;
       cameraRef.current.updateProjectionMatrix();
+
+      if (composerRef.current) composerRef.current.setSize(widthValue, heightValue);
+      if (postRef.current.bloomPass) postRef.current.bloomPass.setSize(widthValue, heightValue);
+      if (postRef.current.ssaoPass) postRef.current.ssaoPass.setSize(widthValue, heightValue);
     };
 
     window.addEventListener('resize', onResize);
@@ -567,7 +648,6 @@ export function WindowViewer3D({ width, height, color, environment = 'day' }) {
         envTextureRef.current = envMap;
         scene.environment = envMap;
       } catch (error) {
-        // Fallback to light-only rendering when remote HDRI is unavailable.
         scene.environment = null;
       }
     };
@@ -576,7 +656,11 @@ export function WindowViewer3D({ width, height, color, environment = 'day' }) {
 
     const renderLoop = () => {
       controls.update();
-      renderer.render(scene, camera);
+      if (composerRef.current) {
+        composerRef.current.render();
+      } else {
+        renderer.render(scene, camera);
+      }
       animationRef.current = window.requestAnimationFrame(renderLoop);
     };
     renderLoop();
@@ -589,9 +673,15 @@ export function WindowViewer3D({ width, height, color, environment = 'day' }) {
         envTextureRef.current = null;
       }
       pmremGenerator.dispose();
+      if (postRef.current.ssaoPass && typeof postRef.current.ssaoPass.dispose === 'function') {
+        postRef.current.ssaoPass.dispose();
+      }
+      if (postRef.current.bloomPass && typeof postRef.current.bloomPass.dispose === 'function') {
+        postRef.current.bloomPass.dispose();
+      }
       controls.dispose();
       renderer.dispose();
-      mountNode.removeChild(renderer.domElement);
+      if (mountNode.contains(renderer.domElement)) mountNode.removeChild(renderer.domElement);
     };
   }, []);
 
@@ -620,6 +710,15 @@ export function WindowViewer3D({ width, height, color, environment = 'day' }) {
 
     if (lights.sky && lights.sky.material && lights.sky.material.color) {
       lights.sky.material.color.set(preset.skyTint);
+    }
+
+    if (postRef.current.bloomPass) {
+      postRef.current.bloomPass.strength = preset.bloomStrength;
+      postRef.current.bloomPass.radius = preset.bloomRadius;
+      postRef.current.bloomPass.threshold = preset.bloomThreshold;
+    }
+    if (postRef.current.ssaoPass) {
+      postRef.current.ssaoPass.kernelRadius = preset.aoRadius;
     }
 
     let cancelled = false;
@@ -685,12 +784,19 @@ export function WindowViewer3D({ width, height, color, environment = 'day' }) {
     frameRef.current = installation;
     scene.add(installation);
 
+    const camera = cameraRef.current;
     const controls = controlsRef.current;
-    if (controls) {
-      controls.target.set(0, clamp((heightScale - 1.2) * 0.14, -0.06, 0.2), 0.05);
+    if (camera && controls) {
+      const cam = getCameraPreset(cameraPreset, widthScale, heightScale);
+      camera.fov = cam.fov;
+      camera.position.set(...cam.position);
+      camera.updateProjectionMatrix();
+      controls.target.set(...cam.target);
+      controls.minDistance = cam.minDistance;
+      controls.maxDistance = cam.maxDistance;
       controls.update();
     }
-  }, [width, height, color]);
+  }, [width, height, color, cameraPreset]);
 
   return <div className="viewer-canvas" ref={mountRef} />;
 }
