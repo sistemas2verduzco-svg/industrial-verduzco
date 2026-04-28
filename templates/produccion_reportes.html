@@ -413,6 +413,72 @@
                     </table>
                 </div>
             </article>
+
+            <article class="card">
+                <h3>Consulta 2: Entregas en Producción</h3>
+
+                <div class="form-grid">
+                    <div class="field">
+                        <label for="eSearch">Busqueda</label>
+                        <input id="eSearch" type="text" placeholder="Maquina, PN, OT">
+                    </div>
+
+                    <div class="field-row">
+                        <div class="field">
+                            <label for="eEstado">Estado</label>
+                            <select id="eEstado">
+                                <option value="">Todos</option>
+                                <option value="produciendo">Produciendo</option>
+                                <option value="mover">Mover</option>
+                                <option value="activa">Activa</option>
+                                <option value="paro">Paro</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label for="eSort">Ordenar por</label>
+                            <select id="eSort">
+                                <option value="nombre">Nombre máquina</option>
+                                <option value="progreso_desc">Progreso desc</option>
+                                <option value="transcurrido_desc">Transcurrido desc</option>
+                                <option value="estado">Estado</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="field-row">
+                        <button class="btn btn-primary" id="eBtnApply" type="button">Aplicar filtros</button>
+                        <button class="btn btn-outline" id="eBtnCsv" type="button">Exportar CSV</button>
+                    </div>
+                </div>
+
+                <div class="inline-meta">
+                    <span>Total entregas en linea: <b id="eTotalCount">0</b></span>
+                    <span>Produciendo: <b id="eProducingCount">0</b></span>
+                    <span>Progreso promedio: <b id="eAvgProgress">0%</b></span>
+                </div>
+
+                <div id="eEmptyState" class="empty" style="display:none;">No hay entregas en producción.</div>
+                <div class="table-wrap" id="eTableWrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Maquina</th>
+                                <th>Estado</th>
+                                <th>Hoja (Serie)</th>
+                                <th>PN (Clave)</th>
+                                <th>OT</th>
+                                <th>Cantidad piezas</th>
+                                <th>Estacion actual</th>
+                                <th>Tiempo objetivo</th>
+                                <th>Tiempo transcurrido</th>
+                                <th>Progreso</th>
+                                <th>Detalle</th>
+                            </tr>
+                        </thead>
+                        <tbody id="eRowsBody"></tbody>
+                    </table>
+                </div>
+            </article>
         </section>
 
         <section class="card subpanel">
@@ -980,6 +1046,7 @@
             renderTable(state.filtered);
             renderTimesPanel();
             renderAlmacenHoyPanel();
+            renderEntregasTable();
             restartAutoRefresh();
         }
 
@@ -1049,6 +1116,132 @@
             state.timerId = setInterval(fetchRealtimeData, state.filters.refreshMs);
         }
 
+        // ===== CONSULTA 2: ENTREGAS EN PRODUCCIÓN =====
+        const entregasFilters = {
+            q: '',
+            estado: '',
+            sort: 'nombre',
+        };
+
+        function filterEntregasRows() {
+            const entregas = state.raw.filter((r) => norm(r.hoja_modulo) === 'entregas');
+            const f = entregasFilters;
+            
+            const filtered = entregas.filter((r) => {
+                if (f.estado && norm(r.estado_code) !== f.estado) return false;
+                if (f.q) {
+                    const haystack = [r.nombre, r.hoja_serie, r.pieza, r.pieza_descripcion].map(norm).join(' ');
+                    if (!haystack.includes(f.q)) return false;
+                }
+                return true;
+            });
+
+            if (f.sort === 'nombre') {
+                filtered.sort((a, b) => norm(a.nombre).localeCompare(norm(b.nombre)));
+            } else if (f.sort === 'progreso_desc') {
+                filtered.sort((a, b) => Number(b.progreso_proceso_pct || 0) - Number(a.progreso_proceso_pct || 0));
+            } else if (f.sort === 'transcurrido_desc') {
+                filtered.sort((a, b) => hmsToSec(b.tiempo_transcurrido_proceso) - hmsToSec(a.tiempo_transcurrido_proceso));
+            } else {
+                filtered.sort((a, b) => norm(a.nombre).localeCompare(norm(b.nombre)));
+            }
+
+            return filtered;
+        }
+
+        function renderEntregasTable() {
+            const rows = filterEntregasRows();
+            const body = document.getElementById('eRowsBody');
+            body.innerHTML = '';
+
+            const empty = document.getElementById('eEmptyState');
+            const wrap = document.getElementById('eTableWrap');
+            if (!rows.length) {
+                empty.style.display = 'block';
+                wrap.style.display = 'none';
+                document.getElementById('eTotalCount').textContent = '0';
+                document.getElementById('eProducingCount').textContent = '0';
+                document.getElementById('eAvgProgress').textContent = '0%';
+                return;
+            }
+
+            empty.style.display = 'none';
+            wrap.style.display = 'block';
+
+            const prod = rows.filter((r) => norm(r.estado_code) === 'produciendo').length;
+            const progressRows = rows.filter((r) => Number(r.progreso_proceso_pct || 0) > 0);
+            const avg = progressRows.length
+                ? (progressRows.reduce((acc, r) => acc + Number(r.progreso_proceso_pct || 0), 0) / progressRows.length)
+                : 0;
+
+            document.getElementById('eTotalCount').textContent = String(rows.length);
+            document.getElementById('eProducingCount').textContent = String(prod);
+            document.getElementById('eAvgProgress').textContent = `${avg.toFixed(1)}%`;
+
+            rows.forEach((r) => {
+                const tr = document.createElement('tr');
+                const code = norm(r.estado_code);
+                const ot = toSafe(r.orden_trabajo_hr) || toSafe(r.orden_trabajo_pt) || '-';
+                const detailUrl = '/hojas_ruta/' + r.id;
+
+                tr.innerHTML = `
+                    <td><b>${toSafe(r.nombre) || '-'}</b></td>
+                    <td><span class="pill pill-${code}">${toSafe(r.estado_label) || '-'}</span></td>
+                    <td>${toSafe(r.hoja_serie) || '-'}</td>
+                    <td>${toSafe(r.pieza) || '-'}</td>
+                    <td><b>${ot}</b></td>
+                    <td>${r.cantidad_piezas || '-'}</td>
+                    <td>${toSafe(r.estacion_actual) || '-'}</td>
+                    <td>${toSafe(r.tiempo_objetivo_proceso) || '-'}</td>
+                    <td>${toSafe(r.tiempo_transcurrido_proceso) || '-'}</td>
+                    <td>${Number(r.progreso_proceso_pct || 0)}%</td>
+                    <td><a href="${detailUrl}">Abrir</a></td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        function applyEntregasFilters() {
+            entregasFilters.q = norm(document.getElementById('eSearch').value);
+            entregasFilters.estado = norm(document.getElementById('eEstado').value);
+            entregasFilters.sort = norm(document.getElementById('eSort').value) || 'nombre';
+            renderEntregasTable();
+        }
+
+        function downloadEntregasCsv() {
+            const rows = filterEntregasRows();
+            const headers = ['maquina', 'estado', 'hoja_serie', 'pn', 'ot', 'cantidad_piezas', 'estacion', 'tiempo_objetivo', 'tiempo_transcurrido', 'progreso_pct'];
+            const lines = [headers.join(',')];
+
+            rows.forEach((r) => {
+                const ot = toSafe(r.orden_trabajo_hr) || toSafe(r.orden_trabajo_pt) || '';
+                const row = [
+                    r.nombre,
+                    r.estado_code,
+                    r.hoja_serie,
+                    r.pieza,
+                    ot,
+                    r.cantidad_piezas,
+                    r.estacion_actual,
+                    r.tiempo_objetivo_proceso,
+                    r.tiempo_transcurrido_proceso,
+                    r.progreso_proceso_pct,
+                ].map(escapeCsv).join(',');
+                lines.push(row);
+            });
+
+            const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const ts = new Date().toISOString().replace(/[:]/g, '-');
+            a.href = url;
+            a.download = `entregas_produccion_${ts}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        }
+
         function wireEvents() {
             const ids = ['qSearch', 'qEstado', 'qModulo', 'qSort', 'qLimit', 'qSoloActivas'];
             ids.forEach((id) => {
@@ -1069,6 +1262,13 @@
             });
             document.getElementById('btnTiemposApply').addEventListener('click', renderTimesPanel);
             document.getElementById('btnTiemposCsv').addEventListener('click', downloadTimesCsv);
+
+            // Consulta 2: Entregas en Producción
+            document.getElementById('eSearch').addEventListener('input', applyEntregasFilters);
+            document.getElementById('eEstado').addEventListener('change', applyEntregasFilters);
+            document.getElementById('eSort').addEventListener('change', applyEntregasFilters);
+            document.getElementById('eBtnApply').addEventListener('click', applyEntregasFilters);
+            document.getElementById('eBtnCsv').addEventListener('click', downloadEntregasCsv);
         }
 
         wireEvents();
