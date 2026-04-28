@@ -464,6 +464,8 @@
                             <tr>
                                 <th>Maquina</th>
                                 <th>Estado</th>
+                                <th>Trabajando</th>
+                                <th>Activa</th>
                                 <th>Hoja (Serie)</th>
                                 <th>PN (Clave)</th>
                                 <th>OT</th>
@@ -1183,10 +1185,14 @@
                 const code = norm(r.estado_code);
                 const ot = toSafe(r.orden_trabajo_hr) || toSafe(r.orden_trabajo_pt) || '-';
                 const detailUrl = '/hojas_ruta/' + r.id;
+                const trabajando = code === 'produciendo' ? 'SI' : 'NO';
+                const activa = r.activo ? 'SI' : 'NO';
 
                 tr.innerHTML = `
                     <td><b>${toSafe(r.nombre) || '-'}</b></td>
                     <td><span class="pill pill-${code}">${toSafe(r.estado_label) || '-'}</span></td>
+                    <td>${trabajando}</td>
+                    <td>${activa}</td>
                     <td>${toSafe(r.hoja_serie) || '-'}</td>
                     <td>${toSafe(r.pieza) || '-'}</td>
                     <td><b>${ot}</b></td>
@@ -1210,7 +1216,7 @@
 
         function downloadEntregasCsv() {
             const rows = filterEntregasRows();
-            const headers = ['maquina', 'estado', 'hoja_serie', 'pn', 'ot', 'cantidad_piezas', 'estacion', 'tiempo_objetivo', 'tiempo_transcurrido', 'progreso_pct'];
+            const headers = ['maquina', 'estado', 'trabajando', 'activa', 'hoja_serie', 'pn', 'ot', 'cantidad_piezas', 'estacion', 'tiempo_objetivo', 'tiempo_transcurrido', 'progreso_pct'];
             const lines = [headers.join(',')];
 
             rows.forEach((r) => {
@@ -1218,6 +1224,8 @@
                 const row = [
                     r.nombre,
                     r.estado_code,
+                    norm(r.estado_code) === 'produciendo' ? 'SI' : 'NO',
+                    r.activo ? 'SI' : 'NO',
                     r.hoja_serie,
                     r.pieza,
                     ot,
