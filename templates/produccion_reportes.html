@@ -262,9 +262,27 @@
             gap: 8px;
         }
 
+        .consulta2-wide {
+            grid-column: 1 / -1;
+        }
+
+        .consulta2-wide table {
+            font-size: 13px;
+            min-width: 1450px;
+        }
+
+        .consulta2-wide th,
+        .consulta2-wide td {
+            padding: 10px;
+        }
+
         @media (max-width: 1100px) {
             .reportes-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .consulta2-wide {
+                grid-column: auto;
             }
 
             .summary-grid {
@@ -414,7 +432,7 @@
                 </div>
             </article>
 
-            <article class="card">
+            <article class="card consulta2-wide">
                 <h3>Consulta 2: Entregas en Producción</h3>
 
                 <div class="form-grid">
