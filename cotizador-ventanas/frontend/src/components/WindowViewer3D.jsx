@@ -6,16 +6,27 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
-function toDisplayColor(color) {
-  const palette = {
-    natural: '#c7d2da',
-    blanco: '#f8fafc',
-    negro: '#111827',
-    gris: '#6b7280',
-    bronce: '#7c5a45',
-  };
+function normalizeToken(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
 
-  return palette[String(color || '').trim().toLowerCase()] || '#c7d2da';
+function toDisplayColor(color) {
+  const key = normalizeToken(color);
+  if (!key) return '#c7d2da';
+
+  if (key.includes('negro') || key.includes('antracita') || key.includes('grafito')) return '#1f2937';
+  if (key.includes('blanco') || key.includes('hueso') || key.includes('marfil')) return '#f8fafc';
+  if (key.includes('gris') || key.includes('plata') || key.includes('silver')) return '#7b8794';
+  if (key.includes('bronce') || key.includes('cafe') || key.includes('madera') || key.includes('nogal')) return '#7c5a45';
+  if (key.includes('champagne') || key.includes('oro') || key.includes('dorado') || key.includes('beige')) return '#b8a37d';
+  if (key.includes('azul')) return '#4a6b95';
+  if (key.includes('verde')) return '#4b6b5e';
+
+  return '#c7d2da';
 }
 
 function createGroundTexture() {
@@ -129,6 +140,14 @@ function addEnvironment(scene) {
   farBuilding.receiveShadow = true;
 
   scene.add(leftBuilding, rightBuilding, farBuilding);
+
+  return {
+    wall,
+    revealTop,
+    revealBottom,
+    revealSideL,
+    revealSideR,
+  };
 }
 
 export function WindowViewer3D({ width, height, color }) {
@@ -138,6 +157,7 @@ export function WindowViewer3D({ width, height, color }) {
   const cameraRef = useRef(null);
   const controlsRef = useRef(null);
   const frameRef = useRef(null);
+  const envRef = useRef(null);
   const animationRef = useRef(0);
 
   useEffect(() => {
@@ -188,7 +208,7 @@ export function WindowViewer3D({ width, height, color }) {
     fillLight.position.set(-8, 4.5, -7);
     scene.add(fillLight);
 
-    addEnvironment(scene);
+    envRef.current = addEnvironment(scene);
 
     sceneRef.current = scene;
     rendererRef.current = renderer;
@@ -237,6 +257,24 @@ export function WindowViewer3D({ width, height, color }) {
     const frameColor = new THREE.Color(toDisplayColor(color));
 
     const group = new THREE.Group();
+
+    const openingWidth = widthScale + 0.56;
+    const openingHeight = heightScale + 0.44;
+    const env = envRef.current;
+    if (env) {
+      env.revealTop.scale.x = openingWidth / 2.7;
+      env.revealTop.position.y = openingHeight / 2;
+      env.revealBottom.scale.x = openingWidth / 2.7;
+      env.revealBottom.position.y = -openingHeight / 2;
+
+      env.revealSideL.scale.y = openingHeight / 2.5;
+      env.revealSideL.position.x = -openingWidth / 2;
+      env.revealSideR.scale.y = openingHeight / 2.5;
+      env.revealSideR.position.x = openingWidth / 2;
+
+      env.wall.scale.x = clamp((openingWidth + 5.4) / 8, 1, 1.6);
+      env.wall.scale.y = clamp((openingHeight + 3.2) / 5.8, 1, 1.35);
+    }
 
     const frameMaterial = new THREE.MeshStandardMaterial({
       color: frameColor,
@@ -295,6 +333,12 @@ export function WindowViewer3D({ width, height, color }) {
     group.position.set(0, 0.05, 0.24);
     frameRef.current = group;
     scene.add(group);
+
+    const controls = controlsRef.current;
+    if (controls) {
+      controls.target.set(0, clamp((heightScale - 1.2) * 0.12, -0.04, 0.18), 0);
+      controls.update();
+    }
   }, [width, height, color]);
 
   return <div className="viewer-canvas" ref={mountRef} />;
