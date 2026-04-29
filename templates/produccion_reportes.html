@@ -542,6 +542,43 @@
         </section>
 
         <section class="card subpanel">
+            <h3>Panel de Proyeccion y Sugerencias</h3>
+
+            <div class="summary-grid">
+                <div class="summary-item"><span class="summary-k">MP generadas hoy</span><span class="summary-v" id="iMpHoy">0</span></div>
+                <div class="summary-item"><span class="summary-k">Entregas generadas hoy</span><span class="summary-v" id="iEntregasHoy">0</span></div>
+                <div class="summary-item"><span class="summary-k">Envios almacen hoy</span><span class="summary-v" id="iEnviosHoy">0</span></div>
+                <div class="summary-item"><span class="summary-k">Proyeccion cierre envios</span><span class="summary-v" id="iEnviosCierre">0</span></div>
+            </div>
+
+            <div class="summary-grid">
+                <div class="summary-item"><span class="summary-k">Maquinas en mover</span><span class="summary-v" id="iMover">0</span></div>
+                <div class="summary-item"><span class="summary-k">Maquinas sin hoja</span><span class="summary-v" id="iSinHoja">0</span></div>
+                <div class="summary-item"><span class="summary-k">Maquinas inactivas</span><span class="summary-v" id="iInactivas">0</span></div>
+                <div class="summary-item"><span class="summary-k">Eficiencia productiva dia</span><span class="summary-v" id="iEfiDia">0%</span></div>
+            </div>
+
+            <div class="inline-meta">
+                <span>Tiempo en mover: <b id="iTiempoMover">00:00:00</b></span>
+                <span>Tiempo no productivo dia: <b id="iNoProductivo">00:00:00</b></span>
+                <span>Avance del dia: <b id="iAvanceDia">0%</b></span>
+            </div>
+
+            <div id="iSugerenciasEmpty" class="empty" style="display:none;">Sin sugerencias por ahora. Operacion estable.</div>
+            <div class="table-wrap" id="iSugerenciasWrap" style="max-height:240px;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Sugerencia operativa</th>
+                        </tr>
+                    </thead>
+                    <tbody id="iSugerenciasBody"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card subpanel">
             <h3>Panel de Tiempos por Máquina</h3>
             <div class="subpanel-grid">
                 <div class="field">
@@ -646,6 +683,7 @@
             filtered: [],
             eficiencia: null,
             logisticaAlmacenHoy: null,
+            insights: null,
             lastFetchAt: null,
             timerId: null,
             filters: {
@@ -991,6 +1029,46 @@
             });
         }
 
+        function renderInsightsPanel() {
+            const insights = state.insights || {};
+            const hoy = insights.hoy || {};
+            const op = insights.operacion_actual || {};
+            const sugerencias = Array.isArray(insights.sugerencias) ? insights.sugerencias : [];
+
+            document.getElementById('iMpHoy').textContent = String(Number(hoy.mp_generadas || 0));
+            document.getElementById('iEntregasHoy').textContent = String(Number(hoy.entregas_generadas || 0));
+            document.getElementById('iEnviosHoy').textContent = String(Number(hoy.envios_almacen || 0));
+            document.getElementById('iEnviosCierre').textContent = String(Number(hoy.envios_proyectados_cierre || 0));
+
+            document.getElementById('iMover').textContent = String(Number(op.maquinas_en_mover || 0));
+            document.getElementById('iSinHoja').textContent = String(Number(op.maquinas_sin_hoja || 0));
+            document.getElementById('iInactivas').textContent = String(Number(op.maquinas_inactivas || 0));
+            document.getElementById('iEfiDia').textContent = `${Number(op.eficiencia_productiva_dia_pct || 0).toFixed(1)}%`;
+
+            document.getElementById('iTiempoMover').textContent = toSafe(op.tiempo_mover_hms) || '00:00:00';
+            document.getElementById('iNoProductivo').textContent = toSafe(op.tiempo_no_productivo_dia_hms) || '00:00:00';
+            document.getElementById('iAvanceDia').textContent = `${Number(hoy.avance_dia_pct || 0).toFixed(1)}%`;
+
+            const body = document.getElementById('iSugerenciasBody');
+            const empty = document.getElementById('iSugerenciasEmpty');
+            const wrap = document.getElementById('iSugerenciasWrap');
+            body.innerHTML = '';
+
+            if (!sugerencias.length) {
+                empty.style.display = 'block';
+                wrap.style.display = 'none';
+                return;
+            }
+
+            empty.style.display = 'none';
+            wrap.style.display = 'block';
+            sugerencias.forEach((txt, idx) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${idx + 1}</td><td>${toSafe(txt)}</td>`;
+                body.appendChild(tr);
+            });
+        }
+
         function downloadTimesCsv() {
             const scope = norm(document.getElementById('tScope').value || 'semana');
             const rows = buildTimesRows();
@@ -1070,6 +1148,7 @@
             renderTable(state.filtered);
             renderTimesPanel();
             renderAlmacenHoyPanel();
+            renderInsightsPanel();
             renderEntregasTable();
             restartAutoRefresh();
         }
@@ -1125,6 +1204,7 @@
                 state.raw = Array.isArray(payload.maquinas) ? payload.maquinas : [];
                 state.eficiencia = payload.eficiencia_planta || null;
                 state.logisticaAlmacenHoy = payload.logistica_almacen_hoy || null;
+                state.insights = payload.insights_operativos || null;
                 state.lastFetchAt = new Date();
                 refreshMachineSelectOptions();
                 applyFiltersAndRender();

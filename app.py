@@ -5189,10 +5189,77 @@ def api_mapa_maquinas():
 
     logistica_almacen_hoy = _build_entregas_almacen_hoy(limit=200)
 
+    # Insights operativos ligeros para tablero de reportes (sin IA pesada).
+    hoy_inicio = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    minutos_transcurridos_hoy = max(1, int((now_dt - hoy_inicio).total_seconds() // 60))
+    minutos_dia = 24 * 60
+    avance_dia_ratio = min(1.0, max(0.0, float(minutos_transcurridos_hoy) / float(minutos_dia)))
+
+    mp_hoy = HojaRutaNueva.query.filter(HojaRutaNueva.fecha_creacion >= hoy_inicio).count()
+    entregas_hoy = HojaRutaEntrega.query.filter(HojaRutaEntrega.fecha_creacion >= hoy_inicio).count()
+
+    def _hms_to_seconds(value):
+        if not value:
+            return 0
+        parts = str(value).split(':')
+        if len(parts) != 3:
+            return 0
+        try:
+            hh = int(parts[0])
+            mm = int(parts[1])
+            ss = int(parts[2])
+            return max(0, hh * 3600 + mm * 60 + ss)
+        except Exception:
+            return 0
+
+    mover_rows = [r for r in data if (r.get('estado_code') or '') == 'mover']
+    mover_count = len(mover_rows)
+    mover_transcurrido_sec = sum(_hms_to_seconds(r.get('tiempo_transcurrido_proceso')) for r in mover_rows)
+
+    sin_hoja_count = len([r for r in data if (r.get('estado_code') or '') == 'sin_hoja'])
+    inactivas_count = len([r for r in data if not bool(r.get('activo'))])
+
+    no_productivo_dia_sec = max(0, available_day - productive_day)
+    productive_day_ratio = 1.0 - (float(no_productivo_dia_sec) / float(max(1, available_day)))
+
+    envios_hoy = int((logistica_almacen_hoy or {}).get('total_envios') or 0)
+    envios_proyectados_hoy = int(round(float(envios_hoy) / max(0.2, avance_dia_ratio)))
+
+    sugerencias = []
+    if mover_count >= max(2, int(machine_count * 0.2)):
+        sugerencias.append('Revisar cuellos de botella: hay muchas máquinas en estado mover.')
+    if sin_hoja_count > 0:
+        sugerencias.append('Hay máquinas sin hoja activa; prioriza asignación de hojas para evitar ociosidad.')
+    if productive_day_ratio < 0.6:
+        sugerencias.append('La eficiencia diaria está baja; valida tiempos muertos y cambios de estado extensos.')
+    if envios_hoy > 0 and envios_proyectados_hoy < envios_hoy:
+        sugerencias.append('Ritmo de entregas irregular; valida tiempos de liberación y confirmación a almacén.')
+
+    insights_operativos = {
+        'fecha_utc': now_dt.isoformat(),
+        'hoy': {
+            'mp_generadas': int(mp_hoy),
+            'entregas_generadas': int(entregas_hoy),
+            'envios_almacen': int(envios_hoy),
+            'envios_proyectados_cierre': int(envios_proyectados_hoy),
+            'avance_dia_pct': round(avance_dia_ratio * 100.0, 1),
+        },
+        'operacion_actual': {
+            'maquinas_en_mover': int(mover_count),
+            'maquinas_sin_hoja': int(sin_hoja_count),
+            'maquinas_inactivas': int(inactivas_count),
+            'tiempo_mover_hms': _format_seconds_to_hms(mover_transcurrido_sec),
+            'tiempo_no_productivo_dia_hms': _format_seconds_to_hms(no_productivo_dia_sec),
+            'eficiencia_productiva_dia_pct': round(productive_day_ratio * 100.0, 1),
+        },
+        'sugerencias': sugerencias,
+    }
+
     return jsonify({
         'maquinas': data,
         'eficiencia_planta': eficiencia_planta,
         'logistica_almacen_hoy': logistica_almacen_hoy,
+        'insights_operativos': insights_operativos,
     })
 
 
