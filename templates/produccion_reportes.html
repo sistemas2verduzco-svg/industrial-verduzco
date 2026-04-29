@@ -315,21 +315,21 @@
         .proj-bar-fill.ent { background: linear-gradient(90deg, #0f766e, #34d399); }
         .proj-bar-fill.env { background: linear-gradient(90deg, #7c3aed, #a78bfa); }
 
-        .metric-compare-grid {
+        .viz-grid {
             display: grid;
-            grid-template-columns: repeat(3, minmax(240px, 1fr));
+            grid-template-columns: repeat(2, minmax(280px, 1fr));
             gap: 10px;
             margin-top: 8px;
         }
 
-        .metric-compare-card {
+        .viz-card {
             border: 1px solid #dbe3ef;
             border-radius: 10px;
             padding: 10px;
             background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
         }
 
-        .metric-head {
+        .viz-head {
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -339,70 +339,49 @@
             color: #0f172a;
         }
 
-        .metric-kpi {
+        .viz-meta {
             font-size: 11px;
-            color: #475569;
+            color: #64748b;
             font-weight: 700;
         }
 
-        .metric-trend {
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            background: #f8fafc;
-            padding: 6px;
-            margin-bottom: 8px;
+        .viz-canvas-wrap {
+            height: 240px;
+            position: relative;
         }
 
-        .metric-trend svg {
-            width: 100%;
-            height: 36px;
-            display: block;
-        }
-
-        .trend-axis {
-            stroke: #cbd5e1;
-            stroke-width: 1;
-        }
-
-        .trend-line {
-            fill: none;
-            stroke-width: 2.2;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-        }
-
-        .trend-line.mp { stroke: #0284c7; }
-        .trend-line.ent { stroke: #0f766e; }
-        .trend-line.env { stroke: #7c3aed; }
-
-        .trend-points circle.mp { fill: #0284c7; }
-        .trend-points circle.ent { fill: #0f766e; }
-        .trend-points circle.env { fill: #7c3aed; }
-
-        .metric-row {
+        .kpi-strip {
+            margin-top: 8px;
             display: grid;
-            grid-template-columns: 52px 1fr 56px;
+            grid-template-columns: repeat(3, minmax(160px, 1fr));
             gap: 8px;
-            align-items: center;
-            margin-bottom: 6px;
+        }
+
+        .kpi-chip {
+            border-radius: 999px;
+            padding: 8px 10px;
             font-size: 12px;
-            color: #334155;
-        }
-
-        .metric-pct {
-            text-align: right;
             font-weight: 800;
-            color: #0f172a;
-            font-size: 11px;
+            text-align: center;
+            border: 1px solid transparent;
         }
 
-        .metric-footer {
-            margin-top: 4px;
-            font-size: 11px;
-            color: #475569;
-            display: flex;
-            justify-content: space-between;
-            gap: 8px;
+        .kpi-chip.ok {
+            background: #dcfce7;
+            color: #166534;
+            border-color: #86efac;
+        }
+
+        .kpi-chip.warn {
+            background: #fef3c7;
+            color: #92400e;
+            border-color: #fcd34d;
+        }
+
+        .kpi-chip.risk {
+            background: #fee2e2;
+            color: #991b1b;
+            border-color: #fca5a5;
         }
 
         .consulta2-wide {
@@ -444,11 +423,16 @@
                 grid-template-columns: 1fr;
             }
 
-            .metric-compare-grid {
+            .viz-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .kpi-strip {
                 grid-template-columns: 1fr;
             }
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
     {% include '_sidebar.html' %}
@@ -780,117 +764,27 @@
                 </div>
             </div>
 
-            <div class="metric-compare-grid">
-                <div class="metric-compare-card">
-                    <div class="metric-head">
-                        <span>Comparativo MP</span>
-                        <span class="metric-kpi" id="iCmpKpiMp">0 / 0</span>
+            <div class="viz-grid">
+                <div class="viz-card">
+                    <div class="viz-head">
+                        <span>Cumplimiento por periodo (%)</span>
+                        <span id="iChartStamp" class="viz-meta">Actualizado -</span>
                     </div>
-                    <div class="metric-trend">
-                        <svg viewBox="0 0 100 36" preserveAspectRatio="none" aria-hidden="true">
-                            <line class="trend-axis" x1="2" y1="30" x2="98" y2="30"></line>
-                            <path id="iTrendMp" class="trend-line mp" d="M6 30 L50 30 L94 30"></path>
-                            <g id="iTrendPtsMp" class="trend-points">
-                                <circle class="mp" cx="6" cy="30" r="2.6"></circle>
-                                <circle class="mp" cx="50" cy="30" r="2.6"></circle>
-                                <circle class="mp" cx="94" cy="30" r="2.6"></circle>
-                            </g>
-                        </svg>
-                    </div>
-                    <div class="metric-row">
-                        <span>Dia</span>
-                        <div class="proj-bar"><div class="proj-bar-fill mp" id="iCmpMpDia"></div></div>
-                        <span class="metric-pct" id="iCmpMpDiaPct">0%</span>
-                    </div>
-                    <div class="metric-row">
-                        <span>Semana</span>
-                        <div class="proj-bar"><div class="proj-bar-fill mp" id="iCmpMpSemana"></div></div>
-                        <span class="metric-pct" id="iCmpMpSemanaPct">0%</span>
-                    </div>
-                    <div class="metric-row">
-                        <span>Mes</span>
-                        <div class="proj-bar"><div class="proj-bar-fill mp" id="iCmpMpMes"></div></div>
-                        <span class="metric-pct" id="iCmpMpMesPct">0%</span>
-                    </div>
-                    <div class="metric-footer">
-                        <span id="iCmpMpDelta1">Dia->Sem 0.0 pp</span>
-                        <span id="iCmpMpDelta2">Sem->Mes 0.0 pp</span>
-                    </div>
+                    <div class="viz-canvas-wrap"><canvas id="iChartCumplimiento"></canvas></div>
                 </div>
+                <div class="viz-card">
+                    <div class="viz-head">
+                        <span>Actual vs Proyeccion de cierre</span>
+                        <span class="viz-meta">Suma MP + Entregas + Envios</span>
+                    </div>
+                    <div class="viz-canvas-wrap"><canvas id="iChartBalance"></canvas></div>
+                </div>
+            </div>
 
-                <div class="metric-compare-card">
-                    <div class="metric-head">
-                        <span>Comparativo Entregas</span>
-                        <span class="metric-kpi" id="iCmpKpiEnt">0 / 0</span>
-                    </div>
-                    <div class="metric-trend">
-                        <svg viewBox="0 0 100 36" preserveAspectRatio="none" aria-hidden="true">
-                            <line class="trend-axis" x1="2" y1="30" x2="98" y2="30"></line>
-                            <path id="iTrendEnt" class="trend-line ent" d="M6 30 L50 30 L94 30"></path>
-                            <g id="iTrendPtsEnt" class="trend-points">
-                                <circle class="ent" cx="6" cy="30" r="2.6"></circle>
-                                <circle class="ent" cx="50" cy="30" r="2.6"></circle>
-                                <circle class="ent" cx="94" cy="30" r="2.6"></circle>
-                            </g>
-                        </svg>
-                    </div>
-                    <div class="metric-row">
-                        <span>Dia</span>
-                        <div class="proj-bar"><div class="proj-bar-fill ent" id="iCmpEntDia"></div></div>
-                        <span class="metric-pct" id="iCmpEntDiaPct">0%</span>
-                    </div>
-                    <div class="metric-row">
-                        <span>Semana</span>
-                        <div class="proj-bar"><div class="proj-bar-fill ent" id="iCmpEntSemana"></div></div>
-                        <span class="metric-pct" id="iCmpEntSemanaPct">0%</span>
-                    </div>
-                    <div class="metric-row">
-                        <span>Mes</span>
-                        <div class="proj-bar"><div class="proj-bar-fill ent" id="iCmpEntMes"></div></div>
-                        <span class="metric-pct" id="iCmpEntMesPct">0%</span>
-                    </div>
-                    <div class="metric-footer">
-                        <span id="iCmpEntDelta1">Dia->Sem 0.0 pp</span>
-                        <span id="iCmpEntDelta2">Sem->Mes 0.0 pp</span>
-                    </div>
-                </div>
-
-                <div class="metric-compare-card">
-                    <div class="metric-head">
-                        <span>Comparativo Envios</span>
-                        <span class="metric-kpi" id="iCmpKpiEnv">0 / 0</span>
-                    </div>
-                    <div class="metric-trend">
-                        <svg viewBox="0 0 100 36" preserveAspectRatio="none" aria-hidden="true">
-                            <line class="trend-axis" x1="2" y1="30" x2="98" y2="30"></line>
-                            <path id="iTrendEnv" class="trend-line env" d="M6 30 L50 30 L94 30"></path>
-                            <g id="iTrendPtsEnv" class="trend-points">
-                                <circle class="env" cx="6" cy="30" r="2.6"></circle>
-                                <circle class="env" cx="50" cy="30" r="2.6"></circle>
-                                <circle class="env" cx="94" cy="30" r="2.6"></circle>
-                            </g>
-                        </svg>
-                    </div>
-                    <div class="metric-row">
-                        <span>Dia</span>
-                        <div class="proj-bar"><div class="proj-bar-fill env" id="iCmpEnvDia"></div></div>
-                        <span class="metric-pct" id="iCmpEnvDiaPct">0%</span>
-                    </div>
-                    <div class="metric-row">
-                        <span>Semana</span>
-                        <div class="proj-bar"><div class="proj-bar-fill env" id="iCmpEnvSemana"></div></div>
-                        <span class="metric-pct" id="iCmpEnvSemanaPct">0%</span>
-                    </div>
-                    <div class="metric-row">
-                        <span>Mes</span>
-                        <div class="proj-bar"><div class="proj-bar-fill env" id="iCmpEnvMes"></div></div>
-                        <span class="metric-pct" id="iCmpEnvMesPct">0%</span>
-                    </div>
-                    <div class="metric-footer">
-                        <span id="iCmpEnvDelta1">Dia->Sem 0.0 pp</span>
-                        <span id="iCmpEnvDelta2">Sem->Mes 0.0 pp</span>
-                    </div>
-                </div>
+            <div class="kpi-strip">
+                <div id="iStatusDia" class="kpi-chip risk">Dia: 0%</div>
+                <div id="iStatusSemana" class="kpi-chip risk">Semana: 0%</div>
+                <div id="iStatusMes" class="kpi-chip risk">Mes: 0%</div>
             </div>
 
             <div id="iSugerenciasEmpty" class="empty" style="display:none;">Sin sugerencias por ahora. Operacion estable.</div>
@@ -1013,6 +907,10 @@
             eficiencia: null,
             logisticaAlmacenHoy: null,
             insights: null,
+            charts: {
+                cumplimiento: null,
+                balance: null,
+            },
             lastFetchAt: null,
             timerId: null,
             filters: {
@@ -1399,43 +1297,6 @@
                 document.getElementById(barId).style.width = `${_ratio(a, c).toFixed(1)}%`;
             }
 
-            function _setMetricCompare(cfg) {
-                const diaPct = _ratio(cfg.dia.actual, cfg.dia.cierre);
-                const semPct = _ratio(cfg.semana.actual, cfg.semana.cierre);
-                const mesPct = _ratio(cfg.mes.actual, cfg.mes.cierre);
-
-                document.getElementById(cfg.kpiId).textContent = `${Number(cfg.dia.actual || 0)} / ${Number(cfg.dia.cierre || 0)}`;
-
-                document.getElementById(cfg.diaBarId).style.width = `${diaPct.toFixed(1)}%`;
-                document.getElementById(cfg.semanaBarId).style.width = `${semPct.toFixed(1)}%`;
-                document.getElementById(cfg.mesBarId).style.width = `${mesPct.toFixed(1)}%`;
-
-                document.getElementById(cfg.diaPctId).textContent = `${diaPct.toFixed(1)}%`;
-                document.getElementById(cfg.semanaPctId).textContent = `${semPct.toFixed(1)}%`;
-                document.getElementById(cfg.mesPctId).textContent = `${mesPct.toFixed(1)}%`;
-
-                const d1 = semPct - diaPct;
-                const d2 = mesPct - semPct;
-                document.getElementById(cfg.delta1Id).textContent = `Dia->Sem ${d1 >= 0 ? '+' : ''}${d1.toFixed(1)} pp`;
-                document.getElementById(cfg.delta2Id).textContent = `Sem->Mes ${d2 >= 0 ? '+' : ''}${d2.toFixed(1)} pp`;
-
-                const yFromPct = (pct) => (30 - (Math.max(0, Math.min(100, pct)) * 0.22)).toFixed(2);
-                const y1 = yFromPct(diaPct);
-                const y2 = yFromPct(semPct);
-                const y3 = yFromPct(mesPct);
-                document.getElementById(cfg.trendPathId).setAttribute('d', `M6 ${y1} L50 ${y2} L94 ${y3}`);
-
-                const points = document.getElementById(cfg.trendPointsId);
-                if (points) {
-                    const circles = points.querySelectorAll('circle');
-                    if (circles.length === 3) {
-                        circles[0].setAttribute('cy', y1);
-                        circles[1].setAttribute('cy', y2);
-                        circles[2].setAttribute('cy', y3);
-                    }
-                }
-            }
-
             _setBar('iTxtDiaMp', 'iBarDiaMp', proyDia.mp_actual, proyDia.mp_cierre);
             _setBar('iTxtDiaEnt', 'iBarDiaEnt', proyDia.entregas_actual, proyDia.entregas_cierre);
             _setBar('iTxtDiaEnv', 'iBarDiaEnv', proyDia.envios_actual, proyDia.envios_cierre);
@@ -1448,56 +1309,147 @@
             _setBar('iTxtMesEnt', 'iBarMesEnt', proyMes.entregas_actual, proyMes.entregas_cierre);
             _setBar('iTxtMesEnv', 'iBarMesEnv', proyMes.envios_actual, proyMes.envios_cierre);
 
-            _setMetricCompare({
-                kpiId: 'iCmpKpiMp',
-                diaBarId: 'iCmpMpDia',
-                semanaBarId: 'iCmpMpSemana',
-                mesBarId: 'iCmpMpMes',
-                diaPctId: 'iCmpMpDiaPct',
-                semanaPctId: 'iCmpMpSemanaPct',
-                mesPctId: 'iCmpMpMesPct',
-                delta1Id: 'iCmpMpDelta1',
-                delta2Id: 'iCmpMpDelta2',
-                trendPathId: 'iTrendMp',
-                trendPointsId: 'iTrendPtsMp',
-                dia: { actual: proyDia.mp_actual, cierre: proyDia.mp_cierre },
-                semana: { actual: proySemana.mp_actual, cierre: proySemana.mp_cierre },
-                mes: { actual: proyMes.mp_actual, cierre: proyMes.mp_cierre },
-            });
+            const diaPctMp = _ratio(proyDia.mp_actual, proyDia.mp_cierre);
+            const diaPctEnt = _ratio(proyDia.entregas_actual, proyDia.entregas_cierre);
+            const diaPctEnv = _ratio(proyDia.envios_actual, proyDia.envios_cierre);
+            const semPctMp = _ratio(proySemana.mp_actual, proySemana.mp_cierre);
+            const semPctEnt = _ratio(proySemana.entregas_actual, proySemana.entregas_cierre);
+            const semPctEnv = _ratio(proySemana.envios_actual, proySemana.envios_cierre);
+            const mesPctMp = _ratio(proyMes.mp_actual, proyMes.mp_cierre);
+            const mesPctEnt = _ratio(proyMes.entregas_actual, proyMes.entregas_cierre);
+            const mesPctEnv = _ratio(proyMes.envios_actual, proyMes.envios_cierre);
 
-            _setMetricCompare({
-                kpiId: 'iCmpKpiEnt',
-                diaBarId: 'iCmpEntDia',
-                semanaBarId: 'iCmpEntSemana',
-                mesBarId: 'iCmpEntMes',
-                diaPctId: 'iCmpEntDiaPct',
-                semanaPctId: 'iCmpEntSemanaPct',
-                mesPctId: 'iCmpEntMesPct',
-                delta1Id: 'iCmpEntDelta1',
-                delta2Id: 'iCmpEntDelta2',
-                trendPathId: 'iTrendEnt',
-                trendPointsId: 'iTrendPtsEnt',
-                dia: { actual: proyDia.entregas_actual, cierre: proyDia.entregas_cierre },
-                semana: { actual: proySemana.entregas_actual, cierre: proySemana.entregas_cierre },
-                mes: { actual: proyMes.entregas_actual, cierre: proyMes.entregas_cierre },
-            });
+            function _periodAvg(a, b, c) {
+                return (Number(a || 0) + Number(b || 0) + Number(c || 0)) / 3;
+            }
 
-            _setMetricCompare({
-                kpiId: 'iCmpKpiEnv',
-                diaBarId: 'iCmpEnvDia',
-                semanaBarId: 'iCmpEnvSemana',
-                mesBarId: 'iCmpEnvMes',
-                diaPctId: 'iCmpEnvDiaPct',
-                semanaPctId: 'iCmpEnvSemanaPct',
-                mesPctId: 'iCmpEnvMesPct',
-                delta1Id: 'iCmpEnvDelta1',
-                delta2Id: 'iCmpEnvDelta2',
-                trendPathId: 'iTrendEnv',
-                trendPointsId: 'iTrendPtsEnv',
-                dia: { actual: proyDia.envios_actual, cierre: proyDia.envios_cierre },
-                semana: { actual: proySemana.envios_actual, cierre: proySemana.envios_cierre },
-                mes: { actual: proyMes.envios_actual, cierre: proyMes.envios_cierre },
-            });
+            function _statusClass(pct) {
+                if (pct >= 95) return 'ok';
+                if (pct >= 80) return 'warn';
+                return 'risk';
+            }
+
+            function _setStatusChip(elId, label, pct) {
+                const el = document.getElementById(elId);
+                if (!el) return;
+                const cls = _statusClass(pct);
+                el.className = `kpi-chip ${cls}`;
+                el.textContent = `${label}: ${pct.toFixed(1)}%`;
+            }
+
+            const avgDia = _periodAvg(diaPctMp, diaPctEnt, diaPctEnv);
+            const avgSem = _periodAvg(semPctMp, semPctEnt, semPctEnv);
+            const avgMes = _periodAvg(mesPctMp, mesPctEnt, mesPctEnv);
+
+            _setStatusChip('iStatusDia', 'Dia', avgDia);
+            _setStatusChip('iStatusSemana', 'Semana', avgSem);
+            _setStatusChip('iStatusMes', 'Mes', avgMes);
+
+            const stamp = document.getElementById('iChartStamp');
+            if (stamp) {
+                stamp.textContent = `Actualizado ${new Date().toLocaleTimeString()}`;
+            }
+
+            if (typeof Chart !== 'undefined') {
+                const c1 = document.getElementById('iChartCumplimiento');
+                const c2 = document.getElementById('iChartBalance');
+
+                if (c1) {
+                    if (state.charts.cumplimiento) {
+                        state.charts.cumplimiento.destroy();
+                    }
+                    state.charts.cumplimiento = new Chart(c1, {
+                        type: 'bar',
+                        data: {
+                            labels: ['Dia', 'Semana', 'Mes'],
+                            datasets: [
+                                { label: 'MP', data: [diaPctMp, semPctMp, mesPctMp], backgroundColor: '#0284c7' },
+                                { label: 'Entregas', data: [diaPctEnt, semPctEnt, mesPctEnt], backgroundColor: '#0f766e' },
+                                { label: 'Envios', data: [diaPctEnv, semPctEnv, mesPctEnv], backgroundColor: '#7c3aed' },
+                            ],
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            animation: false,
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    max: 120,
+                                    ticks: {
+                                        callback: (v) => `${v}%`,
+                                    },
+                                    grid: { color: '#e2e8f0' },
+                                },
+                                x: { grid: { display: false } },
+                            },
+                            plugins: {
+                                legend: { position: 'bottom' },
+                                tooltip: {
+                                    callbacks: {
+                                        label: (ctx) => `${ctx.dataset.label}: ${Number(ctx.parsed.y || 0).toFixed(1)}%`,
+                                    },
+                                },
+                            },
+                        },
+                    });
+                }
+
+                if (c2) {
+                    if (state.charts.balance) {
+                        state.charts.balance.destroy();
+                    }
+                    state.charts.balance = new Chart(c2, {
+                        type: 'line',
+                        data: {
+                            labels: ['Dia', 'Semana', 'Mes'],
+                            datasets: [
+                                {
+                                    label: 'Actual total',
+                                    data: [
+                                        Number(proyDia.mp_actual || 0) + Number(proyDia.entregas_actual || 0) + Number(proyDia.envios_actual || 0),
+                                        Number(proySemana.mp_actual || 0) + Number(proySemana.entregas_actual || 0) + Number(proySemana.envios_actual || 0),
+                                        Number(proyMes.mp_actual || 0) + Number(proyMes.entregas_actual || 0) + Number(proyMes.envios_actual || 0),
+                                    ],
+                                    borderColor: '#1d4ed8',
+                                    backgroundColor: 'rgba(29, 78, 216, 0.14)',
+                                    pointBackgroundColor: '#1d4ed8',
+                                    tension: 0.3,
+                                    fill: true,
+                                },
+                                {
+                                    label: 'Cierre proyectado',
+                                    data: [
+                                        Number(proyDia.mp_cierre || 0) + Number(proyDia.entregas_cierre || 0) + Number(proyDia.envios_cierre || 0),
+                                        Number(proySemana.mp_cierre || 0) + Number(proySemana.entregas_cierre || 0) + Number(proySemana.envios_cierre || 0),
+                                        Number(proyMes.mp_cierre || 0) + Number(proyMes.entregas_cierre || 0) + Number(proyMes.envios_cierre || 0),
+                                    ],
+                                    borderColor: '#f97316',
+                                    backgroundColor: 'rgba(249, 115, 22, 0.08)',
+                                    pointBackgroundColor: '#f97316',
+                                    tension: 0.3,
+                                    fill: false,
+                                },
+                            ],
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            animation: false,
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    grid: { color: '#e2e8f0' },
+                                },
+                                x: { grid: { display: false } },
+                            },
+                            plugins: {
+                                legend: { position: 'bottom' },
+                            },
+                        },
+                    });
+                }
+            }
 
             const body = document.getElementById('iSugerenciasBody');
             const empty = document.getElementById('iSugerenciasEmpty');
