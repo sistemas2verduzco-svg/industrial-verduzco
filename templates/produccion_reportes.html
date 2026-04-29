@@ -262,6 +262,59 @@
             gap: 8px;
         }
 
+        .proj-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(240px, 1fr));
+            gap: 10px;
+            margin: 10px 0;
+        }
+
+        .proj-card {
+            border: 1px solid #dbe3ef;
+            border-radius: 10px;
+            padding: 10px;
+            background: #f8fafc;
+        }
+
+        .proj-title {
+            font-size: 12px;
+            font-weight: 800;
+            color: #0f172a;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .proj-row {
+            display: grid;
+            grid-template-columns: 56px 1fr auto;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 7px;
+            font-size: 12px;
+            color: #334155;
+        }
+
+        .proj-bar {
+            position: relative;
+            height: 9px;
+            border-radius: 999px;
+            background: #e2e8f0;
+            overflow: hidden;
+        }
+
+        .proj-bar-fill {
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 0%;
+            border-radius: 999px;
+            transition: width 280ms ease;
+        }
+
+        .proj-bar-fill.mp { background: linear-gradient(90deg, #0284c7, #38bdf8); }
+        .proj-bar-fill.ent { background: linear-gradient(90deg, #0f766e, #34d399); }
+        .proj-bar-fill.env { background: linear-gradient(90deg, #7c3aed, #a78bfa); }
+
         .consulta2-wide {
             grid-column: 1 / -1;
         }
@@ -295,6 +348,10 @@
 
             .subpanel-grid {
                 grid-template-columns: 1fr 1fr;
+            }
+
+            .proj-grid {
+                grid-template-columns: 1fr;
             }
         }
     </style>
@@ -568,6 +625,65 @@
                 <span>Proyeccion dia: <b id="iProjDia">MP 0/0 | Ent 0/0 | Env 0/0</b></span>
                 <span>Proyeccion semana: <b id="iProjSemana">MP 0/0 | Ent 0/0 | Env 0/0</b></span>
                 <span>Proyeccion mes: <b id="iProjMes">MP 0/0 | Ent 0/0 | Env 0/0</b></span>
+            </div>
+
+            <div class="proj-grid">
+                <div class="proj-card">
+                    <div class="proj-title">Proyeccion del dia</div>
+                    <div class="proj-row">
+                        <span>MP</span>
+                        <div class="proj-bar"><div class="proj-bar-fill mp" id="iBarDiaMp"></div></div>
+                        <b id="iTxtDiaMp">0/0</b>
+                    </div>
+                    <div class="proj-row">
+                        <span>Ent</span>
+                        <div class="proj-bar"><div class="proj-bar-fill ent" id="iBarDiaEnt"></div></div>
+                        <b id="iTxtDiaEnt">0/0</b>
+                    </div>
+                    <div class="proj-row">
+                        <span>Env</span>
+                        <div class="proj-bar"><div class="proj-bar-fill env" id="iBarDiaEnv"></div></div>
+                        <b id="iTxtDiaEnv">0/0</b>
+                    </div>
+                </div>
+
+                <div class="proj-card">
+                    <div class="proj-title">Proyeccion de semana</div>
+                    <div class="proj-row">
+                        <span>MP</span>
+                        <div class="proj-bar"><div class="proj-bar-fill mp" id="iBarSemanaMp"></div></div>
+                        <b id="iTxtSemanaMp">0/0</b>
+                    </div>
+                    <div class="proj-row">
+                        <span>Ent</span>
+                        <div class="proj-bar"><div class="proj-bar-fill ent" id="iBarSemanaEnt"></div></div>
+                        <b id="iTxtSemanaEnt">0/0</b>
+                    </div>
+                    <div class="proj-row">
+                        <span>Env</span>
+                        <div class="proj-bar"><div class="proj-bar-fill env" id="iBarSemanaEnv"></div></div>
+                        <b id="iTxtSemanaEnv">0/0</b>
+                    </div>
+                </div>
+
+                <div class="proj-card">
+                    <div class="proj-title">Proyeccion de mes</div>
+                    <div class="proj-row">
+                        <span>MP</span>
+                        <div class="proj-bar"><div class="proj-bar-fill mp" id="iBarMesMp"></div></div>
+                        <b id="iTxtMesMp">0/0</b>
+                    </div>
+                    <div class="proj-row">
+                        <span>Ent</span>
+                        <div class="proj-bar"><div class="proj-bar-fill ent" id="iBarMesEnt"></div></div>
+                        <b id="iTxtMesEnt">0/0</b>
+                    </div>
+                    <div class="proj-row">
+                        <span>Env</span>
+                        <div class="proj-bar"><div class="proj-bar-fill env" id="iBarMesEnv"></div></div>
+                        <b id="iTxtMesEnv">0/0</b>
+                    </div>
+                </div>
             </div>
 
             <div id="iSugerenciasEmpty" class="empty" style="display:none;">Sin sugerencias por ahora. Operacion estable.</div>
@@ -1062,6 +1178,31 @@
             document.getElementById('iProjDia').textContent = `MP ${Number(proyDia.mp_actual || 0)}/${Number(proyDia.mp_cierre || 0)} | Ent ${Number(proyDia.entregas_actual || 0)}/${Number(proyDia.entregas_cierre || 0)} | Env ${Number(proyDia.envios_actual || 0)}/${Number(proyDia.envios_cierre || 0)}`;
             document.getElementById('iProjSemana').textContent = `MP ${Number(proySemana.mp_actual || 0)}/${Number(proySemana.mp_cierre || 0)} | Ent ${Number(proySemana.entregas_actual || 0)}/${Number(proySemana.entregas_cierre || 0)} | Env ${Number(proySemana.envios_actual || 0)}/${Number(proySemana.envios_cierre || 0)}`;
             document.getElementById('iProjMes').textContent = `MP ${Number(proyMes.mp_actual || 0)}/${Number(proyMes.mp_cierre || 0)} | Ent ${Number(proyMes.entregas_actual || 0)}/${Number(proyMes.entregas_cierre || 0)} | Env ${Number(proyMes.envios_actual || 0)}/${Number(proyMes.envios_cierre || 0)}`;
+
+            function _ratio(actual, cierre) {
+                const a = Number(actual || 0);
+                const c = Math.max(1, Number(cierre || 0));
+                return Math.max(0, Math.min(100, (a * 100.0) / c));
+            }
+
+            function _setBar(textId, barId, actual, cierre) {
+                const a = Number(actual || 0);
+                const c = Number(cierre || 0);
+                document.getElementById(textId).textContent = `${a}/${c}`;
+                document.getElementById(barId).style.width = `${_ratio(a, c).toFixed(1)}%`;
+            }
+
+            _setBar('iTxtDiaMp', 'iBarDiaMp', proyDia.mp_actual, proyDia.mp_cierre);
+            _setBar('iTxtDiaEnt', 'iBarDiaEnt', proyDia.entregas_actual, proyDia.entregas_cierre);
+            _setBar('iTxtDiaEnv', 'iBarDiaEnv', proyDia.envios_actual, proyDia.envios_cierre);
+
+            _setBar('iTxtSemanaMp', 'iBarSemanaMp', proySemana.mp_actual, proySemana.mp_cierre);
+            _setBar('iTxtSemanaEnt', 'iBarSemanaEnt', proySemana.entregas_actual, proySemana.entregas_cierre);
+            _setBar('iTxtSemanaEnv', 'iBarSemanaEnv', proySemana.envios_actual, proySemana.envios_cierre);
+
+            _setBar('iTxtMesMp', 'iBarMesMp', proyMes.mp_actual, proyMes.mp_cierre);
+            _setBar('iTxtMesEnt', 'iBarMesEnt', proyMes.entregas_actual, proyMes.entregas_cierre);
+            _setBar('iTxtMesEnv', 'iBarMesEnv', proyMes.envios_actual, proyMes.envios_cierre);
 
             const body = document.getElementById('iSugerenciasBody');
             const empty = document.getElementById('iSugerenciasEmpty');
