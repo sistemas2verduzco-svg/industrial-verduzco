@@ -1,9 +1,31 @@
 # --- IMPORTS INICIO ---
+import json
+
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from crypto_utils import encrypt_text, decrypt_text
 db = SQLAlchemy()
+
+
+def _capture_paths_from_value(raw_value):
+    if not raw_value:
+        return []
+
+    value = str(raw_value).strip()
+    if not value:
+        return []
+
+    if value.startswith('['):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()]
+        except Exception:
+            pass
+
+    return [value]
+
 # --- FIN IMPORTS INICIO ---
 # ==================== NUEVO MODELO PARA HOJAS DE RUTA NUEVAS ====================
 class HojaRutaNueva(db.Model):
@@ -742,6 +764,11 @@ class HojaRutaFlujoLogistica(db.Model):
     hoja_ruta = db.relationship('HojaRutaEntrega', backref=db.backref('flujo_logistica', uselist=False))
 
     entregas_parciales = db.relationship('EntregaParcial', backref='flujo_logistica', lazy=True, cascade='all, delete-orphan')
+
+    @property
+    def almacen_captura_paths(self):
+        return _capture_paths_from_value(self.almacen_captura_path)
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -752,6 +779,7 @@ class HojaRutaFlujoLogistica(db.Model):
             'almacen_validado': self.almacen_validado,
             'almacen_recepcion_id': self.almacen_recepcion_id,
             'almacen_captura_path': self.almacen_captura_path,
+            'almacen_captura_paths': self.almacen_captura_paths,
             'facturacion_aprobado': self.facturacion_aprobado,
             'facturacion_aprobado_por': self.facturacion_aprobado_por,
             'facturacion_aprobado_en': self.facturacion_aprobado_en.isoformat() if self.facturacion_aprobado_en else None,
@@ -797,6 +825,10 @@ class AlmacenRegistro(db.Model):
 
     hoja_ruta = db.relationship('HojaRutaEntrega', backref='almacen_registros')
     flujo = db.relationship('HojaRutaFlujoLogistica', backref='almacen_registros')
+
+    @property
+    def captura_paths(self):
+        return _capture_paths_from_value(self.captura_path)
 
 
 class FacturacionRegistro(db.Model):

@@ -119,14 +119,13 @@ export function QuoteSection({
                 <span className="eyebrow">VISTA 3D</span>
                 <h3>Representacion interactiva de la ventana</h3>
               </div>
-              <div style={{ display: 'grid', gap: '8px', justifyItems: 'end' }}>
-                <p style={{ margin: 0 }}>Orbita la camara y ajusta dimensiones o color desde el formulario.</p>
-                <label style={{ fontSize: '12px', color: '#64748b', fontWeight: 700 }}>
+              <div className="viewer-controls">
+                <p className="viewer-help">Orbita la camara y ajusta dimensiones o color desde el formulario.</p>
+                <label className="viewer-control">
                   Ambiente visual
                   <select
                     value={viewerMode}
                     onChange={(event) => setViewerMode(event.target.value)}
-                    style={{ marginLeft: '8px', padding: '6px 8px', borderRadius: '8px', border: '1px solid #cbd5e1' }}
                   >
                     <option value="photo">Showroom foto</option>
                     <option value="day">Dia natural</option>
@@ -134,18 +133,18 @@ export function QuoteSection({
                     <option value="night">Noche elegante</option>
                   </select>
                 </label>
-                <label style={{ fontSize: '12px', color: '#64748b', fontWeight: 700 }}>
+                <label className="viewer-control">
                   Angulo de camara
                   <select
                     value={cameraPreset}
                     onChange={(event) => setCameraPreset(event.target.value)}
-                    style={{ marginLeft: '8px', padding: '6px 8px', borderRadius: '8px', border: '1px solid #cbd5e1' }}
                   >
                     <option value="facade">Fachada comercial</option>
                     <option value="interior">Interior acogedor</option>
                     <option value="detail">Detalle de herraje</option>
                   </select>
                 </label>
+                <p className="viewer-touch-hint">Tip movil: arrastra con un dedo para orbitar y pellizca para acercar.</p>
               </div>
             </div>
             <Suspense fallback={<div className="viewer-canvas viewer-loading">Cargando visor 3D...</div>}>

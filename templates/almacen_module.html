@@ -39,7 +39,7 @@
 
     <div class="container" style="padding-top:20px;">
         <h2 style="margin:0 0 8px 0;">Módulo Almacén</h2>
-        <p class="small" style="margin:0 0 12px 0;">Valida recepción de hojas enviadas por Entregas. Requiere check, ID de recepción y captura; después regresa a Entregas como lista para facturación.</p>
+        <p class="small" style="margin:0 0 12px 0;">Valida recepción de hojas enviadas por Entregas. Requiere check, ID de recepción y una o varias capturas; después regresa a Entregas como lista para facturación.</p>
 
         <div class="panel">
             {% if pendientes_almacen %}
@@ -57,8 +57,9 @@
                                 <input type="text" name="recepcion_id" required placeholder="Ej: RX-2026-000123">
                             </label>
                             <label class="field">
-                                <span>Captura de recepción</span>
-                                <input type="file" name="captura_recepcion" accept="image/*" required>
+                                <span>Capturas de recepción</span>
+                                <input type="file" name="captura_recepcion" accept="image/*" multiple required>
+                                <span class="small">Puedes seleccionar más de una imagen.</span>
                             </label>
                             <label class="field" style="justify-content:flex-end;">
                                 <span>&nbsp;</span>

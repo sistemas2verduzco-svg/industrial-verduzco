@@ -3902,6 +3902,15 @@ def _save_logistica_recepcion_image(file_storage, hoja_ruta_id):
     return f"{rel_dir}/{nombre}".replace('\\', '/')
 
 
+def _serialize_logistica_capture_paths(paths):
+    clean_paths = [str(path).strip() for path in (paths or []) if str(path).strip()]
+    if not clean_paths:
+        return None
+    if len(clean_paths) == 1:
+        return clean_paths[0]
+    return json.dumps(clean_paths, ensure_ascii=False)
+
+
 def _sync_flujo_parciales(flujo: HojaRutaFlujoLogistica, hoja: HojaRutaEntrega = None):
     """Sincroniza totales/pendientes/porcentaje para entregas parciales."""
     if not flujo:
@@ -4423,26 +4432,28 @@ def almacen_recibir_item(item_id):
 
     recepcion_id = (request.form.get('recepcion_id') or '').strip()
     entregado = request.form.get('entregado') == 'on'
-    captura = request.files.get('captura_recepcion')
+    capturas = [file for file in request.files.getlist('captura_recepcion') if file and file.filename]
 
     if not entregado or not recepcion_id:
         return redirect(url_for('almacen_module'))
 
-    if not captura or not captura.filename:
+    if not capturas:
         return redirect(url_for('almacen_module'))
 
-    if not _logistica_allowed_image(captura.filename):
+    if any(not _logistica_allowed_image(captura.filename) for captura in capturas):
         return redirect(url_for('almacen_module'))
 
     try:
-        captura_path = _save_logistica_recepcion_image(captura, item.hoja_ruta_id)
+        captura_paths = [_save_logistica_recepcion_image(captura, item.hoja_ruta_id) for captura in capturas]
     except Exception:
-        flash('No se pudo procesar la captura de recepción. Usa una imagen JPG, PNG o WEBP válida.', 'error')
+        flash('No se pudieron procesar las capturas de recepción. Usa imágenes JPG, PNG o WEBP válidas.', 'error')
         return redirect(url_for('almacen_module'))
+
+    captura_path_value = _serialize_logistica_capture_paths(captura_paths)
 
     item.almacen_validado = True
     item.almacen_recepcion_id = recepcion_id
-    item.almacen_captura_path = captura_path
+    item.almacen_captura_path = captura_path_value
     # Almacén solo recepciona/libera y devuelve a Entregas como lista para enviar a Facturación.
     item.estado = 'entregas_lista_facturacion'
     item.actualizado_por = _logistica_username()
@@ -4451,10 +4462,10 @@ def almacen_recibir_item(item_id):
         hoja_ruta_id=item.hoja_ruta_id,
         flujo_id=item.id,
         recepcion_id=recepcion_id,
-        captura_path=item.almacen_captura_path,
+        captura_path=captura_path_value,
         validado=True,
         usuario=_logistica_username(),
-        notas='Recepción validada en almacén y liberada para Entregas.',
+        notas=f'Recepción validada en almacén y liberada para Entregas. Capturas: {len(captura_paths)}.',
     ))
     db.session.add(EntregaRegistro(
         hoja_ruta_id=item.hoja_ruta_id,

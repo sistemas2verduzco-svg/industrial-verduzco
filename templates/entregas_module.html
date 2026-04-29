@@ -215,8 +215,12 @@
                     <div class="small" style="color:#0f766e; font-weight:700;">Estado: Lista para Facturación</div>
                     {% endif %}
                     <div class="small">Recepción CONTPAQ: {{ item.almacen_recepcion_id or '-' }}</div>
-                    {% if item.almacen_captura_path %}
-                    <div class="small">Captura: <a href="/uploads/{{ item.almacen_captura_path }}" target="_blank">Ver captura</a></div>
+                    {% if item.almacen_captura_paths %}
+                    <div class="small">Capturas:
+                        {% for captura_path in item.almacen_captura_paths %}
+                        <a href="/uploads/{{ captura_path }}" target="_blank">Ver captura {{ loop.index }}</a>{% if not loop.last %} | {% endif %}
+                        {% endfor %}
+                    </div>
                     {% endif %}
                     {% if has_permission('entregas', 'edit') or has_permission('catalog', 'edit') %}
                     <div style="margin-top:8px; display:flex; gap:6px;">
