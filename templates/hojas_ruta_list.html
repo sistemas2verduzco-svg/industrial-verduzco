@@ -22,6 +22,7 @@
             background: linear-gradient(180deg, #f7fbff, var(--bg));
             color: var(--ink);
             font-family: "Barlow", "Segoe UI", Tahoma, sans-serif;
+            overflow-x: hidden;
         }
 
         .estaciones-wrap {
@@ -838,6 +839,191 @@
             .filter-wrap {
                 grid-template-columns: 1fr;
             }
+
+            .pending-actions {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .pending-actions .btn-small {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .estaciones-wrap {
+                padding: 0 8px 12px;
+            }
+
+            .estaciones-wrap > .module-head,
+            .estaciones-wrap > .filter-wrap,
+            .estaciones-wrap > .board-layout {
+                max-width: 100%;
+            }
+
+            .module-head,
+            .filter-wrap,
+            .pending-panel,
+            .maquina-card {
+                border-radius: 10px;
+            }
+
+            .module-head {
+                padding: 14px;
+            }
+
+            .stats-row {
+                gap: 8px;
+            }
+
+            .stat-box {
+                padding: 9px 10px;
+            }
+
+            .filter-wrap {
+                padding: 10px;
+                gap: 8px;
+                position: sticky;
+                top: 8px;
+                z-index: 20;
+                box-shadow: 0 8px 20px rgba(12, 40, 73, 0.08);
+            }
+
+            .filter-wrap input,
+            .btn-light,
+            .toggle-wrap {
+                min-height: 42px;
+                box-sizing: border-box;
+            }
+
+            .board-layout {
+                gap: 10px;
+            }
+
+            .cards-wrap {
+                gap: 10px;
+            }
+
+            .maquina-card {
+                padding: 12px;
+                gap: 12px;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .maquina-image {
+                width: 100%;
+                max-width: none;
+                height: auto;
+                min-height: 180px;
+                aspect-ratio: 16 / 9;
+                margin: 0 auto;
+            }
+
+            .maquina-info {
+                gap: 8px;
+            }
+
+            .maquina-summary {
+                gap: 10px;
+            }
+
+            .maquina-nombre {
+                font-size: 18px;
+                line-height: 1.25;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                align-items: center;
+            }
+
+            .tipo-chip {
+                margin-left: 0;
+            }
+
+            .maquina-desc,
+            .pending-meta {
+                font-size: 12px;
+                line-height: 1.4;
+            }
+
+            .time-real {
+                display: block;
+                width: 100%;
+                box-sizing: border-box;
+                text-align: center;
+                min-height: 38px;
+            }
+
+            .process-box,
+            .process-box.pending {
+                max-height: none;
+            }
+
+            .process-item {
+                align-items: flex-start;
+                flex-wrap: wrap;
+                padding-bottom: 2px;
+            }
+
+            .process-chip,
+            .qc-process-chip {
+                margin-left: 22px;
+            }
+
+            .status-badge,
+            .tipo-chip {
+                min-height: 28px;
+                display: inline-flex;
+                align-items: center;
+            }
+
+            .maquina-actions {
+                width: 100%;
+                margin-top: 2px;
+                position: static;
+            }
+
+            .maquina-actions .btn-small,
+            .maquina-actions .btn-view {
+                min-height: 44px;
+            }
+
+            .qc-panel-body {
+                padding: 10px;
+            }
+
+            .qc-panel > summary {
+                min-height: 44px;
+                box-sizing: border-box;
+            }
+
+            .pending-list {
+                max-height: 40vh;
+                padding: 8px;
+            }
+
+            .pending-item {
+                padding: 10px;
+            }
+
+            .modal-backdrop {
+                align-items: flex-start;
+                padding: 10px 8px;
+                overflow-y: auto;
+            }
+
+            .modal-card {
+                width: min(100%, 640px);
+                max-height: calc(100vh - 20px);
+                overflow: auto;
+            }
+
+            .modal-card select,
+            .modal-card input,
+            .modal-card button {
+                min-height: 42px;
+            }
         }
 
         @media (max-width: 1360px) {
@@ -900,12 +1086,47 @@
 
             .maquina-actions {
                 grid-template-columns: 1fr;
+                gap: 8px;
             }
 
             .maquina-actions .btn-small,
             .maquina-actions .btn-view {
                 width: 100%;
                 text-align: center;
+                min-height: 42px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .pending-head > div:last-child {
+                gap: 8px;
+            }
+
+            .pending-head-left {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .pending-actions {
+                grid-template-columns: 1fr;
+            }
+
+            .process-chip,
+            .qc-process-chip {
+                margin-left: 0;
+            }
+
+            .qc-alert-btn {
+                min-height: 42px;
+            }
+
+            .filter-wrap {
+                top: 6px;
+            }
+
+            .pending-list {
+                max-height: 34vh;
             }
 
             .modal-card {
