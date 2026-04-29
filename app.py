@@ -1227,6 +1227,83 @@ def _get_mp_current_process_objective_time(pn_value, cantidad_piezas, completed_
     return projection['objetivo_hms'] if projection else None
 
 
+def _parse_elapsed_process_seconds(raw_value):
+    try:
+        seconds = int(raw_value or 0)
+    except Exception:
+        return None
+    if seconds < 0:
+        return None
+    return min(seconds, 864000)
+
+
+def _apply_entrega_process_elapsed(hoja, estaciones, target_estacion, elapsed_seconds, now_ref):
+    if not hoja or not target_estacion:
+        return
+
+    elapsed_seconds = max(0, int(elapsed_seconds or 0))
+    process_start = now_ref - timedelta(seconds=elapsed_seconds) if elapsed_seconds > 0 else now_ref
+    target_orden = int(target_estacion.orden or 0)
+
+    for estacion in estaciones:
+        estacion_orden = int(estacion.orden or 0)
+        if estacion.id == target_estacion.id:
+            estacion.estado = 'en_curso'
+            estacion.fecha_inicio = process_start
+            estacion.fecha_finalizacion = None
+        elif estacion_orden < target_orden:
+            estacion.estado = 'completada'
+            if not estacion.fecha_inicio:
+                estacion.fecha_inicio = process_start
+            if not estacion.fecha_finalizacion:
+                estacion.fecha_finalizacion = process_start
+        elif (estacion.estado or '').lower() != 'completada':
+            estacion.estado = 'pendiente'
+            estacion.fecha_finalizacion = None
+
+    if not hoja.fecha_salida or hoja.fecha_salida > process_start:
+        hoja.fecha_salida = process_start
+
+
+def _apply_mp_process_elapsed(hoja, start_process_id, elapsed_seconds, now_ref):
+    if not hoja:
+        return None
+
+    virtual_ests = _build_mp_virtual_estaciones_by_pn(hoja.pn, _mp_parse_completed_process_ids(hoja.materia_prima))
+    if not virtual_ests:
+        return None
+
+    ordered = sorted(virtual_ests, key=lambda item: int(item.get('orden') or 0))
+    if start_process_id:
+        try:
+            start_process_id = int(start_process_id)
+        except Exception:
+            return None
+        target = next((item for item in ordered if int(item.get('id') or 0) == start_process_id), None)
+    else:
+        target = next((item for item in ordered if (item.get('estado') or '').lower() != 'completada'), None)
+
+    if not target:
+        return None
+
+    qty = max(1, int(hoja.cantidad_piezas or 1))
+    target_orden = int(target.get('orden') or 0)
+    completed_ids = set()
+    completed_total_sec = 0
+    for item in ordered:
+        item_orden = int(item.get('orden') or 0)
+        item_id = int(item.get('id') or 0)
+        if item_orden < target_orden:
+            completed_ids.add(item_id)
+            cp_prev = ClaveProceso.query.get(item_id)
+            completed_total_sec += (_mp_process_seconds(cp_prev) * qty)
+
+    hoja.materia_prima = _mp_upsert_process_state_block(hoja.materia_prima, completed_ids)
+    elapsed_seconds = max(0, int(elapsed_seconds or 0))
+    hoja.fecha_salida = now_ref - timedelta(seconds=(completed_total_sec + elapsed_seconds))
+    return target
+
+
 def _build_mp_virtual_estaciones_by_pn(pn_value, completed_process_ids=None):
     """Construye una lista virtual de procesos para hojas MP (sin persistir EstacionTrabajo).
     Se usa para visualizacion en UI de hojas MP y panel de asignacion.
@@ -4558,6 +4635,9 @@ def hojas_ruta_nuevo_form():
         item = h.to_dict()
         item['serie'] = item.get('nombre')
         item['clave'] = item.get('pn')
+        item['descripcion_clave'] = _resolve_clave_descripcion_by_pn(h.pn)
+        item['qr_payload'] = f"HRNID:{h.id};SERIE:{h.nombre or ''}"
+        item['qr_deeplink'] = request.url_root.rstrip('/') + f"/hoja_nuevo/{h.id}"
         item['orden_trabajo'] = item.get('orden_trabajo_hr')
         item['comentarios'] = _mp_strip_process_state_block(_clean_nullable_text(item.get('materia_prima')))
         item['firma_ing_jose'] = item.get('supervisor')
@@ -4573,6 +4653,8 @@ def hojas_ruta_nuevo_form():
         companion_hojas.append({
             'id': h.id,
             'serie': h.nombre,
+            'qr_payload': f"HRID:{h.id};SERIE:{h.nombre or ''}",
+            'qr_deeplink': request.url_root.rstrip('/') + f"/hoja/{h.id}",
             'clave': h.pn,
             'descripcion_clave': _resolve_clave_descripcion_by_pn(h.pn),
             'calidad': h.calidad,
@@ -5627,6 +5709,8 @@ def hojas_ruta_entregas_form():
         companion_hojas.append({
             'id': h.id,
             'serie': h.nombre,
+            'qr_payload': f"HRNID:{h.id};SERIE:{h.nombre or ''}",
+            'qr_deeplink': request.url_root.rstrip('/') + f"/hoja_nuevo/{h.id}",
             'clave': h.pn,
             'descripcion_clave': _resolve_clave_descripcion_by_pn(h.pn),
             'calidad': h.calidad,
@@ -6376,8 +6460,11 @@ def api_asignar_hoja_maquina(maquina_id):
     data = request.get_json() or {}
     hoja_id = data.get('hoja_id')
     start_estacion_id = data.get('start_estacion_id')
+    elapsed_process_seconds = _parse_elapsed_process_seconds(data.get('elapsed_process_seconds'))
     if not hoja_id:
         return jsonify({'error': 'hoja_id requerido'}), 400
+    if elapsed_process_seconds is None:
+        return jsonify({'error': 'elapsed_process_seconds invalido'}), 400
 
     hoja = HojaRutaEntrega.query.get_or_404(int(hoja_id))
     if hoja.maquina_id and hoja.maquina_id != maq.id:
@@ -6400,6 +6487,7 @@ def api_asignar_hoja_maquina(maquina_id):
         estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
         now_ref = datetime.utcnow()
 
+        target_estacion = None
         # Modo temporal: permitir iniciar desde un proceso avanzado al asignar.
         if start_estacion_id:
             try:
@@ -6410,6 +6498,7 @@ def api_asignar_hoja_maquina(maquina_id):
             objetivo = next((e for e in estaciones if e.id == start_estacion_id), None)
             if not objetivo:
                 return jsonify({'error': 'El proceso inicial seleccionado no pertenece a la hoja'}), 409
+            target_estacion = objetivo
 
             for e in estaciones:
                 if (e.orden or 0) < (objetivo.orden or 0):
@@ -6455,6 +6544,12 @@ def api_asignar_hoja_maquina(maquina_id):
                     siguiente.estado = 'en_curso'
                     if not siguiente.fecha_inicio:
                         siguiente.fecha_inicio = now_ref
+                    target_estacion = siguiente
+            else:
+                target_estacion = en_curso
+
+        if target_estacion and elapsed_process_seconds > 0:
+            _apply_entrega_process_elapsed(hoja, estaciones, target_estacion, elapsed_process_seconds, now_ref)
 
         _apply_hoja_time_plan(
             hoja,
@@ -6470,6 +6565,42 @@ def api_asignar_hoja_maquina(maquina_id):
         db.session.rollback()
         logger.error(f"Error asignando hoja a maquina: {e}", exc_info=True)
         return jsonify({'error': 'No se pudo asignar la hoja a la máquina'}), 500
+
+
+@app.route('/api/maquinas/<int:maquina_id>/ajustar_tiempo_proceso', methods=['POST'])
+@login_required
+@requires_any_permission([('estaciones', 'operate'), ('catalog', 'edit')])
+def api_ajustar_tiempo_proceso_maquina(maquina_id):
+    maq = Máquina.query.get_or_404(maquina_id)
+    data = request.get_json() or {}
+    elapsed_process_seconds = _parse_elapsed_process_seconds(data.get('elapsed_process_seconds'))
+    if elapsed_process_seconds is None:
+        return jsonify({'error': 'elapsed_process_seconds invalido'}), 400
+
+    hoja = HojaRutaEntrega.query.filter(
+        HojaRutaEntrega.maquina_id == maq.id,
+        HojaRutaEntrega.estado.in_(['activa', 'pausada'])
+    ).order_by(HojaRutaEntrega.fecha_actualizacion.desc(), HojaRutaEntrega.fecha_creacion.desc()).first()
+    if not hoja:
+        return jsonify({'error': 'La máquina no tiene hoja activa o pausada'}), 404
+
+    estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
+    target = next((e for e in estaciones if (e.estado or '').lower() == 'en_curso'), None)
+    if not target:
+        target = next((e for e in estaciones if (e.estado or 'pendiente').lower() != 'completada'), None)
+    if not target:
+        return jsonify({'error': 'No hay proceso actual ajustable en la hoja'}), 409
+
+    try:
+        now_ref = datetime.utcnow()
+        _apply_entrega_process_elapsed(hoja, estaciones, target, elapsed_process_seconds, now_ref)
+        _apply_hoja_time_plan(hoja, estaciones, maquina_tipo=maq.tipo, fallback_total_time=hoja.total_tiempo)
+        db.session.commit()
+        return jsonify({'ok': True, 'hoja_id': hoja.id, 'estacion_id': target.id, 'elapsed_process_seconds': elapsed_process_seconds}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error ajustando tiempo de proceso: {e}", exc_info=True)
+        return jsonify({'error': 'No se pudo ajustar el tiempo del proceso'}), 500
 
 
 @app.route('/api/maquinas/<int:maquina_id>/retirar_hoja', methods=['POST'])
@@ -6915,8 +7046,12 @@ def api_asignar_hoja_maquina_nuevo(maquina_id):
     maq = Máquina.query.get_or_404(maquina_id)
     data = request.get_json() or {}
     hoja_id = data.get('hoja_id')
+    start_estacion_id = data.get('start_estacion_id')
+    elapsed_process_seconds = _parse_elapsed_process_seconds(data.get('elapsed_process_seconds'))
     if not hoja_id:
         return jsonify({'error': 'hoja_id requerido'}), 400
+    if elapsed_process_seconds is None:
+        return jsonify({'error': 'elapsed_process_seconds invalido'}), 400
 
     hoja = HojaRutaNueva.query.get_or_404(int(hoja_id))
     if hoja.maquina_id and hoja.maquina_id != maq.id:
@@ -6929,14 +7064,51 @@ def api_asignar_hoja_maquina_nuevo(maquina_id):
     if activa_actual and activa_actual.id != hoja.id:
         return jsonify({'error': 'La máquina ya tiene una hoja activa o pausada asignada'}), 409
 
-    hoja.maquina_id = maq.id
-    hoja.estado = 'activa'
-    # Reiniciar inicio al momento real de asignación para evitar arrastre de tiempo previo.
-    hoja.fecha_salida = datetime.utcnow()
-    _recompute_mp_time_plan(hoja)
-    maq.activo = True
-    db.session.commit()
-    return jsonify({'success': True, 'hoja': hoja.to_dict()}), 200
+    try:
+        now_ref = datetime.utcnow()
+        hoja.maquina_id = maq.id
+        hoja.estado = 'activa'
+        target = _apply_mp_process_elapsed(hoja, start_estacion_id, elapsed_process_seconds, now_ref)
+        if target is None:
+            hoja.fecha_salida = now_ref - timedelta(seconds=max(0, int(elapsed_process_seconds or 0)))
+        _recompute_mp_time_plan(hoja)
+        maq.activo = True
+        db.session.commit()
+        return jsonify({'success': True, 'hoja': hoja.to_dict()}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error asignando hoja MP a maquina: {e}", exc_info=True)
+        return jsonify({'error': 'No se pudo asignar la hoja MP a la máquina'}), 500
+
+
+@app.route('/api/maquinas_nuevo/<int:maquina_id>/ajustar_tiempo_proceso', methods=['POST'])
+@login_required
+@requires_any_permission([('estaciones', 'operate'), ('catalog', 'edit')])
+def api_ajustar_tiempo_proceso_maquina_nuevo(maquina_id):
+    maq = Máquina.query.get_or_404(maquina_id)
+    data = request.get_json() or {}
+    elapsed_process_seconds = _parse_elapsed_process_seconds(data.get('elapsed_process_seconds'))
+    if elapsed_process_seconds is None:
+        return jsonify({'error': 'elapsed_process_seconds invalido'}), 400
+
+    hoja = HojaRutaNueva.query.filter(
+        HojaRutaNueva.maquina_id == maq.id,
+        HojaRutaNueva.estado.in_(['activa', 'pausada'])
+    ).order_by(HojaRutaNueva.fecha_actualizacion.desc(), HojaRutaNueva.fecha_creacion.desc()).first()
+    if not hoja:
+        return jsonify({'error': 'La máquina no tiene hoja activa o pausada'}), 404
+
+    try:
+        target = _apply_mp_process_elapsed(hoja, None, elapsed_process_seconds, datetime.utcnow())
+        if target is None:
+            return jsonify({'error': 'No hay proceso MP ajustable en la hoja'}), 409
+        _recompute_mp_time_plan(hoja)
+        db.session.commit()
+        return jsonify({'ok': True, 'hoja_id': hoja.id, 'proceso_id': target.get('id'), 'elapsed_process_seconds': elapsed_process_seconds}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error ajustando tiempo de proceso MP: {e}", exc_info=True)
+        return jsonify({'error': 'No se pudo ajustar el tiempo del proceso MP'}), 500
 
 
 @app.route('/api/maquinas_nuevo/<int:maquina_id>/retirar_hoja', methods=['POST'])

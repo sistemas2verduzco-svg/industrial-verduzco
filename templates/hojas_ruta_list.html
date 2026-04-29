@@ -92,7 +92,6 @@
             border: 1px solid var(--line);
             border-radius: 10px;
             padding: 12px;
-            margin: 14px 0;
             display: grid;
             grid-template-columns: 1fr 1fr auto auto;
             gap: 10px;
@@ -424,6 +423,25 @@
             margin-top: 6px;
             font-size: 12px;
             color: #5f7184;
+        }
+
+        .time-adjust-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+
+        .time-adjust-input {
+            max-width: 180px;
+        }
+
+        .time-adjust-presets {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-top: 8px;
         }
 
         .modal-actions {
@@ -1232,6 +1250,10 @@
                                          data-running="{{ '1' if (maq.activo and maq.hoja_activa) else '0' }}">
                                          Tiempo proceso: <span class="js-tiempo-restante">00:00:00</span>
                                      </div>
+                                    <div class="time-adjust-row">
+                                        <button class="btn-light" type="button" onclick="abrirModalAjusteTiempo({{ maq.id }}, {{ maq.nombre|tojson }}, {{ (maq.estacion_actual or 'Proceso actual')|tojson }}, {{ (maq.tiempo_transcurrido_proceso or maq.tiempo_real or '00:00:00')|tojson }})">Ajustar tiempo proceso</button>
+                                        <span style="font-size:11px; color:#64748b;">Si la hoja se capturó tarde, adelanta aquí el tiempo ya corrido.</span>
+                                    </div>
                                     <div class="process-box">
                                         <div class="process-title">Validación de procesos</div>
                                         {% if maq.hoja_activa.estaciones %}
@@ -1412,9 +1434,40 @@
             <label style="display:block; font-weight:700; font-size:12px; margin:10px 0 6px; color:#48627d;">Iniciar desde proceso (temporal)</label>
             <select id="asignarProcesoInicio"></select>
             <div id="asignarProcesoHint" class="modal-hint">Si seleccionas un proceso avanzado, los anteriores se marcaran como completados de forma temporal.</div>
+            <label style="display:block; font-weight:700; font-size:12px; margin:10px 0 6px; color:#48627d;">Tiempo ya corrido del proceso</label>
+            <input id="asignarTiempoProceso" class="time-adjust-input" type="text" placeholder="HH:MM:SS" value="00:00:00">
+            <div class="time-adjust-presets">
+                <button class="btn-light" type="button" onclick="setTiempoAsignacion('00:05:00')">+5 min</button>
+                <button class="btn-light" type="button" onclick="setTiempoAsignacion('00:15:00')">+15 min</button>
+                <button class="btn-light" type="button" onclick="setTiempoAsignacion('00:30:00')">+30 min</button>
+                <button class="btn-light" type="button" onclick="setTiempoAsignacion('01:00:00')">+1 h</button>
+            </div>
+            <div class="modal-hint">Se aplicará al proceso seleccionado o al siguiente pendiente si lo dejas en automático.</div>
             <div class="modal-actions">
                 <button class="btn-light" onclick="cerrarModalAsignar()">Cancelar</button>
                 <button class="btn-small btn-primary-small" onclick="guardarAsignacion()">Asignar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalAjusteTiempo" class="modal-backdrop" onclick="if(event.target===this){cerrarModalAjusteTiempo();}">
+        <div class="modal-card" style="max-width:520px;">
+            <h3 style="margin:0 0 12px 0;">Ajustar tiempo del proceso</h3>
+            <input type="hidden" id="ajusteTiempoMaquinaId">
+            <div style="font-size:13px; color:#5f7184; margin-bottom:8px;">Máquina: <strong id="ajusteTiempoMaquinaNombre">-</strong></div>
+            <div style="font-size:13px; color:#5f7184; margin-bottom:10px;">Proceso actual: <strong id="ajusteTiempoProcesoNombre">-</strong></div>
+            <label style="display:block; font-weight:700; font-size:12px; margin-bottom:6px; color:#48627d;">Tiempo ya corrido</label>
+            <input id="ajusteTiempoValor" class="time-adjust-input" type="text" placeholder="HH:MM:SS" value="00:00:00">
+            <div class="time-adjust-presets">
+                <button class="btn-light" type="button" onclick="setTiempoAjuste('00:05:00')">+5 min</button>
+                <button class="btn-light" type="button" onclick="setTiempoAjuste('00:15:00')">+15 min</button>
+                <button class="btn-light" type="button" onclick="setTiempoAjuste('00:30:00')">+30 min</button>
+                <button class="btn-light" type="button" onclick="setTiempoAjuste('01:00:00')">+1 h</button>
+            </div>
+            <div class="modal-hint">Corrige el reloj del proceso actual sin mover la máquina ni la hoja.</div>
+            <div class="modal-actions">
+                <button class="btn-light" type="button" onclick="cerrarModalAjusteTiempo()">Cancelar</button>
+                <button class="btn-small btn-primary-small" type="button" onclick="guardarAjusteTiempoProceso()">Guardar ajuste</button>
             </div>
         </div>
     </div>
@@ -1468,6 +1521,27 @@
         return `${hh}:${mm}:${ss}`;
     }
 
+    function parseFlexibleDurationToSeconds(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return 0;
+        if (/^\d+$/.test(raw)) {
+            return parseInt(raw, 10) * 60;
+        }
+        const parts = raw.split(':').map(n => parseInt(n, 10));
+        if (parts.length !== 3 || parts.some(Number.isNaN)) return NaN;
+        return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+    }
+
+    function setTiempoAsignacion(value) {
+        const input = document.getElementById('asignarTiempoProceso');
+        if (input) input.value = value;
+    }
+
+    function setTiempoAjuste(value) {
+        const input = document.getElementById('ajusteTiempoValor');
+        if (input) input.value = value;
+    }
+
     function getMachineNameById(id) {
         const m = maquinasCatalogo.find(x => Number(x.id) === Number(id));
         return m ? m.nombre : `ID ${id}`;
@@ -1485,6 +1559,49 @@
             return JSON.parse(m[1]);
         } catch (_) {
             return null;
+        }
+    }
+
+    function abrirModalAjusteTiempo(maquinaId, maquinaNombre, procesoNombre, tiempoActual) {
+        document.getElementById('ajusteTiempoMaquinaId').value = String(maquinaId || '');
+        document.getElementById('ajusteTiempoMaquinaNombre').textContent = maquinaNombre || '-';
+        document.getElementById('ajusteTiempoProcesoNombre').textContent = procesoNombre || 'Proceso actual';
+        document.getElementById('ajusteTiempoValor').value = tiempoActual || '00:00:00';
+        document.getElementById('modalAjusteTiempo').style.display = 'flex';
+    }
+
+    function cerrarModalAjusteTiempo() {
+        document.getElementById('modalAjusteTiempo').style.display = 'none';
+    }
+
+    async function guardarAjusteTiempoProceso() {
+        const maquinaId = parseInt(document.getElementById('ajusteTiempoMaquinaId').value, 10);
+        const elapsedProcessSeconds = parseFlexibleDurationToSeconds(document.getElementById('ajusteTiempoValor').value || '00:00:00');
+
+        if (!maquinaId) {
+            alert('No se pudo identificar la máquina.');
+            return;
+        }
+        if (!Number.isFinite(elapsedProcessSeconds) || elapsedProcessSeconds < 0) {
+            alert('Captura un tiempo válido en formato HH:MM:SS.');
+            return;
+        }
+
+        try {
+            const res = await fetch(API_MAQUINA_BASE + '/' + maquinaId + '/ajustar_tiempo_proceso', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ elapsed_process_seconds: elapsedProcessSeconds })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.error || 'No se pudo ajustar el tiempo del proceso');
+            }
+            cerrarModalAjusteTiempo();
+            await softRefreshBoard();
+        } catch (err) {
+            alert('Error: ' + err.message);
         }
     }
 
@@ -1678,10 +1795,12 @@
         const select = document.getElementById('asignarHojaId');
         const hojaResumen = document.getElementById('asignarHojaResumen');
         const procesoSel = document.getElementById('asignarProcesoInicio');
+        const tiempoInput = document.getElementById('asignarTiempoProceso');
 
         maquinaInput.value = maquinaId || '';
         maquinaLabel.textContent = maquinaNombre || 'Selecciona máquina';
         maquinaHint.textContent = '';
+        if (tiempoInput) tiempoInput.value = '00:00:00';
 
         maquinaSelect.innerHTML = '';
         const defaultMOpt = document.createElement('option');
@@ -1872,12 +1991,17 @@
         const maquinaId = maquinaFromHidden || maquinaFromSelect;
         const hojaId = parseInt(document.getElementById('asignarHojaId').value, 10);
         const procesoInicioId = parseInt(document.getElementById('asignarProcesoInicio').value, 10);
+        const elapsedProcessSeconds = parseFlexibleDurationToSeconds(document.getElementById('asignarTiempoProceso').value || '00:00:00');
         if (!maquinaId) {
             alert('Selecciona una máquina para asignar la hoja.');
             return;
         }
         if (!hojaId) {
             alert('Selecciona una hoja pendiente.');
+            return;
+        }
+        if (!Number.isFinite(elapsedProcessSeconds) || elapsedProcessSeconds < 0) {
+            alert('Captura un tiempo válido en formato HH:MM:SS.');
             return;
         }
 
@@ -1888,7 +2012,8 @@
                 credentials: 'same-origin',
                 body: JSON.stringify({
                     hoja_id: hojaId,
-                    start_estacion_id: Number.isNaN(procesoInicioId) ? null : procesoInicioId
+                    start_estacion_id: Number.isNaN(procesoInicioId) ? null : procesoInicioId,
+                    elapsed_process_seconds: elapsedProcessSeconds
                 })
             });
             const data = await res.json();

@@ -199,6 +199,114 @@
             background: #fff;
         }
 
+        .report-subpanel {
+            margin-top: 12px;
+            border: 1px solid #dbe3ee;
+            border-radius: 10px;
+            background: #f8fafc;
+            padding: 12px;
+        }
+
+        .report-subpanel-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .report-subpanel-title {
+            font-size: 14px;
+            font-weight: 800;
+            color: #0f172a;
+        }
+
+        .report-subpanel-meta {
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        .mp-quick-toolbar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 180px auto;
+            gap: 8px;
+            margin-bottom: 10px;
+            align-items: end;
+        }
+
+        .mp-quick-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 10px;
+            max-height: 440px;
+            overflow: auto;
+        }
+
+        .mp-quick-card {
+            border: 1px solid #d9e4ef;
+            border-radius: 10px;
+            background: #fff;
+            padding: 12px;
+            display: grid;
+            gap: 10px;
+        }
+
+        .mp-quick-main {
+            display: grid;
+            grid-template-columns: 88px minmax(0, 1fr);
+            gap: 10px;
+            align-items: start;
+        }
+
+        .mp-quick-qr {
+            width: 88px;
+            height: 88px;
+            border: 1px solid #dbe3ee;
+            border-radius: 8px;
+            background: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .mp-quick-qr canvas,
+        .mp-quick-qr img {
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        .mp-quick-serie {
+            font-size: 14px;
+            font-weight: 800;
+            color: #0f172a;
+            line-height: 1.25;
+            word-break: break-word;
+        }
+
+        .mp-quick-meta {
+            font-size: 12px;
+            color: #475569;
+            line-height: 1.45;
+        }
+
+        .mp-quick-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .mp-quick-empty {
+            font-size: 13px;
+            color: #64748b;
+            text-align: center;
+            padding: 16px;
+            border: 1px dashed #cbd5e1;
+            border-radius: 8px;
+            background: #fff;
+        }
+
         .report-table td[contenteditable="true"] {
             background: #fffdf2;
             outline: none;
@@ -570,6 +678,20 @@
 
             .report-filters {
                 grid-template-columns: 1fr;
+            }
+
+            .mp-quick-toolbar {
+                grid-template-columns: 1fr;
+            }
+
+            .mp-quick-main {
+                grid-template-columns: 1fr;
+            }
+
+            .mp-quick-qr {
+                width: 108px;
+                height: 108px;
+                margin: 0 auto;
             }
         }
     </style>
@@ -1047,11 +1169,42 @@
                 </table>
             </div>
 
+            <div class="report-subpanel">
+                <div class="report-subpanel-head">
+                    <div>
+                        <div class="report-subpanel-title">Panel rápido: Hojas de ruta en Almacén MP</div>
+                        <div class="report-subpanel-meta">Extracción rápida con búsqueda, almacén y acceso directo a QR.</div>
+                    </div>
+                    <div class="report-subpanel-meta" id="mpQuickCount">0 registro(s)</div>
+                </div>
+
+                <div class="mp-quick-toolbar">
+                    <div>
+                        <label for="mpQuickSearch">Buscar hoja MP</label>
+                        <input id="mpQuickSearch" type="text" placeholder="Serie, clave, descripción, comentarios..." oninput="renderMpQuickPanel()">
+                    </div>
+                    <div>
+                        <label for="mpQuickAlmacen">Almacén</label>
+                        <select id="mpQuickAlmacen" onchange="renderMpQuickPanel()">
+                            <option value="almacenmp">AlmacenMP</option>
+                            <option value="">Todos</option>
+                            <option value="almacenpt">AlmacenPT</option>
+                            <option value="maquinaria">Maquinaria</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" type="button" onclick="exportarMpQuickCsv()">Exportar MP CSV</button>
+                </div>
+
+                <div id="mpQuickGrid" class="mp-quick-grid"></div>
+            </div>
+
             <div class="modal-actions">
                 <button class="btn btn-secondary" type="button" onclick="cerrarReportesModal()">Cerrar</button>
             </div>
         </div>
     </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
     <script>
         const API_HOJAS_BASE = {{ (api_hojas_base or '/api/hojas_ruta')|tojson }};
@@ -1061,6 +1214,7 @@
         const ALLOW_TIPO_SWITCH = {{ (allow_tipo_switch or false)|tojson }};
         let clavesData = [];
         const hojasReporteData = {{ hojas|tojson }};
+        const companionHojasData = {{ (companion_hojas or [])|tojson }};
         const hojasDataById = new Map(hojasReporteData.map((item) => [String(item.id), item]));
         const REPORT_COLUMNS = [
             { key: 'id', label: 'ID' },
@@ -1941,6 +2095,7 @@
             reportDataDraft = JSON.parse(JSON.stringify(hojasReporteData || []));
             renderReportColumnsSelector();
             renderReportTable();
+            renderMpQuickPanel();
             document.getElementById('reportesModal').style.display = 'flex';
         }
 
@@ -1987,6 +2142,150 @@
             const a = document.createElement('a');
             a.href = url;
             a.download = 'reporte_hojas_ruta.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function getMpQuickRows() {
+            const sourceRows = API_HOJAS_BASE === API_HOJAS_MP ? hojasReporteData : companionHojasData;
+            const almacen = normalizeSearchText(document.getElementById('mpQuickAlmacen')?.value || 'almacenmp');
+            const q = normalizeSearchText(document.getElementById('mpQuickSearch')?.value || '');
+
+            return (sourceRows || []).filter((row) => {
+                const rowAlmacen = normalizeSearchText(row.almacen || '');
+                if (almacen && !rowAlmacen.includes(almacen)) {
+                    return false;
+                }
+
+                if (!q) {
+                    return true;
+                }
+
+                const blob = normalizeSearchText([
+                    row.id,
+                    row.serie,
+                    row.clave,
+                    row.descripcion_clave,
+                    row.calidad,
+                    row.almacen,
+                    row.orden_trabajo,
+                    row.comentarios,
+                    row.estado,
+                ].join(' | '));
+                return blob.includes(q);
+            });
+        }
+
+        function renderMpQuickPanel() {
+            const rows = getMpQuickRows();
+            const grid = document.getElementById('mpQuickGrid');
+            const count = document.getElementById('mpQuickCount');
+            if (!grid || !count) return;
+
+            count.textContent = `${rows.length} registro(s)`;
+            grid.innerHTML = '';
+
+            if (!rows.length) {
+                grid.innerHTML = '<div class="mp-quick-empty">No hay hojas de ruta MP para el filtro seleccionado.</div>';
+                return;
+            }
+
+            rows.forEach((row) => {
+                const card = document.createElement('div');
+                card.className = 'mp-quick-card';
+                const qrId = `mpQuickQr_${row.id}`;
+                const qrText = row.qr_payload || row.qr_deeplink || `HRNID:${row.id};SERIE:${row.serie || ''}`;
+                const deeplink = row.qr_deeplink || ((API_HOJAS_BASE === API_HOJAS_MP) ? `/hoja_nuevo/${row.id}` : `/hoja_nuevo/${row.id}`);
+                const fecha = row.fecha_salida ? String(row.fecha_salida).replace('T', ' ').slice(0, 16) : '-';
+
+                card.innerHTML = `
+                    <div class="mp-quick-main">
+                        <div id="${qrId}" class="mp-quick-qr"></div>
+                        <div>
+                            <div class="mp-quick-serie">${row.serie || ('HOJA #' + row.id)}</div>
+                            <div class="mp-quick-meta"><strong>Clave:</strong> ${row.clave || '-'}</div>
+                            <div class="mp-quick-meta"><strong>Descripción:</strong> ${row.descripcion_clave || '-'}</div>
+                            <div class="mp-quick-meta"><strong>Almacén:</strong> ${row.almacen || '-'}</div>
+                            <div class="mp-quick-meta"><strong>Estado:</strong> ${row.estado || '-'}</div>
+                            <div class="mp-quick-meta"><strong>Fecha:</strong> ${fecha}</div>
+                            <div class="mp-quick-meta"><strong>Piezas:</strong> ${row.cantidad_piezas || 0}</div>
+                            <div class="mp-quick-meta"><strong>OT:</strong> ${row.orden_trabajo || '-'}</div>
+                        </div>
+                    </div>
+                    <div class="mp-quick-actions">
+                        <a class="btn btn-secondary" href="${deeplink}" target="_blank" rel="noopener">Ver / QR</a>
+                        <button class="btn btn-primary" type="button" data-qr="${String(qrText).replace(/"/g, '&quot;')}">Copiar código QR</button>
+                    </div>
+                `;
+                grid.appendChild(card);
+
+                const qrNode = document.getElementById(qrId);
+                if (qrNode && typeof QRCode !== 'undefined') {
+                    qrNode.innerHTML = '';
+                    new QRCode(qrNode, {
+                        text: qrText,
+                        width: 84,
+                        height: 84,
+                        correctLevel: QRCode.CorrectLevel.M,
+                    });
+                }
+
+                const copyBtn = card.querySelector('button[data-qr]');
+                if (copyBtn) {
+                    copyBtn.addEventListener('click', async () => {
+                        const qrValue = copyBtn.getAttribute('data-qr') || '';
+                        try {
+                            if (navigator.clipboard && navigator.clipboard.writeText) {
+                                await navigator.clipboard.writeText(qrValue);
+                                alert('Código QR copiado al portapapeles');
+                            } else {
+                                throw new Error('Clipboard no disponible');
+                            }
+                        } catch (err) {
+                            alert('No se pudo copiar el código QR');
+                        }
+                    });
+                }
+            });
+        }
+
+        function exportarMpQuickCsv() {
+            const rows = getMpQuickRows();
+            if (!rows.length) {
+                alert('No hay hojas MP para exportar con el filtro actual.');
+                return;
+            }
+
+            const headers = ['ID', 'Serie', 'Clave', 'Descripcion', 'Calidad', 'Almacen', 'Estado', 'Fecha', 'Piezas', 'Orden trabajo', 'QR payload', 'QR deeplink'];
+            const allRows = [headers];
+            rows.forEach((row) => {
+                allRows.push([
+                    row.id || '',
+                    row.serie || '',
+                    row.clave || '',
+                    row.descripcion_clave || '',
+                    row.calidad || '',
+                    row.almacen || '',
+                    row.estado || '',
+                    row.fecha_salida || '',
+                    row.cantidad_piezas || '',
+                    row.orden_trabajo || '',
+                    row.qr_payload || '',
+                    row.qr_deeplink || '',
+                ]);
+            });
+
+            const csvBody = allRows
+                .map(r => r.map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(','))
+                .join('\r\n');
+            const csv = '\uFEFF' + csvBody;
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'reporte_almacen_mp_qr.csv';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
