@@ -564,6 +564,12 @@
                 <span>Avance del dia: <b id="iAvanceDia">0%</b></span>
             </div>
 
+            <div class="inline-meta" style="margin-top:-2px;">
+                <span>Proyeccion dia: <b id="iProjDia">MP 0/0 | Ent 0/0 | Env 0/0</b></span>
+                <span>Proyeccion semana: <b id="iProjSemana">MP 0/0 | Ent 0/0 | Env 0/0</b></span>
+                <span>Proyeccion mes: <b id="iProjMes">MP 0/0 | Ent 0/0 | Env 0/0</b></span>
+            </div>
+
             <div id="iSugerenciasEmpty" class="empty" style="display:none;">Sin sugerencias por ahora. Operacion estable.</div>
             <div class="table-wrap" id="iSugerenciasWrap" style="max-height:240px;">
                 <table>
@@ -1032,6 +1038,10 @@
         function renderInsightsPanel() {
             const insights = state.insights || {};
             const hoy = insights.hoy || {};
+            const proy = insights.proyeccion || {};
+            const proyDia = proy.dia || {};
+            const proySemana = proy.semana || {};
+            const proyMes = proy.mes || {};
             const op = insights.operacion_actual || {};
             const sugerencias = Array.isArray(insights.sugerencias) ? insights.sugerencias : [];
 
@@ -1048,6 +1058,10 @@
             document.getElementById('iTiempoMover').textContent = toSafe(op.tiempo_mover_hms) || '00:00:00';
             document.getElementById('iNoProductivo').textContent = toSafe(op.tiempo_no_productivo_dia_hms) || '00:00:00';
             document.getElementById('iAvanceDia').textContent = `${Number(hoy.avance_dia_pct || 0).toFixed(1)}%`;
+
+            document.getElementById('iProjDia').textContent = `MP ${Number(proyDia.mp_actual || 0)}/${Number(proyDia.mp_cierre || 0)} | Ent ${Number(proyDia.entregas_actual || 0)}/${Number(proyDia.entregas_cierre || 0)} | Env ${Number(proyDia.envios_actual || 0)}/${Number(proyDia.envios_cierre || 0)}`;
+            document.getElementById('iProjSemana').textContent = `MP ${Number(proySemana.mp_actual || 0)}/${Number(proySemana.mp_cierre || 0)} | Ent ${Number(proySemana.entregas_actual || 0)}/${Number(proySemana.entregas_cierre || 0)} | Env ${Number(proySemana.envios_actual || 0)}/${Number(proySemana.envios_cierre || 0)}`;
+            document.getElementById('iProjMes').textContent = `MP ${Number(proyMes.mp_actual || 0)}/${Number(proyMes.mp_cierre || 0)} | Ent ${Number(proyMes.entregas_actual || 0)}/${Number(proyMes.entregas_cierre || 0)} | Env ${Number(proyMes.envios_actual || 0)}/${Number(proyMes.envios_cierre || 0)}`;
 
             const body = document.getElementById('iSugerenciasBody');
             const empty = document.getElementById('iSugerenciasEmpty');

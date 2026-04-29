@@ -5191,12 +5191,31 @@ def api_mapa_maquinas():
 
     # Insights operativos ligeros para tablero de reportes (sin IA pesada).
     hoy_inicio = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    semana_inicio = (hoy_inicio - timedelta(days=hoy_inicio.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    mes_inicio = hoy_inicio.replace(day=1)
+    if mes_inicio.month == 12:
+        siguiente_mes_inicio = mes_inicio.replace(year=mes_inicio.year + 1, month=1)
+    else:
+        siguiente_mes_inicio = mes_inicio.replace(month=mes_inicio.month + 1)
+
+    semana_fin = semana_inicio + timedelta(days=7)
     minutos_transcurridos_hoy = max(1, int((now_dt - hoy_inicio).total_seconds() // 60))
     minutos_dia = 24 * 60
+    minutos_semana = 7 * 24 * 60
+    minutos_mes = max(1, int((siguiente_mes_inicio - mes_inicio).total_seconds() // 60))
+
     avance_dia_ratio = min(1.0, max(0.0, float(minutos_transcurridos_hoy) / float(minutos_dia)))
+    minutos_transcurridos_semana = max(1, int((now_dt - semana_inicio).total_seconds() // 60))
+    minutos_transcurridos_mes = max(1, int((now_dt - mes_inicio).total_seconds() // 60))
+    avance_semana_ratio = min(1.0, max(0.0, float(minutos_transcurridos_semana) / float(minutos_semana)))
+    avance_mes_ratio = min(1.0, max(0.0, float(minutos_transcurridos_mes) / float(minutos_mes)))
 
     mp_hoy = HojaRutaNueva.query.filter(HojaRutaNueva.fecha_creacion >= hoy_inicio).count()
     entregas_hoy = HojaRutaEntrega.query.filter(HojaRutaEntrega.fecha_creacion >= hoy_inicio).count()
+    mp_semana = HojaRutaNueva.query.filter(HojaRutaNueva.fecha_creacion >= semana_inicio).count()
+    entregas_semana = HojaRutaEntrega.query.filter(HojaRutaEntrega.fecha_creacion >= semana_inicio).count()
+    mp_mes = HojaRutaNueva.query.filter(HojaRutaNueva.fecha_creacion >= mes_inicio).count()
+    entregas_mes = HojaRutaEntrega.query.filter(HojaRutaEntrega.fecha_creacion >= mes_inicio).count()
 
     def _hms_to_seconds(value):
         if not value:
@@ -5223,7 +5242,31 @@ def api_mapa_maquinas():
     productive_day_ratio = 1.0 - (float(no_productivo_dia_sec) / float(max(1, available_day)))
 
     envios_hoy = int((logistica_almacen_hoy or {}).get('total_envios') or 0)
+    acciones_envio = ['enviada_a_almacen', 'enviada_a_almacen_revision']
+    envios_semana = int(
+        EntregaRegistro.query
+        .filter(EntregaRegistro.accion.in_(acciones_envio))
+        .filter(EntregaRegistro.fecha_creacion >= semana_inicio)
+        .filter(EntregaRegistro.fecha_creacion < semana_fin)
+        .count() or 0
+    )
+    envios_mes = int(
+        EntregaRegistro.query
+        .filter(EntregaRegistro.accion.in_(acciones_envio))
+        .filter(EntregaRegistro.fecha_creacion >= mes_inicio)
+        .filter(EntregaRegistro.fecha_creacion < siguiente_mes_inicio)
+        .count() or 0
+    )
+
     envios_proyectados_hoy = int(round(float(envios_hoy) / max(0.2, avance_dia_ratio)))
+    envios_proyectados_semana = int(round(float(envios_semana) / max(0.2, avance_semana_ratio)))
+    envios_proyectados_mes = int(round(float(envios_mes) / max(0.2, avance_mes_ratio)))
+    mp_proyectado_hoy = int(round(float(mp_hoy) / max(0.2, avance_dia_ratio)))
+    mp_proyectado_semana = int(round(float(mp_semana) / max(0.2, avance_semana_ratio)))
+    mp_proyectado_mes = int(round(float(mp_mes) / max(0.2, avance_mes_ratio)))
+    entregas_proyectado_hoy = int(round(float(entregas_hoy) / max(0.2, avance_dia_ratio)))
+    entregas_proyectado_semana = int(round(float(entregas_semana) / max(0.2, avance_semana_ratio)))
+    entregas_proyectado_mes = int(round(float(entregas_mes) / max(0.2, avance_mes_ratio)))
 
     sugerencias = []
     if mover_count >= max(2, int(machine_count * 0.2)):
@@ -5243,6 +5286,35 @@ def api_mapa_maquinas():
             'envios_almacen': int(envios_hoy),
             'envios_proyectados_cierre': int(envios_proyectados_hoy),
             'avance_dia_pct': round(avance_dia_ratio * 100.0, 1),
+        },
+        'proyeccion': {
+            'dia': {
+                'mp_actual': int(mp_hoy),
+                'mp_cierre': int(mp_proyectado_hoy),
+                'entregas_actual': int(entregas_hoy),
+                'entregas_cierre': int(entregas_proyectado_hoy),
+                'envios_actual': int(envios_hoy),
+                'envios_cierre': int(envios_proyectados_hoy),
+                'avance_pct': round(avance_dia_ratio * 100.0, 1),
+            },
+            'semana': {
+                'mp_actual': int(mp_semana),
+                'mp_cierre': int(mp_proyectado_semana),
+                'entregas_actual': int(entregas_semana),
+                'entregas_cierre': int(entregas_proyectado_semana),
+                'envios_actual': int(envios_semana),
+                'envios_cierre': int(envios_proyectados_semana),
+                'avance_pct': round(avance_semana_ratio * 100.0, 1),
+            },
+            'mes': {
+                'mp_actual': int(mp_mes),
+                'mp_cierre': int(mp_proyectado_mes),
+                'entregas_actual': int(entregas_mes),
+                'entregas_cierre': int(entregas_proyectado_mes),
+                'envios_actual': int(envios_mes),
+                'envios_cierre': int(envios_proyectados_mes),
+                'avance_pct': round(avance_mes_ratio * 100.0, 1),
+            },
         },
         'operacion_actual': {
             'maquinas_en_mover': int(mover_count),
