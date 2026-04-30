@@ -5,7 +5,7 @@ from email_manager import EmailManager
 import os
 import json
 from dotenv import load_dotenv
-from sqlalchemy import text, func, inspect
+from sqlalchemy import text, func, inspect, extract
 from functools import wraps
 import secrets
 from werkzeug.utils import secure_filename
@@ -2269,28 +2269,175 @@ def _upsert_contpaq_existencia_data(payload):
     return stats
 
 
-def _contpaq_max_min_rows(q='', sucursal='', category1='', category2='', only_alert=False, limit=500, page=1):
-    lookback_days = CONTPAQ_MM_LOOKBACK_DAYS
-    start_dt = datetime.utcnow() - timedelta(days=lookback_days)
+def _contpaq_max_min_rows(
+    q='',
+    sucursal='',
+    category1='',
+    category2='',
+    only_alert=False,
+    limit=500,
+    page=1,
+    period_type='week',
+    period_value=None,
+    period_from=None,
+    period_to=None,
+    period_year=None,
+    date_from=None,
+    date_to=None,
+):
+    now = datetime.utcnow()
+    period_type = str(period_type or 'week').strip().lower()
+    if period_type not in ('week', 'month', 'date'):
+        period_type = 'week'
 
-    demand_query = (
+    try:
+        period_year = int(period_year or now.year)
+    except Exception:
+        period_year = now.year
+
+    if period_type == 'week':
+        default_period_value = int(now.isocalendar()[1])
+        period_label = 'Semana'
+    elif period_type == 'month':
+        default_period_value = int(now.month)
+        period_label = 'Mes'
+    else:
+        default_period_value = None
+        period_label = 'Fecha'
+
+    try:
+        period_value = int(period_value) if period_value not in (None, '') else default_period_value
+    except Exception:
+        period_value = default_period_value
+
+    def _to_int_or_none(value):
+        try:
+            if value in (None, ''):
+                return None
+            return int(value)
+        except Exception:
+            return None
+
+    period_from_i = _to_int_or_none(period_from)
+    period_to_i = _to_int_or_none(period_to)
+    if period_value is not None and period_from_i is None and period_to_i is None:
+        period_from_i = int(period_value)
+        period_to_i = int(period_value)
+    if period_from_i is None and period_to_i is not None:
+        period_from_i = period_to_i
+    if period_to_i is None and period_from_i is not None:
+        period_to_i = period_from_i
+    if period_from_i is not None and period_to_i is not None and period_from_i > period_to_i:
+        period_from_i, period_to_i = period_to_i, period_from_i
+
+    def _parse_date_iso(raw):
+        raw_txt = str(raw or '').strip()
+        if not raw_txt:
+            return None
+        try:
+            return datetime.strptime(raw_txt, '%Y-%m-%d').date()
+        except Exception:
+            return None
+
+    date_from_d = _parse_date_iso(date_from)
+    date_to_d = _parse_date_iso(date_to)
+    if date_from_d and date_to_d and date_from_d > date_to_d:
+        date_from_d, date_to_d = date_to_d, date_from_d
+
+    def _extract_period_number(raw_value):
+        text = str(raw_value or '').strip()
+        if not text:
+            return None
+        match = re.search(r'(\d+)', text)
+        if not match:
+            return None
+        try:
+            return int(match.group(1))
+        except Exception:
+            return None
+
+    pedido_query = (
         db.session.query(
-            func.upper(func.trim(ContpaqPedidoDetalle.clave_producto)).label('product_key_norm'),
-            func.upper(func.trim(ContpaqPedido.sucursal)).label('sucursal_norm'),
-            func.coalesce(func.sum(ContpaqPedidoDetalle.cantidad), 0).label('qty_total'),
+            ContpaqPedidoDetalle.clave_producto,
+            ContpaqPedidoDetalle.descripcion,
+            ContpaqPedidoDetalle.cantidad,
+            ContpaqPedido.document_id,
+            ContpaqPedido.sucursal,
+            ContpaqPedido.fecha_documento,
+            ContpaqPedido.periodo_semana,
         )
         .join(ContpaqPedido, ContpaqPedido.id == ContpaqPedidoDetalle.pedido_id)
-        .filter(ContpaqPedido.fecha_documento >= start_dt)
-        .group_by(
-            func.upper(func.trim(ContpaqPedidoDetalle.clave_producto)),
-            func.upper(func.trim(ContpaqPedido.sucursal)),
-        )
+        .filter(ContpaqPedido.fecha_documento.isnot(None))
     )
-    demand_map = {
-        (str(pk or '').strip().upper(), str(sc or '').strip().upper()): float(qty or 0)
-        for pk, sc, qty in demand_query.all()
-        if str(pk or '').strip()
-    }
+
+    # Si filtran por fecha exacta, se respeta rango de fecha; si no, se usa el anio.
+    if period_type == 'date' and (date_from_d or date_to_d):
+        if date_from_d:
+            pedido_query = pedido_query.filter(ContpaqPedido.fecha_documento >= datetime.combine(date_from_d, datetime.min.time()))
+        if date_to_d:
+            pedido_query = pedido_query.filter(ContpaqPedido.fecha_documento < datetime.combine(date_to_d + timedelta(days=1), datetime.min.time()))
+    else:
+        pedido_query = pedido_query.filter(extract('year', ContpaqPedido.fecha_documento) == period_year)
+
+    pedido_rows = pedido_query.all()
+
+    demand_map = {}
+    docs_map = {}
+    desc_map = {}
+    for clave_producto, descripcion, cantidad, document_id, pedido_sucursal, fecha_documento, periodo_semana in pedido_rows:
+        product_key_norm = str(clave_producto or '').strip().upper()
+        sucursal_norm = str(pedido_sucursal or '').strip().upper()
+        if not product_key_norm:
+            continue
+
+        bucket_label = None
+        bucket_sort = None
+        if period_type == 'week':
+            week_number = _extract_period_number(periodo_semana)
+            if week_number is None and fecha_documento is not None:
+                week_number = int(fecha_documento.isocalendar()[1])
+            if week_number is None:
+                continue
+            if period_from_i is not None and period_to_i is not None and not (period_from_i <= week_number <= period_to_i):
+                continue
+            bucket_label = f"S{week_number:02d}"
+            bucket_sort = week_number
+        elif period_type == 'month':
+            if fecha_documento is None:
+                continue
+            month_number = int(fecha_documento.month)
+            if period_from_i is not None and period_to_i is not None and not (period_from_i <= month_number <= period_to_i):
+                continue
+            bucket_label = f"M{month_number:02d}"
+            bucket_sort = month_number
+        else:
+            if fecha_documento is None:
+                continue
+            fecha_doc = fecha_documento.date()
+            if date_from_d and fecha_doc < date_from_d:
+                continue
+            if date_to_d and fecha_doc > date_to_d:
+                continue
+            bucket_label = fecha_doc.isoformat()
+            bucket_sort = bucket_label
+
+        map_key = (product_key_norm, sucursal_norm)
+        bucket_key = (product_key_norm, sucursal_norm, bucket_label)
+        demand_map[bucket_key] = float(demand_map.get(bucket_key, 0.0)) + float(cantidad or 0.0)
+        docs_map.setdefault(map_key, set()).add(int(document_id or 0))
+        if map_key not in desc_map and str(descripcion or '').strip():
+            desc_map[map_key] = str(descripcion or '').strip()
+
+    bucket_order = {}
+    for bucket_key in demand_map.keys():
+        _, _, label = bucket_key
+        if label.startswith('S') or label.startswith('M'):
+            try:
+                bucket_order[label] = int(label[1:])
+            except Exception:
+                bucket_order[label] = 9999
+        else:
+            bucket_order[label] = label
 
     stocks_q = ContpaqExistenciaStock.query.filter(ContpaqExistenciaStock.product_key.isnot(None))
     if sucursal:
@@ -2314,36 +2461,45 @@ def _contpaq_max_min_rows(q='', sucursal='', category1='', category2='', only_al
     stocks = stocks_q.order_by(ContpaqExistenciaStock.product_key.asc(), ContpaqExistenciaStock.depot_name.asc()).all()
 
     rows = []
-    weeks_span = max(lookback_days / 7.0, 1.0)
     for stock in stocks:
         product_key = str(stock.product_key or '').strip().upper()
         if not product_key:
             continue
 
         sucursal_norm = str(stock.depot_name or '').strip().upper()
-        qty_demand_total = float(demand_map.get((product_key, sucursal_norm), 0.0))
-        qty_demand_week = qty_demand_total / weeks_span
+        product_buckets = []
+        for (pk, sc, label), qty in demand_map.items():
+            if pk == product_key and sc == sucursal_norm:
+                product_buckets.append((label, float(qty or 0.0)))
+        product_buckets.sort(key=lambda x: bucket_order.get(x[0]))
 
-        min_calc = int(math.ceil(qty_demand_week * CONTPAQ_MM_MIN_WEEKS))
-        max_calc = int(math.ceil(qty_demand_week * CONTPAQ_MM_MAX_WEEKS))
-        if max_calc < min_calc:
-            max_calc = min_calc
+        qty_periodo = float(sum(q for _, q in product_buckets))
+        pedidos_periodo = len(docs_map.get((product_key, sucursal_norm), set()))
+        demanda_min_periodo = float(min([q for _, q in product_buckets], default=0.0))
+        demanda_max_periodo = float(max([q for _, q in product_buckets], default=0.0))
+        detalle_periodos = ' | '.join([f"{lbl}:{round(qty, 2)}" for lbl, qty in product_buckets[:16]])
+
+        min_contpaq = float(stock.qty_min_contpaq or 0.0)
+        max_contpaq = float(stock.qty_max_contpaq or 0.0)
+        if max_contpaq > 0 and max_contpaq < min_contpaq:
+            max_contpaq = min_contpaq
 
         existencia = float(stock.qty_available or 0.0)
-        if existencia < min_calc:
+        if min_contpaq > 0 and existencia < min_contpaq:
             status = 'BAJO_MINIMO'
-        elif max_calc > 0 and existencia > max_calc:
+        elif max_contpaq > 0 and existencia > max_contpaq:
             status = 'SOBRE_MAXIMO'
         else:
             status = 'EN_RANGO'
 
-        sugerido_compra = max(0.0, float(max_calc) - existencia) if status == 'BAJO_MINIMO' else 0.0
+        objetivo_reabasto = max_contpaq if max_contpaq > 0 else min_contpaq
+        sugerido_compra = max(0.0, float(objetivo_reabasto) - existencia) if status == 'BAJO_MINIMO' else 0.0
 
         row = {
             'id': stock.id,
             'sucursal': stock.depot_name,
             'product_key': stock.product_key,
-            'product_name': stock.product_name,
+            'product_name': stock.product_name or desc_map.get((product_key, sucursal_norm)),
             'category1': stock.category1,
             'category2': stock.category2,
             'unit': stock.unit,
@@ -2353,14 +2509,18 @@ def _contpaq_max_min_rows(q='', sucursal='', category1='', category2='', only_al
             'qty_to_receive_supplier': float(stock.qty_to_receive_supplier or 0.0),
             'qty_on_transit': float(stock.qty_on_transit or 0.0),
             'qty_to_receive': float(stock.qty_to_receive or 0.0),
-            'demanda_total_periodo': round(qty_demand_total, 2),
-            'demanda_promedio_semana': round(qty_demand_week, 2),
-            'minimo_calculado': min_calc,
-            'maximo_calculado': max_calc,
-            'qty_min_contpaq': float(stock.qty_min_contpaq or 0.0),
-            'qty_max_contpaq': float(stock.qty_max_contpaq or 0.0),
+            'cantidad_periodo': round(qty_periodo, 2),
+            'pedidos_periodo': pedidos_periodo,
+            'demanda_min_periodo': round(demanda_min_periodo, 2),
+            'demanda_max_periodo': round(demanda_max_periodo, 2),
+            'detalle_periodos': detalle_periodos,
+            'qty_min_contpaq': min_contpaq,
+            'qty_max_contpaq': max_contpaq,
             'sugerido_compra': round(sugerido_compra, 2),
             'status': status,
+            'period_type': period_type,
+            'period_value': period_value,
+            'period_year': period_year,
             'updated_at': stock.updated_at.isoformat() if stock.updated_at else None,
         }
 
@@ -2380,9 +2540,18 @@ def _contpaq_max_min_rows(q='', sucursal='', category1='', category2='', only_al
         'bajo_minimo': sum(1 for r in rows if r['status'] == 'BAJO_MINIMO'),
         'sobre_maximo': sum(1 for r in rows if r['status'] == 'SOBRE_MAXIMO'),
         'sugerido_compra_total': round(sum(float(r['sugerido_compra'] or 0.0) for r in rows), 2),
-        'lookback_days': lookback_days,
-        'min_weeks': CONTPAQ_MM_MIN_WEEKS,
-        'max_weeks': CONTPAQ_MM_MAX_WEEKS,
+        'cantidad_periodo_total': round(sum(float(r['cantidad_periodo'] or 0.0) for r in rows), 2),
+        'pedidos_periodo_total': sum(int(r['pedidos_periodo'] or 0) for r in rows),
+        'demanda_min_global': round(min([float(r['demanda_min_periodo'] or 0.0) for r in rows], default=0.0), 2),
+        'demanda_max_global': round(max([float(r['demanda_max_periodo'] or 0.0) for r in rows], default=0.0), 2),
+        'period_type': period_type,
+        'period_label': period_label,
+        'period_value': period_value,
+        'period_from': period_from_i,
+        'period_to': period_to_i,
+        'period_year': period_year,
+        'date_from': date_from_d.isoformat() if date_from_d else None,
+        'date_to': date_to_d.isoformat() if date_to_d else None,
     }
 
     return {
@@ -10511,6 +10680,13 @@ def api_contpaq_maximos_minimos():
             category1=(request.args.get('category1') or '').strip(),
             category2=(request.args.get('category2') or '').strip(),
             only_alert=(request.args.get('only_alert') or '').strip().lower() in ('1', 'true', 'yes', 'on'),
+            period_type=(request.args.get('period_type') or 'week').strip(),
+            period_value=request.args.get('period_value'),
+            period_from=request.args.get('period_from'),
+            period_to=request.args.get('period_to'),
+            period_year=request.args.get('period_year'),
+            date_from=request.args.get('date_from'),
+            date_to=request.args.get('date_to'),
             limit=request.args.get('limit', default=200, type=int),
             page=request.args.get('page', default=1, type=int),
         )
@@ -10531,6 +10707,13 @@ def api_contpaq_maximos_minimos_export_csv():
             category1=(request.args.get('category1') or '').strip(),
             category2=(request.args.get('category2') or '').strip(),
             only_alert=(request.args.get('only_alert') or '').strip().lower() in ('1', 'true', 'yes', 'on'),
+            period_type=(request.args.get('period_type') or 'week').strip(),
+            period_value=request.args.get('period_value'),
+            period_from=request.args.get('period_from'),
+            period_to=request.args.get('period_to'),
+            period_year=request.args.get('period_year'),
+            date_from=request.args.get('date_from'),
+            date_to=request.args.get('date_to'),
             limit=200000,
             page=1,
         )
@@ -10539,9 +10722,10 @@ def api_contpaq_maximos_minimos_export_csv():
         columns = [
             'sucursal', 'product_key', 'product_name', 'category1', 'category2', 'unit',
             'qty_present', 'qty_available', 'qty_to_deliver_customer', 'qty_to_receive_supplier',
-            'qty_on_transit', 'qty_to_receive', 'demanda_total_periodo', 'demanda_promedio_semana',
-            'minimo_calculado', 'maximo_calculado', 'qty_min_contpaq', 'qty_max_contpaq',
-            'sugerido_compra', 'status', 'updated_at'
+            'qty_on_transit', 'qty_to_receive', 'cantidad_periodo', 'pedidos_periodo',
+            'demanda_min_periodo', 'demanda_max_periodo', 'detalle_periodos',
+            'qty_min_contpaq', 'qty_max_contpaq', 'sugerido_compra', 'status',
+            'period_type', 'period_value', 'period_from', 'period_to', 'period_year', 'date_from', 'date_to', 'updated_at'
         ]
         df = pd.DataFrame(items, columns=columns)
         csv_data = df.to_csv(index=False, encoding='utf-8-sig')

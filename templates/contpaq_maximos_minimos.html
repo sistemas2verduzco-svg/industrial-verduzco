@@ -9,7 +9,7 @@
         .mm-wrap { max-width: 1450px; margin: 22px auto; padding: 0 16px 24px; }
         .toolbar {
             display: grid;
-            grid-template-columns: 1.2fr 1fr 1fr 1fr auto auto;
+            grid-template-columns: 1.2fr 1fr 1fr 1fr 0.9fr 0.8fr 0.8fr 0.8fr 1fr 1fr auto auto auto;
             gap: 10px;
             align-items: center;
             margin-bottom: 12px;
@@ -80,13 +80,23 @@
 <body>
     <div class="mm-wrap">
         <h2>Maximos y Minimos CONTPAQi</h2>
-        <p class="muted">Calculo automatico con demanda de pedidos historicos + existencia actual por sucursal.</p>
+        <p class="muted">Existencia actual desde CONTPAQ y cantidades pedidas segun el periodo exacto filtrado.</p>
 
         <div class="toolbar">
             <input id="q" type="text" placeholder="Buscar clave, descripcion o sucursal">
             <input id="sucursal" type="text" placeholder="Sucursal">
             <input id="category1" type="text" placeholder="Categoria 1">
             <input id="category2" type="text" placeholder="Categoria 2">
+            <select id="period_type">
+                <option value="week" selected>Semana</option>
+                <option value="month">Mes</option>
+                <option value="date">Fechas</option>
+            </select>
+            <input id="period_from" type="number" min="1" max="53" placeholder="Desde">
+            <input id="period_to" type="number" min="1" max="53" placeholder="Hasta">
+            <input id="period_year" type="number" min="2020" max="2100" placeholder="Año">
+            <input id="date_from" type="date" placeholder="Fecha desde">
+            <input id="date_to" type="date" placeholder="Fecha hasta">
             <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#455a64;"><input id="only_alert" type="checkbox"> Solo alertas</label>
             <button id="btnBuscar" class="btn">Aplicar</button>
             <button id="btnLimpiar" class="btn btn-secondary">Limpiar</button>
@@ -118,12 +128,16 @@
                         <th>Clave</th>
                         <th>Descripcion</th>
                         <th>Existencia</th>
-                        <th>Demanda/semana</th>
-                        <th>Minimo (calc)</th>
-                        <th>Maximo (calc)</th>
+                        <th id="periodHeader">Cantidad periodo</th>
+                        <th>Pedidos</th>
+                        <th>Demanda min</th>
+                        <th>Demanda max</th>
+                        <th>Minimo CONTPAQ</th>
+                        <th>Maximo CONTPAQ</th>
                         <th>Sugerido compra</th>
                         <th>Pendiente entregar</th>
                         <th>Pendiente recibir</th>
+                        <th>Detalle periodos</th>
                         <th>Categoria 1</th>
                         <th>Categoria 2</th>
                         <th>Ultima sync</th>
@@ -156,13 +170,71 @@
             const suc = document.getElementById('sucursal').value.trim();
             const c1 = document.getElementById('category1').value.trim();
             const c2 = document.getElementById('category2').value.trim();
+            const periodType = document.getElementById('period_type').value;
+            const periodFrom = document.getElementById('period_from').value.trim();
+            const periodTo = document.getElementById('period_to').value.trim();
+            const periodYear = document.getElementById('period_year').value.trim();
+            const dateFrom = document.getElementById('date_from').value.trim();
+            const dateTo = document.getElementById('date_to').value.trim();
             const onlyAlert = document.getElementById('only_alert').checked;
             if (q) params.set('q', q);
             if (suc) params.set('sucursal', suc);
             if (c1) params.set('category1', c1);
             if (c2) params.set('category2', c2);
+            params.set('period_type', periodType || 'week');
+            if (periodFrom) params.set('period_from', periodFrom);
+            if (periodTo) params.set('period_to', periodTo);
+            if (periodYear) params.set('period_year', periodYear);
+            if (dateFrom) params.set('date_from', dateFrom);
+            if (dateTo) params.set('date_to', dateTo);
             if (onlyAlert) params.set('only_alert', '1');
             return params;
+        }
+
+        function syncPeriodInputs() {
+            const type = document.getElementById('period_type').value;
+            const periodFrom = document.getElementById('period_from');
+            const periodTo = document.getElementById('period_to');
+            const periodYear = document.getElementById('period_year');
+            const dateFrom = document.getElementById('date_from');
+            const dateTo = document.getElementById('date_to');
+            const periodHeader = document.getElementById('periodHeader');
+            if (type === 'month') {
+                periodFrom.min = '1';
+                periodFrom.max = '12';
+                periodFrom.placeholder = 'Mes desde';
+                periodTo.min = '1';
+                periodTo.max = '12';
+                periodTo.placeholder = 'Mes hasta';
+                periodHeader.textContent = 'Cantidad mes';
+                periodFrom.disabled = false;
+                periodTo.disabled = false;
+                periodYear.disabled = false;
+                dateFrom.disabled = true;
+                dateTo.disabled = true;
+            } else {
+                if (type === 'week') {
+                    periodFrom.min = '1';
+                    periodFrom.max = '53';
+                    periodFrom.placeholder = 'Semana desde';
+                    periodTo.min = '1';
+                    periodTo.max = '53';
+                    periodTo.placeholder = 'Semana hasta';
+                    periodHeader.textContent = 'Cantidad semana';
+                    periodFrom.disabled = false;
+                    periodTo.disabled = false;
+                    periodYear.disabled = false;
+                    dateFrom.disabled = true;
+                    dateTo.disabled = true;
+                } else {
+                    periodHeader.textContent = 'Cantidad fecha';
+                    periodFrom.disabled = true;
+                    periodTo.disabled = true;
+                    periodYear.disabled = true;
+                    dateFrom.disabled = false;
+                    dateTo.disabled = false;
+                }
+            }
         }
 
         async function loadData(page = 1) {
@@ -177,6 +249,9 @@
                 state.page = data.page || page;
                 state.hasPrev = !!data.has_prev;
                 state.hasNext = !!data.has_next;
+                const summary = data.summary || {};
+                const periodLabel = summary.period_label || (document.getElementById('period_type').value === 'month' ? 'Mes' : 'Semana');
+                document.getElementById('periodHeader').textContent = `Cantidad ${periodLabel.toLowerCase()}`;
 
                 const tbody = document.getElementById('tbody');
                 tbody.innerHTML = (data.items || []).map((row) => `
@@ -186,33 +261,36 @@
                         <td>${row.product_key || ''}</td>
                         <td>${row.product_name || ''}</td>
                         <td>${fmtNum(row.qty_available)}</td>
-                        <td>${fmtNum(row.demanda_promedio_semana)}</td>
-                        <td>${fmtNum(row.minimo_calculado)}</td>
-                        <td>${fmtNum(row.maximo_calculado)}</td>
+                        <td>${fmtNum(row.cantidad_periodo)}</td>
+                        <td>${fmtNum(row.pedidos_periodo)}</td>
+                        <td>${fmtNum(row.demanda_min_periodo)}</td>
+                        <td>${fmtNum(row.demanda_max_periodo)}</td>
+                        <td>${fmtNum(row.qty_min_contpaq)}</td>
+                        <td>${fmtNum(row.qty_max_contpaq)}</td>
                         <td>${fmtNum(row.sugerido_compra)}</td>
                         <td>${fmtNum(row.qty_to_deliver_customer)}</td>
                         <td>${fmtNum(row.qty_to_receive_supplier)}</td>
+                        <td title="${row.detalle_periodos || ''}">${row.detalle_periodos || ''}</td>
                         <td>${row.category1 || ''}</td>
                         <td>${row.category2 || ''}</td>
                         <td>${row.updated_at ? new Date(row.updated_at).toLocaleString('es-MX') : ''}</td>
                     </tr>
                 `).join('');
 
-                const summary = data.summary || {};
                 const summaryEl = document.getElementById('summary');
                 summaryEl.style.display = 'grid';
                 summaryEl.innerHTML = `
                     <div><b>Total filas</b>${fmtNum(summary.total_rows)}</div>
                     <div><b>Bajo minimo</b>${fmtNum(summary.bajo_minimo)}</div>
                     <div><b>Sobre maximo</b>${fmtNum(summary.sobre_maximo)}</div>
-                    <div><b>En rango</b>${fmtNum(summary.en_rango)}</div>
-                    <div><b>Sugerido total</b>${fmtNum(summary.sugerido_compra_total)}</div>
+                    <div><b>${periodLabel} ${summary.period_from || summary.period_value || ''} - ${summary.period_to || summary.period_value || ''}/${summary.period_year || ''}</b>${fmtNum(summary.cantidad_periodo_total)}</div>
+                    <div><b>Pedidos periodo</b>${fmtNum(summary.pedidos_periodo_total)}</div>
                 `;
 
                 document.getElementById('pageInfo').textContent = `Pagina ${data.page || 1} de ${data.total_pages || 0} (${fmtNum(data.total_records || 0)} registros)`;
                 document.getElementById('btnPrev').disabled = !state.hasPrev;
                 document.getElementById('btnNext').disabled = !state.hasNext;
-                status.textContent = `Actualizado. Ventana de demanda: ${summary.lookback_days || '-'} dias.`;
+                status.textContent = `Actualizado. ${periodLabel} aplicado con detalle de partidas.`;
             } catch (err) {
                 status.textContent = `Error: ${err.message}`;
             }
@@ -229,13 +307,40 @@
             document.getElementById('sucursal').value = '';
             document.getElementById('category1').value = '';
             document.getElementById('category2').value = '';
+            document.getElementById('period_type').value = 'week';
             document.getElementById('only_alert').checked = false;
+            document.getElementById('date_from').value = '';
+            document.getElementById('date_to').value = '';
+            const today = new Date();
+            const start = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+            const dayNum = start.getUTCDay() || 7;
+            start.setUTCDate(start.getUTCDate() + 4 - dayNum);
+            const yearStart = new Date(Date.UTC(start.getUTCFullYear(), 0, 1));
+            const weekNo = Math.ceil((((start - yearStart) / 86400000) + 1) / 7);
+            document.getElementById('period_from').value = String(weekNo);
+            document.getElementById('period_to').value = String(weekNo);
+            document.getElementById('period_year').value = String(today.getFullYear());
+            syncPeriodInputs();
             loadData(1);
         });
         document.getElementById('btnPrev').addEventListener('click', () => { if (state.hasPrev) loadData(state.page - 1); });
         document.getElementById('btnNext').addEventListener('click', () => { if (state.hasNext) loadData(state.page + 1); });
         document.getElementById('limit').addEventListener('change', () => loadData(1));
         document.getElementById('btnExport').addEventListener('click', exportCsv);
+        document.getElementById('period_type').addEventListener('change', syncPeriodInputs);
+
+        (function initPeriods() {
+            const today = new Date();
+            const start = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+            const dayNum = start.getUTCDay() || 7;
+            start.setUTCDate(start.getUTCDate() + 4 - dayNum);
+            const yearStart = new Date(Date.UTC(start.getUTCFullYear(), 0, 1));
+            const weekNo = Math.ceil((((start - yearStart) / 86400000) + 1) / 7);
+            document.getElementById('period_from').value = String(weekNo);
+            document.getElementById('period_to').value = String(weekNo);
+            document.getElementById('period_year').value = String(today.getFullYear());
+            syncPeriodInputs();
+        })();
 
         loadData(1);
     </script>
