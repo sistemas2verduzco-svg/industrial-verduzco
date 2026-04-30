@@ -46,7 +46,7 @@ class HojaRutaNueva(db.Model):
     orden_trabajo_pt = db.Column(db.String(100), nullable=True)
     almacen = db.Column(db.String(100), nullable=True)
     no_sin_orden = db.Column(db.String(100), nullable=True)
-    materia_prima = db.Column(db.String(255), nullable=True)
+    materia_prima = db.Column(db.Text, nullable=True)
     total_tiempo = db.Column(db.String(50), nullable=True)
     dias_a_laborar = db.Column(db.Float, nullable=True)
     fecha_termino = db.Column(db.DateTime, nullable=True)
