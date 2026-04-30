@@ -1242,6 +1242,63 @@ class ContpaqPrecioPublico(db.Model):
         }
 
 
+class ContpaqExistenciaStock(db.Model):
+    __tablename__ = 'contpaq_existencias_stock'
+
+    id = db.Column(db.Integer, primary_key=True)
+    owned_business_entity_id = db.Column(db.BigInteger, nullable=True, index=True)
+    product_id = db.Column(db.BigInteger, nullable=True, index=True)
+    depot_id = db.Column(db.BigInteger, nullable=True, index=True)
+    depot_name = db.Column(db.String(255), nullable=True, index=True)
+    depot_type_id = db.Column(db.Integer, nullable=True, index=True)
+    product_key = db.Column(db.String(120), nullable=True, index=True)
+    product_name = db.Column(db.Text, nullable=True)
+    category1 = db.Column(db.String(255), nullable=True, index=True)
+    category2 = db.Column(db.String(255), nullable=True, index=True)
+    unit = db.Column(db.String(60), nullable=True)
+    matrix_key1 = db.Column(db.String(120), nullable=True)
+    matrix_key2 = db.Column(db.String(120), nullable=True)
+    qty_present = db.Column(db.Float, nullable=True)
+    qty_available = db.Column(db.Float, nullable=True)
+    qty_to_deliver_customer = db.Column(db.Float, nullable=True)
+    qty_to_receive_supplier = db.Column(db.Float, nullable=True)
+    qty_on_transit = db.Column(db.Float, nullable=True)
+    qty_to_receive = db.Column(db.Float, nullable=True)
+    qty_max_contpaq = db.Column(db.Float, nullable=True)
+    qty_min_contpaq = db.Column(db.Float, nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('depot_id', 'product_id', 'matrix_key1', 'matrix_key2', name='uq_contpaq_existencia_depot_producto_matrix'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'owned_business_entity_id': self.owned_business_entity_id,
+            'product_id': self.product_id,
+            'depot_id': self.depot_id,
+            'depot_name': self.depot_name,
+            'depot_type_id': self.depot_type_id,
+            'product_key': self.product_key,
+            'product_name': self.product_name,
+            'category1': self.category1,
+            'category2': self.category2,
+            'unit': self.unit,
+            'matrix_key1': self.matrix_key1,
+            'matrix_key2': self.matrix_key2,
+            'qty_present': self.qty_present,
+            'qty_available': self.qty_available,
+            'qty_to_deliver_customer': self.qty_to_deliver_customer,
+            'qty_to_receive_supplier': self.qty_to_receive_supplier,
+            'qty_on_transit': self.qty_on_transit,
+            'qty_to_receive': self.qty_to_receive,
+            'qty_max_contpaq': self.qty_max_contpaq,
+            'qty_min_contpaq': self.qty_min_contpaq,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class ContpaqSupplierOT(db.Model):
     __tablename__ = 'contpaq_supplier_ots'
 

@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, AlertaBuzonGeneral
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, AlertaBuzonGeneral
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -1797,6 +1797,9 @@ CONTPAQ_SYNC_STARTUP_DELAY_SECONDS = max(5, int(os.getenv('CONTPAQ_SYNC_STARTUP_
 CONTPAQ_CUSTOMER_NAME = os.getenv('CONTPAQ_CUSTOMER_NAME', 'RUTH VERDUZCO SANTOS').strip()
 CONTPAQ_START_DATE = os.getenv('CONTPAQ_START_DATE', '2025-01-01').strip()
 CONTPAQ_MAQUINARIA_START_DATE = os.getenv('CONTPAQ_MAQUINARIA_START_DATE', '2025-06-01').strip()
+CONTPAQ_MM_LOOKBACK_DAYS = max(14, int(os.getenv('CONTPAQ_MM_LOOKBACK_DAYS', '84') or 84))
+CONTPAQ_MM_MIN_WEEKS = max(1.0, float(os.getenv('CONTPAQ_MM_MIN_WEEKS', '2.0') or 2.0))
+CONTPAQ_MM_MAX_WEEKS = max(CONTPAQ_MM_MIN_WEEKS, float(os.getenv('CONTPAQ_MM_MAX_WEEKS', '6.0') or 6.0))
 
 _CONTPAQ_SYNC_LOCK = threading.Lock()
 _CONTPAQ_SYNC_THREAD = None
@@ -2213,6 +2216,185 @@ def _upsert_contpaq_data(payload):
         stats['remision_detalles_upserted'] += 1
 
     return stats
+
+
+def _upsert_contpaq_existencia_data(payload):
+    existencias = payload.get('existencias') or []
+    stats = {
+        'existencias_upserted': 0,
+    }
+
+    for row in existencias:
+        depot_id = int(row.get('DepotID') or 0)
+        product_id = int(row.get('ProductID') or 0)
+        matrix_key1 = str(row.get('MatrixKey1') or '').strip()
+        matrix_key2 = str(row.get('MatrixKey2') or '').strip()
+        if depot_id <= 0 or product_id <= 0:
+            continue
+
+        item = ContpaqExistenciaStock.query.filter_by(
+            depot_id=depot_id,
+            product_id=product_id,
+            matrix_key1=matrix_key1,
+            matrix_key2=matrix_key2,
+        ).first()
+        if not item:
+            item = ContpaqExistenciaStock(
+                depot_id=depot_id,
+                product_id=product_id,
+                matrix_key1=matrix_key1,
+                matrix_key2=matrix_key2,
+            )
+            db.session.add(item)
+
+        item.owned_business_entity_id = int(row.get('OwnedBusinessEntityID') or 0) or None
+        item.depot_name = str(row.get('DepotName') or '').strip()
+        item.depot_type_id = int(row.get('DepotTypeID') or 0) or None
+        item.product_key = str(row.get('ProductKey') or '').strip().upper()[:120]
+        item.product_name = str(row.get('ProductName') or '').strip()
+        item.category1 = str(row.get('Category1') or '').strip()[:255] or None
+        item.category2 = str(row.get('Category2') or '').strip()[:255] or None
+        item.unit = str(row.get('Unit') or '').strip()[:60] or None
+        item.qty_present = _to_float(row.get('QtyPresent'))
+        item.qty_available = _to_float(row.get('QtyAvailable'))
+        item.qty_to_deliver_customer = _to_float(row.get('QtyToDeliverToCustomer'))
+        item.qty_to_receive_supplier = _to_float(row.get('QtyToReceiveFromSupplier'))
+        item.qty_on_transit = _to_float(row.get('QtyOnTransit'))
+        item.qty_to_receive = _to_float(row.get('QtyToReceive'))
+        item.qty_max_contpaq = _to_float(row.get('QtyMax'))
+        item.qty_min_contpaq = _to_float(row.get('QtyMinimum'))
+        item.updated_at = datetime.utcnow()
+        stats['existencias_upserted'] += 1
+
+    return stats
+
+
+def _contpaq_max_min_rows(q='', sucursal='', category1='', category2='', only_alert=False, limit=500, page=1):
+    lookback_days = CONTPAQ_MM_LOOKBACK_DAYS
+    start_dt = datetime.utcnow() - timedelta(days=lookback_days)
+
+    demand_query = (
+        db.session.query(
+            func.upper(func.trim(ContpaqPedidoDetalle.clave_producto)).label('product_key_norm'),
+            func.upper(func.trim(ContpaqPedido.sucursal)).label('sucursal_norm'),
+            func.coalesce(func.sum(ContpaqPedidoDetalle.cantidad), 0).label('qty_total'),
+        )
+        .join(ContpaqPedido, ContpaqPedido.id == ContpaqPedidoDetalle.pedido_id)
+        .filter(ContpaqPedido.fecha_documento >= start_dt)
+        .group_by(
+            func.upper(func.trim(ContpaqPedidoDetalle.clave_producto)),
+            func.upper(func.trim(ContpaqPedido.sucursal)),
+        )
+    )
+    demand_map = {
+        (str(pk or '').strip().upper(), str(sc or '').strip().upper()): float(qty or 0)
+        for pk, sc, qty in demand_query.all()
+        if str(pk or '').strip()
+    }
+
+    stocks_q = ContpaqExistenciaStock.query.filter(ContpaqExistenciaStock.product_key.isnot(None))
+    if sucursal:
+        stocks_q = stocks_q.filter(ContpaqExistenciaStock.depot_name.ilike(f"%{sucursal}%"))
+    if category1:
+        stocks_q = stocks_q.filter(ContpaqExistenciaStock.category1.ilike(f"%{category1}%"))
+    if category2:
+        stocks_q = stocks_q.filter(ContpaqExistenciaStock.category2.ilike(f"%{category2}%"))
+    if q:
+        like = f"%{q}%"
+        stocks_q = stocks_q.filter(
+            db.or_(
+                ContpaqExistenciaStock.product_key.ilike(like),
+                ContpaqExistenciaStock.product_name.ilike(like),
+                ContpaqExistenciaStock.depot_name.ilike(like),
+                ContpaqExistenciaStock.category1.ilike(like),
+                ContpaqExistenciaStock.category2.ilike(like),
+            )
+        )
+
+    stocks = stocks_q.order_by(ContpaqExistenciaStock.product_key.asc(), ContpaqExistenciaStock.depot_name.asc()).all()
+
+    rows = []
+    weeks_span = max(lookback_days / 7.0, 1.0)
+    for stock in stocks:
+        product_key = str(stock.product_key or '').strip().upper()
+        if not product_key:
+            continue
+
+        sucursal_norm = str(stock.depot_name or '').strip().upper()
+        qty_demand_total = float(demand_map.get((product_key, sucursal_norm), 0.0))
+        qty_demand_week = qty_demand_total / weeks_span
+
+        min_calc = int(math.ceil(qty_demand_week * CONTPAQ_MM_MIN_WEEKS))
+        max_calc = int(math.ceil(qty_demand_week * CONTPAQ_MM_MAX_WEEKS))
+        if max_calc < min_calc:
+            max_calc = min_calc
+
+        existencia = float(stock.qty_available or 0.0)
+        if existencia < min_calc:
+            status = 'BAJO_MINIMO'
+        elif max_calc > 0 and existencia > max_calc:
+            status = 'SOBRE_MAXIMO'
+        else:
+            status = 'EN_RANGO'
+
+        sugerido_compra = max(0.0, float(max_calc) - existencia) if status == 'BAJO_MINIMO' else 0.0
+
+        row = {
+            'id': stock.id,
+            'sucursal': stock.depot_name,
+            'product_key': stock.product_key,
+            'product_name': stock.product_name,
+            'category1': stock.category1,
+            'category2': stock.category2,
+            'unit': stock.unit,
+            'qty_present': float(stock.qty_present or 0.0),
+            'qty_available': existencia,
+            'qty_to_deliver_customer': float(stock.qty_to_deliver_customer or 0.0),
+            'qty_to_receive_supplier': float(stock.qty_to_receive_supplier or 0.0),
+            'qty_on_transit': float(stock.qty_on_transit or 0.0),
+            'qty_to_receive': float(stock.qty_to_receive or 0.0),
+            'demanda_total_periodo': round(qty_demand_total, 2),
+            'demanda_promedio_semana': round(qty_demand_week, 2),
+            'minimo_calculado': min_calc,
+            'maximo_calculado': max_calc,
+            'qty_min_contpaq': float(stock.qty_min_contpaq or 0.0),
+            'qty_max_contpaq': float(stock.qty_max_contpaq or 0.0),
+            'sugerido_compra': round(sugerido_compra, 2),
+            'status': status,
+            'updated_at': stock.updated_at.isoformat() if stock.updated_at else None,
+        }
+
+        if only_alert and status == 'EN_RANGO':
+            continue
+        rows.append(row)
+
+    total = len(rows)
+    limit = max(1, min(int(limit or 500), 2000))
+    page = max(1, int(page or 1))
+    offset = (page - 1) * limit
+    paged_rows = rows[offset:offset + limit]
+
+    summary = {
+        'total_rows': total,
+        'en_rango': sum(1 for r in rows if r['status'] == 'EN_RANGO'),
+        'bajo_minimo': sum(1 for r in rows if r['status'] == 'BAJO_MINIMO'),
+        'sobre_maximo': sum(1 for r in rows if r['status'] == 'SOBRE_MAXIMO'),
+        'sugerido_compra_total': round(sum(float(r['sugerido_compra'] or 0.0) for r in rows), 2),
+        'lookback_days': lookback_days,
+        'min_weeks': CONTPAQ_MM_MIN_WEEKS,
+        'max_weeks': CONTPAQ_MM_MAX_WEEKS,
+    }
+
+    return {
+        'items': paged_rows,
+        'summary': summary,
+        'total_records': total,
+        'page': page,
+        'limit': limit,
+        'total_pages': (total + limit - 1) // limit if total else 0,
+        'has_prev': page > 1,
+        'has_next': offset + limit < total,
+    }
 
 
 def _upsert_contpaq_supplier_ot_data(payload):
@@ -10310,6 +10492,69 @@ def contpaq_conciliacion_page():
     return render_template('contpaq_conciliacion.html')
 
 
+@app.route('/contpaq/maximos-minimos')
+@login_required
+@requires_permission('contpaq', 'view')
+def contpaq_maximos_minimos_page():
+    """Vista privada para máximos y mínimos calculados con demanda de pedidos CONTPAQ."""
+    return render_template('contpaq_maximos_minimos.html')
+
+
+@app.route('/api/contpaq/maximos-minimos', methods=['GET'])
+@login_required
+@requires_permission('contpaq', 'view')
+def api_contpaq_maximos_minimos():
+    try:
+        payload = _contpaq_max_min_rows(
+            q=(request.args.get('q') or '').strip(),
+            sucursal=(request.args.get('sucursal') or '').strip(),
+            category1=(request.args.get('category1') or '').strip(),
+            category2=(request.args.get('category2') or '').strip(),
+            only_alert=(request.args.get('only_alert') or '').strip().lower() in ('1', 'true', 'yes', 'on'),
+            limit=request.args.get('limit', default=200, type=int),
+            page=request.args.get('page', default=1, type=int),
+        )
+        return jsonify(payload), 200
+    except Exception as exc:
+        logger.error(f"Error generando maximos/minimos CONTPAQ: {exc}", exc_info=True)
+        return jsonify({'error': str(exc)}), 500
+
+
+@app.route('/api/contpaq/maximos-minimos/export.csv', methods=['GET'])
+@login_required
+@requires_permission('contpaq', 'view')
+def api_contpaq_maximos_minimos_export_csv():
+    try:
+        payload = _contpaq_max_min_rows(
+            q=(request.args.get('q') or '').strip(),
+            sucursal=(request.args.get('sucursal') or '').strip(),
+            category1=(request.args.get('category1') or '').strip(),
+            category2=(request.args.get('category2') or '').strip(),
+            only_alert=(request.args.get('only_alert') or '').strip().lower() in ('1', 'true', 'yes', 'on'),
+            limit=200000,
+            page=1,
+        )
+        items = payload.get('items') or []
+
+        columns = [
+            'sucursal', 'product_key', 'product_name', 'category1', 'category2', 'unit',
+            'qty_present', 'qty_available', 'qty_to_deliver_customer', 'qty_to_receive_supplier',
+            'qty_on_transit', 'qty_to_receive', 'demanda_total_periodo', 'demanda_promedio_semana',
+            'minimo_calculado', 'maximo_calculado', 'qty_min_contpaq', 'qty_max_contpaq',
+            'sugerido_compra', 'status', 'updated_at'
+        ]
+        df = pd.DataFrame(items, columns=columns)
+        csv_data = df.to_csv(index=False, encoding='utf-8-sig')
+
+        response = make_response(csv_data)
+        response.headers['Content-Type'] = 'text/csv; charset=utf-8'
+        response.headers['Content-Disposition'] = 'attachment; filename=contpaq_maximos_minimos.csv'
+        return response
+    except Exception as exc:
+        logger.error(f"Error exportando maximos/minimos CSV: {exc}", exc_info=True)
+        return jsonify({'error': str(exc)}), 500
+
+
 @app.route('/api/contpaq/conciliacion', methods=['GET'])
 @login_required
 @requires_permission('contpaq', 'view')
@@ -10974,6 +11219,27 @@ def api_contpaq_maquinaria_sync_push():
     except Exception as exc:
         db.session.rollback()
         logger.error(f'[CONTPAQ-MAQUINARIA] Error de sincronizacion: {exc}', exc_info=True)
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/contpaq/existencia/sync/push', methods=['POST'])
+def api_contpaq_existencia_sync_push():
+    """Recibe existencias por sucursal desde agente local CONTPAQ."""
+    ok, err = _require_sync_key()
+    if not ok:
+        return err
+
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify({'error': 'Payload invalido'}), 400
+
+    try:
+        stats = _upsert_contpaq_existencia_data(payload)
+        db.session.commit()
+        return jsonify({'ok': True, 'stats': stats}), 200
+    except Exception as exc:
+        db.session.rollback()
+        logger.error(f'[CONTPAQ-EXISTENCIA] Error de sincronizacion: {exc}', exc_info=True)
         return jsonify({'ok': False, 'error': str(exc)}), 500
 
 

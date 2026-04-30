@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maximos y Minimos CONTPAQi</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .mm-wrap { max-width: 1450px; margin: 22px auto; padding: 0 16px 24px; }
+        .toolbar {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr 1fr 1fr auto auto;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .toolbar input, .toolbar select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d5dee8;
+            border-radius: 8px;
+            background: #fff;
+            font-size: 14px;
+        }
+        .btn {
+            border: 1px solid transparent;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            color: #fff;
+            background: #1565c0;
+        }
+        .btn-secondary { background: #546e7a; border-color: #455a64; }
+        .btn-success { background: #2e7d32; border-color: #1b5e20; }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .summary {
+            background: linear-gradient(135deg, #ecf6ff 0%, #f7ffef 100%);
+            border: 1px solid #d3e8f7;
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 12px;
+            display: grid;
+            grid-template-columns: repeat(5, minmax(120px, 1fr));
+            gap: 10px;
+            font-size: 12px;
+            color: #263238;
+        }
+        .summary b { display: block; color: #0b4b77; font-size: 11px; margin-bottom: 2px; }
+        .status { font-size: 12px; color: #546e7a; margin-bottom: 10px; }
+        .pager {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 8px 0 12px;
+            flex-wrap: wrap;
+        }
+        .table-wrap {
+            border: 1px solid #dce3e8;
+            border-radius: 10px;
+            overflow: auto;
+            background: #fff;
+        }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 1300px; }
+        th, td { border-bottom: 1px solid #eef2f6; padding: 8px; text-align: left; white-space: nowrap; }
+        thead th { position: sticky; top: 0; background: #f7fafc; color: #455a64; z-index: 1; }
+        .tag { display: inline-block; padding: 2px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+        .tag.ok { background: #e8f5e9; color: #1b5e20; }
+        .tag.low { background: #ffebee; color: #b71c1c; }
+        .tag.high { background: #fff8e1; color: #8d6e00; }
+        .muted { color: #78909c; font-size: 12px; }
+
+        @media (max-width: 1100px) {
+            .toolbar { grid-template-columns: 1fr; }
+            .summary { grid-template-columns: 1fr 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="mm-wrap">
+        <h2>Maximos y Minimos CONTPAQi</h2>
+        <p class="muted">Calculo automatico con demanda de pedidos historicos + existencia actual por sucursal.</p>
+
+        <div class="toolbar">
+            <input id="q" type="text" placeholder="Buscar clave, descripcion o sucursal">
+            <input id="sucursal" type="text" placeholder="Sucursal">
+            <input id="category1" type="text" placeholder="Categoria 1">
+            <input id="category2" type="text" placeholder="Categoria 2">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#455a64;"><input id="only_alert" type="checkbox"> Solo alertas</label>
+            <button id="btnBuscar" class="btn">Aplicar</button>
+            <button id="btnLimpiar" class="btn btn-secondary">Limpiar</button>
+            <button id="btnExport" class="btn btn-success">Exportar CSV</button>
+        </div>
+
+        <div id="summary" class="summary" style="display:none;"></div>
+        <div id="status" class="status">Cargando...</div>
+
+        <div class="pager">
+            <label for="limit" style="font-size:12px;color:#455a64;">Registros por pagina</label>
+            <select id="limit" style="padding:6px 8px;border:1px solid #cfd8dc;border-radius:6px;">
+                <option value="100">100</option>
+                <option value="200" selected>200</option>
+                <option value="500">500</option>
+                <option value="1000">1000</option>
+            </select>
+            <button class="btn btn-secondary" id="btnPrev">Anterior</button>
+            <button class="btn btn-secondary" id="btnNext">Siguiente</button>
+            <span id="pageInfo" class="status" style="margin:0;"></span>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Sucursal</th>
+                        <th>Clave</th>
+                        <th>Descripcion</th>
+                        <th>Existencia</th>
+                        <th>Demanda/semana</th>
+                        <th>Minimo (calc)</th>
+                        <th>Maximo (calc)</th>
+                        <th>Sugerido compra</th>
+                        <th>Pendiente entregar</th>
+                        <th>Pendiente recibir</th>
+                        <th>Categoria 1</th>
+                        <th>Categoria 2</th>
+                        <th>Ultima sync</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let state = { page: 1, hasPrev: false, hasNext: false };
+
+        function fmtNum(value) {
+            const n = Number(value || 0);
+            return n.toLocaleString('es-MX', { maximumFractionDigits: 2 });
+        }
+
+        function statusTag(status) {
+            if (status === 'BAJO_MINIMO') return '<span class="tag low">BAJO</span>';
+            if (status === 'SOBRE_MAXIMO') return '<span class="tag high">ALTO</span>';
+            return '<span class="tag ok">OK</span>';
+        }
+
+        function buildQuery(page) {
+            const params = new URLSearchParams();
+            params.set('page', String(page));
+            params.set('limit', document.getElementById('limit').value || '200');
+            const q = document.getElementById('q').value.trim();
+            const suc = document.getElementById('sucursal').value.trim();
+            const c1 = document.getElementById('category1').value.trim();
+            const c2 = document.getElementById('category2').value.trim();
+            const onlyAlert = document.getElementById('only_alert').checked;
+            if (q) params.set('q', q);
+            if (suc) params.set('sucursal', suc);
+            if (c1) params.set('category1', c1);
+            if (c2) params.set('category2', c2);
+            if (onlyAlert) params.set('only_alert', '1');
+            return params;
+        }
+
+        async function loadData(page = 1) {
+            const status = document.getElementById('status');
+            status.textContent = 'Consultando datos...';
+            try {
+                const params = buildQuery(page);
+                const resp = await fetch(`/api/contpaq/maximos-minimos?${params.toString()}`, { credentials: 'same-origin' });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || 'No se pudo consultar maximos y minimos');
+
+                state.page = data.page || page;
+                state.hasPrev = !!data.has_prev;
+                state.hasNext = !!data.has_next;
+
+                const tbody = document.getElementById('tbody');
+                tbody.innerHTML = (data.items || []).map((row) => `
+                    <tr>
+                        <td>${statusTag(row.status)}</td>
+                        <td>${row.sucursal || ''}</td>
+                        <td>${row.product_key || ''}</td>
+                        <td>${row.product_name || ''}</td>
+                        <td>${fmtNum(row.qty_available)}</td>
+                        <td>${fmtNum(row.demanda_promedio_semana)}</td>
+                        <td>${fmtNum(row.minimo_calculado)}</td>
+                        <td>${fmtNum(row.maximo_calculado)}</td>
+                        <td>${fmtNum(row.sugerido_compra)}</td>
+                        <td>${fmtNum(row.qty_to_deliver_customer)}</td>
+                        <td>${fmtNum(row.qty_to_receive_supplier)}</td>
+                        <td>${row.category1 || ''}</td>
+                        <td>${row.category2 || ''}</td>
+                        <td>${row.updated_at ? new Date(row.updated_at).toLocaleString('es-MX') : ''}</td>
+                    </tr>
+                `).join('');
+
+                const summary = data.summary || {};
+                const summaryEl = document.getElementById('summary');
+                summaryEl.style.display = 'grid';
+                summaryEl.innerHTML = `
+                    <div><b>Total filas</b>${fmtNum(summary.total_rows)}</div>
+                    <div><b>Bajo minimo</b>${fmtNum(summary.bajo_minimo)}</div>
+                    <div><b>Sobre maximo</b>${fmtNum(summary.sobre_maximo)}</div>
+                    <div><b>En rango</b>${fmtNum(summary.en_rango)}</div>
+                    <div><b>Sugerido total</b>${fmtNum(summary.sugerido_compra_total)}</div>
+                `;
+
+                document.getElementById('pageInfo').textContent = `Pagina ${data.page || 1} de ${data.total_pages || 0} (${fmtNum(data.total_records || 0)} registros)`;
+                document.getElementById('btnPrev').disabled = !state.hasPrev;
+                document.getElementById('btnNext').disabled = !state.hasNext;
+                status.textContent = `Actualizado. Ventana de demanda: ${summary.lookback_days || '-'} dias.`;
+            } catch (err) {
+                status.textContent = `Error: ${err.message}`;
+            }
+        }
+
+        function exportCsv() {
+            const params = buildQuery(1);
+            window.location.href = `/api/contpaq/maximos-minimos/export.csv?${params.toString()}`;
+        }
+
+        document.getElementById('btnBuscar').addEventListener('click', () => loadData(1));
+        document.getElementById('btnLimpiar').addEventListener('click', () => {
+            document.getElementById('q').value = '';
+            document.getElementById('sucursal').value = '';
+            document.getElementById('category1').value = '';
+            document.getElementById('category2').value = '';
+            document.getElementById('only_alert').checked = false;
+            loadData(1);
+        });
+        document.getElementById('btnPrev').addEventListener('click', () => { if (state.hasPrev) loadData(state.page - 1); });
+        document.getElementById('btnNext').addEventListener('click', () => { if (state.hasNext) loadData(state.page + 1); });
+        document.getElementById('limit').addEventListener('change', () => loadData(1));
+        document.getElementById('btnExport').addEventListener('click', exportCsv);
+
+        loadData(1);
+    </script>
+</body>
+</html>
