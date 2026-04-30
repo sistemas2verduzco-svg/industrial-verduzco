@@ -54,6 +54,20 @@ _MACHINE_SCHEDULE_INIT = False
 _MACHINE_SCHEDULE_STOP = threading.Event()
 MYE_CATALOG_FILE = os.path.join('uploads', 'maquinaria_estaciones_catalogo.json')
 _MYE_CATALOG_LOCK = threading.Lock()
+MACHINE_QUEUE_LIMIT = max(1, int(os.getenv('MACHINE_QUEUE_LIMIT', '4') or '4'))
+_MACHINE_QUEUE_LIMIT_BY_TYPE_RAW = (os.getenv('MACHINE_QUEUE_LIMIT_BY_TYPE') or '').strip()
+MACHINE_QUEUE_LIMIT_BY_TYPE = {}
+if _MACHINE_QUEUE_LIMIT_BY_TYPE_RAW:
+    try:
+        parsed_limits = json.loads(_MACHINE_QUEUE_LIMIT_BY_TYPE_RAW)
+        if isinstance(parsed_limits, dict):
+            for k, v in parsed_limits.items():
+                try:
+                    MACHINE_QUEUE_LIMIT_BY_TYPE[str(k).strip().lower()] = max(1, int(v))
+                except Exception:
+                    continue
+    except Exception:
+        MACHINE_QUEUE_LIMIT_BY_TYPE = {}
 
 WHATSAPP_ALERTS_ENABLED = os.getenv('WHATSAPP_ALERTS_ENABLED', '0').strip().lower() in ('1', 'true', 'yes', 'on')
 WHATSAPP_ALERT_TYPES = {
@@ -154,6 +168,74 @@ def _telegram_destinations():
     if TELEGRAM_CHAT_ID:
         return [TELEGRAM_CHAT_ID]
     return []
+
+
+def _order_machine_queue_items(hojas):
+    """Order assigned hojas so active appears first and the rest by recent update."""
+    ordered = list(hojas or [])
+    ordered.sort(
+        key=lambda h: (h.fecha_actualizacion or h.fecha_creacion or datetime.min),
+        reverse=True,
+    )
+    ordered.sort(key=lambda h: 0 if (h.estado or '').lower() == 'activa' else 1)
+    return ordered
+
+
+def _normalize_machine_type_key(value):
+    return str(value or '').strip().lower()
+
+
+def _machine_queue_limit_for_type(maquina_tipo):
+    tipo_key = _normalize_machine_type_key(maquina_tipo)
+    if not tipo_key:
+        return MACHINE_QUEUE_LIMIT
+    if tipo_key in MACHINE_QUEUE_LIMIT_BY_TYPE:
+        return MACHINE_QUEUE_LIMIT_BY_TYPE[tipo_key]
+    wildcard_limit = MACHINE_QUEUE_LIMIT_BY_TYPE.get('*')
+    if wildcard_limit:
+        return wildcard_limit
+    return MACHINE_QUEUE_LIMIT
+
+
+def _pick_machine_active_hoja(hojas):
+    for hoja in hojas or []:
+        if (hoja.estado or '').lower() == 'activa':
+            return hoja
+    return hojas[0] if hojas else None
+
+
+def _machine_queue_count(model_cls, maquina_id, exclude_hoja_id=None):
+    q = model_cls.query.filter(
+        model_cls.maquina_id == maquina_id,
+        model_cls.estado.in_(['activa', 'pausada'])
+    )
+    if exclude_hoja_id:
+        q = q.filter(model_cls.id != int(exclude_hoja_id))
+    return q.count()
+
+
+def _pause_other_machine_hojas(model_cls, maquina_id, except_hoja_id, now_dt):
+    others = model_cls.query.filter(
+        model_cls.maquina_id == maquina_id,
+        model_cls.estado == 'activa',
+        model_cls.id != except_hoja_id,
+    ).all()
+    for item in others:
+        item.estado = 'pausada'
+        item.fecha_actualizacion = now_dt
+
+
+def _resume_or_activate_hoja(hoja, now_dt):
+    if (hoja.estado or '').lower() == 'pausada':
+        paused_at = hoja.fecha_actualizacion or now_dt
+        if hoja.fecha_salida:
+            hoja.fecha_salida = hoja.fecha_salida + (now_dt - paused_at)
+        else:
+            hoja.fecha_salida = now_dt
+    elif not hoja.fecha_salida:
+        hoja.fecha_salida = now_dt
+    hoja.estado = 'activa'
+    hoja.fecha_actualizacion = now_dt
 
 
 def _send_telegram_message(body_text):
@@ -4743,18 +4825,20 @@ def hojas_ruta_entregas_list():
     """Estaciones T usando hojas de ruta MP (hojas_ruta_nueva)."""
     maquinas = Máquina.query.all()
 
-    hojas_activas = HojaRutaNueva.query.filter(
+    hojas_asignadas = HojaRutaNueva.query.filter(
         HojaRutaNueva.maquina_id.isnot(None),
         HojaRutaNueva.estado.in_(['activa', 'pausada'])
     ).order_by(HojaRutaNueva.fecha_creacion.desc()).all()
 
+    hojas_asignadas_por_maquina = {}
+    for hoja in hojas_asignadas:
+        hojas_asignadas_por_maquina.setdefault(hoja.maquina_id, []).append(hoja)
+
     hoja_activa_por_maquina = {}
-    for hoja in hojas_activas:
-        existing = hoja_activa_por_maquina.get(hoja.maquina_id)
-        if existing is None:
-            hoja_activa_por_maquina[hoja.maquina_id] = hoja
-        elif existing.estado != 'activa' and hoja.estado == 'activa':
-            hoja_activa_por_maquina[hoja.maquina_id] = hoja
+    for maq_id, items in hojas_asignadas_por_maquina.items():
+        ordered = _order_machine_queue_items(items)
+        hojas_asignadas_por_maquina[maq_id] = ordered
+        hoja_activa_por_maquina[maq_id] = _pick_machine_active_hoja(ordered)
 
     qc_registros = QCProduccionRegistro.query.filter(
         QCProduccionRegistro.maquina_id.isnot(None)
@@ -4763,6 +4847,7 @@ def hojas_ruta_entregas_list():
 
     maquinas_data = []
     for maq in maquinas:
+        hojas_asignadas_maq = hojas_asignadas_por_maquina.get(maq.id, [])
         hoja_activa = hoja_activa_por_maquina.get(maq.id)
         hoja_activa_dict = hoja_activa.to_dict() if hoja_activa else None
         tiempo_objetivo_proceso = None
@@ -4826,6 +4911,20 @@ def hojas_ruta_entregas_list():
             'descripcion': maq.descripcion,
             'imagen_url': maq.imagen_url,
             'hoja_activa': hoja_activa_dict,
+            'hojas_asignadas': [
+                {
+                    'id': qh.id,
+                    'nombre': qh.nombre,
+                    'serie': qh.nombre,
+                    'pn': qh.pn,
+                    'estado': qh.estado,
+                    'cantidad_piezas': qh.cantidad_piezas,
+                    'es_activa': bool(hoja_activa and qh.id == hoja_activa.id),
+                }
+                for qh in hojas_asignadas_maq
+            ],
+            'hojas_asignadas_count': len(hojas_asignadas_maq),
+            'cola_maxima': _machine_queue_limit_for_type(getattr(maq, 'tipo', None)),
             'activo': getattr(maq, 'activo', False),
             'estacion_actual': estacion_actual,
             'tiempo_real': tiempo_real,
@@ -6043,13 +6142,16 @@ def api_crear_hoja_ruta():
 
     maquina_id = int(data.get('maquina_id')) if data.get('maquina_id') else None
     if maquina_id:
-        hoja_ocupada = HojaRutaEntrega.query.filter(
+        maq_for_limit = Máquina.query.get(maquina_id)
+        queue_limit = _machine_queue_limit_for_type(getattr(maq_for_limit, 'tipo', None) if maq_for_limit else None)
+        hojas_en_cola = HojaRutaEntrega.query.filter(
             HojaRutaEntrega.maquina_id == maquina_id,
             HojaRutaEntrega.estado.in_(['activa', 'pausada'])
-        ).first()
-        if hoja_ocupada:
+        ).order_by(HojaRutaEntrega.fecha_actualizacion.desc(), HojaRutaEntrega.fecha_creacion.desc()).all()
+        if len(hojas_en_cola) >= queue_limit:
+            hoja_ocupada = hojas_en_cola[0]
             return jsonify({
-                'error': 'La máquina ya tiene una hoja activa o pausada. Retira la hoja actual antes de crear una nueva.',
+                'error': f'La máquina ya alcanzó su cola máxima ({queue_limit} hojas).',
                 'code': 'machine_busy',
                 'existing_hoja': {
                     'id': hoja_ocupada.id,
@@ -6127,6 +6229,10 @@ def api_crear_hoja_ruta():
         # Serie automatica: HR-YYYYMMDD-CLAVE-####
         clave_segura = ''.join(ch for ch in (clave.clave or '') if ch.isalnum())[:10] or 'CLAVE'
         hoja.nombre = f"HR-{fecha_actual.strftime('%Y%m%d')}-{clave_segura}-{hoja.id:04d}"
+
+        if maquina_id:
+            _pause_other_machine_hojas(HojaRutaEntrega, maquina_id, hoja.id, fecha_actual)
+            _resume_or_activate_hoja(hoja, fecha_actual)
 
         estaciones_creadas = []
         for idx, cp in enumerate(procesos, start=1):
@@ -6398,18 +6504,15 @@ def api_activar_maquina(maquina_id):
     try:
         now_dt = datetime.utcnow()
         maq.activo = True
-        hoja_actual = HojaRutaEntrega.query.filter(
+        cola = HojaRutaEntrega.query.filter(
             HojaRutaEntrega.maquina_id == maq.id,
             HojaRutaEntrega.estado.in_(['activa', 'pausada'])
-        ).order_by(HojaRutaEntrega.fecha_actualizacion.desc(), HojaRutaEntrega.fecha_creacion.desc()).first()
-        if hoja_actual and hoja_actual.estado == 'pausada':
-            paused_at = hoja_actual.fecha_actualizacion or now_dt
-            if hoja_actual.fecha_salida:
-                hoja_actual.fecha_salida = hoja_actual.fecha_salida + (now_dt - paused_at)
-            else:
-                hoja_actual.fecha_salida = now_dt
-            hoja_actual.estado = 'activa'
-            hoja_actual.fecha_actualizacion = now_dt
+        ).all()
+        cola = _order_machine_queue_items(cola)
+        hoja_actual = _pick_machine_active_hoja(cola)
+        if hoja_actual:
+            _pause_other_machine_hojas(HojaRutaEntrega, maq.id, hoja_actual.id, now_dt)
+            _resume_or_activate_hoja(hoja_actual, now_dt)
         db.session.commit()
         logger.info(f"[MAQUINA] Activada maquina {maquina_id}")
         return jsonify({'ok': True, 'maquina_id': maquina_id, 'activo': True}), 200
@@ -6427,8 +6530,8 @@ def api_desactivar_maquina(maquina_id):
     try:
         now_dt = datetime.utcnow()
         maq.activo = False
-        hoja_activa = HojaRutaEntrega.query.filter_by(maquina_id=maq.id, estado='activa').order_by(HojaRutaEntrega.fecha_creacion.desc()).first()
-        if hoja_activa:
+        hojas_activas = HojaRutaEntrega.query.filter_by(maquina_id=maq.id, estado='activa').all()
+        for hoja_activa in hojas_activas:
             hoja_activa.estado = 'pausada'
             hoja_activa.fecha_actualizacion = now_dt
         db.session.commit()
@@ -6449,8 +6552,8 @@ def api_paro_mantenimiento(maquina_id):
     try:
         now_dt = datetime.utcnow()
         maq.activo = False
-        hoja_activa = HojaRutaEntrega.query.filter_by(maquina_id=maq.id, estado='activa').order_by(HojaRutaEntrega.fecha_creacion.desc()).first()
-        if hoja_activa:
+        hojas_activas = HojaRutaEntrega.query.filter_by(maquina_id=maq.id, estado='activa').all()
+        for hoja_activa in hojas_activas:
             hoja_activa.estado = 'pausada'
             hoja_activa.fecha_actualizacion = now_dt
         db.session.commit()
@@ -6481,22 +6584,19 @@ def api_asignar_hoja_maquina(maquina_id):
     if hoja.maquina_id and hoja.maquina_id != maq.id:
         return jsonify({'error': 'La hoja ya está asignada a otra máquina'}), 409
 
-    activa_actual = HojaRutaEntrega.query.filter(
-        HojaRutaEntrega.maquina_id == maq.id,
-        HojaRutaEntrega.estado.in_(['activa', 'pausada'])
-    ).first()
-    if activa_actual and activa_actual.id != hoja.id:
-        return jsonify({'error': 'La máquina ya tiene una hoja activa o pausada asignada'}), 409
+    queue_limit = _machine_queue_limit_for_type(getattr(maq, 'tipo', None))
+    queue_count = _machine_queue_count(HojaRutaEntrega, maq.id, exclude_hoja_id=hoja.id)
+    if queue_count >= queue_limit:
+        return jsonify({'error': f'La máquina ya alcanzó su cola máxima ({queue_limit} hojas).'}), 409
 
     try:
+        now_ref = datetime.utcnow()
         hoja.maquina_id = maq.id
-        if not hoja.fecha_salida:
-            hoja.fecha_salida = datetime.utcnow()
-        hoja.estado = 'activa'
+        _pause_other_machine_hojas(HojaRutaEntrega, maq.id, hoja.id, now_ref)
+        _resume_or_activate_hoja(hoja, now_ref)
         maq.activo = True  # Activar la máquina al recibir una hoja
 
         estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()
-        now_ref = datetime.utcnow()
 
         target_estacion = None
         # Modo temporal: permitir iniciar desde un proceso avanzado al asignar.
@@ -6588,10 +6688,12 @@ def api_ajustar_tiempo_proceso_maquina(maquina_id):
     if elapsed_process_seconds is None:
         return jsonify({'error': 'elapsed_process_seconds invalido'}), 400
 
-    hoja = HojaRutaEntrega.query.filter(
+    cola = HojaRutaEntrega.query.filter(
         HojaRutaEntrega.maquina_id == maq.id,
         HojaRutaEntrega.estado.in_(['activa', 'pausada'])
-    ).order_by(HojaRutaEntrega.fecha_actualizacion.desc(), HojaRutaEntrega.fecha_creacion.desc()).first()
+    ).all()
+    cola = _order_machine_queue_items(cola)
+    hoja = _pick_machine_active_hoja(cola)
     if not hoja:
         return jsonify({'error': 'La máquina no tiene hoja activa o pausada'}), 404
 
@@ -6636,11 +6738,24 @@ def api_retirar_hoja_maquina(maquina_id):
             return jsonify({'error': 'No hay hoja activa o pausada asignada a esta máquina'}), 404
 
     try:
+        now_ref = datetime.utcnow()
         hoja.estado = 'activa'
         hoja.maquina_id = None
         # Al volver a pendientes, reiniciar ventanas de tiempo para futura reasignacion.
         hoja.fecha_salida = None
         hoja.fecha_termino = None
+
+        if bool(getattr(maq, 'activo', False)):
+            restantes = HojaRutaEntrega.query.filter(
+                HojaRutaEntrega.maquina_id == maq.id,
+                HojaRutaEntrega.estado.in_(['activa', 'pausada'])
+            ).all()
+            restantes = _order_machine_queue_items(restantes)
+            siguiente = _pick_machine_active_hoja(restantes)
+            if siguiente:
+                _pause_other_machine_hojas(HojaRutaEntrega, maq.id, siguiente.id, now_ref)
+                _resume_or_activate_hoja(siguiente, now_ref)
+
         db.session.commit()
         logger.info(f"[HOJAS_RUTA] Hoja {hoja.id} retirada de maquina {maquina_id}")
         return jsonify({'success': True, 'hoja': hoja.to_dict()}), 200
@@ -6648,6 +6763,33 @@ def api_retirar_hoja_maquina(maquina_id):
         db.session.rollback()
         logger.error(f"Error retirando hoja de maquina: {e}", exc_info=True)
         return jsonify({'error': 'No se pudo retirar la hoja de la máquina'}), 500
+
+
+@app.route('/api/maquinas/<int:maquina_id>/activar_hoja', methods=['POST'])
+@login_required
+@requires_any_permission([('estaciones', 'operate'), ('catalog', 'edit')])
+def api_activar_hoja_maquina(maquina_id):
+    maq = Máquina.query.get_or_404(maquina_id)
+    data = request.get_json() or {}
+    hoja_id = int(data.get('hoja_id') or 0)
+    if not hoja_id:
+        return jsonify({'error': 'hoja_id requerido'}), 400
+
+    hoja = HojaRutaEntrega.query.get_or_404(hoja_id)
+    if hoja.maquina_id != maq.id:
+        return jsonify({'error': 'La hoja no está asignada a esta máquina'}), 409
+
+    try:
+        now_dt = datetime.utcnow()
+        _pause_other_machine_hojas(HojaRutaEntrega, maq.id, hoja.id, now_dt)
+        _resume_or_activate_hoja(hoja, now_dt)
+        maq.activo = True
+        db.session.commit()
+        return jsonify({'ok': True, 'maquina_id': maq.id, 'hoja_id': hoja.id}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error activando hoja en cola de maquina: {e}", exc_info=True)
+        return jsonify({'error': 'No se pudo priorizar la hoja en la máquina'}), 500
 
 
 @app.route('/api/estaciones/<int:estacion_id>/check_proceso', methods=['POST'])
@@ -7001,21 +7143,15 @@ def api_activar_maquina_nuevo(maquina_id):
     maq = Máquina.query.get_or_404(maquina_id)
     now_dt = datetime.utcnow()
     maq.activo = True
-    hoja_actual = HojaRutaNueva.query.filter(
+    cola = HojaRutaNueva.query.filter(
         HojaRutaNueva.maquina_id == maq.id,
         HojaRutaNueva.estado.in_(['activa', 'pausada'])
-    ).order_by(HojaRutaNueva.fecha_actualizacion.desc(), HojaRutaNueva.fecha_creacion.desc()).first()
+    ).all()
+    cola = _order_machine_queue_items(cola)
+    hoja_actual = _pick_machine_active_hoja(cola)
     if hoja_actual:
-        if hoja_actual.estado == 'pausada':
-            paused_at = hoja_actual.fecha_actualizacion or now_dt
-            if hoja_actual.fecha_salida:
-                hoja_actual.fecha_salida = hoja_actual.fecha_salida + (now_dt - paused_at)
-            else:
-                hoja_actual.fecha_salida = now_dt
-        elif not hoja_actual.fecha_salida:
-            hoja_actual.fecha_salida = now_dt
-        hoja_actual.estado = 'activa'
-        hoja_actual.fecha_actualizacion = now_dt
+        _pause_other_machine_hojas(HojaRutaNueva, maq.id, hoja_actual.id, now_dt)
+        _resume_or_activate_hoja(hoja_actual, now_dt)
     db.session.commit()
     return jsonify({'ok': True, 'maquina_id': maquina_id, 'activo': True}), 200
 
@@ -7027,8 +7163,8 @@ def api_desactivar_maquina_nuevo(maquina_id):
     maq = Máquina.query.get_or_404(maquina_id)
     now_dt = datetime.utcnow()
     maq.activo = False
-    hoja_activa = HojaRutaNueva.query.filter_by(maquina_id=maq.id, estado='activa').order_by(HojaRutaNueva.fecha_creacion.desc()).first()
-    if hoja_activa:
+    hojas_activas = HojaRutaNueva.query.filter_by(maquina_id=maq.id, estado='activa').all()
+    for hoja_activa in hojas_activas:
         hoja_activa.estado = 'pausada'
         hoja_activa.fecha_actualizacion = now_dt
     db.session.commit()
@@ -7042,8 +7178,8 @@ def api_paro_mantenimiento_nuevo(maquina_id):
     maq = Máquina.query.get_or_404(maquina_id)
     now_dt = datetime.utcnow()
     maq.activo = False
-    hoja_activa = HojaRutaNueva.query.filter_by(maquina_id=maq.id, estado='activa').order_by(HojaRutaNueva.fecha_creacion.desc()).first()
-    if hoja_activa:
+    hojas_activas = HojaRutaNueva.query.filter_by(maquina_id=maq.id, estado='activa').all()
+    for hoja_activa in hojas_activas:
         hoja_activa.estado = 'pausada'
         hoja_activa.fecha_actualizacion = now_dt
     db.session.commit()
@@ -7068,19 +7204,18 @@ def api_asignar_hoja_maquina_nuevo(maquina_id):
     if hoja.maquina_id and hoja.maquina_id != maq.id:
         return jsonify({'error': 'La hoja ya está asignada a otra máquina'}), 409
 
-    activa_actual = HojaRutaNueva.query.filter(
-        HojaRutaNueva.maquina_id == maq.id,
-        HojaRutaNueva.estado.in_(['activa', 'pausada'])
-    ).first()
-    if activa_actual and activa_actual.id != hoja.id:
-        return jsonify({'error': 'La máquina ya tiene una hoja activa o pausada asignada'}), 409
+    queue_limit = _machine_queue_limit_for_type(getattr(maq, 'tipo', None))
+    queue_count = _machine_queue_count(HojaRutaNueva, maq.id, exclude_hoja_id=hoja.id)
+    if queue_count >= queue_limit:
+        return jsonify({'error': f'La máquina ya alcanzó su cola máxima ({queue_limit} hojas).'}), 409
 
     try:
         now_ref = datetime.utcnow()
         hoja.maquina_id = maq.id
-        hoja.estado = 'activa'
+        _pause_other_machine_hojas(HojaRutaNueva, maq.id, hoja.id, now_ref)
+        _resume_or_activate_hoja(hoja, now_ref)
         target = _apply_mp_process_elapsed(hoja, start_estacion_id, elapsed_process_seconds, now_ref)
-        if target is None:
+        if target is None and not hoja.fecha_salida:
             hoja.fecha_salida = now_ref - timedelta(seconds=max(0, int(elapsed_process_seconds or 0)))
         _recompute_mp_time_plan(hoja)
         maq.activo = True
@@ -7102,10 +7237,12 @@ def api_ajustar_tiempo_proceso_maquina_nuevo(maquina_id):
     if elapsed_process_seconds is None:
         return jsonify({'error': 'elapsed_process_seconds invalido'}), 400
 
-    hoja = HojaRutaNueva.query.filter(
+    cola = HojaRutaNueva.query.filter(
         HojaRutaNueva.maquina_id == maq.id,
         HojaRutaNueva.estado.in_(['activa', 'pausada'])
-    ).order_by(HojaRutaNueva.fecha_actualizacion.desc(), HojaRutaNueva.fecha_creacion.desc()).first()
+    ).all()
+    cola = _order_machine_queue_items(cola)
+    hoja = _pick_machine_active_hoja(cola)
     if not hoja:
         return jsonify({'error': 'La máquina no tiene hoja activa o pausada'}), 404
 
@@ -7142,12 +7279,52 @@ def api_retirar_hoja_maquina_nuevo(maquina_id):
         if not hoja:
             return jsonify({'error': 'No hay hoja activa o pausada asignada a esta máquina'}), 404
 
+    now_ref = datetime.utcnow()
     hoja.maquina_id = None
     hoja.estado = 'activa'
     hoja.fecha_salida = None
     hoja.fecha_termino = None
+
+    if bool(getattr(maq, 'activo', False)):
+        restantes = HojaRutaNueva.query.filter(
+            HojaRutaNueva.maquina_id == maq.id,
+            HojaRutaNueva.estado.in_(['activa', 'pausada'])
+        ).all()
+        restantes = _order_machine_queue_items(restantes)
+        siguiente = _pick_machine_active_hoja(restantes)
+        if siguiente:
+            _pause_other_machine_hojas(HojaRutaNueva, maq.id, siguiente.id, now_ref)
+            _resume_or_activate_hoja(siguiente, now_ref)
+
     db.session.commit()
     return jsonify({'success': True, 'hoja': hoja.to_dict()}), 200
+
+
+@app.route('/api/maquinas_nuevo/<int:maquina_id>/activar_hoja', methods=['POST'])
+@login_required
+@requires_any_permission([('estaciones', 'operate'), ('catalog', 'edit')])
+def api_activar_hoja_maquina_nuevo(maquina_id):
+    maq = Máquina.query.get_or_404(maquina_id)
+    data = request.get_json() or {}
+    hoja_id = int(data.get('hoja_id') or 0)
+    if not hoja_id:
+        return jsonify({'error': 'hoja_id requerido'}), 400
+
+    hoja = HojaRutaNueva.query.get_or_404(hoja_id)
+    if hoja.maquina_id != maq.id:
+        return jsonify({'error': 'La hoja no está asignada a esta máquina'}), 409
+
+    try:
+        now_dt = datetime.utcnow()
+        _pause_other_machine_hojas(HojaRutaNueva, maq.id, hoja.id, now_dt)
+        _resume_or_activate_hoja(hoja, now_dt)
+        maq.activo = True
+        db.session.commit()
+        return jsonify({'ok': True, 'maquina_id': maq.id, 'hoja_id': hoja.id}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error activando hoja MP en cola de maquina: {e}", exc_info=True)
+        return jsonify({'error': 'No se pudo priorizar la hoja en la máquina'}), 500
 
 
 @app.route('/api/produccion/ingresar_piezas', methods=['POST'])
@@ -7171,12 +7348,15 @@ def api_ingresar_piezas():
     except Exception:
         return jsonify({'error': 'maquina_id inválido'}), 400
 
-    hoja_ocupada = HojaRutaEntrega.query.filter(
+    maq_for_limit = Máquina.query.get(maquina_id_int)
+    queue_limit = _machine_queue_limit_for_type(getattr(maq_for_limit, 'tipo', None) if maq_for_limit else None)
+
+    hojas_en_cola = HojaRutaEntrega.query.filter(
         HojaRutaEntrega.maquina_id == maquina_id_int,
         HojaRutaEntrega.estado.in_(['activa', 'pausada'])
-    ).first()
-    if hoja_ocupada:
-        return jsonify({'error': 'La máquina ya tiene una hoja activa o pausada. Retira la hoja actual antes de agregar otra.'}), 409
+    ).order_by(HojaRutaEntrega.fecha_actualizacion.desc(), HojaRutaEntrega.fecha_creacion.desc()).all()
+    if len(hojas_en_cola) >= queue_limit:
+        return jsonify({'error': f'La máquina ya alcanzó su cola máxima ({queue_limit} hojas).'}), 409
 
     veces_previas_maquina = HojaRutaEntrega.query.filter_by(maquina_id=maquina_id_int, pn=clave).count()
 
@@ -7195,6 +7375,9 @@ def api_ingresar_piezas():
         )
         db.session.add(hoja)
         db.session.flush()  # obtener id sin commit
+        now_ref = datetime.utcnow()
+        _pause_other_machine_hojas(HojaRutaEntrega, maquina_id_int, hoja.id, now_ref)
+        _resume_or_activate_hoja(hoja, now_ref)
 
         estaciones_creadas = []
 

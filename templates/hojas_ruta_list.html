@@ -556,6 +556,93 @@
             grid-template-columns: minmax(0, 1fr);
             gap: 8px;
         }
+
+        .queue-box {
+            margin-top: 6px;
+            border: 1px solid #d5e2ee;
+            background: #f8fbff;
+            border-radius: 8px;
+            padding: 8px;
+            display: grid;
+            gap: 6px;
+        }
+
+        .queue-title {
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.25px;
+            color: #234b73;
+        }
+
+        .queue-item {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 8px;
+            align-items: center;
+            border: 1px solid #dbe7f3;
+            background: #fff;
+            border-radius: 7px;
+            padding: 6px 7px;
+        }
+
+        .queue-item.activa {
+            border-color: #86efac;
+            background: #f0fdf4;
+        }
+
+        .queue-main {
+            min-width: 0;
+            font-size: 12px;
+            color: #35526f;
+            line-height: 1.35;
+        }
+
+        .queue-main strong {
+            color: #133a62;
+        }
+
+        .queue-actions {
+            display: inline-flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .queue-btn {
+            border: 1px solid #bfd6ec;
+            border-radius: 6px;
+            padding: 4px 7px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            background: #fff;
+            color: #1b446e;
+        }
+
+        .queue-btn.primary {
+            border-color: #8ec5ff;
+            background: #e8f4ff;
+            color: #0a4e88;
+        }
+
+        .queue-chip {
+            display: inline-block;
+            border-radius: 999px;
+            border: 1px solid #bcd3e8;
+            background: #f1f7ff;
+            color: #24527b;
+            padding: 1px 7px;
+            font-size: 10px;
+            font-weight: 700;
+            margin-left: 5px;
+        }
+
+        .queue-chip.activa {
+            border-color: #86efac;
+            background: #dcfce7;
+            color: #166534;
+        }
         .maquina-nombre {
             font-size: 20px;
             font-weight: 700;
@@ -1226,7 +1313,7 @@
                 {% if maquinas %}
                     {% for maq in maquinas %}
                     {% set tipo_norm = (maq.tipo or 'otro')|lower|replace('á','a')|replace('é','e')|replace('í','i')|replace('ó','o')|replace('ú','u')|replace(' ','_') %}
-                    <div class="maquina-card tipo-{{ tipo_norm }}" data-maq-nombre="{{ maq.nombre.lower() }}" data-hoja-nombre="{% if maq.hoja_activa %}{{ maq.hoja_activa.nombre.lower() }}{% endif %}" data-activo="{{ '1' if maq.activo else '0' }}">
+                    <div class="maquina-card tipo-{{ tipo_norm }}" data-maq-nombre="{{ maq.nombre.lower() }}" data-hoja-nombre="{% if maq.hojas_asignadas %}{% for q in maq.hojas_asignadas %}{{ (q.nombre or '')|lower }} {% endfor %}{% elif maq.hoja_activa %}{{ maq.hoja_activa.nombre.lower() }}{% endif %}" data-activo="{{ '1' if maq.activo else '0' }}">
                         <div class="maquina-image">
                             {% if maq.imagen_url %}
                                 <img src="{{ maq.imagen_url }}" alt="{{ maq.nombre }}" />
@@ -1327,8 +1414,32 @@
                                             </div>
                                         </div>
                                     </details>
+
+                                    {% if maq.hojas_asignadas %}
+                                    <div class="queue-box">
+                                        <div class="queue-title">Cola de fabricación ({{ maq.hojas_asignadas|length }}/{{ maq.cola_maxima or 4 }})</div>
+                                        {% for qh in maq.hojas_asignadas %}
+                                        <div class="queue-item {% if qh.es_activa %}activa{% endif %}">
+                                            <div class="queue-main">
+                                                <strong>{{ qh.nombre or ('HOJA #' ~ qh.id) }}</strong>
+                                                <span class="queue-chip {% if qh.es_activa %}activa{% endif %}">{{ 'ACTIVA' if qh.es_activa else (qh.estado or 'pausada')|upper }}</span><br>
+                                                Clave: {{ qh.pn or '-' }} · Pzas: {{ qh.cantidad_piezas or 0 }}
+                                            </div>
+                                            <div class="queue-actions">
+                                                {% if not qh.es_activa %}
+                                                <button type="button" class="queue-btn primary" onclick="activarHojaCola({{ maq.id }}, {{ qh.id }})">Priorizar</button>
+                                                {% endif %}
+                                                <button type="button" class="queue-btn" onclick="retirarHojaRuta({{ maq.id }}, {{ qh.id }}, '{{ (qh.nombre or ('HOJA ' ~ qh.id))|e }}')">Retirar</button>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
                                 {% else %}
                                     <span class="status-badge status-parado">⏸ Sin producción</span>
+                                    {% if maq.hojas_asignadas %}
+                                    <div style="font-size:12px; color:#4b5f73;">Hay {{ maq.hojas_asignadas|length }} hoja(s) en cola pausada para esta máquina.</div>
+                                    {% endif %}
                                 {% endif %}
                                 <div style="margin-top: 8px; display: flex; align-items: center; gap: 8px;">
                                     <div id="status-badge-{{ maq.id }}" style="display: flex; align-items: center; padding: 6px 12px; border-radius: 20px; {% if maq.activo %}background: linear-gradient(90deg, #28a745, #2ecc71); color: white; font-weight: 600;{% else %}background: linear-gradient(90deg, #dc3545, #e74c3c); color: white; font-weight: 600;{% endif %}">
@@ -1344,7 +1455,7 @@
                                 <button class="btn-small btn-stop" onclick="paroMaquina({{ maq.id }})">Paro de máquina</button>
                             {% endif %}
                             <button class="btn-small btn-maintenance" onclick="paroMantenimiento({{ maq.id }})">Paro por mantenimiento</button>
-                            <button class="btn-small btn-retire" onclick="retirarHojaRuta({{ maq.id }})">Retirar hoja de ruta</button>
+                            <button class="btn-small btn-retire" onclick="retirarHojaRuta({{ maq.id }})">Retirar hoja activa</button>
                             <a href="{{ hoja_detalle_base or '/hojas_ruta' }}/{{ maq.id }}" class="btn-small btn-view">Ver hojas</a>
                             {% if not maq.activo %}
                                 <button id="btn-toggle-{{ maq.id }}" class="btn-small btn-resume" onclick="toggleActivacion({{ maq.id }}, true)">Reanudar máquina</button>
@@ -1811,10 +1922,12 @@
         maquinasCatalogo.forEach(m => {
             const opt = document.createElement('option');
             opt.value = m.id;
-            const ocupada = !!(m.hoja_activa && m.hoja_activa.id);
-            opt.textContent = ocupada ? `${m.nombre} (ocupada)` : m.nombre;
-            // Si la máquina está ocupada no se permite nueva asignación directa.
-            if (ocupada && Number(m.id) !== Number(maquinaId || 0)) {
+            const queueCount = Number(m.hojas_asignadas_count || 0);
+            const queueLimit = Number(m.cola_maxima || 4);
+            const llena = queueCount >= queueLimit;
+            opt.textContent = `${m.nombre} (${queueCount}/${queueLimit})`;
+            // Solo bloquear si ya alcanzó su capacidad de cola.
+            if (llena) {
                 opt.disabled = true;
             }
             maquinaSelect.appendChild(opt);
@@ -1822,7 +1935,16 @@
 
         if (maquinaId) {
             maquinaSelect.value = String(maquinaId);
-            maquinaHint.textContent = 'Máquina preseleccionada desde la tarjeta.';
+            const selectedMachine = maquinasCatalogo.find(m => Number(m.id) === Number(maquinaId));
+            const queueCount = Number(selectedMachine && selectedMachine.hojas_asignadas_count || 0);
+            const queueLimit = Number(selectedMachine && selectedMachine.cola_maxima || 4);
+            if (queueCount >= queueLimit) {
+                maquinaInput.value = '';
+                maquinaSelect.value = '';
+                maquinaHint.textContent = `Esta máquina ya está llena (${queueCount}/${queueLimit}). Retira una hoja para poder asignar otra.`;
+            } else {
+                maquinaHint.textContent = 'Máquina preseleccionada desde la tarjeta.';
+            }
         }
 
         select.innerHTML = '';
@@ -2059,8 +2181,27 @@
         }
     }
 
-    async function retirarHojaRuta(maquinaId) {
-        if (!confirm('¿Retirar hoja de ruta activa de esta máquina y regresarla a hojas por asignar?')) {
+    async function activarHojaCola(maquinaId, hojaId) {
+        try {
+            const res = await fetch(API_MAQUINA_BASE + '/' + maquinaId + '/activar_hoja', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ hoja_id: hojaId })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.error || 'No se pudo priorizar la hoja');
+            }
+            await softRefreshBoard();
+        } catch (err) {
+            alert('Error: ' + err.message);
+        }
+    }
+
+    async function retirarHojaRuta(maquinaId, hojaId, hojaSerie) {
+        const label = hojaSerie || 'la hoja activa';
+        if (!confirm('¿Retirar ' + label + ' de esta máquina y regresarla a hojas por asignar?')) {
             return;
         }
         try {
@@ -2068,7 +2209,7 @@
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'same-origin',
-                body: JSON.stringify({})
+                body: JSON.stringify(hojaId ? { hoja_id: hojaId } : {})
             });
             const data = await res.json();
             if (!res.ok) {
