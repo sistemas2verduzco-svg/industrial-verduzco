@@ -5379,6 +5379,25 @@ def servir_qr_tecnico(filename):
     return send_from_directory(os.path.abspath(TECNICOS_QR_DIR), filename)
 
 
+@app.route('/tecnicos/<int:tid>/credencial')
+@login_required
+def credencial_tecnico(tid):
+    user = get_current_user()
+    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+        return render_template('403.html'), 403
+    tecnico = Tecnico.query.get_or_404(tid)
+    # Generar QR si no existe
+    if not (tecnico.qr_imagen or '').strip():
+        try:
+            _save_tecnico_qr_image(tecnico)
+            db.session.commit()
+        except Exception as exc:
+            logger.warning(f'No se pudo generar QR para credencial: {exc}')
+    now = datetime.utcnow()
+    vigente = tecnico.esta_vigente(now)
+    return render_template('credencial_tecnico.html', tecnico=tecnico, vigente=vigente, now=now)
+
+
 # ==================== MÓDULO HOJAS DE RUTA NUEVO ====================
 
 @app.route('/hojas_ruta_nuevo')

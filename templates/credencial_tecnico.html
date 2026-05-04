@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Credencial — {{ tecnico.nombre }}</title>
+    <style>
+        /* ── Reset y config impresión ───────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html, body {
+            background: #e8e8e8;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        }
+
+        /* ── Controles de pantalla (ocultos al imprimir) ────── */
+        .print-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            padding: 24px 16px 16px;
+        }
+        .btn-print {
+            background: #1b5e20;
+            color: #fff;
+            border: none;
+            padding: 10px 28px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            letter-spacing: .5px;
+        }
+        .btn-print:hover { background: #2e7d32; }
+        .btn-back {
+            background: #607d8b;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: .9rem;
+            cursor: pointer;
+        }
+        .hint {
+            text-align: center;
+            color: #666;
+            font-size: .82rem;
+            margin-bottom: 20px;
+        }
+
+        /* ── Contenedor exterior ────────────────────────────── */
+        .card-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 32px;
+            padding-bottom: 40px;
+        }
+
+        /* ── Credencial CR80: 85.6 × 54 mm ─────────────────── */
+        .card {
+            width: 85.6mm;
+            height: 54mm;
+            position: relative;
+            border-radius: 3.5mm;
+            overflow: hidden;
+            box-shadow: 0 6px 28px rgba(0,0,0,.28);
+            background: #fff;
+            page-break-inside: avoid;
+        }
+
+        /* ═══ CARA FRONTAL ══════════════════════════════════ */
+        .card-front {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Banda superior verde */
+        .card-header {
+            background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 60%, #33691e 100%);
+            padding: 3.2mm 4mm 2.5mm;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+        .card-header .logo-wrap {
+            height: 10mm;
+            display: flex;
+            align-items: center;
+        }
+        .card-header .logo-wrap img {
+            max-height: 10mm;
+            max-width: 28mm;
+            object-fit: contain;
+            filter: brightness(0) invert(1); /* blanco sobre verde */
+        }
+        .card-header .empresa-name {
+            color: #fff;
+            font-size: 5.5pt;
+            font-weight: 700;
+            text-align: right;
+            text-transform: uppercase;
+            letter-spacing: .6px;
+            max-width: 38mm;
+            line-height: 1.3;
+        }
+
+        /* Franja amarilla delgada */
+        .card-stripe {
+            height: 2.5mm;
+            background: linear-gradient(90deg, #f9a825, #fdd835, #f9a825);
+            flex-shrink: 0;
+        }
+
+        /* Cuerpo principal */
+        .card-body {
+            flex: 1;
+            display: flex;
+            padding: 2.5mm 3.5mm 0;
+            gap: 3mm;
+        }
+
+        /* Foto */
+        .card-photo-wrap {
+            flex-shrink: 0;
+            width: 18mm;
+        }
+        .card-photo {
+            width: 18mm;
+            height: 22mm;
+            object-fit: cover;
+            border-radius: 1.5mm;
+            border: 1px solid #c8e6c9;
+        }
+        .card-photo-placeholder {
+            width: 18mm;
+            height: 22mm;
+            background: #e8f5e9;
+            border-radius: 1.5mm;
+            border: 1px solid #c8e6c9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20pt;
+            color: #a5d6a7;
+        }
+
+        /* Datos */
+        .card-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            padding-top: 0.5mm;
+        }
+        .card-label {
+            font-size: 4pt;
+            font-weight: 700;
+            color: #1b5e20;
+            text-transform: uppercase;
+            letter-spacing: .8px;
+            margin-bottom: .8mm;
+            margin-top: 1.5mm;
+        }
+        .card-label:first-child { margin-top: 0; }
+        .card-value {
+            font-size: 7pt;
+            font-weight: 700;
+            color: #212121;
+            line-height: 1.2;
+        }
+        .card-value.small { font-size: 6pt; }
+        .card-num-badge {
+            display: inline-block;
+            background: #f9a825;
+            color: #212121;
+            font-size: 6pt;
+            font-weight: 800;
+            padding: 0.5mm 2mm;
+            border-radius: 2mm;
+            margin-top: 0.8mm;
+        }
+
+        /* Pie de tarjeta */
+        .card-footer-front {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.5mm 3.5mm 2mm;
+            border-top: .4mm solid #e8f5e9;
+            margin-top: auto;
+        }
+        .card-footer-front .vigencia {
+            font-size: 4.5pt;
+            color: #555;
+        }
+        .card-footer-front .vigencia strong {
+            color: #1b5e20;
+        }
+        .card-footer-front .estado-badge {
+            font-size: 4.5pt;
+            font-weight: 800;
+            padding: 0.6mm 2mm;
+            border-radius: 2mm;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+        }
+        .estado-activo  { background: #c8e6c9; color: #1b5e20; }
+        .estado-invalido { background: #ffcdd2; color: #b71c1c; }
+
+        /* ═══ CARA TRASERA ══════════════════════════════════ */
+        .card-back {
+            display: flex;
+            flex-direction: column;
+            background: #fff;
+        }
+
+        .card-back .back-header {
+            background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 60%, #33691e 100%);
+            height: 7mm;
+            display: flex;
+            align-items: center;
+            padding: 0 4mm;
+        }
+        .card-back .back-header span {
+            color: #fdd835;
+            font-size: 5.5pt;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .card-back .back-stripe {
+            height: 2mm;
+            background: linear-gradient(90deg, #f9a825, #fdd835, #f9a825);
+        }
+        /* Banda magnética simulada */
+        .mag-stripe {
+            height: 9mm;
+            background: #1a1a1a;
+            margin: 3mm 0 0;
+            flex-shrink: 0;
+        }
+
+        .back-body {
+            flex: 1;
+            display: flex;
+            padding: 2mm 3.5mm;
+            gap: 3mm;
+            align-items: center;
+        }
+        .qr-wrap {
+            flex-shrink: 0;
+        }
+        .qr-wrap img {
+            width: 18mm;
+            height: 18mm;
+            object-fit: contain;
+            border: .4mm solid #e0e0e0;
+            border-radius: 1mm;
+            padding: .5mm;
+        }
+        .back-info {
+            flex: 1;
+        }
+        .back-scan-text {
+            font-size: 5pt;
+            color: #555;
+            line-height: 1.5;
+            margin-bottom: 1.5mm;
+        }
+        .back-scan-text strong { color: #1b5e20; }
+        .back-url {
+            font-size: 4pt;
+            color: #888;
+            word-break: break-all;
+        }
+        .back-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 3.5mm 1.5mm;
+            border-top: .4mm solid #e8f5e9;
+            padding-top: 1mm;
+        }
+        .back-footer .disclaimer {
+            font-size: 3.5pt;
+            color: #aaa;
+            max-width: 52mm;
+            line-height: 1.4;
+        }
+        .back-footer .logo-small img {
+            max-height: 5mm;
+            max-width: 14mm;
+            object-fit: contain;
+            opacity: .55;
+        }
+
+        /* ── Etiquetas de cara ──────────────────────────────── */
+        .side-label {
+            text-align: center;
+            font-size: .75rem;
+            color: #888;
+            margin-bottom: 6px;
+            font-weight: 600;
+            letter-spacing: .5px;
+            text-transform: uppercase;
+        }
+
+        /* ── Reglas de impresión ────────────────────────────── */
+        @media print {
+            html, body {
+                background: #fff;
+                margin: 0;
+                padding: 0;
+            }
+            .print-controls, .hint, .side-label { display: none !important; }
+            .card-wrapper {
+                flex-direction: row;
+                flex-wrap: wrap;
+                align-items: flex-start;
+                justify-content: center;
+                gap: 8mm;
+                padding: 10mm;
+            }
+            .card {
+                box-shadow: none;
+                border: .3mm solid #ccc;
+            }
+            .card-item { page-break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="print-controls">
+    <button class="btn-back" onclick="history.back()">← Volver</button>
+    <button class="btn-print" onclick="window.print()">🖨️ Imprimir Credencial</button>
+</div>
+<p class="hint">Tamaño CR80 estándar (85.6 × 54 mm). En la impresora selecciona "Tamaño real" o "Sin escala".</p>
+
+<div class="card-wrapper">
+
+    <!-- ── FRENTE ───────────────────────────────────────────── -->
+    <div class="card-item">
+        <div class="side-label">Frente</div>
+        <div class="card card-front">
+
+            <div class="card-header">
+                <div class="logo-wrap">
+                    <img src="{{ url_for('static', filename='img/logo_ttm.jpg') }}" alt="Logo">
+                </div>
+                <div class="empresa-name">{{ tecnico.empresa }}</div>
+            </div>
+            <div class="card-stripe"></div>
+
+            <div class="card-body">
+                <!-- Foto -->
+                <div class="card-photo-wrap">
+                    {% if tecnico.foto %}
+                        <img class="card-photo" src="{{ tecnico.foto }}" alt="Foto">
+                    {% else %}
+                        <div class="card-photo-placeholder">👷</div>
+                    {% endif %}
+                </div>
+
+                <!-- Datos -->
+                <div class="card-info">
+                    <div class="card-label">Nombre</div>
+                    <div class="card-value">{{ tecnico.nombre }}</div>
+
+                    <div class="card-label">Empresa</div>
+                    <div class="card-value small">{{ tecnico.empresa }}</div>
+
+                    <div class="card-label">No. Empleado</div>
+                    <span class="card-num-badge">{{ tecnico.numero_empleado }}</span>
+                </div>
+            </div>
+
+            <div class="card-footer-front">
+                <div class="vigencia">
+                    Vigente hasta: <strong>{{ tecnico.fecha_expiracion.strftime('%d/%m/%Y') if tecnico.fecha_expiracion else '—' }}</strong>
+                </div>
+                <span class="estado-badge {% if vigente %}estado-activo{% else %}estado-invalido{% endif %}">
+                    {% if vigente %}ACTIVO{% else %}NO VIGENTE{% endif %}
+                </span>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ── REVERSO ───────────────────────────────────────────── -->
+    <div class="card-item">
+        <div class="side-label">Reverso</div>
+        <div class="card card-back">
+
+            <div class="back-header">
+                <span>Credencial de Acceso — Verificación Digital</span>
+            </div>
+            <div class="back-stripe"></div>
+            <div class="mag-stripe"></div>
+
+            <div class="back-body">
+                <!-- QR -->
+                <div class="qr-wrap">
+                    {% if tecnico.qr_imagen %}
+                        <img src="{{ tecnico.qr_imagen }}" alt="QR">
+                    {% else %}
+                        <div style="width:18mm;height:18mm;background:#f5f5f5;border-radius:1mm;display:flex;align-items:center;justify-content:center;font-size:7pt;color:#aaa;">Sin QR</div>
+                    {% endif %}
+                </div>
+
+                <div class="back-info">
+                    <div class="back-scan-text">
+                        Escanea el código QR para<br>
+                        <strong>verificar esta credencial</strong><br>
+                        en tiempo real.
+                    </div>
+                    <div class="back-url">
+                        controlcalidad360.site/verificar/{{ tecnico.token_qr[:12] }}…
+                    </div>
+                </div>
+            </div>
+
+            <div class="back-footer">
+                <div class="disclaimer">
+                    Esta credencial es personal e intransferible. En caso de pérdida repórtala inmediatamente.
+                </div>
+                <div class="logo-small">
+                    <img src="{{ url_for('static', filename='img/logo_ttm.jpg') }}" alt="Logo">
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>
