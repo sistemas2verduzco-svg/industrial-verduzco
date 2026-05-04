@@ -123,6 +123,9 @@
         {% if has_permission('proveedores', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
         <a href="/proveedores" class="sb-link sb-sub" data-base="/proveedores"><span>🏢</span> <span>Proveedores</span></a>
         {% endif %}
+        {% if has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        <a href="/tecnicos" class="sb-link sb-sub" data-base="/tecnicos"><span>🪪</span> <span>Técnicos QR</span></a>
+        {% endif %}
         {% if has_permission('users', 'view') or has_permission('users', 'edit') or has_permission('roles', 'view') or has_permission('roles', 'edit') or has_permission('permissions', 'view') or has_permission('permissions', 'edit') or current_user and current_user.es_admin %}
         <a href="/admin/users" class="sb-link sb-sub" data-base="/admin/users"><span>👥</span> <span>{% if (has_permission('roles', 'view') or has_permission('roles', 'edit') or has_permission('permissions', 'view') or has_permission('permissions', 'edit') or current_user and current_user.es_admin) %}Usuarios y Roles{% else %}Usuarios{% endif %}</span></a>
         {% endif %}

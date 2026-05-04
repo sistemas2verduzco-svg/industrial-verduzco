@@ -5217,6 +5217,167 @@ def reportar_problema_verificacion(token):
     return redirect(url_for('verificar_tecnico_publico', token=token_txt))
 
 
+# ==================== ADMIN TÉCNICOS QR ====================
+
+TECNICOS_FOTO_DIR = os.path.join('uploads', 'tecnicos', 'fotos')
+os.makedirs(TECNICOS_FOTO_DIR, exist_ok=True)
+
+@app.route('/tecnicos')
+@login_required
+def tecnicos_admin():
+    user = get_current_user()
+    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+        return render_template('403.html'), 403
+    return render_template('tecnicos.html')
+
+
+@app.route('/api/tecnicos', methods=['GET'])
+@login_required
+def api_list_tecnicos():
+    user = get_current_user()
+    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+        return jsonify({'error': 'Permiso denegado'}), 403
+    tecnicos = Tecnico.query.order_by(Tecnico.creado_en.desc()).all()
+    return jsonify({'tecnicos': [t.to_dict() for t in tecnicos]})
+
+
+@app.route('/api/tecnicos', methods=['POST'])
+@login_required
+def api_crear_tecnico():
+    user = get_current_user()
+    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+        return jsonify({'error': 'Permiso denegado'}), 403
+
+    nombre = (request.form.get('nombre') or '').strip()
+    empresa = (request.form.get('empresa') or '').strip()
+    numero_empleado = (request.form.get('numero_empleado') or '').strip()
+    fecha_exp_str = (request.form.get('fecha_expiracion') or '').strip()
+
+    if not nombre or not empresa or not numero_empleado or not fecha_exp_str:
+        return jsonify({'error': 'nombre, empresa, numero_empleado y fecha_expiracion son requeridos'}), 400
+
+    if Tecnico.query.filter_by(numero_empleado=numero_empleado).first():
+        return jsonify({'error': f'Ya existe un técnico con número de empleado {numero_empleado}'}), 409
+
+    try:
+        fecha_exp = datetime.strptime(fecha_exp_str, '%Y-%m-%d')
+    except ValueError:
+        return jsonify({'error': 'fecha_expiracion debe ser YYYY-MM-DD'}), 400
+
+    foto_url = None
+    if 'foto' in request.files:
+        f = request.files['foto']
+        if f and f.filename and allowed_file(f.filename):
+            fname = secure_filename(f.filename)
+            ts = datetime.now().strftime('%Y%m%d_%H%M%S_')
+            fname = ts + fname
+            f.save(os.path.join(TECNICOS_FOTO_DIR, fname))
+            foto_url = f'/uploads/tecnicos/fotos/{fname}'
+
+    tecnico = Tecnico(
+        nombre=nombre,
+        empresa=empresa,
+        numero_empleado=numero_empleado,
+        foto=foto_url,
+        fecha_expiracion=fecha_exp,
+    )
+    db.session.add(tecnico)
+    db.session.flush()  # genera el id y token_qr
+
+    try:
+        _save_tecnico_qr_image(tecnico)
+    except Exception as exc:
+        logger.warning(f'No se pudo pre-generar QR para técnico nuevo: {exc}')
+
+    db.session.commit()
+    return jsonify({'mensaje': 'Técnico creado', 'tecnico': tecnico.to_dict()}), 201
+
+
+@app.route('/api/tecnicos/<int:tid>', methods=['PUT'])
+@login_required
+def api_editar_tecnico(tid):
+    user = get_current_user()
+    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+        return jsonify({'error': 'Permiso denegado'}), 403
+
+    tecnico = Tecnico.query.get_or_404(tid)
+    nombre = (request.form.get('nombre') or '').strip()
+    empresa = (request.form.get('empresa') or '').strip()
+    numero_empleado = (request.form.get('numero_empleado') or '').strip()
+    fecha_exp_str = (request.form.get('fecha_expiracion') or '').strip()
+
+    if nombre:
+        tecnico.nombre = nombre
+    if empresa:
+        tecnico.empresa = empresa
+    if numero_empleado:
+        dup = Tecnico.query.filter(Tecnico.numero_empleado == numero_empleado, Tecnico.id != tid).first()
+        if dup:
+            return jsonify({'error': 'Número de empleado ya existe en otro técnico'}), 409
+        tecnico.numero_empleado = numero_empleado
+    if fecha_exp_str:
+        try:
+            tecnico.fecha_expiracion = datetime.strptime(fecha_exp_str, '%Y-%m-%d')
+        except ValueError:
+            return jsonify({'error': 'fecha_expiracion debe ser YYYY-MM-DD'}), 400
+
+    if 'foto' in request.files:
+        f = request.files['foto']
+        if f and f.filename and allowed_file(f.filename):
+            fname = secure_filename(f.filename)
+            ts = datetime.now().strftime('%Y%m%d_%H%M%S_')
+            fname = ts + fname
+            f.save(os.path.join(TECNICOS_FOTO_DIR, fname))
+            tecnico.foto = f'/uploads/tecnicos/fotos/{fname}'
+
+    db.session.commit()
+    return jsonify({'mensaje': 'Técnico actualizado', 'tecnico': tecnico.to_dict()})
+
+
+@app.route('/api/tecnicos/<int:tid>/estado', methods=['POST'])
+@login_required
+def api_toggle_tecnico_estado(tid):
+    user = get_current_user()
+    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+        return jsonify({'error': 'Permiso denegado'}), 403
+    tecnico = Tecnico.query.get_or_404(tid)
+    nuevo = Tecnico.ESTADO_SUSPENDIDO if tecnico.estado == Tecnico.ESTADO_ACTIVO else Tecnico.ESTADO_ACTIVO
+    tecnico.estado = nuevo
+    db.session.commit()
+    return jsonify({'mensaje': f'Estado cambiado a {nuevo}', 'estado': nuevo})
+
+
+@app.route('/api/tecnicos/<int:tid>/qr')
+@login_required
+def api_descargar_qr_tecnico(tid):
+    user = get_current_user()
+    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+        return jsonify({'error': 'Permiso denegado'}), 403
+    tecnico = Tecnico.query.get_or_404(tid)
+    if not (tecnico.qr_imagen or '').strip():
+        try:
+            _save_tecnico_qr_image(tecnico)
+            db.session.commit()
+        except Exception as exc:
+            return jsonify({'error': f'No se pudo generar QR: {exc}'}), 500
+
+    filename = os.path.basename(tecnico.qr_imagen)
+    abs_path = os.path.join(TECNICOS_QR_DIR, filename)
+    if not os.path.exists(abs_path):
+        return jsonify({'error': 'Archivo QR no encontrado'}), 404
+    return send_from_directory(os.path.abspath(TECNICOS_QR_DIR), filename, as_attachment=True,
+                               download_name=f'QR_{tecnico.numero_empleado}.png')
+
+
+@app.route('/uploads/tecnicos/fotos/<filename>')
+def servir_foto_tecnico(filename):
+    return send_from_directory(os.path.abspath(TECNICOS_FOTO_DIR), filename)
+
+
+@app.route('/uploads/tecnicos/qr/<filename>')
+def servir_qr_tecnico(filename):
+    return send_from_directory(os.path.abspath(TECNICOS_QR_DIR), filename)
+
 
 # ==================== MÓDULO HOJAS DE RUTA NUEVO ====================
 
