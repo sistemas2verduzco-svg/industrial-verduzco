@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="216" height="216" viewBox="0 0 216 216" role="img" aria-label="Nuestra Seguridad es Primero">
+  <rect width="216" height="216" fill="#ffffff"/>
+  <g transform="translate(108,108)">
+    <polygon points="0,-84 66,-46 66,46 0,84 -66,46 -66,-46" fill="#f4bf21"/>
+    <polygon points="0,-73 57,-40 57,40 0,73 -57,40 -57,-40" fill="#f4bf21" stroke="#0f2a54" stroke-width="2.4"/>
+
+    <g fill="#0f2a54" transform="translate(0,-54)">
+      <circle r="2.4" cx="0" cy="0"/>
+      <rect x="-0.8" y="-10" width="1.6" height="4.8" rx="0.8"/>
+      <rect x="-0.8" y="5.2" width="1.6" height="4.8" rx="0.8"/>
+      <rect x="5.2" y="-0.8" width="4.8" height="1.6" rx="0.8"/>
+      <rect x="-10" y="-0.8" width="4.8" height="1.6" rx="0.8"/>
+      <rect x="4.2" y="-7.5" width="1.4" height="4.4" rx="0.7" transform="rotate(45 4.9 -5.3)"/>
+      <rect x="-5.6" y="3.1" width="1.4" height="4.4" rx="0.7" transform="rotate(45 -4.9 5.3)"/>
+      <rect x="-5.6" y="-7.5" width="1.4" height="4.4" rx="0.7" transform="rotate(-45 -4.9 -5.3)"/>
+      <rect x="4.2" y="3.1" width="1.4" height="4.4" rx="0.7" transform="rotate(-45 4.9 5.3)"/>
+    </g>
+
+    <text x="0" y="-35" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#0f2a54" font-weight="700" letter-spacing="0.8">NUESTRA</text>
+
+    <rect x="-42" y="-24" width="84" height="50" fill="#0f2a54"/>
+    <text x="0" y="-2" text-anchor="middle" font-family="Arial Black, Segoe UI, Arial, sans-serif" font-size="18" fill="#f4bf21" font-weight="900">SEGURIDAD</text>
+    <text x="0" y="20" text-anchor="middle" font-family="Arial Black, Segoe UI, Arial, sans-serif" font-size="14" fill="#f4bf21" font-weight="900">ES PRIMERO</text>
+  </g>
+</svg>
