@@ -3,181 +3,239 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Verificacion de Tecnico</title>
+    <title>Verificaci&#243;n de T&#233;cnico &#8212; Industrias Verduzco</title>
     <style>
         :root {
-            --ok: #1e7a34;
-            --error: #b82020;
-            --ink: #1f2937;
-            --muted: #64748b;
-            --bg: #f4f7fb;
-            --card: #ffffff;
-            --border: #d9e2ec;
+            --green: #0f5f34; --green-light: #e6f4ec; --green-border: #b3dcc4;
+            --red: #b82020; --red-light: #fdeaea;
+            --ink: #1a1a1a; --muted: #64748b; --bg: #f0f4f8;
+            --card: #ffffff; --border: #dce4ef;
         }
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            margin: 0;
-            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-            color: var(--ink);
-            background: radial-gradient(circle at top left, #eef5ff 0%, var(--bg) 55%, #e9eef5 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 24px;
+            font-family: "Segoe UI", system-ui, sans-serif;
+            background: var(--bg); min-height: 100vh;
+            display: flex; align-items: flex-start; justify-content: center;
+            padding: 28px 16px 48px; color: var(--ink);
         }
-        .card {
-            width: min(760px, 100%);
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
-            padding: 22px;
+        .wrap { width: min(680px, 100%); }
+        .top-bar {
+            display: flex; align-items: center; gap: 14px;
+            background: var(--green); border-radius: 12px 12px 0 0; padding: 16px 22px;
         }
-        .head {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 14px;
+        .top-bar img { height: 46px; width: auto; filter: brightness(0) invert(1); }
+        .top-bar-text h1 { color: #fff; font-size: 1.05rem; font-weight: 700; }
+        .top-bar-text p { color: rgba(255,255,255,.75); font-size: .78rem; margin-top: 2px; }
+        .status-banner {
+            display: flex; align-items: center; gap: 14px;
+            padding: 14px 22px; font-weight: 700; font-size: 1.05rem;
         }
-        .head img {
-            height: 48px;
-            width: auto;
+        .status-banner.ok  { background: var(--green-light); color: var(--green); border-bottom: 1px solid var(--green-border); }
+        .status-banner.error { background: var(--red-light); color: var(--red); border-bottom: 1px solid #f4c2c2; }
+        .status-icon { font-size: 2rem; line-height: 1; }
+        .status-sub { font-size: .82rem; font-weight: 500; margin-top: 3px; opacity: .85; }
+        .card-body {
+            background: var(--card); border: 1px solid var(--border); border-top: 0;
+            border-radius: 0 0 12px 12px; padding: 24px 22px;
         }
-        .head h1 {
-            margin: 0;
-            font-size: 20px;
-            line-height: 1.2;
+        .profile { display: flex; gap: 20px; margin-bottom: 24px; }
+        .profile-photo {
+            flex-shrink: 0; width: 110px; height: 130px; border-radius: 8px;
+            border: 2px solid var(--green); background: #eef2f7;
+            display: flex; align-items: center; justify-content: center;
+            color: #94a3b8; font-size: .82rem; text-align: center; overflow: hidden;
         }
-        .status {
-            border-radius: 10px;
-            padding: 12px 14px;
-            margin-bottom: 16px;
-            font-weight: 700;
+        .profile-photo img { width: 100%; height: 100%; object-fit: cover; }
+        .profile-name { font-size: 1.3rem; font-weight: 800; line-height: 1.2; }
+        .profile-role { color: var(--green); font-size: .92rem; font-weight: 600; margin: 4px 0 8px; }
+        .profile-company { font-size: .88rem; color: var(--muted); }
+        .badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 4px 12px; border-radius: 20px;
+            font-size: .78rem; font-weight: 700; margin-top: 10px;
         }
-        .status.ok {
-            background: #e8f8ec;
-            color: var(--ok);
-            border: 1px solid #bfe6ca;
+        .badge.activo  { background: var(--green-light); color: var(--green); border: 1px solid var(--green-border); }
+        .badge.inactivo { background: var(--red-light);   color: var(--red);   border: 1px solid #f4c2c2; }
+        .badge::before { content: '●'; }
+        .section-title {
+            font-size: .7rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: .08em; color: var(--muted);
+            border-bottom: 1px solid var(--border); padding-bottom: 6px; margin: 20px 0 12px;
         }
-        .status.error {
-            background: #fdeeee;
-            color: var(--error);
-            border: 1px solid #f4caca;
+        .data-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+        .data-label { font-size: .7rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 3px; }
+        .data-value { font-size: .92rem; color: var(--ink); font-weight: 500; word-break: break-word; }
+        .data-value.hi  { color: var(--green); font-weight: 700; }
+        .data-value.warn { color: var(--red); font-weight: 700; }
+        .validity-bar {
+            display: flex; align-items: center; gap: 10px;
+            background: #f8fafc; border: 1px solid var(--border);
+            border-radius: 8px; padding: 10px 14px; margin-top: 20px;
         }
-        .grid {
-            display: grid;
-            grid-template-columns: 170px 1fr;
-            gap: 16px;
+        .validity-bar .vb-icon { font-size: 1.4rem; }
+        .validity-bar .vb-text { font-size: .83rem; }
+        .validity-bar .vb-text b { display: block; color: var(--ink); }
+        .validity-bar .vb-text span { color: var(--muted); }
+        .emergency {
+            background: #fff8e7; border: 1px solid #f0d98a; border-radius: 8px;
+            padding: 12px 16px; margin-top: 20px;
         }
-        .photo {
-            width: 170px;
-            height: 170px;
-            border-radius: 10px;
-            border: 1px solid var(--border);
-            object-fit: cover;
-            background: #eef2f7;
+        .emergency-title { font-size: .73rem; font-weight: 800; color: #7c5a00; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 10px; }
+        .footer { margin-top: 22px; border-top: 1px dashed var(--border); padding-top: 16px; }
+        .footer-note { font-size: .78rem; color: var(--muted); margin-bottom: 12px; }
+        .footer label { display: block; font-weight: 600; font-size: .85rem; margin-bottom: 6px; }
+        .footer textarea {
+            width: 100%; min-height: 68px; resize: vertical;
+            border: 1px solid var(--border); border-radius: 7px;
+            padding: 8px 10px; font-size: .85rem; font-family: inherit;
         }
-        .meta p {
-            margin: 0 0 8px;
-            font-size: 15px;
+        .footer button {
+            margin-top: 8px; background: #1e5b8f; color: #fff; border: 0;
+            padding: 9px 16px; border-radius: 7px; font-weight: 700; font-size: .85rem; cursor: pointer;
         }
-        .meta b {
-            display: inline-block;
-            width: 160px;
-            color: #334155;
-        }
-        .small {
-            margin-top: 12px;
-            color: var(--muted);
-            font-size: 13px;
-        }
-        .problem {
-            margin-top: 16px;
-            border-top: 1px dashed var(--border);
-            padding-top: 14px;
-        }
-        .problem textarea {
-            width: 100%;
-            min-height: 72px;
-            resize: vertical;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 9px;
-            font-size: 14px;
-        }
-        .problem button {
-            margin-top: 10px;
-            border: 0;
-            background: #0b5fad;
-            color: #fff;
-            padding: 10px 13px;
-            border-radius: 8px;
-            font-weight: 700;
-            cursor: pointer;
-        }
-        .flash {
-            margin: 0 0 12px;
-            padding: 10px;
-            border-radius: 8px;
-            border: 1px solid #bde3c7;
-            background: #e9f8ee;
-            color: #245a34;
-            font-size: 14px;
-        }
-        @media (max-width: 640px) {
-            .grid { grid-template-columns: 1fr; }
-            .photo { width: 100%; height: auto; max-height: 280px; }
-            .meta b { width: 100%; margin-bottom: 2px; }
+        .flash { margin-bottom: 12px; padding: 10px 14px; border-radius: 8px; font-size: .85rem; background: #e9f8ee; border: 1px solid #b3dcc4; color: #1b5e2e; }
+        @media (max-width: 500px) {
+            .profile { flex-direction: column; align-items: center; text-align: center; }
+            .data-grid { grid-template-columns: 1fr 1fr; }
         }
     </style>
 </head>
 <body>
-    <main class="card">
-        <header class="head">
-            <img src="{{ logo_url }}" alt="Logo empresa" onerror="this.style.display='none';">
-            <h1>Verificacion Publica de Credencial</h1>
-        </header>
+<div class="wrap">
+
+    <div class="top-bar">
+        <img src="{{ logo_url }}" alt="Industrias Verduzco" onerror="this.style.display='none';">
+        <div class="top-bar-text">
+            <h1>Verificaci&#243;n de Credencial</h1>
+            <p>Industrias Verduzco &mdash; Portal P&#250;blico de Acceso</p>
+        </div>
+    </div>
+
+    <div class="status-banner {{ 'ok' if estado_visual == 'valido' else 'error' }}">
+        <span class="status-icon">{{ '✔' if estado_visual == 'valido' else '✘' }}</span>
+        <div>
+            {{ mensaje_estado }}
+            {% if motivo %}<div class="status-sub">{{ motivo }}</div>{% endif %}
+        </div>
+    </div>
+
+    <div class="card-body">
 
         {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="flash">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
+            {% if messages %}{% for _, msg in messages %}
+                <div class="flash">{{ msg }}</div>
+            {% endfor %}{% endif %}
         {% endwith %}
 
-        <section class="status {{ 'ok' if estado_visual == 'valido' else 'error' }}">
-            {{ mensaje_estado }}
-            {% if motivo %}<div style="font-size:13px;font-weight:500;margin-top:4px;">{{ motivo }}</div>{% endif %}
-        </section>
+        {% if tecnico %}
 
-        <section class="grid">
-            {% if tecnico and tecnico.foto %}
-                <img class="photo" src="{{ tecnico.foto }}" alt="Foto tecnico">
-            {% else %}
-                <div class="photo" style="display:flex;align-items:center;justify-content:center;color:#6b7280;">Sin foto</div>
-            {% endif %}
-
-            <div class="meta">
-                <p><b>Nombre:</b> {{ tecnico.nombre if tecnico else 'No disponible' }}</p>
-                <p><b>Empresa:</b> {{ tecnico.empresa if tecnico else 'No disponible' }}</p>
-                <p><b>Numero de empleado:</b> {{ tecnico.numero_empleado if tecnico else 'No disponible' }}</p>
-                <p><b>Estado actual:</b> {{ tecnico.estado if tecnico else 'No encontrado' }}</p>
-                {% if tecnico and tecnico.fecha_expiracion %}
-                    <p><b>Expira:</b> {{ tecnico.fecha_expiracion }}</p>
-                {% endif %}
-                <p class="small"><b>Fecha y hora de verificacion:</b> {{ verified_at }}</p>
+        <!-- Perfil principal -->
+        <div class="profile">
+            <div class="profile-photo">
+                {% if tecnico.foto %}
+                    <img src="{{ tecnico.foto }}" alt="Foto">
+                {% else %}Sin<br>foto{% endif %}
             </div>
-        </section>
+            <div>
+                <div class="profile-name">{{ tecnico.nombre }}</div>
+                <div class="profile-role">{{ tecnico.puesto or 'T&#233;cnico Industrial' }}</div>
+                <div class="profile-company">{{ tecnico.empresa }}</div>
+                <span class="badge {{ 'activo' if estado_visual == 'valido' else 'inactivo' }}">
+                    {{ 'VIGENTE' if estado_visual == 'valido' else 'NO VIGENTE' }}
+                </span>
+            </div>
+        </div>
 
-        <section class="problem">
+        <!-- Identificación -->
+        <div class="section-title">Datos de Identificaci&#243;n</div>
+        <div class="data-grid">
+            <div>
+                <div class="data-label">N&#250;m. de Empleado</div>
+                <div class="data-value hi">{{ tecnico.numero_empleado }}</div>
+            </div>
+            <div>
+                <div class="data-label">Empresa</div>
+                <div class="data-value">{{ tecnico.empresa }}</div>
+            </div>
+            {% if tecnico.antiguedad %}
+            <div>
+                <div class="data-label">Antig&#252;edad</div>
+                <div class="data-value">{{ tecnico.antiguedad }}</div>
+            </div>
+            {% endif %}
+            {% if tecnico.nss %}
+            <div>
+                <div class="data-label">NSS</div>
+                <div class="data-value">{{ tecnico.nss }}</div>
+            </div>
+            {% endif %}
+            {% if tecnico.curp %}
+            <div>
+                <div class="data-label">CURP</div>
+                <div class="data-value" style="font-size:.82rem;">{{ tecnico.curp }}</div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Vigencia -->
+        <div class="validity-bar">
+            <span class="vb-icon">&#128197;</span>
+            <div class="vb-text">
+                <b>Expedici&#243;n: {{ tecnico.creado_en.strftime('%d/%m/%Y') if tecnico.creado_en else 'N/D' }}</b>
+                <span>Vencimiento: <strong class="{{ 'warn' if estado_visual != 'valido' else '' }}">
+                    {{ tecnico.fecha_expiracion.strftime('%d/%m/%Y') if tecnico.fecha_expiracion else 'No definido' }}
+                </strong></span>
+            </div>
+        </div>
+
+        <!-- Datos médicos -->
+        {% if tecnico.tipo_sangre or tecnico.alergias or tecnico.contacto_emergencia %}
+        <div class="emergency">
+            <div class="emergency-title">&#9888; Informaci&#243;n M&#233;dica de Emergencia</div>
+            <div class="data-grid">
+                {% if tecnico.tipo_sangre %}
+                <div>
+                    <div class="data-label">Tipo de Sangre</div>
+                    <div class="data-value" style="color:#7c5a00;font-weight:700;">{{ tecnico.tipo_sangre }}</div>
+                </div>
+                {% endif %}
+                {% if tecnico.alergias %}
+                <div>
+                    <div class="data-label">Alergias</div>
+                    <div class="data-value" style="color:#7c5a00;">{{ tecnico.alergias }}</div>
+                </div>
+                {% endif %}
+                {% if tecnico.contacto_emergencia %}
+                <div>
+                    <div class="data-label">Contacto de Emergencia</div>
+                    <div class="data-value" style="color:#7c5a00;">{{ tecnico.contacto_emergencia }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <p style="font-size:.75rem;color:var(--muted);margin-top:16px;">
+            &#128274; Verificado el {{ verified_at.strftime('%d/%m/%Y a las %H:%M') if verified_at else '' }} UTC
+        </p>
+
+        {% else %}
+        <p style="color:var(--muted);font-size:.95rem;padding:20px 0;">
+            No se encontr&#243; ning&#250;n t&#233;cnico asociado a este c&#243;digo QR. Puede tratarse de una credencial falsa o revocada.
+        </p>
+        {% endif %}
+
+        <!-- Reportar problema -->
+        <div class="footer">
+            <p class="footer-note">Si detectas algo incorrecto, por favor rep&#243;rtalo:</p>
             <form method="post" action="{{ url_for('reportar_problema_verificacion', token=token) }}">
-                <label for="comentario" style="display:block;font-weight:600;margin-bottom:6px;">Reportar problema</label>
-                <textarea id="comentario" name="comentario" placeholder="Describe el problema detectado (opcional)"></textarea>
-                <button type="submit">Reportar problema</button>
+                <label for="comentario">Reportar problema</label>
+                <textarea id="comentario" name="comentario" placeholder="Describe el problema (credencial falsa, persona diferente, datos incorrectos...)"></textarea>
+                <button type="submit">Enviar reporte</button>
             </form>
-        </section>
-    </main>
+        </div>
+
+    </div>
+</div>
 </body>
 </html>
