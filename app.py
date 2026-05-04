@@ -5412,6 +5412,24 @@ def credencial_tecnico(tid):
     return render_template('credencial_tecnico.html', tecnico=tecnico, vigente=vigente, now=now)
 
 
+@app.route('/tecnicos/<int:tid>/credencial-seguridad')
+@login_required
+def credencial_walmart(tid):
+    user = get_current_user()
+    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+        return render_template('403.html'), 403
+    tecnico = Tecnico.query.get_or_404(tid)
+    if not (tecnico.qr_imagen or '').strip():
+        try:
+            _save_tecnico_qr_image(tecnico)
+            db.session.commit()
+        except Exception as exc:
+            logger.warning(f'No se pudo generar QR para credencial seguridad: {exc}')
+    now = datetime.utcnow()
+    vigente = tecnico.esta_vigente(now)
+    return render_template('credencial_walmart.html', tecnico=tecnico, vigente=vigente, now=now)
+
+
 # ==================== MÓDULO HOJAS DE RUTA NUEVO ====================
 
 @app.route('/hojas_ruta_nuevo')

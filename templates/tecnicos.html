@@ -242,6 +242,7 @@ function renderTecnicos(lista) {
                 <button class="btn-sm ${toggleClass}" onclick="toggleEstado(${t.id},'${t.estado}')">${toggleLabel}</button>
                 <a class="btn-sm btn-secondary" href="/api/tecnicos/${t.id}/qr" download>⬇️ QR</a>
                 <a class="btn-sm" style="background:#2e7d32;color:#fff" href="/tecnicos/${t.id}/credencial" target="_blank">🪪 Credencial</a>
+                <a class="btn-sm" style="background:#0057a8;color:#fff" href="/tecnicos/${t.id}/credencial-seguridad" target="_blank">&#128737; Seguridad</a>
                 <button class="btn-sm" style="background:#673ab7;color:#fff" onclick="copiarLink('${verifyUrl}')">🔗 Link</button>
             </div>
         </div>`;

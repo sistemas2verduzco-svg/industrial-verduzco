@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Credencial Seguridad &mdash; {{ tecnico.nombre }}</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body {
+            background: #c8d0da;
+            font-family: 'Arial', 'Segoe UI', sans-serif;
+            min-height: 100vh;
+        }
+
+        /* ══ CONTROLES ══ */
+        .top-controls {
+            display: flex; flex-direction: column; align-items: center;
+            gap: 10px; padding: 22px 16px 10px;
+        }
+        .ctrl-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
+        .btn {
+            border: none; padding: 9px 22px; border-radius: 7px;
+            font-size: .875rem; font-weight: 700; cursor: pointer;
+        }
+        .btn-back  { background: #546e7a; color: #fff; }
+        .btn-print { background: #0057a8; color: #fff; }
+        .hint { text-align: center; color: #555; font-size: .8rem; }
+
+        /* ══ WRAPPER ══ */
+        .card-wrapper {
+            display: flex; flex-direction: column; align-items: center;
+            gap: 28px; padding-bottom: 48px;
+        }
+        .side-label {
+            text-align: center; font-size: .72rem; color: #888;
+            margin-bottom: 5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase;
+        }
+
+        /* ══ TARJETA BASE  54 x 85.6 mm ══ */
+        .wm-card {
+            width: 54mm; height: 85.6mm; position: relative;
+            border-radius: 3.5mm; overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,.35);
+            background: #fff; page-break-inside: avoid; flex-shrink: 0;
+        }
+        /* punch hole */
+        .wm-card::before {
+            content: ''; position: absolute; top: 2.5mm; left: 50%;
+            transform: translateX(-50%); width: 9mm; height: 2mm;
+            background: #333; border-radius: 1mm; z-index: 20; opacity: .8;
+        }
+
+        /* ══════════════════════════
+           FRENTE
+        ══════════════════════════ */
+        .wm-front {
+            display: flex; flex-direction: column;
+            width: 54mm; height: 85.6mm; position: relative;
+            background: #fff;
+        }
+
+        /* Logo circular */
+        .wm-logo-wrap {
+            display: flex; justify-content: center; align-items: center;
+            padding-top: 6mm;
+        }
+        .wm-logo-circle {
+            width: 12mm; height: 12mm; border-radius: 50%;
+            border: .6mm dashed #777;
+            background: #f5f5f5;
+            display: flex; align-items: center; justify-content: center;
+            overflow: hidden;
+        }
+        .wm-logo-circle img { width: 100%; height: 100%; object-fit: contain; }
+
+        /* Slogan rojo */
+        .wm-slogan {
+            text-align: center;
+            color: #cc0000;
+            font-size: 5.5pt;
+            font-style: italic;
+            font-weight: 700;
+            padding: 1.5mm 3mm 1mm;
+            line-height: 1.35;
+        }
+
+        /* Foto */
+        .wm-photo-wrap {
+            display: flex; justify-content: center;
+            padding: 0 0 1mm;
+        }
+        .wm-photo {
+            width: 20mm; height: 24mm; object-fit: cover;
+            border: .7mm dashed #1565c0;
+        }
+        .wm-photo-ph {
+            width: 20mm; height: 24mm;
+            border: .7mm dashed #1565c0;
+            background: #e3f0ff;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13pt; color: #90a4ae;
+        }
+
+        /* Nombre */
+        .wm-name {
+            text-align: center;
+            font-size: 8pt; font-weight: 900;
+            color: #111;
+            padding: 1.2mm 3mm 0;
+            line-height: 1.2;
+        }
+
+        /* Barra gris puesto */
+        .wm-role-bar {
+            background: #9e9e9e;
+            color: #fff;
+            text-align: center;
+            font-size: 6pt;
+            font-weight: 700;
+            padding: .7mm 2mm;
+            margin: 1.2mm 0 0;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+        }
+
+        /* Faltas + badge */
+        .wm-bottom-section {
+            display: flex;
+            flex: 1;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.5mm 3mm 0;
+        }
+        .wm-faltas { }
+        .wm-faltas-title {
+            font-size: 6.5pt; font-weight: 900; color: #111; margin-bottom: 1.5mm;
+        }
+        .wm-fila {
+            display: flex; align-items: center; gap: 1mm; margin-bottom: 1mm;
+        }
+        .wm-fila-lbl { font-size: 4.8pt; color: #333; width: 11mm; }
+        .sq {
+            width: 3mm; height: 3mm; border-radius: .4mm;
+        }
+        .sq-g { background: #4caf50; }
+        .sq-y { background: #fdd835; }
+        .sq-r { background: #e53935; }
+        .sq-empty { background: #e0e0e0; border: .3mm solid #bbb; }
+
+        /* Hexágono */
+        .wm-hex-wrap { display: flex; flex-direction: column; align-items: center; }
+        .wm-hex {
+            width: 14mm; height: 16mm;
+            background: linear-gradient(145deg, #e65100, #f57c00);
+            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .wm-hex-text {
+            text-align: center; color: #fff; font-size: 4.5pt;
+            font-weight: 900; text-transform: uppercase; line-height: 1.3;
+        }
+
+        /* Barra azul inferior */
+        .wm-blue-bar {
+            height: 7mm; background: #1565c0;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .wm-blue-bar span {
+            color: #fff; font-size: 6.5pt; font-weight: 800;
+            text-transform: uppercase; letter-spacing: .7px;
+        }
+
+        /* ══════════════════════════
+           REVERSO
+        ══════════════════════════ */
+        .wm-back {
+            width: 54mm; height: 85.6mm; position: relative;
+            background: #fff;
+            display: flex; flex-direction: column;
+            padding: 4.5mm 3.5mm 3mm;
+        }
+
+        /* Header QR + "Yo soy Líder" */
+        .wm-back-head {
+            display: flex; align-items: flex-start; justify-content: space-between;
+            margin-bottom: 2.5mm;
+        }
+        .wm-back-qr img {
+            width: 15mm; height: 15mm; object-fit: contain;
+            background: #fff; border: .4mm solid #ccc; border-radius: .5mm;
+        }
+        .wm-lider {
+            text-align: right; flex: 1; padding-left: 2mm;
+        }
+        .wm-lider-star { font-size: 10pt; color: #f9a825; line-height: 1; }
+        .wm-lider-text {
+            font-size: 5.5pt; font-weight: 700; color: #0057a8;
+            line-height: 1.35; margin-top: .8mm;
+        }
+
+        /* Campos de datos */
+        .wm-fields {
+            flex: 1;
+            display: flex; flex-direction: column; gap: .6mm;
+        }
+        .wm-field-row {
+            display: flex; align-items: baseline;
+            border-bottom: .3mm solid #e0e0e0;
+            padding-bottom: .5mm;
+        }
+        .wm-field-row:last-child { border-bottom: none; }
+        .wm-fl {
+            font-size: 4pt; font-weight: 800; color: #555;
+            white-space: nowrap; width: 24mm; flex-shrink: 0;
+        }
+        .wm-fv {
+            font-size: 4.4pt; font-weight: 600; color: #111;
+            word-break: break-word; flex: 1;
+        }
+        .wm-fv.nd { color: #bbb; font-weight: 400; }
+
+        /* Tabla de especialidades */
+        .wm-spec-table {
+            margin-top: 2mm;
+            border: .4mm solid #bbb;
+            border-radius: .8mm;
+            overflow: hidden;
+        }
+        .wm-spec-instruction {
+            font-size: 3.6pt; color: #555;
+            padding: .8mm 1mm .6mm;
+            background: #f9f9f9;
+            border-bottom: .3mm solid #ddd;
+            line-height: 1.3;
+        }
+        .wm-spec-header {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            background: #1565c0;
+        }
+        .wm-spec-col {
+            font-size: 3pt; font-weight: 800; color: #fff;
+            text-align: center; padding: .8mm .3mm;
+            border-right: .2mm solid rgba(255,255,255,.3);
+            line-height: 1.25;
+        }
+        .wm-spec-col:last-child { border-right: none; }
+        .wm-spec-check {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+        }
+        .wm-spec-cell {
+            height: 4mm; border-right: .2mm solid #ddd;
+            border-top: .2mm solid #ddd;
+        }
+        .wm-spec-cell:last-child { border-right: none; }
+
+        /* Firmas */
+        .wm-firmas {
+            margin-top: 1.5mm;
+        }
+        .wm-firma-compromiso {
+            font-size: 3.6pt; color: #555; line-height: 1.4;
+            border-top: .3mm solid #777; padding-top: .8mm;
+            margin-bottom: 1.5mm;
+        }
+        .wm-firma-compromiso b { display: block; font-size: 4pt; color: #111; margin-bottom: .4mm; }
+        .wm-firma-row {
+            display: flex; gap: 2mm;
+        }
+        .wm-firma-box { flex: 1; }
+        .wm-firma-line {
+            border-bottom: .4mm solid #777;
+            height: 4mm; margin-bottom: .5mm;
+        }
+        .wm-firma-label { font-size: 3.2pt; color: #666; text-align: center; line-height: 1.3; }
+
+        /* ══ PRINT ══ */
+        @media print {
+            html, body { background: #fff; margin: 0; padding: 0; }
+            .top-controls, .side-label { display: none !important; }
+            .card-wrapper {
+                flex-direction: row !important; flex-wrap: wrap !important;
+                align-items: flex-start !important; justify-content: center !important;
+                gap: 10mm !important; padding: 8mm !important;
+            }
+            .wm-card { box-shadow: none !important; border: .25mm solid #ccc !important; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="top-controls">
+    <div class="ctrl-row">
+        <button class="btn btn-back" onclick="history.back()">&#8592; Volver</button>
+        <button class="btn btn-print" onclick="window.print()">&#128424; Imprimir Credencial Seguridad</button>
+    </div>
+    <p class="hint">Tama&ntilde;o CR80 est&aacute;ndar (54 &times; 85.6&thinsp;mm) &mdash; Credencial de Seguridad</p>
+</div>
+
+<div class="card-wrapper">
+
+    <!-- ═══════════ FRENTE ═══════════ -->
+    <div class="card-item">
+        <div class="side-label">Frente &mdash; Credencial Seguridad</div>
+        <div class="wm-card">
+            <div class="wm-front">
+
+                <!-- Logo circular -->
+                <div class="wm-logo-wrap">
+                    <div class="wm-logo-circle">
+                        <img src="{{ url_for('static', filename='img/logo_verduzco.png') }}" alt="Logo">
+                    </div>
+                </div>
+
+                <!-- Slogan -->
+                <div class="wm-slogan">Eres el &uacute;nico responsable de tu vida</div>
+
+                <!-- Foto -->
+                <div class="wm-photo-wrap">
+                    {% if tecnico.foto %}
+                        <img class="wm-photo" src="{{ tecnico.foto }}" alt="Foto">
+                    {% else %}
+                        <div class="wm-photo-ph">&#128119;</div>
+                    {% endif %}
+                </div>
+
+                <!-- Nombre -->
+                <div class="wm-name">{{ tecnico.nombre }}</div>
+
+                <!-- Barra gris puesto -->
+                <div class="wm-role-bar">{{ tecnico.puesto or 'T&eacute;cnico Industrial' }}</div>
+
+                <!-- Faltas + Hexágono -->
+                <div class="wm-bottom-section">
+                    <div class="wm-faltas">
+                        <div class="wm-faltas-title">Faltas</div>
+                        <div class="wm-fila">
+                            <span class="wm-fila-lbl">Rango 1</span>
+                            <span class="sq sq-g"></span>
+                            <span class="sq sq-g"></span>
+                            <span class="sq sq-g"></span>
+                        </div>
+                        <div class="wm-fila">
+                            <span class="wm-fila-lbl">Rango 2</span>
+                            <span class="sq sq-g"></span>
+                            <span class="sq sq-y"></span>
+                        </div>
+                        <div class="wm-fila">
+                            <span class="wm-fila-lbl">Rango 3</span>
+                            <span class="sq sq-r"></span>
+                        </div>
+                    </div>
+
+                    <div class="wm-hex-wrap">
+                        <div class="wm-hex">
+                            <div class="wm-hex-text">SEGU&shy;RIDAD<br>ES<br>PRIMERO</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Barra azul inferior con empresa -->
+                <div class="wm-blue-bar">
+                    <span>{{ tecnico.empresa }}</span>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════ REVERSO ═══════════ -->
+    <div class="card-item">
+        <div class="side-label">Reverso &mdash; Credencial Seguridad</div>
+        <div class="wm-card">
+            <div class="wm-back">
+
+                <!-- QR + Líder de Seguridad -->
+                <div class="wm-back-head">
+                    <div class="wm-back-qr">
+                        {% if tecnico.qr_imagen %}
+                            <img src="{{ tecnico.qr_imagen }}" alt="QR">
+                        {% else %}
+                            <div style="width:15mm;height:15mm;background:#eee;display:flex;align-items:center;justify-content:center;font-size:3.5pt;color:#aaa;">SIN&nbsp;QR</div>
+                        {% endif %}
+                    </div>
+                    <div class="wm-lider">
+                        <div class="wm-lider-star">&#10022;</div>
+                        <div class="wm-lider-text">Yo soy L&iacute;der<br>de Seguridad</div>
+                    </div>
+                </div>
+
+                <!-- Campos -->
+                <div class="wm-fields">
+
+                    <div class="wm-field-row">
+                        <span class="wm-fl">NSS :</span>
+                        <span class="wm-fv {% if not tecnico.nss %}nd{% endif %}">
+                            {{ tecnico.nss or '&mdash;' }}
+                        </span>
+                    </div>
+
+                    <div class="wm-field-row">
+                        <span class="wm-fl">CURP :</span>
+                        <span class="wm-fv {% if not tecnico.curp %}nd{% endif %}">
+                            {{ tecnico.curp or '&mdash;' }}
+                        </span>
+                    </div>
+
+                    <div class="wm-field-row">
+                        <span class="wm-fl">Tipo de Sangre :</span>
+                        <span class="wm-fv {% if not tecnico.tipo_sangre %}nd{% endif %}">
+                            {{ tecnico.tipo_sangre or '&mdash;' }}
+                        </span>
+                    </div>
+
+                    <div class="wm-field-row">
+                        <span class="wm-fl">Alergias :</span>
+                        <span class="wm-fv {% if not tecnico.alergias %}nd{% endif %}">
+                            {{ tecnico.alergias or '&mdash;' }}
+                        </span>
+                    </div>
+
+                    <div class="wm-field-row">
+                        <span class="wm-fl">Contacto Emergencia Laboral :</span>
+                        <span class="wm-fv {% if not tecnico.contacto_emergencia %}nd{% endif %}">
+                            {{ tecnico.contacto_emergencia or '&mdash;' }}
+                        </span>
+                    </div>
+
+                    <div class="wm-field-row">
+                        <span class="wm-fl">Contacto Emergencia Personal :</span>
+                        <span class="wm-fv nd">&mdash;</span>
+                    </div>
+
+                    <div class="wm-field-row">
+                        <span class="wm-fl">Nombre Proyecto :</span>
+                        <span class="wm-fv">{{ tecnico.empresa }}</span>
+                    </div>
+
+                    <div class="wm-field-row">
+                        <span class="wm-fl">Antig&uuml;edad en la empresa :</span>
+                        <span class="wm-fv {% if not tecnico.antiguedad %}nd{% endif %}">
+                            {{ tecnico.antiguedad or '&mdash;' }}
+                        </span>
+                    </div>
+
+                    <div class="wm-field-row">
+                        <span class="wm-fl">Validaci&oacute;n de experiencia :</span>
+                        <span class="wm-fv {% if not tecnico.puesto %}nd{% endif %}">
+                            {{ tecnico.puesto or '&mdash;' }}
+                        </span>
+                    </div>
+
+                </div>
+
+                <!-- Tabla de especialidades -->
+                <div class="wm-spec-table">
+                    <div class="wm-spec-instruction">
+                        Coloca una X en el recuadro correspondiente para validar la obtenci&oacute;n de la Capacitaci&oacute;n y especialidad
+                    </div>
+                    <div class="wm-spec-header">
+                        <div class="wm-spec-col">Alturas</div>
+                        <div class="wm-spec-col">Maniobras a baja</div>
+                        <div class="wm-spec-col">El&eacute;ctricos</div>
+                        <div class="wm-spec-col">Trabajos en caliente</div>
+                        <div class="wm-spec-col">Espacio Confinados</div>
+                        <div class="wm-spec-col">Excava&shy;ciones</div>
+                        <div class="wm-spec-col">Maquinaria</div>
+                    </div>
+                    <div class="wm-spec-check">
+                        <div class="wm-spec-cell"></div>
+                        <div class="wm-spec-cell"></div>
+                        <div class="wm-spec-cell"></div>
+                        <div class="wm-spec-cell"></div>
+                        <div class="wm-spec-cell"></div>
+                        <div class="wm-spec-cell"></div>
+                        <div class="wm-spec-cell"></div>
+                    </div>
+                </div>
+
+                <!-- Firmas -->
+                <div class="wm-firmas">
+                    <div class="wm-firma-compromiso">
+                        <b>Firma Compromiso del Trabajador</b>
+                        Reconozco que conozco y me comprometo a cumplir con todas las medidas de seguridad
+                    </div>
+                    <div class="wm-firma-row">
+                        <div class="wm-firma-box">
+                            <div class="wm-firma-line"></div>
+                            <div class="wm-firma-label">Firma de Validaci&oacute;n de CRI</div>
+                        </div>
+                        <div class="wm-firma-box">
+                            <div class="wm-firma-line"></div>
+                            <div class="wm-firma-label">Firma de Validaci&oacute;n Supervisi&oacute;n</div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+</div><!-- /card-wrapper -->
+</body>
+</html>
