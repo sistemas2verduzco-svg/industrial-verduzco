@@ -16,10 +16,10 @@
       <rect x="4.2" y="3.1" width="1.4" height="4.4" rx="0.7" transform="rotate(-45 4.9 5.3)"/>
     </g>
 
-    <text x="0" y="-35" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#0f2a54" font-weight="700" letter-spacing="0.8">NUESTRA</text>
+    <text x="0" y="-35" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="9" fill="#0f2a54" font-weight="700" letter-spacing="0.8">NUESTRA</text>
 
-    <rect x="-42" y="-24" width="84" height="50" fill="#0f2a54"/>
-    <text x="0" y="-2" text-anchor="middle" font-family="Arial Black, Segoe UI, Arial, sans-serif" font-size="18" fill="#f4bf21" font-weight="900">SEGURIDAD</text>
-    <text x="0" y="20" text-anchor="middle" font-family="Arial Black, Segoe UI, Arial, sans-serif" font-size="14" fill="#f4bf21" font-weight="900">ES PRIMERO</text>
+    <rect x="-45" y="-24" width="90" height="50" fill="#0f2a54"/>
+    <text x="0" y="-2" text-anchor="middle" font-family="Arial Black, Segoe UI, Arial, sans-serif" font-size="15" fill="#f4bf21" font-weight="900" letter-spacing="0.4">SEGURIDAD</text>
+    <text x="0" y="19" text-anchor="middle" font-family="Arial Black, Segoe UI, Arial, sans-serif" font-size="12" fill="#f4bf21" font-weight="900" letter-spacing="0.3">ES PRIMERO</text>
   </g>
 </svg>
