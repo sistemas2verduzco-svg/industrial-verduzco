@@ -148,6 +148,12 @@
 
         /* Hexágono */
         .wm-hex-wrap { display: flex; flex-direction: column; align-items: center; }
+        .wm-safety-logo {
+            width: 14mm;
+            height: 16mm;
+            object-fit: contain;
+            display: block;
+        }
         .wm-hex {
             width: 14mm; height: 16mm;
             background: linear-gradient(145deg, #e65100, #f57c00);
@@ -192,7 +198,13 @@
         .wm-lider {
             text-align: right; flex: 1; padding-left: 2mm;
         }
-        .wm-lider-star { font-size: 10pt; color: #f9a825; line-height: 1; }
+        .wm-lider-logo {
+            width: 16mm;
+            height: auto;
+            object-fit: contain;
+            margin-left: auto;
+            display: block;
+        }
         .wm-lider-text {
             font-size: 5.5pt; font-weight: 700; color: #0057a8;
             line-height: 1.35; margin-top: .8mm;
@@ -353,7 +365,13 @@
                     </div>
 
                     <div class="wm-hex-wrap">
-                        <div class="wm-hex">
+                        <img
+                            class="wm-safety-logo"
+                            src="{{ url_for('static', filename='img/logo_seguridad_walmart.png') }}"
+                            alt="Seguridad es primero"
+                            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                        >
+                        <div class="wm-hex" style="display:none;">
                             <div class="wm-hex-text">SEGU&shy;RIDAD<br>ES<br>PRIMERO</div>
                         </div>
                     </div>
@@ -384,8 +402,13 @@
                         {% endif %}
                     </div>
                     <div class="wm-lider">
-                        <div class="wm-lider-star">&#10022;</div>
-                        <div class="wm-lider-text">Yo soy L&iacute;der<br>de Seguridad</div>
+                        <img
+                            class="wm-lider-logo"
+                            src="{{ url_for('static', filename='img/logo_lider_seguridad.png') }}"
+                            alt="Yo soy L&iacute;der de Seguridad"
+                            onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
+                        >
+                        <div class="wm-lider-text" style="display:none;">Yo soy L&iacute;der<br>de Seguridad</div>
                     </div>
                 </div>
 
