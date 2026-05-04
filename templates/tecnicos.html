@@ -31,13 +31,18 @@
         /* Modal */
         .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:1000; align-items:center; justify-content:center; }
         .modal-overlay.active { display:flex; }
-        .modal-box { background:#fff; border-radius:12px; width:100%; max-width:480px; padding:28px 28px 20px; position:relative; }
-        .modal-box h3 { margin:0 0 18px; font-size:1.15rem; }
+        .modal-box { background:#fff; border-radius:12px; width:100%; max-width:480px; max-height:90vh; display:flex; flex-direction:column; padding:0; position:relative; overflow:hidden; }
+        .modal-box h3 { margin:0; font-size:1.15rem; padding:22px 28px 14px; border-bottom:1px solid #eee; flex-shrink:0; }
         .modal-close { position:absolute; top:14px; right:16px; background:none; border:none; font-size:1.4rem; cursor:pointer; color:#555; }
-        .form-group { margin-bottom:14px; }
-        .form-group label { display:block; font-size:.88rem; font-weight:600; margin-bottom:5px; }
-        .form-group input, .form-group select { width:100%; padding:8px 10px; border:1px solid #ccc; border-radius:6px; font-size:.9rem; box-sizing:border-box; }
+        .modal-form-scroll { overflow-y:auto; flex:1; padding:20px 28px 8px; }
+        .form-actions { padding:14px 28px 20px; border-top:1px solid #eee; display:flex; justify-content:flex-end; gap:10px; flex-shrink:0; margin-top:0; }
+        .form-group { margin-bottom:16px; }
+        .form-group label { display:block; font-size:.92rem; font-weight:700; color:#1a1a1a; margin-bottom:3px; }
+        .form-group .field-title { display:block; font-size:.78rem; color:#0f5f34; font-weight:600; margin-bottom:5px; }
+        .form-group input, .form-group select { width:100%; padding:8px 10px; border:1.5px solid #ccc; border-radius:6px; font-size:.9rem; box-sizing:border-box; }
+        .form-group input:focus { border-color:#0f5f34; outline:none; box-shadow:0 0 0 2px rgba(15,95,52,.12); }
         .form-group input[type=file] { padding:4px 6px; }
+        .form-hint { display:block; font-size:.74rem; color:#888; margin-top:4px; line-height:1.45; }
         .form-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
         .empty-state { text-align:center; padding:60px 20px; color:#888; }
         .empty-state .icon { font-size:56px; margin-bottom:12px; }
@@ -70,55 +75,94 @@
     <div class="modal-box">
         <button class="modal-close" onclick="cerrarModal()">×</button>
         <h3 id="modalTitulo">Nuevo Técnico</h3>
-        <form id="formTecnico" enctype="multipart/form-data">
+        <form id="formTecnico" enctype="multipart/form-data" style="display:contents">
             <input type="hidden" id="tecId" value="">
-            <div class="form-group">
-                <label>Nombre completo *</label>
-                <input type="text" id="tecNombre" required placeholder="Ej. Juan Pérez">
-            </div>
-            <div class="form-group">
-                <label>Empresa *</label>
-                <input type="text" id="tecEmpresa" required placeholder="Ej. Mantenimientos SA">
-            </div>
-            <div class="form-group">
-                <label>Número de empleado *</label>
-                <input type="text" id="tecNumero" required placeholder="Ej. TEC-001">
-            </div>
-            <div class="form-group">
-                <label>Puesto / Cargo</label>
-                <input type="text" id="tecPuesto" placeholder="Ej. Ayudante General">
-            </div>
-            <div class="form-group">
-                <label>Vigencia hasta *</label>
-                <input type="date" id="tecExpiracion" required>
-            </div>
-            <div class="form-group">
-                <label>NSS</label>
-                <input type="text" id="tecNss" placeholder="Ej. 62-97-81-9262-3">
-            </div>
-            <div class="form-group">
-                <label>CURP</label>
-                <input type="text" id="tecCurp" placeholder="Ej. UICA810328HPLRML09" style="text-transform:uppercase">
-            </div>
-            <div class="form-group">
-                <label>Tipo de sangre</label>
-                <input type="text" id="tecSangre" placeholder="Ej. O+">
-            </div>
-            <div class="form-group">
-                <label>Alergias</label>
-                <input type="text" id="tecAlergias" placeholder="Ej. N/A o Penicilina">
-            </div>
-            <div class="form-group">
-                <label>Contacto emergencia laboral</label>
-                <input type="text" id="tecContacto" placeholder="Ej. 722 648 0301">
-            </div>
-            <div class="form-group">
-                <label>Antigüedad en la empresa</label>
-                <input type="text" id="tecAntiguedad" placeholder="Ej. 5 años">
-            </div>
-            <div class="form-group">
-                <label>Foto (opcional)</label>
-                <input type="file" id="tecFoto" accept="image/*">
+            <div class="modal-form-scroll">
+
+                <div class="form-group">
+                    <label>Nombre completo *</label>
+                    <span class="field-title">Nombre y dos apellidos del trabajador</span>
+                    <input type="text" id="tecNombre" required placeholder="Ej. Alejandro Uriarte Camarena">
+                    <span class="form-hint">Escríbelo tal como aparece en su INE o pasaporte.</span>
+                </div>
+
+                <div class="form-group">
+                    <label>Empresa *</label>
+                    <span class="field-title">Nombre de la empresa o contratista</span>
+                    <input type="text" id="tecEmpresa" required placeholder="Ej. Grupo Industrial Verduzco">
+                    <span class="form-hint">Aparecerá en el frente de la credencial.</span>
+                </div>
+
+                <div class="form-group">
+                    <label>Número de empleado *</label>
+                    <span class="field-title">Clave única del trabajador (no se puede repetir)</span>
+                    <input type="text" id="tecNumero" required placeholder="Ej. TEC-001">
+                    <span class="form-hint">Usa el número que ya manejas internamente, o asigna uno nuevo.</span>
+                </div>
+
+                <div class="form-group">
+                    <label>Puesto / Cargo</label>
+                    <span class="field-title">Función que desempeña dentro de la planta</span>
+                    <input type="text" id="tecPuesto" placeholder="Ej. Ayudante General, Electricista, Mecánico">
+                    <span class="form-hint">Si se deja vacío aparece &ldquo;Técnico Industrial&rdquo; en la credencial.</span>
+                </div>
+
+                <div class="form-group">
+                    <label>Vigencia hasta *</label>
+                    <span class="field-title">Fecha en que vence el acceso del trabajador</span>
+                    <input type="date" id="tecExpiracion" required>
+                    <span class="form-hint">Después de esta fecha la credencial se marca automáticamente como NO VIGENTE.</span>
+                </div>
+
+                <div class="form-group">
+                    <label>NSS &mdash; Número de Seguridad Social</label>
+                    <span class="field-title">Código de 11 dígitos del IMSS</span>
+                    <input type="text" id="tecNss" placeholder="Ej. 62-97-81-9262-3">
+                    <span class="form-hint">Lo encuentras en la tarjeta del IMSS o en el recibo de nómina.</span>
+                </div>
+
+                <div class="form-group">
+                    <label>CURP</label>
+                    <span class="field-title">Clave Única de Registro de Población (18 caracteres)</span>
+                    <input type="text" id="tecCurp" placeholder="Ej. UICA810328HPLRML09" style="text-transform:uppercase">
+                    <span class="form-hint">Consúltala gratis en <em>gob.mx/curp</em> con solo el nombre y fecha de nacimiento.</span>
+                </div>
+
+                <div class="form-group">
+                    <label>Tipo de sangre</label>
+                    <span class="field-title">Grupo sanguíneo del trabajador (dato médico de emergencia)</span>
+                    <input type="text" id="tecSangre" placeholder="Ej. O+, A-, B+, AB+">
+                    <span class="form-hint">Si no se conoce escribe &ldquo;ND&rdquo; (No Determinado).</span>
+                </div>
+
+                <div class="form-group">
+                    <label>Alergias</label>
+                    <span class="field-title">Sustancias o medicamentos a los que es alérgico</span>
+                    <input type="text" id="tecAlergias" placeholder="Ej. Penicilina, Mariscos &mdash; o N/A">
+                    <span class="form-hint">Escribe &ldquo;N/A&rdquo; si no tiene ninguna alergia conocida.</span>
+                </div>
+
+                <div class="form-group">
+                    <label>Contacto de emergencia laboral</label>
+                    <span class="field-title">Teléfono a quien llamar si ocurre un accidente en planta</span>
+                    <input type="text" id="tecContacto" placeholder="Ej. 722 648 0301">
+                    <span class="form-hint">Puede ser un familiar, supervisor o responsable de seguridad.</span>
+                </div>
+
+                <div class="form-group">
+                    <label>Antigüedad en la empresa</label>
+                    <span class="field-title">Cuánto tiempo lleva trabajando aquí</span>
+                    <input type="text" id="tecAntiguedad" placeholder="Ej. 16 años, 6 meses, Desde Enero 2020">
+                    <span class="form-hint">Escríbelo en el formato que prefieras.</span>
+                </div>
+
+                <div class="form-group">
+                    <label>Foto del trabajador (opcional)</label>
+                    <span class="field-title">Imagen para el frente de la credencial</span>
+                    <input type="file" id="tecFoto" accept="image/*">
+                    <span class="form-hint">JPG o PNG, fondo neutro, rostro visible. Máx. 5 MB.</span>
+                </div>
+
             </div>
             <div class="form-actions">
                 <button type="button" class="btn-sm btn-secondary" onclick="cerrarModal()">Cancelar</button>
