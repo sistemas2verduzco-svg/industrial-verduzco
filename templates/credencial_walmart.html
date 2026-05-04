@@ -148,56 +148,6 @@
 
         /* Hexágono */
         .wm-hex-wrap { display: flex; flex-direction: column; align-items: center; }
-        .wm-hex {
-            width: 14mm; height: 16mm;
-            background: linear-gradient(145deg, #e65100, #f57c00);
-            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-            display: flex; align-items: center; justify-content: center;
-        }
-        .wm-hex-text {
-            text-align: center; color: #fff; font-size: 4.5pt;
-            font-weight: 900; text-transform: uppercase; line-height: 1.3;
-        }
-        .wm-hex-ref {
-            width: 15.5mm;
-            height: 17.5mm;
-            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-            background: #f4bf21;
-            border: .45mm solid #0f2a54;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            padding-top: .4mm;
-        }
-        .wm-hex-star {
-            font-size: 4.3pt;
-            color: #0f2a54;
-            line-height: 1;
-            font-weight: 900;
-            margin-bottom: .2mm;
-        }
-        .wm-hex-top {
-            font-size: 2.8pt;
-            color: #0f2a54;
-            font-weight: 800;
-            line-height: 1;
-            letter-spacing: .2px;
-            margin-bottom: .7mm;
-        }
-        .wm-hex-band {
-            width: 12.1mm;
-            background: #0f2a54;
-            color: #f4bf21;
-            text-align: center;
-            font-weight: 900;
-            text-transform: uppercase;
-            line-height: 1.05;
-            padding: .55mm .2mm .45mm;
-        }
-        .wm-hex-band .l1 { font-size: 4.2pt; display: block; }
-        .wm-hex-band .l2 { font-size: 3.2pt; display: block; margin-top: .25mm; }
 
         /* Barra azul inferior */
         .wm-blue-bar {
@@ -422,14 +372,22 @@
                     </div>
 
                     <div class="wm-hex-wrap">
-                        <div class="wm-hex-ref" aria-label="Nuestra Seguridad es Primero">
-                            <div class="wm-hex-star">&#10022;</div>
-                            <div class="wm-hex-top">NUESTRA</div>
-                            <div class="wm-hex-band">
-                                <span class="l1">SEGURIDAD</span>
-                                <span class="l2">ES PRIMERO</span>
-                            </div>
-                        </div>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="59" height="66" viewBox="0 0 59 66" aria-label="Nuestra Seguridad es Primero">
+                            <!-- Sombra/borde exterior -->
+                            <polygon points="29.5,1.5 57.5,17 57.5,49 29.5,64.5 1.5,49 1.5,17" fill="#0f2a54" stroke="none"/>
+                            <!-- Hexágono amarillo interior -->
+                            <polygon points="29.5,4 55,18.7 55,47.3 29.5,62 4,47.3 4,18.7" fill="#f4bf21" stroke="none"/>
+                            <!-- Banda azul central -->
+                            <rect x="5" y="28" width="49" height="18" fill="#0f2a54"/>
+                            <!-- Diamante superior -->
+                            <polygon points="29.5,8 32,12 29.5,16 27,12" fill="#0f2a54"/>
+                            <!-- Texto NUESTRA -->
+                            <text x="29.5" y="26.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="7" font-weight="800" fill="#0f2a54" letter-spacing="0.5">NUESTRA</text>
+                            <!-- Texto SEGURIDAD -->
+                            <text x="29.5" y="37.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="8.5" font-weight="900" fill="#f4bf21" letter-spacing="0.3">SEGURIDAD</text>
+                            <!-- Texto ES PRIMERO -->
+                            <text x="29.5" y="43.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="6" font-weight="700" fill="#f4bf21" letter-spacing="0.3">ES PRIMERO</text>
+                        </svg>
                     </div>
                 </div>
 
