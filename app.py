@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, AlertaBuzonGeneral
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, AlertaBuzonGeneral, Tecnico, LogVerificacion
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -24,6 +24,7 @@ import subprocess
 import sys
 import threading
 import requests
+import qrcode
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 from urllib.parse import urlencode
@@ -44,6 +45,8 @@ logger = logging.getLogger(__name__)
 PROCESOS_IMPORT_LOCK = threading.Lock()
 PROCESOS_IMPORT_DIR = os.path.join('uploads', 'imports_jobs')
 os.makedirs(PROCESOS_IMPORT_DIR, exist_ok=True)
+TECNICOS_QR_DIR = os.path.join('uploads', 'tecnicos', 'qr')
+os.makedirs(TECNICOS_QR_DIR, exist_ok=True)
 
 MACHINE_SCHEDULE_ENABLED = os.getenv('MACHINE_SCHEDULE_ENABLED', '1').strip().lower() not in ('0', 'false', 'no')
 MACHINE_SCHEDULE_POLL_SECONDS = max(5, int(os.getenv('MACHINE_SCHEDULE_POLL_SECONDS', '15') or '15'))
@@ -5104,6 +5107,114 @@ def uploaded_file(filename):
         return send_from_directory(uploads_root, filename)
     except Exception:
         return ('', 404)
+
+
+def _verify_client_ip():
+    forwarded = (request.headers.get('X-Forwarded-For') or '').strip()
+    if forwarded:
+        return forwarded.split(',')[0].strip()
+    return (request.remote_addr or '').strip()
+
+
+def _save_tecnico_qr_image(tecnico):
+    base_url = request.url_root.rstrip('/')
+    verify_url = f"{base_url}/verificar/{tecnico.token_qr}"
+    qr = qrcode.QRCode(version=1, box_size=8, border=4)
+    qr.add_data(verify_url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color='black', back_color='white')
+
+    filename = f"tecnico_{tecnico.token_qr}.png"
+    abs_path = os.path.join(TECNICOS_QR_DIR, filename)
+    img.save(abs_path)
+    tecnico.qr_imagen = f"/uploads/tecnicos/qr/{filename}"
+
+
+def _write_verification_log(tecnico, token_raw, resultado):
+    entry = LogVerificacion(
+        tecnico_id=tecnico.id if tecnico else None,
+        ip_cliente=_verify_client_ip(),
+        user_agent=(request.headers.get('User-Agent') or '')[:1000],
+        token_consultado=(token_raw or '')[:80],
+        resultado=resultado,
+    )
+    db.session.add(entry)
+    db.session.commit()
+
+
+@app.route('/verificar/<token>', methods=['GET'])
+def verificar_tecnico_publico(token):
+    now = datetime.utcnow()
+    token_txt = (token or '').strip()
+    tecnico = Tecnico.query.filter_by(token_qr=token_txt).first()
+
+    template_data = {
+        'logo_url': '/static/logo.png',
+        'tecnico': tecnico,
+        'estado_visual': 'invalido',
+        'mensaje_estado': 'Credencial invalida o expirada',
+        'motivo': 'Token no encontrado',
+        'verified_at': now,
+        'token': token_txt,
+    }
+
+    if tecnico:
+        if tecnico.estado != Tecnico.ESTADO_ACTIVO:
+            template_data.update({
+                'estado_visual': 'invalido',
+                'mensaje_estado': 'Credencial invalida o expirada',
+                'motivo': 'Tecnico suspendido',
+            })
+            _write_verification_log(tecnico, token_txt, 'suspendido')
+            return render_template('verificar_tecnico_publico.html', **template_data), 200
+
+        if now >= tecnico.fecha_expiracion:
+            template_data.update({
+                'estado_visual': 'invalido',
+                'mensaje_estado': 'Credencial invalida o expirada',
+                'motivo': 'Credencial expirada',
+            })
+            _write_verification_log(tecnico, token_txt, 'expirado')
+            return render_template('verificar_tecnico_publico.html', **template_data), 200
+
+        if not (tecnico.qr_imagen or '').strip():
+            try:
+                _save_tecnico_qr_image(tecnico)
+                db.session.add(tecnico)
+                db.session.commit()
+            except Exception as exc:
+                db.session.rollback()
+                logger.warning(f'No se pudo generar QR para tecnico {tecnico.id}: {exc}')
+
+        template_data.update({
+            'estado_visual': 'valido',
+            'mensaje_estado': 'Tecnico verificado',
+            'motivo': '',
+        })
+        _write_verification_log(tecnico, token_txt, 'valido')
+        return render_template('verificar_tecnico_publico.html', **template_data), 200
+
+    _write_verification_log(None, token_txt, 'token_invalido')
+    return render_template('verificar_tecnico_publico.html', **template_data), 404
+
+
+@app.route('/verificar/<token>/reportar-problema', methods=['POST'])
+def reportar_problema_verificacion(token):
+    token_txt = (token or '').strip()
+    tecnico = Tecnico.query.filter_by(token_qr=token_txt).first()
+    comentario = (request.form.get('comentario') or '').strip()
+
+    log = LogVerificacion(
+        tecnico_id=tecnico.id if tecnico else None,
+        ip_cliente=_verify_client_ip(),
+        user_agent=((request.headers.get('User-Agent') or '') + f' | reportar:{comentario}')[:1000],
+        token_consultado=token_txt[:80],
+        resultado='reporte_problema',
+    )
+    db.session.add(log)
+    db.session.commit()
+    flash('Problema reportado. Gracias por avisarnos.', 'success')
+    return redirect(url_for('verificar_tecnico_publico', token=token_txt))
 
 
 

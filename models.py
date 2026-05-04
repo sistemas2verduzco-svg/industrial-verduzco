@@ -1,5 +1,6 @@
 # --- IMPORTS INICIO ---
 import json
+import uuid
 
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
@@ -1837,4 +1838,67 @@ class AlertaBuzonGeneral(db.Model):
             'nota_atencion': self.nota_atencion,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class Tecnico(db.Model):
+    __tablename__ = 'tecnicos'
+
+    ESTADO_ACTIVO = 'activo'
+    ESTADO_SUSPENDIDO = 'suspendido'
+
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(255), nullable=False, index=True)
+    empresa = db.Column(db.String(255), nullable=False, index=True)
+    numero_empleado = db.Column(db.String(120), nullable=False, unique=True, index=True)
+    foto = db.Column(db.String(500), nullable=True)
+    qr_imagen = db.Column(db.String(500), nullable=True)
+    token_qr = db.Column(db.String(36), nullable=False, unique=True, index=True, default=lambda: str(uuid.uuid4()))
+    estado = db.Column(db.String(20), nullable=False, default=ESTADO_ACTIVO, index=True)
+    fecha_expiracion = db.Column(db.DateTime, nullable=False, index=True)
+    creado_en = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    actualizado_en = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nombre': self.nombre,
+            'empresa': self.empresa,
+            'numero_empleado': self.numero_empleado,
+            'foto': self.foto,
+            'qr_imagen': self.qr_imagen,
+            'token_qr': self.token_qr,
+            'estado': self.estado,
+            'fecha_expiracion': self.fecha_expiracion.isoformat() if self.fecha_expiracion else None,
+            'creado_en': self.creado_en.isoformat() if self.creado_en else None,
+            'actualizado_en': self.actualizado_en.isoformat() if self.actualizado_en else None,
+        }
+
+    def esta_vigente(self, now_utc=None):
+        ref = now_utc or datetime.utcnow()
+        return self.estado == self.ESTADO_ACTIVO and bool(self.fecha_expiracion and ref < self.fecha_expiracion)
+
+
+class LogVerificacion(db.Model):
+    __tablename__ = 'logs_verificacion'
+
+    id = db.Column(db.Integer, primary_key=True)
+    tecnico_id = db.Column(db.Integer, db.ForeignKey('tecnicos.id'), nullable=True, index=True)
+    fecha_hora = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    ip_cliente = db.Column(db.String(64), nullable=True, index=True)
+    user_agent = db.Column(db.Text, nullable=True)
+    token_consultado = db.Column(db.String(80), nullable=True, index=True)
+    resultado = db.Column(db.String(40), nullable=False, default='invalido', index=True)
+
+    tecnico = db.relationship('Tecnico', backref='logs_verificacion')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'tecnico_id': self.tecnico_id,
+            'fecha_hora': self.fecha_hora.isoformat() if self.fecha_hora else None,
+            'ip_cliente': self.ip_cliente,
+            'user_agent': self.user_agent,
+            'token_consultado': self.token_consultado,
+            'resultado': self.resultado,
         }

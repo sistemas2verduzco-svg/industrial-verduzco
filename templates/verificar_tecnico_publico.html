@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verificacion de Tecnico</title>
+    <style>
+        :root {
+            --ok: #1e7a34;
+            --error: #b82020;
+            --ink: #1f2937;
+            --muted: #64748b;
+            --bg: #f4f7fb;
+            --card: #ffffff;
+            --border: #d9e2ec;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--ink);
+            background: radial-gradient(circle at top left, #eef5ff 0%, var(--bg) 55%, #e9eef5 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        .card {
+            width: min(760px, 100%);
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+            padding: 22px;
+        }
+        .head {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+        .head img {
+            height: 48px;
+            width: auto;
+        }
+        .head h1 {
+            margin: 0;
+            font-size: 20px;
+            line-height: 1.2;
+        }
+        .status {
+            border-radius: 10px;
+            padding: 12px 14px;
+            margin-bottom: 16px;
+            font-weight: 700;
+        }
+        .status.ok {
+            background: #e8f8ec;
+            color: var(--ok);
+            border: 1px solid #bfe6ca;
+        }
+        .status.error {
+            background: #fdeeee;
+            color: var(--error);
+            border: 1px solid #f4caca;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 170px 1fr;
+            gap: 16px;
+        }
+        .photo {
+            width: 170px;
+            height: 170px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            object-fit: cover;
+            background: #eef2f7;
+        }
+        .meta p {
+            margin: 0 0 8px;
+            font-size: 15px;
+        }
+        .meta b {
+            display: inline-block;
+            width: 160px;
+            color: #334155;
+        }
+        .small {
+            margin-top: 12px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+        .problem {
+            margin-top: 16px;
+            border-top: 1px dashed var(--border);
+            padding-top: 14px;
+        }
+        .problem textarea {
+            width: 100%;
+            min-height: 72px;
+            resize: vertical;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 9px;
+            font-size: 14px;
+        }
+        .problem button {
+            margin-top: 10px;
+            border: 0;
+            background: #0b5fad;
+            color: #fff;
+            padding: 10px 13px;
+            border-radius: 8px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .flash {
+            margin: 0 0 12px;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #bde3c7;
+            background: #e9f8ee;
+            color: #245a34;
+            font-size: 14px;
+        }
+        @media (max-width: 640px) {
+            .grid { grid-template-columns: 1fr; }
+            .photo { width: 100%; height: auto; max-height: 280px; }
+            .meta b { width: 100%; margin-bottom: 2px; }
+        }
+    </style>
+</head>
+<body>
+    <main class="card">
+        <header class="head">
+            <img src="{{ logo_url }}" alt="Logo empresa" onerror="this.style.display='none';">
+            <h1>Verificacion Publica de Credencial</h1>
+        </header>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <section class="status {{ 'ok' if estado_visual == 'valido' else 'error' }}">
+            {{ mensaje_estado }}
+            {% if motivo %}<div style="font-size:13px;font-weight:500;margin-top:4px;">{{ motivo }}</div>{% endif %}
+        </section>
+
+        <section class="grid">
+            {% if tecnico and tecnico.foto %}
+                <img class="photo" src="{{ tecnico.foto }}" alt="Foto tecnico">
+            {% else %}
+                <div class="photo" style="display:flex;align-items:center;justify-content:center;color:#6b7280;">Sin foto</div>
+            {% endif %}
+
+            <div class="meta">
+                <p><b>Nombre:</b> {{ tecnico.nombre if tecnico else 'No disponible' }}</p>
+                <p><b>Empresa:</b> {{ tecnico.empresa if tecnico else 'No disponible' }}</p>
+                <p><b>Numero de empleado:</b> {{ tecnico.numero_empleado if tecnico else 'No disponible' }}</p>
+                <p><b>Estado actual:</b> {{ tecnico.estado if tecnico else 'No encontrado' }}</p>
+                {% if tecnico and tecnico.fecha_expiracion %}
+                    <p><b>Expira:</b> {{ tecnico.fecha_expiracion }}</p>
+                {% endif %}
+                <p class="small"><b>Fecha y hora de verificacion:</b> {{ verified_at }}</p>
+            </div>
+        </section>
+
+        <section class="problem">
+            <form method="post" action="{{ url_for('reportar_problema_verificacion', token=token) }}">
+                <label for="comentario" style="display:block;font-weight:600;margin-bottom:6px;">Reportar problema</label>
+                <textarea id="comentario" name="comentario" placeholder="Describe el problema detectado (opcional)"></textarea>
+                <button type="submit">Reportar problema</button>
+            </form>
+        </section>
+    </main>
+</body>
+</html>

@@ -13,3 +13,4 @@ requests==2.31.0
 cryptography==41.0.4
 pyodbc==5.1.0
 tzdata==2024.2
+qrcode==7.4.2
