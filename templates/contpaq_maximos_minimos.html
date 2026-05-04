@@ -121,28 +121,7 @@
 
         <div class="table-wrap">
             <table>
-                <thead>
-                    <tr>
-                        <th>Status</th>
-                        <th>Sucursal</th>
-                        <th>Clave</th>
-                        <th>Descripcion</th>
-                        <th>Existencia</th>
-                        <th id="periodHeader">Cantidad periodo</th>
-                        <th>Pedidos</th>
-                        <th>Demanda min</th>
-                        <th>Demanda max</th>
-                        <th>Minimo CONTPAQ</th>
-                        <th>Maximo CONTPAQ</th>
-                        <th>Sugerido compra</th>
-                        <th>Pendiente entregar</th>
-                        <th>Pendiente recibir</th>
-                        <th>Detalle periodos</th>
-                        <th>Categoria 1</th>
-                        <th>Categoria 2</th>
-                        <th>Ultima sync</th>
-                    </tr>
-                </thead>
+                <thead id="thead"></thead>
                 <tbody id="tbody"></tbody>
             </table>
         </div>
@@ -160,6 +139,15 @@
             if (status === 'BAJO_MINIMO') return '<span class="tag low">BAJO</span>';
             if (status === 'SOBRE_MAXIMO') return '<span class="tag high">ALTO</span>';
             return '<span class="tag ok">OK</span>';
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#39;');
         }
 
         function buildQuery(page) {
@@ -198,7 +186,6 @@
             const periodYear = document.getElementById('period_year');
             const dateFrom = document.getElementById('date_from');
             const dateTo = document.getElementById('date_to');
-            const periodHeader = document.getElementById('periodHeader');
             if (type === 'month') {
                 periodFrom.min = '1';
                 periodFrom.max = '12';
@@ -206,7 +193,6 @@
                 periodTo.min = '1';
                 periodTo.max = '12';
                 periodTo.placeholder = 'Mes hasta';
-                periodHeader.textContent = 'Cantidad mes';
                 periodFrom.disabled = false;
                 periodTo.disabled = false;
                 periodYear.disabled = false;
@@ -220,14 +206,12 @@
                     periodTo.min = '1';
                     periodTo.max = '53';
                     periodTo.placeholder = 'Semana hasta';
-                    periodHeader.textContent = 'Cantidad semana';
                     periodFrom.disabled = false;
                     periodTo.disabled = false;
                     periodYear.disabled = false;
                     dateFrom.disabled = true;
                     dateTo.disabled = true;
                 } else {
-                    periodHeader.textContent = 'Cantidad fecha';
                     periodFrom.disabled = true;
                     periodTo.disabled = true;
                     periodYear.disabled = true;
@@ -251,26 +235,49 @@
                 state.hasNext = !!data.has_next;
                 const summary = data.summary || {};
                 const periodLabel = summary.period_label || (document.getElementById('period_type').value === 'month' ? 'Mes' : 'Semana');
-                document.getElementById('periodHeader').textContent = `Cantidad ${periodLabel.toLowerCase()}`;
+                const periodColumns = summary.period_columns || [];
+
+                document.getElementById('thead').innerHTML = `
+                    <tr>
+                        <th>Status</th>
+                        <th>Clave</th>
+                        <th>Descripcion</th>
+                        ${periodColumns.map((label) => `<th>${escapeHtml(label)}</th>`).join('')}
+                        <th>Total periodo</th>
+                        <th>Pedidos</th>
+                        <th>Promedio</th>
+                        <th>Existencia</th>
+                        <th>Max</th>
+                        <th>Min</th>
+                        <th>Sugerido compra</th>
+                        <th>Disponible</th>
+                        <th>Pendiente entregar</th>
+                        <th>Pendiente recibir</th>
+                        <th>Detalle periodos</th>
+                        <th>Categoria 1</th>
+                        <th>Categoria 2</th>
+                        <th>Ultima sync</th>
+                    </tr>
+                `;
 
                 const tbody = document.getElementById('tbody');
                 tbody.innerHTML = (data.items || []).map((row) => `
                     <tr>
                         <td>${statusTag(row.status)}</td>
-                        <td>${row.sucursal || ''}</td>
                         <td>${row.product_key || ''}</td>
                         <td>${row.product_name || ''}</td>
-                        <td>${fmtNum(row.qty_available)}</td>
+                        ${periodColumns.map((label) => `<td>${fmtNum((row.period_values || {})[label])}</td>`).join('')}
                         <td>${fmtNum(row.cantidad_periodo)}</td>
                         <td>${fmtNum(row.pedidos_periodo)}</td>
-                        <td>${fmtNum(row.demanda_min_periodo)}</td>
-                        <td>${fmtNum(row.demanda_max_periodo)}</td>
-                        <td>${fmtNum(row.qty_min_contpaq)}</td>
-                        <td>${fmtNum(row.qty_max_contpaq)}</td>
+                        <td>${fmtNum(row.promedio)}</td>
+                        <td>${fmtNum(row.existencia)}</td>
+                        <td>${fmtNum(row.maximo)}</td>
+                        <td>${fmtNum(row.minimo)}</td>
                         <td>${fmtNum(row.sugerido_compra)}</td>
+                        <td>${fmtNum(row.qty_available)}</td>
                         <td>${fmtNum(row.qty_to_deliver_customer)}</td>
                         <td>${fmtNum(row.qty_to_receive_supplier)}</td>
-                        <td title="${row.detalle_periodos || ''}">${row.detalle_periodos || ''}</td>
+                        <td title="${escapeHtml(row.detalle_periodos || '')}">${row.detalle_periodos || ''}</td>
                         <td>${row.category1 || ''}</td>
                         <td>${row.category2 || ''}</td>
                         <td>${row.updated_at ? new Date(row.updated_at).toLocaleString('es-MX') : ''}</td>
@@ -284,7 +291,7 @@
                     <div><b>Bajo minimo</b>${fmtNum(summary.bajo_minimo)}</div>
                     <div><b>Sobre maximo</b>${fmtNum(summary.sobre_maximo)}</div>
                     <div><b>${periodLabel} ${summary.period_from || summary.period_value || ''} - ${summary.period_to || summary.period_value || ''}/${summary.period_year || ''}</b>${fmtNum(summary.cantidad_periodo_total)}</div>
-                    <div><b>Pedidos periodo</b>${fmtNum(summary.pedidos_periodo_total)}</div>
+                    <div><b>Promedio acumulado</b>${fmtNum(summary.promedio_global)}</div>
                 `;
 
                 document.getElementById('pageInfo').textContent = `Pagina ${data.page || 1} de ${data.total_pages || 0} (${fmtNum(data.total_records || 0)} registros)`;
