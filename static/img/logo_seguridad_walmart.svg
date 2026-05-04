@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="216" height="216" viewBox="0 0 216 216" role="img" aria-label="Nuestra Seguridad es Primero">
-  <rect width="216" height="216" fill="#ffffff"/>
-  <g transform="translate(108,108)">
-    <polygon points="0,-84 66,-46 66,46 0,84 -66,46 -66,-46" fill="#f4bf21"/>
-    <polygon points="0,-73 57,-40 57,40 0,73 -57,40 -57,-40" fill="#f4bf21" stroke="#0f2a54" stroke-width="2.4"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240" role="img" aria-label="Nuestra Seguridad es Primero">
+  <rect width="240" height="240" fill="#ffffff"/>
+  <g transform="translate(120,120)">
+    <polygon points="0,-92 72,-50 72,50 0,92 -72,50 -72,-50" fill="#f4bf21"/>
+    <polygon points="0,-80 62,-43 62,43 0,80 -62,43 -62,-43" fill="#f4bf21" stroke="#0f2a54" stroke-width="2.6"/>
 
     <g fill="#0f2a54" transform="translate(0,-54)">
       <circle r="2.4" cx="0" cy="0"/>
@@ -16,10 +16,10 @@
       <rect x="4.2" y="3.1" width="1.4" height="4.4" rx="0.7" transform="rotate(-45 4.9 5.3)"/>
     </g>
 
-    <text x="0" y="-35" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="9" fill="#0f2a54" font-weight="700" letter-spacing="0.8">NUESTRA</text>
+    <text x="0" y="-36" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#0f2a54" font-weight="700" letter-spacing="0.8">NUESTRA</text>
 
-    <rect x="-45" y="-24" width="90" height="50" fill="#0f2a54"/>
-    <text x="0" y="-2" text-anchor="middle" font-family="Arial Black, Segoe UI, Arial, sans-serif" font-size="15" fill="#f4bf21" font-weight="900" letter-spacing="0.4">SEGURIDAD</text>
-    <text x="0" y="19" text-anchor="middle" font-family="Arial Black, Segoe UI, Arial, sans-serif" font-size="12" fill="#f4bf21" font-weight="900" letter-spacing="0.3">ES PRIMERO</text>
+    <rect x="-48" y="-25" width="96" height="54" fill="#0f2a54"/>
+    <text x="0" y="-2" text-anchor="middle" font-family="Arial Black, Segoe UI, Arial, sans-serif" font-size="15" fill="#f4bf21" font-weight="900" letter-spacing="0.3">SEGURIDAD</text>
+    <text x="0" y="20" text-anchor="middle" font-family="Arial Black, Segoe UI, Arial, sans-serif" font-size="11" fill="#f4bf21" font-weight="900" letter-spacing="0.3">ES PRIMERO</text>
   </g>
 </svg>
