@@ -5,338 +5,786 @@
     <title>Credencial &mdash; {{ tecnico.nombre }}</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
         html, body {
-            background: #e8e8e8;
-            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #dde1e4;
+            font-family: 'Trebuchet MS', 'Segoe UI', Arial, sans-serif;
+            min-height: 100vh;
         }
 
-        .print-controls {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 14px;
-            padding: 24px 16px 16px;
-        }
-        .btn-print {
-            background: #1b5e20;
-            color: #fff;
-            border: none;
-            padding: 10px 28px;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 700;
-            cursor: pointer;
-            letter-spacing: .5px;
-        }
-        .btn-print:hover { background: #2e7d32; }
-        .btn-back {
-            background: #607d8b;
-            color: #fff;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-size: .9rem;
-            cursor: pointer;
-        }
-        .hint {
-            text-align: center;
-            color: #666;
-            font-size: .82rem;
-            margin-bottom: 20px;
-        }
-
-        .card-wrapper {
+        /* ══ CONTROLES ══ */
+        .top-controls {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 32px;
-            padding-bottom: 40px;
+            gap: 10px;
+            padding: 22px 16px 10px;
+        }
+        .ctrl-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
+        .btn {
+            border: none;
+            padding: 9px 22px;
+            border-radius: 7px;
+            font-size: .875rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: opacity .15s;
+            letter-spacing: .3px;
+        }
+        .btn:hover { opacity: .85; }
+        .btn-back  { background: #546e7a; color: #fff; }
+        .btn-print { background: #0f5f34; color: #fff; }
+        .btn-style { background: #fff; color: #333; border: 1.5px solid #b0bec5; }
+        .btn-style.active { background: #0f5f34; color: #fff; border-color: #0f5f34; }
+        .hint { text-align: center; color: #666; font-size: .8rem; }
+
+        /* ══ SWITCHER ══ */
+        .estilo-section { display: none; }
+        .estilo-section.active {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 28px;
+            padding-bottom: 48px;
+        }
+        .side-label {
+            text-align: center;
+            font-size: .72rem;
+            color: #888;
+            margin-bottom: 5px;
+            font-weight: 700;
+            letter-spacing: .6px;
+            text-transform: uppercase;
         }
 
-        /* CR80: 85.6 x 54 mm */
-        .card {
+        /* ═══════════════════════════════════════════
+           CORPORATIVA  —  portrait  54 &times; 85.6 mm
+           ═══════════════════════════════════════════ */
+        .corp-card {
+            width: 54mm;
+            height: 85.6mm;
+            position: relative;
+            border-radius: 3.5mm;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,.3);
+            background: #fff;
+            page-break-inside: avoid;
+            flex-shrink: 0;
+        }
+        /* punch hole */
+        .corp-card::before {
+            content: '';
+            position: absolute;
+            top: 2.8mm;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 10mm;
+            height: 2mm;
+            background: #111;
+            border-radius: 1mm;
+            z-index: 15;
+            opacity: .82;
+        }
+
+        /* ─ FRENTE corporativa ─ */
+        .corp-front { display: flex; flex-direction: column; }
+
+        .corp-header {
+            flex-shrink: 0;
+            height: 34mm;
+            background: linear-gradient(145deg, #0d5c32 0%, #1b7a42 60%, #0f5f34 100%);
+            position: relative;
+        }
+        /* wave bottom of green header */
+        .corp-header::after {
+            content: '';
+            position: absolute;
+            bottom: -6mm;
+            left: -4mm;
+            width: 62mm;
+            height: 12mm;
+            background: linear-gradient(145deg, #0d5c32, #0f5f34);
+            border-radius: 0 0 50% 50%;
+        }
+        .corp-topbar {
+            position: relative;
+            z-index: 5;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6mm 3.5mm 0;
+        }
+        .corp-topbar img {
+            max-height: 7mm;
+            max-width: 18mm;
+            object-fit: contain;
+            background: #fff;
+            border-radius: 1mm;
+            padding: .3mm .5mm;
+        }
+        .corp-coname {
+            font-size: 4.5pt;
+            font-weight: 800;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: .7px;
+            text-align: right;
+            line-height: 1.3;
+        }
+        /* photo — absolute, straddles wave boundary */
+        .corp-photo-wrap {
+            position: absolute;
+            top: 19mm;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 6;
+        }
+        .corp-photo {
+            width: 22mm;
+            height: 26mm;
+            object-fit: cover;
+            border-radius: 2.5mm;
+            border: 1.1mm solid #fff;
+            box-shadow: 0 1mm 4mm rgba(0,0,0,.25);
+            display: block;
+        }
+        .corp-photo-ph {
+            width: 22mm;
+            height: 26mm;
+            background: #e8f5e9;
+            border-radius: 2.5mm;
+            border: 1mm solid #fff;
+            box-shadow: 0 1mm 3mm rgba(0,0,0,.18);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 17pt;
+            color: #a5d6a7;
+        }
+        .corp-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 13mm 4mm 0;
+            text-align: center;
+        }
+        .corp-name {
+            font-size: 9.5pt;
+            font-weight: 800;
+            color: #1a1a1a;
+            line-height: 1.2;
+            max-width: 46mm;
+        }
+        .corp-role {
+            font-size: 5.5pt;
+            color: #666;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .8px;
+            margin-top: 1mm;
+        }
+        .corp-divider {
+            width: 30mm;
+            height: .45mm;
+            background: linear-gradient(90deg, transparent, #f9bf1c, transparent);
+            margin: 2mm auto 2mm;
+        }
+        .corp-fields {
+            width: 100%;
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: .9mm 3mm;
+            text-align: left;
+            padding: 0 3mm;
+        }
+        .corp-fl {
+            font-size: 4.2pt;
+            font-weight: 800;
+            color: #0f5f34;
+            text-transform: uppercase;
+            letter-spacing: .4px;
+            white-space: nowrap;
+        }
+        .corp-fv {
+            font-size: 5.2pt;
+            color: #222;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .corp-footer {
+            margin-top: auto;
+            width: 100%;
+            padding: 0 3.5mm 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .corp-badge {
+            font-size: 4.5pt;
+            font-weight: 900;
+            padding: .65mm 2.6mm;
+            border-radius: 2mm;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+        }
+        .badge-activo   { background: #d9f3df; color: #0f5f34; }
+        .badge-inactivo { background: #ffcdd2; color: #b71c1c; }
+        .corp-site { font-size: 3.8pt; color: #bbb; }
+        .corp-stripe {
+            width: 100%;
+            height: 2mm;
+            background: linear-gradient(90deg, #e8a010, #fdd835 40%, #e8a010);
+            flex-shrink: 0;
+            margin-top: 1.5mm;
+        }
+
+        /* ─ REVERSO corporativa ─ */
+        .corp-back { display: flex; flex-direction: column; background: #fff; }
+        .corp-back-top {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 7.5mm 4.5mm 2mm;
+            text-align: center;
+        }
+        .corp-back-name {
+            font-size: 10pt;
+            font-weight: 800;
+            color: #1a1a1a;
+            line-height: 1.15;
+        }
+        .corp-back-div {
+            width: 36mm;
+            height: .5mm;
+            background: linear-gradient(90deg, transparent, #f9bf1c 30%, #f9bf1c 70%, transparent);
+            margin: 2mm auto 2.5mm;
+        }
+        .corp-back-desc {
+            font-size: 5pt;
+            color: #555;
+            line-height: 1.6;
+            text-align: center;
+            max-width: 44mm;
+        }
+        .corp-back-dates {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0 3mm;
+            margin-top: auto;
+            padding: 2.5mm 3.5mm 0;
+            width: 100%;
+        }
+        .corp-back-date-col { text-align: left; }
+        .corp-datelabel {
+            font-size: 4pt;
+            font-weight: 800;
+            color: #aaa;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+        }
+        .corp-dateval {
+            font-size: 6pt;
+            font-weight: 700;
+            color: #222;
+            margin-top: .4mm;
+        }
+        /* green wave bottom */
+        .corp-back-wave {
+            height: 30mm;
+            background: linear-gradient(145deg, #0d5c32 0%, #1b7a42 60%, #0f5f34 100%);
+            position: relative;
+            flex-shrink: 0;
+        }
+        .corp-back-wave::before {
+            content: '';
+            position: absolute;
+            top: -6mm;
+            left: -4mm;
+            width: 62mm;
+            height: 12mm;
+            background: linear-gradient(145deg, #0d5c32, #0f5f34);
+            border-radius: 50% 50% 0 0;
+        }
+        .corp-wave-content {
+            position: relative;
+            z-index: 2;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 5mm 4mm 3mm;
+        }
+        .corp-qr img {
+            width: 18mm;
+            height: 18mm;
+            object-fit: contain;
+            background: #fff;
+            border-radius: 1.2mm;
+            padding: .5mm;
+            box-shadow: 0 .5mm 2mm rgba(0,0,0,.3);
+        }
+        .corp-qr-info {
+            flex: 1;
+            padding-left: 3mm;
+        }
+        .corp-scan {
+            font-size: 5pt;
+            color: rgba(255,255,255,.92);
+            line-height: 1.4;
+        }
+        .corp-scan strong { color: #f9bf1c; }
+        .corp-back-logo img {
+            max-height: 5mm;
+            max-width: 11mm;
+            object-fit: contain;
+            background: rgba(255,255,255,.92);
+            border-radius: .8mm;
+            padding: .2mm .4mm;
+        }
+
+        /* ═══════════════════════════════════════════
+           MODERNA  —  landscape  85.6 &times; 54 mm
+           ═══════════════════════════════════════════ */
+        .mod-card {
             width: 85.6mm;
             height: 54mm;
             position: relative;
             border-radius: 3.5mm;
             overflow: hidden;
-            box-shadow: 0 6px 28px rgba(0,0,0,.28);
+            box-shadow: 0 8px 32px rgba(0,0,0,.3);
             background: #fff;
             page-break-inside: avoid;
+            flex-shrink: 0;
+        }
+        /* punch hole */
+        .mod-card::before {
+            content: '';
+            position: absolute;
+            top: 2.8mm;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 14mm;
+            height: 2.2mm;
+            background: #111;
+            border-radius: 1.1mm;
+            z-index: 15;
+            opacity: .82;
         }
 
-        /* === FRENTE === */
-        .card-front { display: flex; flex-direction: column; }
-
-        .card-header {
-            background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 60%, #33691e 100%);
-            padding: 3.2mm 4mm 2.5mm;
+        /* ─ FRENTE moderna ─ */
+        .mod-front { display: flex; flex-direction: column; }
+        /* full green band top */
+        .mod-band {
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 17.5mm;
+            background: linear-gradient(135deg, #0c5a30 0%, #1b7a42 55%, #0f5f34 100%);
+            z-index: 0;
+        }
+        /* wave bottom of band */
+        .mod-band::after {
+            content: '';
+            position: absolute;
+            bottom: -5.5mm;
+            left: -5mm;
+            width: 100mm;
+            height: 11mm;
+            background: linear-gradient(135deg, #0c5a30, #0f5f34);
+            border-radius: 0 0 46% 46% / 0 0 100% 100%;
+        }
+        .mod-topbar {
+            position: relative;
+            z-index: 5;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            flex-shrink: 0;
+            padding: 5.5mm 3.8mm 0;
         }
-        .card-header .logo-wrap {
-            height: 11mm;
-            display: flex;
-            align-items: center;
-        }
-        .card-header .logo-wrap img {
-            max-height: 11mm;
-            max-width: 26mm;
+        .mod-topbar img {
+            max-height: 8mm;
+            max-width: 22mm;
             object-fit: contain;
             background: #fff;
-            border-radius: 1.5mm;
-            padding: .5mm;
+            border-radius: 1.2mm;
+            padding: .3mm .5mm;
         }
-        .card-header .empresa-name {
+        .mod-coname {
+            font-size: 5pt;
+            font-weight: 800;
             color: #fff;
-            font-size: 5.5pt;
-            font-weight: 700;
-            text-align: right;
             text-transform: uppercase;
-            letter-spacing: .6px;
-            max-width: 38mm;
+            letter-spacing: .7px;
+            text-align: right;
             line-height: 1.3;
         }
-
-        .card-stripe {
-            height: 2.5mm;
-            background: linear-gradient(90deg, #f9a825, #fdd835, #f9a825);
-            flex-shrink: 0;
+        /* photo */
+        .mod-photo-wrap {
+            position: absolute;
+            top: 9.5mm;
+            left: 4mm;
+            z-index: 5;
         }
-
-        .card-body {
-            flex: 1;
-            display: flex;
-            padding: 2.5mm 3.5mm 0;
-            gap: 3mm;
-        }
-
-        .card-photo-wrap { flex-shrink: 0; width: 18mm; }
-        .card-photo {
-            width: 18mm;
-            height: 22mm;
+        .mod-photo {
+            width: 20mm;
+            height: 26mm;
             object-fit: cover;
-            border-radius: 1.5mm;
-            border: 1px solid #c8e6c9;
+            border-radius: 2mm;
+            border: 1mm solid #fff;
+            box-shadow: 0 1mm 3mm rgba(0,0,0,.22);
+            display: block;
         }
-        .card-photo-placeholder {
-            width: 18mm;
-            height: 22mm;
+        .mod-photo-ph {
+            width: 20mm;
+            height: 26mm;
             background: #e8f5e9;
-            border-radius: 1.5mm;
-            border: 1px solid #c8e6c9;
+            border-radius: 2mm;
+            border: 1mm solid #fff;
+            box-shadow: 0 1mm 2.5mm rgba(0,0,0,.16);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 20pt;
-            color: #a5d6a7;
+            font-size: 14pt;
+            color: #9fb4a6;
         }
-
-        .card-info {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-start;
-            padding-top: 0.5mm;
+        /* info block right of photo */
+        .mod-info {
+            position: absolute;
+            top: 20mm;
+            left: 27mm;
+            right: 3.5mm;
+            z-index: 3;
         }
-        .card-label {
-            font-size: 4pt;
-            font-weight: 700;
-            color: #1b5e20;
-            text-transform: uppercase;
-            letter-spacing: .8px;
-            margin-bottom: .8mm;
-            margin-top: 1.5mm;
-        }
-        .card-label:first-child { margin-top: 0; }
-        .card-value {
-            font-size: 7pt;
-            font-weight: 700;
-            color: #212121;
-            line-height: 1.2;
-        }
-        .card-value.small { font-size: 6pt; }
-        .card-num-badge {
-            display: inline-block;
-            background: #f9a825;
-            color: #212121;
-            font-size: 6pt;
+        .mod-name {
+            font-size: 9pt;
             font-weight: 800;
-            padding: 0.5mm 2mm;
-            border-radius: 2mm;
-            margin-top: 0.8mm;
+            color: #1a1a1a;
+            line-height: 1.15;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
-
-        .card-footer-front {
+        .mod-role {
+            font-size: 5pt;
+            color: #666;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .6px;
+            margin-top: .6mm;
+        }
+        .mod-badge {
+            display: inline-block;
+            background: linear-gradient(90deg, #f9a825, #fdd835);
+            color: #1a1a1a;
+            font-size: 5.8pt;
+            font-weight: 900;
+            padding: .5mm 2mm;
+            border-radius: 1.8mm;
+            margin-top: 1.2mm;
+        }
+        .mod-empresa {
+            font-size: 5.4pt;
+            color: #444;
+            margin-top: .8mm;
+            font-weight: 600;
+        }
+        /* footer */
+        .mod-footer {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 8mm;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 1.5mm 3.5mm 2mm;
-            border-top: .4mm solid #e8f5e9;
-            margin-top: auto;
+            padding: 0 3.8mm;
+            background: #fff;
+            border-top: .4mm solid #eceff1;
+            z-index: 3;
         }
-        .card-footer-front .vigencia { font-size: 4.5pt; color: #555; }
-        .card-footer-front .vigencia strong { color: #1b5e20; }
-        .card-footer-front .estado-badge {
-            font-size: 4.5pt;
-            font-weight: 800;
-            padding: 0.6mm 2mm;
-            border-radius: 2mm;
+        .mod-vigencia { font-size: 4.4pt; color: #555; }
+        .mod-vigencia strong { color: #0f5f34; }
+        .mod-estado {
+            font-size: 4.4pt;
+            font-weight: 900;
+            padding: .55mm 2mm;
+            border-radius: 1.8mm;
             text-transform: uppercase;
-            letter-spacing: .5px;
+            letter-spacing: .4px;
         }
-        .estado-activo   { background: #c8e6c9; color: #1b5e20; }
-        .estado-invalido { background: #ffcdd2; color: #b71c1c; }
+        .mod-activo   { background: #d9f3df; color: #0f5f34; }
+        .mod-inactivo { background: #ffcdd2; color: #b71c1c; }
 
-        /* === REVERSO === */
-        .card-back { display: flex; flex-direction: column; background: #fff; }
-
-        .card-back .back-header {
-            background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 60%, #33691e 100%);
-            height: 7mm;
+        /* ─ REVERSO moderna ─ */
+        .mod-back { display: flex; flex-direction: column; background: #fff; }
+        /* green banner top */
+        .mod-back-banner {
+            background: linear-gradient(135deg, #0c5a30 0%, #1b7a42 55%, #0f5f34 100%);
+            height: 11mm;
             display: flex;
             align-items: center;
-            padding: 0 4mm;
-        }
-        .card-back .back-header span {
-            color: #fdd835;
-            font-size: 5.5pt;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        .card-back .back-stripe {
-            height: 2mm;
-            background: linear-gradient(90deg, #f9a825, #fdd835, #f9a825);
-        }
-        .mag-stripe {
-            height: 9mm;
-            background: #1a1a1a;
-            margin: 3mm 0 0;
+            justify-content: center;
+            position: relative;
+            z-index: 3;
             flex-shrink: 0;
         }
-        .back-body {
+        .mod-back-banner::after {
+            content: '';
+            position: absolute;
+            bottom: -4.5mm;
+            left: -5mm;
+            width: 100mm;
+            height: 9mm;
+            background: linear-gradient(135deg, #0c5a30, #0f5f34);
+            border-radius: 0 0 46% 46% / 0 0 100% 100%;
+        }
+        .mod-banner-text {
+            font-size: 6pt;
+            font-weight: 800;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            position: relative;
+            z-index: 4;
+        }
+        .mod-banner-text span { color: #f9bf1c; }
+        /* content */
+        .mod-back-content {
             flex: 1;
             display: flex;
-            padding: 2mm 3.5mm;
-            gap: 3mm;
             align-items: center;
+            padding: 6.5mm 4mm 0;
+            gap: 4mm;
         }
-        .qr-wrap img {
+        .mod-back-qr img {
             width: 18mm;
             height: 18mm;
             object-fit: contain;
-            border: .4mm solid #e0e0e0;
+            border: .6mm solid #ddd;
             border-radius: 1mm;
-            padding: .5mm;
+            padding: .4mm;
+            background: #fff;
+            box-shadow: 0 .5mm 1.5mm rgba(0,0,0,.12);
+            flex-shrink: 0;
         }
-        .back-info { flex: 1; }
-        .back-scan-text {
+        .mod-back-right { flex: 1; }
+        .mod-back-tname {
+            font-size: 9pt;
+            font-weight: 800;
+            color: #1a1a1a;
+            line-height: 1.15;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .mod-back-sep {
+            width: 44mm;
+            height: .45mm;
+            background: linear-gradient(90deg, #f9bf1c, rgba(249,191,28,.15));
+            margin: 1.5mm 0;
+        }
+        .mod-back-scan {
             font-size: 5pt;
             color: #555;
-            line-height: 1.5;
-            margin-bottom: 1.5mm;
+            line-height: 1.4;
         }
-        .back-scan-text strong { color: #1b5e20; }
-        .back-url { font-size: 4pt; color: #888; word-break: break-all; }
-        .back-footer {
+        .mod-back-scan strong { color: #0f5f34; }
+        .mod-back-url {
+            font-size: 3.8pt;
+            color: #aaa;
+            word-break: break-all;
+            margin-top: .8mm;
+        }
+        /* green footer */
+        .mod-back-foot {
+            height: 9mm;
+            background: linear-gradient(135deg, #0c5a30, #0f5f34);
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 1mm 3.5mm 1.5mm;
-            border-top: .4mm solid #e8f5e9;
+            padding: 0 4mm;
+            flex-shrink: 0;
         }
-        .back-footer .disclaimer {
-            font-size: 3.5pt;
-            color: #aaa;
-            max-width: 52mm;
+        .mod-back-disc {
+            font-size: 3.6pt;
+            color: rgba(255,255,255,.75);
+            max-width: 54mm;
             line-height: 1.4;
         }
-        .back-footer .logo-small img {
+        .mod-back-logo img {
             max-height: 5mm;
-            max-width: 14mm;
+            max-width: 13mm;
             object-fit: contain;
-            opacity: .55;
+            background: rgba(255,255,255,.9);
+            border-radius: .8mm;
+            padding: .15mm .3mm;
         }
 
-        .side-label {
-            text-align: center;
-            font-size: .75rem;
-            color: #888;
-            margin-bottom: 6px;
-            font-weight: 600;
-            letter-spacing: .5px;
-            text-transform: uppercase;
-        }
-
+        /* ══ PRINT ══ */
         @media print {
             html, body { background: #fff; margin: 0; padding: 0; }
-            .print-controls, .hint, .side-label { display: none !important; }
-            .card-wrapper {
-                flex-direction: row;
-                flex-wrap: wrap;
-                align-items: flex-start;
-                justify-content: center;
-                gap: 8mm;
-                padding: 10mm;
+            .top-controls, .side-label { display: none !important; }
+            .estilo-section { display: none !important; }
+            .estilo-section.active {
+                display: flex !important;
+                flex-direction: row !important;
+                flex-wrap: wrap !important;
+                align-items: flex-start !important;
+                justify-content: center !important;
+                gap: 10mm !important;
+                padding: 8mm !important;
             }
-            .card { box-shadow: none; border: .3mm solid #ccc; }
-            .card-item { page-break-inside: avoid; }
+            .corp-card, .mod-card { box-shadow: none !important; border: .25mm solid #ccc !important; }
         }
     </style>
 </head>
 <body>
 
-<div class="print-controls">
-    <button class="btn-back" onclick="history.back()">&#8592; Volver</button>
-    <button class="btn-print" onclick="window.print()">&#128424; Imprimir Credencial</button>
+<div class="top-controls">
+    <div class="ctrl-row">
+        <button class="btn btn-back" onclick="history.back()">&#8592; Volver</button>
+        <button class="btn btn-style active" id="btn-corp" onclick="switchStyle('corp')">&#127970; Corporativa</button>
+        <button class="btn btn-style" id="btn-mod"  onclick="switchStyle('mod')">&#9889; Moderna</button>
+        <button class="btn btn-print" onclick="window.print()">&#128424; Imprimir</button>
+    </div>
+    <p class="hint">CR80 est&aacute;ndar. Elige el estilo y usa &ldquo;Sin escala&rdquo; al imprimir.</p>
 </div>
-<p class="hint">Tama&ntilde;o CR80 est&aacute;ndar (85.6 &times; 54 mm). En la impresora selecciona &ldquo;Tama&ntilde;o real&rdquo; o &ldquo;Sin escala&rdquo;.</p>
 
-<div class="card-wrapper">
+<!-- ══════════════════════════════
+     ESTILO CORPORATIVA (portrait)
+     ══════════════════════════════ -->
+<div class="estilo-section active" id="sec-corp">
 
     <!-- FRENTE -->
     <div class="card-item">
-        <div class="side-label">Frente</div>
-        <div class="card card-front">
+        <div class="side-label">Corporativa &mdash; Frente</div>
+        <div class="corp-card corp-front">
 
-            <div class="card-header">
-                <div class="logo-wrap">
-                    <img src="{{ url_for('static', filename='img/logo_verduzco.png') }}" alt="Industrias Verduzco">
-                </div>
-                <div class="empresa-name">INDUSTRIAS<br>VERDUZCO</div>
-            </div>
-            <div class="card-stripe"></div>
-
-            <div class="card-body">
-                <div class="card-photo-wrap">
-                    {% if tecnico.foto %}
-                        <img class="card-photo" src="{{ tecnico.foto }}" alt="Foto">
-                    {% else %}
-                        <div class="card-photo-placeholder">&#128119;</div>
-                    {% endif %}
-                </div>
-
-                <div class="card-info">
-                    <div class="card-label">Nombre</div>
-                    <div class="card-value">{{ tecnico.nombre }}</div>
-
-                    <div class="card-label">Empresa</div>
-                    <div class="card-value small">{{ tecnico.empresa }}</div>
-
-                    <div class="card-label">No. Empleado</div>
-                    <span class="card-num-badge">{{ tecnico.numero_empleado }}</span>
+            <div class="corp-header">
+                <div class="corp-topbar">
+                    <img src="{{ url_for('static', filename='img/logo_verduzco.png') }}" alt="Logo">
+                    <span class="corp-coname">INDUSTRIAS<br>VERDUZCO</span>
                 </div>
             </div>
 
-            <div class="card-footer-front">
-                <div class="vigencia">
-                    Vigente hasta: <strong>{{ tecnico.fecha_expiracion.strftime('%d/%m/%Y') if tecnico.fecha_expiracion else '&mdash;' }}</strong>
+            <div class="corp-photo-wrap">
+                {% if tecnico.foto %}
+                    <img class="corp-photo" src="{{ tecnico.foto }}" alt="Foto">
+                {% else %}
+                    <div class="corp-photo-ph">&#128119;</div>
+                {% endif %}
+            </div>
+
+            <div class="corp-body">
+                <div class="corp-name">{{ tecnico.nombre }}</div>
+                <div class="corp-role">T&eacute;cnico Industrial</div>
+                <div class="corp-divider"></div>
+                <div class="corp-fields">
+                    <span class="corp-fl">ID No</span>
+                    <span class="corp-fv">{{ tecnico.numero_empleado }}</span>
+                    <span class="corp-fl">Empresa</span>
+                    <span class="corp-fv">{{ tecnico.empresa }}</span>
+                    <span class="corp-fl">Vigente</span>
+                    <span class="corp-fv">{{ tecnico.fecha_expiracion.strftime('%d/%m/%Y') if tecnico.fecha_expiracion else '&mdash;' }}</span>
                 </div>
-                <span class="estado-badge {% if vigente %}estado-activo{% else %}estado-invalido{% endif %}">
+            </div>
+
+            <div class="corp-footer">
+                <span class="corp-badge {% if vigente %}badge-activo{% else %}badge-inactivo{% endif %}">
+                    {% if vigente %}ACTIVO{% else %}NO VIGENTE{% endif %}
+                </span>
+                <span class="corp-site">controlcalidad360.site</span>
+            </div>
+            <div class="corp-stripe"></div>
+
+        </div>
+    </div>
+
+    <!-- REVERSO -->
+    <div class="card-item">
+        <div class="side-label">Corporativa &mdash; Reverso</div>
+        <div class="corp-card corp-back">
+
+            <div class="corp-back-top">
+                <div class="corp-back-name">{{ tecnico.nombre }}</div>
+                <div class="corp-back-div"></div>
+                <div class="corp-back-desc">
+                    Portador autorizado de acceso a instalaciones de
+                    <strong>Industrias Verduzco</strong>.
+                    Credencial sujeta a verificaci&oacute;n digital en l&iacute;nea.
+                </div>
+                <div class="corp-back-dates">
+                    <div class="corp-back-date-col">
+                        <div class="corp-datelabel">Expedici&oacute;n</div>
+                        <div class="corp-dateval">{{ tecnico.creado_en.strftime('%d/%m/%Y') if tecnico.creado_en else '&mdash;' }}</div>
+                    </div>
+                    <div class="corp-back-date-col">
+                        <div class="corp-datelabel">Vencimiento</div>
+                        <div class="corp-dateval">{{ tecnico.fecha_expiracion.strftime('%d/%m/%Y') if tecnico.fecha_expiracion else '&mdash;' }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="corp-back-wave">
+                <div class="corp-wave-content">
+                    <div class="corp-qr">
+                        {% if tecnico.qr_imagen %}
+                            <img src="{{ tecnico.qr_imagen }}" alt="QR">
+                        {% else %}
+                            <div style="width:18mm;height:18mm;background:#1b7a42;border-radius:1mm;display:flex;align-items:center;justify-content:center;font-size:5.5pt;color:rgba(255,255,255,.6);">Sin QR</div>
+                        {% endif %}
+                    </div>
+                    <div class="corp-qr-info">
+                        <div class="corp-scan">Escanea para<br><strong>verificar</strong></div>
+                    </div>
+                    <div class="corp-back-logo">
+                        <img src="{{ url_for('static', filename='img/logo_verduzco.png') }}" alt="Logo">
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════
+     ESTILO MODERNA (landscape)
+     ══════════════════════════════ -->
+<div class="estilo-section" id="sec-mod">
+
+    <!-- FRENTE -->
+    <div class="card-item">
+        <div class="side-label">Moderna &mdash; Frente</div>
+        <div class="mod-card mod-front">
+
+            <div class="mod-band"></div>
+            <div class="mod-topbar">
+                <img src="{{ url_for('static', filename='img/logo_verduzco.png') }}" alt="Logo">
+                <span class="mod-coname">INDUSTRIAS<br>VERDUZCO</span>
+            </div>
+
+            <div class="mod-photo-wrap">
+                {% if tecnico.foto %}
+                    <img class="mod-photo" src="{{ tecnico.foto }}" alt="Foto">
+                {% else %}
+                    <div class="mod-photo-ph">&#128119;</div>
+                {% endif %}
+            </div>
+
+            <div class="mod-info">
+                <div class="mod-name">{{ tecnico.nombre }}</div>
+                <div class="mod-role">T&eacute;cnico Industrial</div>
+                <span class="mod-badge">{{ tecnico.numero_empleado }}</span>
+                <div class="mod-empresa">{{ tecnico.empresa }}</div>
+            </div>
+
+            <div class="mod-footer">
+                <div class="mod-vigencia">
+                    Vigente: <strong>{{ tecnico.fecha_expiracion.strftime('%d/%m/%Y') if tecnico.fecha_expiracion else '&mdash;' }}</strong>
+                </div>
+                <span class="mod-estado {% if vigente %}mod-activo{% else %}mod-inactivo{% endif %}">
                     {% if vigente %}ACTIVO{% else %}NO VIGENTE{% endif %}
                 </span>
             </div>
@@ -346,42 +794,36 @@
 
     <!-- REVERSO -->
     <div class="card-item">
-        <div class="side-label">Reverso</div>
-        <div class="card card-back">
+        <div class="side-label">Moderna &mdash; Reverso</div>
+        <div class="mod-card mod-back">
 
-            <div class="back-header">
-                <span>Credencial de Acceso &mdash; Verificaci&oacute;n Digital</span>
+            <div class="mod-back-banner">
+                <span class="mod-banner-text">Credencial de Acceso &mdash; <span>Verificaci&oacute;n Digital</span></span>
             </div>
-            <div class="back-stripe"></div>
-            <div class="mag-stripe"></div>
 
-            <div class="back-body">
-                <div class="qr-wrap">
+            <div class="mod-back-content">
+                <div class="mod-back-qr">
                     {% if tecnico.qr_imagen %}
                         <img src="{{ tecnico.qr_imagen }}" alt="QR">
                     {% else %}
-                        <div style="width:18mm;height:18mm;background:#f5f5f5;border-radius:1mm;display:flex;align-items:center;justify-content:center;font-size:7pt;color:#aaa;">Sin QR</div>
+                        <div style="width:18mm;height:18mm;background:#f5f5f5;border-radius:1mm;display:flex;align-items:center;justify-content:center;font-size:6pt;color:#aaa;">Sin QR</div>
                     {% endif %}
                 </div>
-
-                <div class="back-info">
-                    <div class="back-scan-text">
+                <div class="mod-back-right">
+                    <div class="mod-back-tname">{{ tecnico.nombre }}</div>
+                    <div class="mod-back-sep"></div>
+                    <div class="mod-back-scan">
                         Escanea el c&oacute;digo QR para<br>
-                        <strong>verificar esta credencial</strong><br>
-                        en tiempo real.
+                        <strong>verificar esta credencial</strong> en tiempo real.
                     </div>
-                    <div class="back-url">
-                        controlcalidad360.site/verificar/{{ tecnico.token_qr[:12] }}&hellip;
-                    </div>
+                    <div class="mod-back-url">controlcalidad360.site/verificar/{{ tecnico.token_qr[:12] }}&hellip;</div>
                 </div>
             </div>
 
-            <div class="back-footer">
-                <div class="disclaimer">
-                    Esta credencial es personal e intransferible. En caso de p&eacute;rdida rep&oacute;rtala inmediatamente.
-                </div>
-                <div class="logo-small">
-                    <img src="{{ url_for('static', filename='img/logo_verduzco.png') }}" alt="Industrias Verduzco">
+            <div class="mod-back-foot">
+                <div class="mod-back-disc">Personal e intransferible. P&eacute;rdida: rep&oacute;rtala de inmediato.</div>
+                <div class="mod-back-logo">
+                    <img src="{{ url_for('static', filename='img/logo_verduzco.png') }}" alt="Logo">
                 </div>
             </div>
 
@@ -389,5 +831,17 @@
     </div>
 
 </div>
+
+<script>
+function switchStyle(s) {
+    ['corp','mod'].forEach(function(k) {
+        document.getElementById('sec-' + k).classList.remove('active');
+        document.getElementById('btn-' + k).classList.remove('active');
+    });
+    document.getElementById('sec-' + s).classList.add('active');
+    document.getElementById('btn-' + s).classList.add('active');
+}
+</script>
+
 </body>
 </html>
