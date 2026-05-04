@@ -1851,6 +1851,13 @@ class Tecnico(db.Model):
     nombre = db.Column(db.String(255), nullable=False, index=True)
     empresa = db.Column(db.String(255), nullable=False, index=True)
     numero_empleado = db.Column(db.String(120), nullable=False, unique=True, index=True)
+    puesto = db.Column(db.String(120), nullable=True)
+    nss = db.Column(db.String(30), nullable=True)
+    curp = db.Column(db.String(20), nullable=True)
+    tipo_sangre = db.Column(db.String(10), nullable=True)
+    alergias = db.Column(db.String(255), nullable=True)
+    contacto_emergencia = db.Column(db.String(120), nullable=True)
+    antiguedad = db.Column(db.String(60), nullable=True)
     foto = db.Column(db.String(500), nullable=True)
     qr_imagen = db.Column(db.String(500), nullable=True)
     token_qr = db.Column(db.String(36), nullable=False, unique=True, index=True, default=lambda: str(uuid.uuid4()))
@@ -1865,6 +1872,13 @@ class Tecnico(db.Model):
             'nombre': self.nombre,
             'empresa': self.empresa,
             'numero_empleado': self.numero_empleado,
+            'puesto': self.puesto,
+            'nss': self.nss,
+            'curp': self.curp,
+            'tipo_sangre': self.tipo_sangre,
+            'alergias': self.alergias,
+            'contacto_emergencia': self.contacto_emergencia,
+            'antiguedad': self.antiguedad,
             'foto': self.foto,
             'qr_imagen': self.qr_imagen,
             'token_qr': self.token_qr,

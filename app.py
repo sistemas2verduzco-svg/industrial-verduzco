@@ -5274,10 +5274,19 @@ def api_crear_tecnico():
             f.save(os.path.join(TECNICOS_FOTO_DIR, fname))
             foto_url = f'/uploads/tecnicos/fotos/{fname}'
 
+    def _opt(key): return (request.form.get(key) or '').strip() or None
+
     tecnico = Tecnico(
         nombre=nombre,
         empresa=empresa,
         numero_empleado=numero_empleado,
+        puesto=_opt('puesto'),
+        nss=_opt('nss'),
+        curp=_opt('curp'),
+        tipo_sangre=_opt('tipo_sangre'),
+        alergias=_opt('alergias'),
+        contacto_emergencia=_opt('contacto_emergencia'),
+        antiguedad=_opt('antiguedad'),
         foto=foto_url,
         fecha_expiracion=fecha_exp,
     )
@@ -5320,6 +5329,11 @@ def api_editar_tecnico(tid):
             tecnico.fecha_expiracion = datetime.strptime(fecha_exp_str, '%Y-%m-%d')
         except ValueError:
             return jsonify({'error': 'fecha_expiracion debe ser YYYY-MM-DD'}), 400
+
+    for field in ('puesto', 'nss', 'curp', 'tipo_sangre', 'alergias', 'contacto_emergencia', 'antiguedad'):
+        val = (request.form.get(field) or '').strip()
+        if val:
+            setattr(tecnico, field, val)
 
     if 'foto' in request.files:
         f = request.files['foto']

@@ -85,8 +85,36 @@
                 <input type="text" id="tecNumero" required placeholder="Ej. TEC-001">
             </div>
             <div class="form-group">
+                <label>Puesto / Cargo</label>
+                <input type="text" id="tecPuesto" placeholder="Ej. Ayudante General">
+            </div>
+            <div class="form-group">
                 <label>Vigencia hasta *</label>
                 <input type="date" id="tecExpiracion" required>
+            </div>
+            <div class="form-group">
+                <label>NSS</label>
+                <input type="text" id="tecNss" placeholder="Ej. 62-97-81-9262-3">
+            </div>
+            <div class="form-group">
+                <label>CURP</label>
+                <input type="text" id="tecCurp" placeholder="Ej. UICA810328HPLRML09" style="text-transform:uppercase">
+            </div>
+            <div class="form-group">
+                <label>Tipo de sangre</label>
+                <input type="text" id="tecSangre" placeholder="Ej. O+">
+            </div>
+            <div class="form-group">
+                <label>Alergias</label>
+                <input type="text" id="tecAlergias" placeholder="Ej. N/A o Penicilina">
+            </div>
+            <div class="form-group">
+                <label>Contacto emergencia laboral</label>
+                <input type="text" id="tecContacto" placeholder="Ej. 722 648 0301">
+            </div>
+            <div class="form-group">
+                <label>Antigüedad en la empresa</label>
+                <input type="text" id="tecAntiguedad" placeholder="Ej. 5 años">
             </div>
             <div class="form-group">
                 <label>Foto (opcional)</label>
@@ -185,6 +213,13 @@ function abrirModalNuevo() {
     document.getElementById('tecNombre').value = '';
     document.getElementById('tecEmpresa').value = '';
     document.getElementById('tecNumero').value = '';
+    document.getElementById('tecPuesto').value = '';
+    document.getElementById('tecNss').value = '';
+    document.getElementById('tecCurp').value = '';
+    document.getElementById('tecSangre').value = '';
+    document.getElementById('tecAlergias').value = '';
+    document.getElementById('tecContacto').value = '';
+    document.getElementById('tecAntiguedad').value = '';
     document.getElementById('tecFoto').value = '';
     // Por defecto un año adelante
     const d = new Date(); d.setFullYear(d.getFullYear()+1);
@@ -199,6 +234,13 @@ function editarTecnico(t) {
     document.getElementById('tecNombre').value = t.nombre;
     document.getElementById('tecEmpresa').value = t.empresa;
     document.getElementById('tecNumero').value = t.numero_empleado;
+    document.getElementById('tecPuesto').value = t.puesto || '';
+    document.getElementById('tecNss').value = t.nss || '';
+    document.getElementById('tecCurp').value = t.curp || '';
+    document.getElementById('tecSangre').value = t.tipo_sangre || '';
+    document.getElementById('tecAlergias').value = t.alergias || '';
+    document.getElementById('tecContacto').value = t.contacto_emergencia || '';
+    document.getElementById('tecAntiguedad').value = t.antiguedad || '';
     document.getElementById('tecExpiracion').value = (t.fecha_expiracion||'').slice(0,10);
     document.getElementById('tecFoto').value = '';
     document.getElementById('modalTitulo').textContent = 'Editar Técnico';
@@ -218,6 +260,12 @@ document.getElementById('formTecnico').addEventListener('submit', async function
     fd.append('empresa', document.getElementById('tecEmpresa').value.trim());
     fd.append('numero_empleado', document.getElementById('tecNumero').value.trim());
     fd.append('fecha_expiracion', document.getElementById('tecExpiracion').value);
+    ['tecPuesto:puesto','tecNss:nss','tecCurp:curp','tecSangre:tipo_sangre',
+     'tecAlergias:alergias','tecContacto:contacto_emergencia','tecAntiguedad:antiguedad'].forEach(function(pair) {
+        const [eid, fname] = pair.split(':');
+        const v = document.getElementById(eid).value.trim();
+        if (v) fd.append(fname, v);
+    });
     const fotoFile = document.getElementById('tecFoto').files[0];
     if (fotoFile) fd.append('foto', fotoFile);
 
