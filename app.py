@@ -5274,7 +5274,12 @@ def api_crear_tecnico():
             f.save(os.path.join(TECNICOS_FOTO_DIR, fname))
             foto_url = f'/uploads/tecnicos/fotos/{fname}'
 
-    def _opt(key): return (request.form.get(key) or '').strip() or None
+    def _opt(key):
+        return (request.form.get(key) or '').strip() or None
+
+    def _bool_opt(key):
+        raw = (request.form.get(key) or '').strip().lower()
+        return raw in ('1', 'true', 'si', 'sí', 'on', 'x')
 
     tecnico = Tecnico(
         nombre=nombre,
@@ -5287,6 +5292,13 @@ def api_crear_tecnico():
         alergias=_opt('alergias'),
         contacto_emergencia=_opt('contacto_emergencia'),
         antiguedad=_opt('antiguedad'),
+        esp_alturas=_bool_opt('esp_alturas'),
+        esp_maniobras_baja=_bool_opt('esp_maniobras_baja'),
+        esp_electricos=_bool_opt('esp_electricos'),
+        esp_trabajos_caliente=_bool_opt('esp_trabajos_caliente'),
+        esp_espacios_confinados=_bool_opt('esp_espacios_confinados'),
+        esp_excavaciones=_bool_opt('esp_excavaciones'),
+        esp_maquinaria=_bool_opt('esp_maquinaria'),
         foto=foto_url,
         fecha_expiracion=fecha_exp,
     )
@@ -5334,6 +5346,19 @@ def api_editar_tecnico(tid):
         val = (request.form.get(field) or '').strip()
         if val:
             setattr(tecnico, field, val)
+
+    for field in (
+        'esp_alturas',
+        'esp_maniobras_baja',
+        'esp_electricos',
+        'esp_trabajos_caliente',
+        'esp_espacios_confinados',
+        'esp_excavaciones',
+        'esp_maquinaria',
+    ):
+        if field in request.form:
+            raw = (request.form.get(field) or '').strip().lower()
+            setattr(tecnico, field, raw in ('1', 'true', 'si', 'sí', 'on', 'x'))
 
     if 'foto' in request.files:
         f = request.files['foto']

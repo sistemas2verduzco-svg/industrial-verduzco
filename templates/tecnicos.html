@@ -43,6 +43,10 @@
         .form-group input:focus { border-color:#0f5f34; outline:none; box-shadow:0 0 0 2px rgba(15,95,52,.12); }
         .form-group input[type=file] { padding:4px 6px; }
         .form-hint { display:block; font-size:.74rem; color:#888; margin-top:4px; line-height:1.45; }
+        .checks-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 10px; margin-top:8px; }
+        .check-item { display:flex; align-items:center; gap:7px; padding:6px 8px; border:1px solid #e5e7eb; border-radius:8px; background:#fafafa; }
+        .check-item input[type=checkbox] { width:16px; height:16px; accent-color:#0f5f34; }
+        .check-item span { font-size:.82rem; color:#1f2937; font-weight:600; line-height:1.2; }
         .form-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
         .empty-state { text-align:center; padding:60px 20px; color:#888; }
         .empty-state .icon { font-size:56px; margin-bottom:12px; }
@@ -163,6 +167,21 @@
                     <span class="form-hint">JPG o PNG, fondo neutro, rostro visible. Máx. 5 MB.</span>
                 </div>
 
+                <div class="form-group">
+                    <label>Tipos de trabajo autorizados (tache en credencial seguridad)</label>
+                    <span class="field-title">Marca las especialidades validadas para este trabajador</span>
+                    <div class="checks-grid">
+                        <label class="check-item"><input type="checkbox" id="espAlturas"><span>Alturas</span></label>
+                        <label class="check-item"><input type="checkbox" id="espManiobrasBaja"><span>Maniobras a baja</span></label>
+                        <label class="check-item"><input type="checkbox" id="espElectricos"><span>El&eacute;ctricos</span></label>
+                        <label class="check-item"><input type="checkbox" id="espTrabajosCaliente"><span>Trabajos en caliente</span></label>
+                        <label class="check-item"><input type="checkbox" id="espEspaciosConfinados"><span>Espacios confinados</span></label>
+                        <label class="check-item"><input type="checkbox" id="espExcavaciones"><span>Excavaciones</span></label>
+                        <label class="check-item"><input type="checkbox" id="espMaquinaria"><span>Maquinaria</span></label>
+                    </div>
+                    <span class="form-hint">Cada casilla marcada se imprime con una X en la tabla de tipos de trabajo.</span>
+                </div>
+
             </div>
             <div class="form-actions">
                 <button type="button" class="btn-sm btn-secondary" onclick="cerrarModal()">Cancelar</button>
@@ -266,6 +285,8 @@ function abrirModalNuevo() {
     document.getElementById('tecContacto').value = '';
     document.getElementById('tecAntiguedad').value = '';
     document.getElementById('tecFoto').value = '';
+    ['espAlturas','espManiobrasBaja','espElectricos','espTrabajosCaliente','espEspaciosConfinados','espExcavaciones','espMaquinaria']
+        .forEach(id => { document.getElementById(id).checked = false; });
     // Por defecto un año adelante
     const d = new Date(); d.setFullYear(d.getFullYear()+1);
     document.getElementById('tecExpiracion').value = d.toISOString().slice(0,10);
@@ -288,6 +309,13 @@ function editarTecnico(t) {
     document.getElementById('tecAntiguedad').value = t.antiguedad || '';
     document.getElementById('tecExpiracion').value = (t.fecha_expiracion||'').slice(0,10);
     document.getElementById('tecFoto').value = '';
+    document.getElementById('espAlturas').checked = !!t.esp_alturas;
+    document.getElementById('espManiobrasBaja').checked = !!t.esp_maniobras_baja;
+    document.getElementById('espElectricos').checked = !!t.esp_electricos;
+    document.getElementById('espTrabajosCaliente').checked = !!t.esp_trabajos_caliente;
+    document.getElementById('espEspaciosConfinados').checked = !!t.esp_espacios_confinados;
+    document.getElementById('espExcavaciones').checked = !!t.esp_excavaciones;
+    document.getElementById('espMaquinaria').checked = !!t.esp_maquinaria;
     document.getElementById('modalTitulo').textContent = 'Editar Técnico';
     document.getElementById('btnGuardar').textContent = 'Guardar cambios';
     document.getElementById('modalTecnico').classList.add('active');
@@ -310,6 +338,18 @@ document.getElementById('formTecnico').addEventListener('submit', async function
         const [eid, fname] = pair.split(':');
         const v = document.getElementById(eid).value.trim();
         if (v) fd.append(fname, v);
+    });
+    [
+        ['espAlturas', 'esp_alturas'],
+        ['espManiobrasBaja', 'esp_maniobras_baja'],
+        ['espElectricos', 'esp_electricos'],
+        ['espTrabajosCaliente', 'esp_trabajos_caliente'],
+        ['espEspaciosConfinados', 'esp_espacios_confinados'],
+        ['espExcavaciones', 'esp_excavaciones'],
+        ['espMaquinaria', 'esp_maquinaria']
+    ].forEach(function(item) {
+        const [eid, fname] = item;
+        fd.append(fname, document.getElementById(eid).checked ? '1' : '0');
     });
     const fotoFile = document.getElementById('tecFoto').files[0];
     if (fotoFile) fd.append('foto', fotoFile);

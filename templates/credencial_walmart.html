@@ -264,6 +264,12 @@
         .wm-spec-cell {
             height: 4mm; border-right: .2mm solid #ddd;
             border-top: .2mm solid #ddd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 4.8pt;
+            font-weight: 900;
+            color: #111;
         }
         .wm-spec-cell:last-child { border-right: none; }
 
@@ -491,13 +497,13 @@
                         <div class="wm-spec-col">Maquinaria</div>
                     </div>
                     <div class="wm-spec-check">
-                        <div class="wm-spec-cell"></div>
-                        <div class="wm-spec-cell"></div>
-                        <div class="wm-spec-cell"></div>
-                        <div class="wm-spec-cell"></div>
-                        <div class="wm-spec-cell"></div>
-                        <div class="wm-spec-cell"></div>
-                        <div class="wm-spec-cell"></div>
+                        <div class="wm-spec-cell">{% if tecnico.esp_alturas %}X{% endif %}</div>
+                        <div class="wm-spec-cell">{% if tecnico.esp_maniobras_baja %}X{% endif %}</div>
+                        <div class="wm-spec-cell">{% if tecnico.esp_electricos %}X{% endif %}</div>
+                        <div class="wm-spec-cell">{% if tecnico.esp_trabajos_caliente %}X{% endif %}</div>
+                        <div class="wm-spec-cell">{% if tecnico.esp_espacios_confinados %}X{% endif %}</div>
+                        <div class="wm-spec-cell">{% if tecnico.esp_excavaciones %}X{% endif %}</div>
+                        <div class="wm-spec-cell">{% if tecnico.esp_maquinaria %}X{% endif %}</div>
                     </div>
                 </div>
 

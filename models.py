@@ -1858,6 +1858,13 @@ class Tecnico(db.Model):
     alergias = db.Column(db.String(255), nullable=True)
     contacto_emergencia = db.Column(db.String(120), nullable=True)
     antiguedad = db.Column(db.String(60), nullable=True)
+    esp_alturas = db.Column(db.Boolean, nullable=False, default=False)
+    esp_maniobras_baja = db.Column(db.Boolean, nullable=False, default=False)
+    esp_electricos = db.Column(db.Boolean, nullable=False, default=False)
+    esp_trabajos_caliente = db.Column(db.Boolean, nullable=False, default=False)
+    esp_espacios_confinados = db.Column(db.Boolean, nullable=False, default=False)
+    esp_excavaciones = db.Column(db.Boolean, nullable=False, default=False)
+    esp_maquinaria = db.Column(db.Boolean, nullable=False, default=False)
     foto = db.Column(db.String(500), nullable=True)
     qr_imagen = db.Column(db.String(500), nullable=True)
     token_qr = db.Column(db.String(36), nullable=False, unique=True, index=True, default=lambda: str(uuid.uuid4()))
@@ -1879,6 +1886,13 @@ class Tecnico(db.Model):
             'alergias': self.alergias,
             'contacto_emergencia': self.contacto_emergencia,
             'antiguedad': self.antiguedad,
+            'esp_alturas': self.esp_alturas,
+            'esp_maniobras_baja': self.esp_maniobras_baja,
+            'esp_electricos': self.esp_electricos,
+            'esp_trabajos_caliente': self.esp_trabajos_caliente,
+            'esp_espacios_confinados': self.esp_espacios_confinados,
+            'esp_excavaciones': self.esp_excavaciones,
+            'esp_maquinaria': self.esp_maquinaria,
             'foto': self.foto,
             'qr_imagen': self.qr_imagen,
             'token_qr': self.token_qr,
