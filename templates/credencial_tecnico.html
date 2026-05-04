@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Credencial — {{ tecnico.nombre }}</title>
+    <title>Credencial â€” {{ tecnico.nombre }}</title>
     <style>
-        /* ── Reset y config impresión ───────────────────────── */
+        /* â”€â”€ Reset y config impresiÃ³n â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         html, body {
@@ -12,7 +12,7 @@
             font-family: 'Segoe UI', Arial, sans-serif;
         }
 
-        /* ── Controles de pantalla (ocultos al imprimir) ────── */
+        /* â”€â”€ Controles de pantalla (ocultos al imprimir) â”€â”€â”€â”€â”€â”€ */
         .print-controls {
             display: flex;
             align-items: center;
@@ -48,7 +48,7 @@
             margin-bottom: 20px;
         }
 
-        /* ── Contenedor exterior ────────────────────────────── */
+        /* â”€â”€ Contenedor exterior â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
         .card-wrapper {
             display: flex;
             flex-direction: column;
@@ -57,7 +57,7 @@
             padding-bottom: 40px;
         }
 
-        /* ── Credencial CR80: 85.6 × 54 mm ─────────────────── */
+        /* â”€â”€ Credencial CR80: 85.6 Ã— 54 mm â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
         .card {
             width: 85.6mm;
             height: 54mm;
@@ -69,7 +69,7 @@
             page-break-inside: avoid;
         }
 
-        /* ═══ CARA FRONTAL ══════════════════════════════════ */
+        /* â•â•â• CARA FRONTAL â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
         .card-front {
             display: flex;
             flex-direction: column;
@@ -90,10 +90,12 @@
             align-items: center;
         }
         .card-header .logo-wrap img {
-            max-height: 10mm;
-            max-width: 28mm;
+            max-height: 11mm;
+            max-width: 26mm;
             object-fit: contain;
-            filter: brightness(0) invert(1); /* blanco sobre verde */
+            background: #fff;
+            border-radius: 1.5mm;
+            padding: .5mm;
         }
         .card-header .empresa-name {
             color: #fff;
@@ -209,7 +211,7 @@
         .estado-activo  { background: #c8e6c9; color: #1b5e20; }
         .estado-invalido { background: #ffcdd2; color: #b71c1c; }
 
-        /* ═══ CARA TRASERA ══════════════════════════════════ */
+        /* â•â•â• CARA TRASERA â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
         .card-back {
             display: flex;
             flex-direction: column;
@@ -234,7 +236,7 @@
             height: 2mm;
             background: linear-gradient(90deg, #f9a825, #fdd835, #f9a825);
         }
-        /* Banda magnética simulada */
+        /* Banda magnÃ©tica simulada */
         .mag-stripe {
             height: 9mm;
             background: #1a1a1a;
@@ -296,7 +298,7 @@
             opacity: .55;
         }
 
-        /* ── Etiquetas de cara ──────────────────────────────── */
+        /* â”€â”€ Etiquetas de cara â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
         .side-label {
             text-align: center;
             font-size: .75rem;
@@ -307,7 +309,7 @@
             text-transform: uppercase;
         }
 
-        /* ── Reglas de impresión ────────────────────────────── */
+        /* â”€â”€ Reglas de impresiÃ³n â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
         @media print {
             html, body {
                 background: #fff;
@@ -334,23 +336,23 @@
 <body>
 
 <div class="print-controls">
-    <button class="btn-back" onclick="history.back()">← Volver</button>
-    <button class="btn-print" onclick="window.print()">🖨️ Imprimir Credencial</button>
+    <button class="btn-back" onclick="history.back()">â† Volver</button>
+    <button class="btn-print" onclick="window.print()">ðŸ–¨ï¸ Imprimir Credencial</button>
 </div>
-<p class="hint">Tamaño CR80 estándar (85.6 × 54 mm). En la impresora selecciona "Tamaño real" o "Sin escala".</p>
+<p class="hint">TamaÃ±o CR80 estÃ¡ndar (85.6 Ã— 54 mm). En la impresora selecciona "TamaÃ±o real" o "Sin escala".</p>
 
 <div class="card-wrapper">
 
-    <!-- ── FRENTE ───────────────────────────────────────────── -->
+    <!-- â”€â”€ FRENTE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div class="card-item">
         <div class="side-label">Frente</div>
         <div class="card card-front">
 
             <div class="card-header">
                 <div class="logo-wrap">
-                    <img src="{{ url_for('static', filename='img/logo_ttm.jpg') }}" alt="Logo">
+                    <img src="{{ url_for('static', filename='img/logo_verduzco.png') }}" alt="Logo">
                 </div>
-                <div class="empresa-name">{{ tecnico.empresa }}</div>
+                <div class="empresa-name">INDUSTRIAS<br>VERDUZCO</div>
             </div>
             <div class="card-stripe"></div>
 
@@ -360,7 +362,7 @@
                     {% if tecnico.foto %}
                         <img class="card-photo" src="{{ tecnico.foto }}" alt="Foto">
                     {% else %}
-                        <div class="card-photo-placeholder">👷</div>
+                        <div class="card-photo-placeholder">ðŸ‘·</div>
                     {% endif %}
                 </div>
 
@@ -379,7 +381,7 @@
 
             <div class="card-footer-front">
                 <div class="vigencia">
-                    Vigente hasta: <strong>{{ tecnico.fecha_expiracion.strftime('%d/%m/%Y') if tecnico.fecha_expiracion else '—' }}</strong>
+                    Vigente hasta: <strong>{{ tecnico.fecha_expiracion.strftime('%d/%m/%Y') if tecnico.fecha_expiracion else 'â€”' }}</strong>
                 </div>
                 <span class="estado-badge {% if vigente %}estado-activo{% else %}estado-invalido{% endif %}">
                     {% if vigente %}ACTIVO{% else %}NO VIGENTE{% endif %}
@@ -389,13 +391,13 @@
         </div>
     </div>
 
-    <!-- ── REVERSO ───────────────────────────────────────────── -->
+    <!-- â”€â”€ REVERSO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div class="card-item">
         <div class="side-label">Reverso</div>
         <div class="card card-back">
 
             <div class="back-header">
-                <span>Credencial de Acceso — Verificación Digital</span>
+                <span>Credencial de Acceso â€” VerificaciÃ³n Digital</span>
             </div>
             <div class="back-stripe"></div>
             <div class="mag-stripe"></div>
@@ -412,22 +414,22 @@
 
                 <div class="back-info">
                     <div class="back-scan-text">
-                        Escanea el código QR para<br>
+                        Escanea el cÃ³digo QR para<br>
                         <strong>verificar esta credencial</strong><br>
                         en tiempo real.
                     </div>
                     <div class="back-url">
-                        controlcalidad360.site/verificar/{{ tecnico.token_qr[:12] }}…
+                        controlcalidad360.site/verificar/{{ tecnico.token_qr[:12] }}â€¦
                     </div>
                 </div>
             </div>
 
             <div class="back-footer">
                 <div class="disclaimer">
-                    Esta credencial es personal e intransferible. En caso de pérdida repórtala inmediatamente.
+                    Esta credencial es personal e intransferible. En caso de pÃ©rdida repÃ³rtala inmediatamente.
                 </div>
                 <div class="logo-small">
-                    <img src="{{ url_for('static', filename='img/logo_ttm.jpg') }}" alt="Logo">
+                    <img src="{{ url_for('static', filename='img/logo_verduzco.png') }}" alt="Logo">
                 </div>
             </div>
 
