@@ -1,10 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Credencial â€” {{ tecnico.nombre }}</title>
+    <title>Credencial &mdash; {{ tecnico.nombre }}</title>
     <style>
-        /* â”€â”€ Reset y config impresiÃ³n â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         html, body {
@@ -12,7 +11,6 @@
             font-family: 'Segoe UI', Arial, sans-serif;
         }
 
-        /* â”€â”€ Controles de pantalla (ocultos al imprimir) â”€â”€â”€â”€â”€â”€ */
         .print-controls {
             display: flex;
             align-items: center;
@@ -48,7 +46,6 @@
             margin-bottom: 20px;
         }
 
-        /* â”€â”€ Contenedor exterior â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
         .card-wrapper {
             display: flex;
             flex-direction: column;
@@ -57,7 +54,7 @@
             padding-bottom: 40px;
         }
 
-        /* â”€â”€ Credencial CR80: 85.6 Ã— 54 mm â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+        /* CR80: 85.6 x 54 mm */
         .card {
             width: 85.6mm;
             height: 54mm;
@@ -69,13 +66,9 @@
             page-break-inside: avoid;
         }
 
-        /* â•â•â• CARA FRONTAL â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
-        .card-front {
-            display: flex;
-            flex-direction: column;
-        }
+        /* === FRENTE === */
+        .card-front { display: flex; flex-direction: column; }
 
-        /* Banda superior verde */
         .card-header {
             background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 60%, #33691e 100%);
             padding: 3.2mm 4mm 2.5mm;
@@ -85,7 +78,7 @@
             flex-shrink: 0;
         }
         .card-header .logo-wrap {
-            height: 10mm;
+            height: 11mm;
             display: flex;
             align-items: center;
         }
@@ -108,14 +101,12 @@
             line-height: 1.3;
         }
 
-        /* Franja amarilla delgada */
         .card-stripe {
             height: 2.5mm;
             background: linear-gradient(90deg, #f9a825, #fdd835, #f9a825);
             flex-shrink: 0;
         }
 
-        /* Cuerpo principal */
         .card-body {
             flex: 1;
             display: flex;
@@ -123,11 +114,7 @@
             gap: 3mm;
         }
 
-        /* Foto */
-        .card-photo-wrap {
-            flex-shrink: 0;
-            width: 18mm;
-        }
+        .card-photo-wrap { flex-shrink: 0; width: 18mm; }
         .card-photo {
             width: 18mm;
             height: 22mm;
@@ -148,7 +135,6 @@
             color: #a5d6a7;
         }
 
-        /* Datos */
         .card-info {
             flex: 1;
             display: flex;
@@ -184,7 +170,6 @@
             margin-top: 0.8mm;
         }
 
-        /* Pie de tarjeta */
         .card-footer-front {
             display: flex;
             align-items: center;
@@ -193,13 +178,8 @@
             border-top: .4mm solid #e8f5e9;
             margin-top: auto;
         }
-        .card-footer-front .vigencia {
-            font-size: 4.5pt;
-            color: #555;
-        }
-        .card-footer-front .vigencia strong {
-            color: #1b5e20;
-        }
+        .card-footer-front .vigencia { font-size: 4.5pt; color: #555; }
+        .card-footer-front .vigencia strong { color: #1b5e20; }
         .card-footer-front .estado-badge {
             font-size: 4.5pt;
             font-weight: 800;
@@ -208,15 +188,11 @@
             text-transform: uppercase;
             letter-spacing: .5px;
         }
-        .estado-activo  { background: #c8e6c9; color: #1b5e20; }
+        .estado-activo   { background: #c8e6c9; color: #1b5e20; }
         .estado-invalido { background: #ffcdd2; color: #b71c1c; }
 
-        /* â•â•â• CARA TRASERA â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
-        .card-back {
-            display: flex;
-            flex-direction: column;
-            background: #fff;
-        }
+        /* === REVERSO === */
+        .card-back { display: flex; flex-direction: column; background: #fff; }
 
         .card-back .back-header {
             background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 60%, #33691e 100%);
@@ -236,23 +212,18 @@
             height: 2mm;
             background: linear-gradient(90deg, #f9a825, #fdd835, #f9a825);
         }
-        /* Banda magnÃ©tica simulada */
         .mag-stripe {
             height: 9mm;
             background: #1a1a1a;
             margin: 3mm 0 0;
             flex-shrink: 0;
         }
-
         .back-body {
             flex: 1;
             display: flex;
             padding: 2mm 3.5mm;
             gap: 3mm;
             align-items: center;
-        }
-        .qr-wrap {
-            flex-shrink: 0;
         }
         .qr-wrap img {
             width: 18mm;
@@ -262,9 +233,7 @@
             border-radius: 1mm;
             padding: .5mm;
         }
-        .back-info {
-            flex: 1;
-        }
+        .back-info { flex: 1; }
         .back-scan-text {
             font-size: 5pt;
             color: #555;
@@ -272,18 +241,13 @@
             margin-bottom: 1.5mm;
         }
         .back-scan-text strong { color: #1b5e20; }
-        .back-url {
-            font-size: 4pt;
-            color: #888;
-            word-break: break-all;
-        }
+        .back-url { font-size: 4pt; color: #888; word-break: break-all; }
         .back-footer {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 3.5mm 1.5mm;
+            padding: 1mm 3.5mm 1.5mm;
             border-top: .4mm solid #e8f5e9;
-            padding-top: 1mm;
         }
         .back-footer .disclaimer {
             font-size: 3.5pt;
@@ -298,7 +262,6 @@
             opacity: .55;
         }
 
-        /* â”€â”€ Etiquetas de cara â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
         .side-label {
             text-align: center;
             font-size: .75rem;
@@ -309,13 +272,8 @@
             text-transform: uppercase;
         }
 
-        /* â”€â”€ Reglas de impresiÃ³n â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
         @media print {
-            html, body {
-                background: #fff;
-                margin: 0;
-                padding: 0;
-            }
+            html, body { background: #fff; margin: 0; padding: 0; }
             .print-controls, .hint, .side-label { display: none !important; }
             .card-wrapper {
                 flex-direction: row;
@@ -325,10 +283,7 @@
                 gap: 8mm;
                 padding: 10mm;
             }
-            .card {
-                box-shadow: none;
-                border: .3mm solid #ccc;
-            }
+            .card { box-shadow: none; border: .3mm solid #ccc; }
             .card-item { page-break-inside: avoid; }
         }
     </style>
@@ -336,37 +291,35 @@
 <body>
 
 <div class="print-controls">
-    <button class="btn-back" onclick="history.back()">â† Volver</button>
-    <button class="btn-print" onclick="window.print()">ðŸ–¨ï¸ Imprimir Credencial</button>
+    <button class="btn-back" onclick="history.back()">&#8592; Volver</button>
+    <button class="btn-print" onclick="window.print()">&#128424; Imprimir Credencial</button>
 </div>
-<p class="hint">TamaÃ±o CR80 estÃ¡ndar (85.6 Ã— 54 mm). En la impresora selecciona "TamaÃ±o real" o "Sin escala".</p>
+<p class="hint">Tama&ntilde;o CR80 est&aacute;ndar (85.6 &times; 54 mm). En la impresora selecciona &ldquo;Tama&ntilde;o real&rdquo; o &ldquo;Sin escala&rdquo;.</p>
 
 <div class="card-wrapper">
 
-    <!-- â”€â”€ FRENTE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
+    <!-- FRENTE -->
     <div class="card-item">
         <div class="side-label">Frente</div>
         <div class="card card-front">
 
             <div class="card-header">
                 <div class="logo-wrap">
-                    <img src="{{ url_for('static', filename='img/logo_verduzco.png') }}" alt="Logo">
+                    <img src="{{ url_for('static', filename='img/logo_verduzco.png') }}" alt="Industrias Verduzco">
                 </div>
                 <div class="empresa-name">INDUSTRIAS<br>VERDUZCO</div>
             </div>
             <div class="card-stripe"></div>
 
             <div class="card-body">
-                <!-- Foto -->
                 <div class="card-photo-wrap">
                     {% if tecnico.foto %}
                         <img class="card-photo" src="{{ tecnico.foto }}" alt="Foto">
                     {% else %}
-                        <div class="card-photo-placeholder">ðŸ‘·</div>
+                        <div class="card-photo-placeholder">&#128119;</div>
                     {% endif %}
                 </div>
 
-                <!-- Datos -->
                 <div class="card-info">
                     <div class="card-label">Nombre</div>
                     <div class="card-value">{{ tecnico.nombre }}</div>
@@ -381,7 +334,7 @@
 
             <div class="card-footer-front">
                 <div class="vigencia">
-                    Vigente hasta: <strong>{{ tecnico.fecha_expiracion.strftime('%d/%m/%Y') if tecnico.fecha_expiracion else 'â€”' }}</strong>
+                    Vigente hasta: <strong>{{ tecnico.fecha_expiracion.strftime('%d/%m/%Y') if tecnico.fecha_expiracion else '&mdash;' }}</strong>
                 </div>
                 <span class="estado-badge {% if vigente %}estado-activo{% else %}estado-invalido{% endif %}">
                     {% if vigente %}ACTIVO{% else %}NO VIGENTE{% endif %}
@@ -391,19 +344,18 @@
         </div>
     </div>
 
-    <!-- â”€â”€ REVERSO â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
+    <!-- REVERSO -->
     <div class="card-item">
         <div class="side-label">Reverso</div>
         <div class="card card-back">
 
             <div class="back-header">
-                <span>Credencial de Acceso â€” VerificaciÃ³n Digital</span>
+                <span>Credencial de Acceso &mdash; Verificaci&oacute;n Digital</span>
             </div>
             <div class="back-stripe"></div>
             <div class="mag-stripe"></div>
 
             <div class="back-body">
-                <!-- QR -->
                 <div class="qr-wrap">
                     {% if tecnico.qr_imagen %}
                         <img src="{{ tecnico.qr_imagen }}" alt="QR">
@@ -414,22 +366,22 @@
 
                 <div class="back-info">
                     <div class="back-scan-text">
-                        Escanea el cÃ³digo QR para<br>
+                        Escanea el c&oacute;digo QR para<br>
                         <strong>verificar esta credencial</strong><br>
                         en tiempo real.
                     </div>
                     <div class="back-url">
-                        controlcalidad360.site/verificar/{{ tecnico.token_qr[:12] }}â€¦
+                        controlcalidad360.site/verificar/{{ tecnico.token_qr[:12] }}&hellip;
                     </div>
                 </div>
             </div>
 
             <div class="back-footer">
                 <div class="disclaimer">
-                    Esta credencial es personal e intransferible. En caso de pÃ©rdida repÃ³rtala inmediatamente.
+                    Esta credencial es personal e intransferible. En caso de p&eacute;rdida rep&oacute;rtala inmediatamente.
                 </div>
                 <div class="logo-small">
-                    <img src="{{ url_for('static', filename='img/logo_verduzco.png') }}" alt="Logo">
+                    <img src="{{ url_for('static', filename='img/logo_verduzco.png') }}" alt="Industrias Verduzco">
                 </div>
             </div>
 
@@ -437,6 +389,5 @@
     </div>
 
 </div>
-
 </body>
 </html>
