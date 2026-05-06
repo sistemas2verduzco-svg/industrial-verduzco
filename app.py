@@ -5469,7 +5469,7 @@ def hojas_ruta_nuevo_list():
 @requires_any_permission([('hojas_mp', 'view'), ('hojas', 'view'), ('catalog', 'view')])
 def hojas_ruta_nuevo_form():
     """Formulario para crear hojas de ruta nuevas."""
-    almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria', 'Walmart']
+    almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria', 'Walmart', 'ALMACEN 3']
     hojas = HojaRutaNueva.query.order_by(HojaRutaNueva.fecha_creacion.desc()).all()
     hojas_data = []
     for h in hojas:
@@ -6458,7 +6458,7 @@ def api_hojas_ruta_lista_para_entregas():
 @requires_any_permission([('hojas_entregas', 'view'), ('hojas', 'view'), ('catalog', 'view')])
 def hojas_ruta_entregas_form():
     """Formulario simplificado para crear hojas de ruta de produccion."""
-    almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria', 'Walmart']
+    almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria', 'Walmart', 'ALMACEN 3']
     # Listado completo para consulta
     hojas = HojaRutaEntrega.query.order_by(HojaRutaEntrega.fecha_creacion.desc()).all()
 
