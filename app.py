@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, AlertaBuzonGeneral, Tecnico, LogVerificacion
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, AlmacenCajaSurtidoSesion, AlmacenCajaSurtidoCaja, AlmacenCajaSurtidoLecturaBascula, AlmacenCajaSurtidoItem, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, AlertaBuzonGeneral, Tecnico, LogVerificacion
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -1670,6 +1670,105 @@ def _ensure_alertas_buzon_table():
 
     _ALERTAS_BUZON_TABLE_READY = True
     return True
+
+
+_ALMACEN_CAJAS_SURTIDO_TABLES_READY = False
+
+
+def _ensure_almacen_cajas_surtido_tables():
+    global _ALMACEN_CAJAS_SURTIDO_TABLES_READY
+
+    if _ALMACEN_CAJAS_SURTIDO_TABLES_READY:
+        return True
+
+    try:
+        AlmacenCajaSurtidoSesion.__table__.create(bind=db.engine, checkfirst=True)
+        AlmacenCajaSurtidoCaja.__table__.create(bind=db.engine, checkfirst=True)
+        AlmacenCajaSurtidoLecturaBascula.__table__.create(bind=db.engine, checkfirst=True)
+        AlmacenCajaSurtidoItem.__table__.create(bind=db.engine, checkfirst=True)
+        _ALMACEN_CAJAS_SURTIDO_TABLES_READY = True
+        return True
+    except Exception as exc:
+        logger.warning(f"No se pudo asegurar tablas de cajas surtido: {exc}")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return False
+
+
+def _serialize_almacen_caja_surtido_sesion(sesion):
+    cajas = (
+        AlmacenCajaSurtidoCaja.query
+        .filter_by(sesion_id=sesion.id)
+        .order_by(AlmacenCajaSurtidoCaja.numero_caja.asc(), AlmacenCajaSurtidoCaja.id.asc())
+        .all()
+    )
+    caja_ids = [c.id for c in cajas]
+    items = (
+        AlmacenCajaSurtidoItem.query
+        .filter(AlmacenCajaSurtidoItem.caja_id.in_(caja_ids))
+        .order_by(AlmacenCajaSurtidoItem.fecha_creacion.asc(), AlmacenCajaSurtidoItem.id.asc())
+        .all()
+    ) if caja_ids else []
+
+    items_por_caja = {}
+    for it in items:
+        items_por_caja.setdefault(it.caja_id, []).append(it.to_dict())
+
+    cajas_data = []
+    for caja in cajas:
+        caja_dict = caja.to_dict()
+        caja_dict['items'] = items_por_caja.get(caja.id, [])
+        cajas_data.append(caja_dict)
+
+    lectura = (
+        AlmacenCajaSurtidoLecturaBascula.query
+        .filter_by(sesion_id=sesion.id)
+        .order_by(AlmacenCajaSurtidoLecturaBascula.id.desc())
+        .first()
+    )
+
+    abierta = next((c for c in cajas_data if c.get('estado') == 'abierta'), None)
+
+    data = sesion.to_dict()
+    data.update({
+        'cajas': cajas_data,
+        'caja_abierta': abierta,
+        'lectura_ultima': lectura.to_dict() if lectura else None,
+    })
+    return data
+
+
+def _sync_cajas_surtido_to_sheets(sesion):
+    if not GOOGLE_SHEETS_SYNC_ENABLED:
+        return False, 'disabled'
+    if not GOOGLE_SHEETS_WEBHOOK_URL:
+        return False, 'missing_webhook_url'
+
+    payload = {
+        'event': 'almacen_caja_surtido_finalizada',
+        'timestamp': datetime.utcnow().isoformat(),
+        'sesion': _serialize_almacen_caja_surtido_sesion(sesion),
+    }
+    headers = {'Content-Type': 'application/json'}
+    if GOOGLE_SHEETS_WEBHOOK_TOKEN:
+        headers['Authorization'] = f'Bearer {GOOGLE_SHEETS_WEBHOOK_TOKEN}'
+
+    try:
+        res = requests.post(
+            GOOGLE_SHEETS_WEBHOOK_URL,
+            json=payload,
+            headers=headers,
+            timeout=GOOGLE_SHEETS_TIMEOUT_SECONDS,
+        )
+        if 200 <= res.status_code < 300:
+            return True, 'ok'
+        logger.warning(f"[SHEETS_SYNC] cajas surtido webhook status={res.status_code} body={res.text[:500]}")
+        return False, f'http_{res.status_code}'
+    except Exception as exc:
+        logger.warning(f"[SHEETS_SYNC] cajas surtido exception: {exc}")
+        return False, 'exception'
 
 
 def _serialize_alerta_buzon(item):
@@ -5008,6 +5107,282 @@ def almacen_regresar_entregas(item_id):
     return redirect(url_for('almacen_module'))
 
 
+@app.route('/almacen/cajas-surtido')
+@login_required
+@requires_any_permission([('almacen', 'view'), ('catalog', 'edit')])
+def almacen_cajas_surtido_page():
+    if not _ensure_almacen_cajas_surtido_tables():
+        return render_template('403.html'), 500
+
+    productos = (
+        Producto.query
+        .order_by(Producto.clave.asc())
+        .limit(300)
+        .all()
+    )
+    productos_data = [
+        {
+            'codigo': (p.clave or '').strip(),
+            'nombre': (p.nombre or '').strip(),
+        }
+        for p in productos
+        if (p.clave or '').strip()
+    ]
+
+    return render_template('almacen_cajas_surtido.html', productos=productos_data)
+
+
+@app.route('/api/almacen/cajas-surtido/sesiones', methods=['POST'])
+@login_required
+@requires_any_permission([('almacen', 'edit'), ('catalog', 'edit')])
+def api_almacen_cajas_surtido_crear_sesion():
+    if not _ensure_almacen_cajas_surtido_tables():
+        return jsonify({'error': 'No se pudo preparar módulo de cajas surtido'}), 500
+
+    data = request.get_json() or {}
+    pedido_referencia = (data.get('pedido_referencia') or '').strip()
+    notas = (data.get('notas') or '').strip() or None
+    if not pedido_referencia:
+        return jsonify({'error': 'pedido_referencia es requerido'}), 400
+
+    usuario = _current_username_for_audit(get_current_user())
+    sesion = AlmacenCajaSurtidoSesion(
+        pedido_referencia=pedido_referencia,
+        estado='abierta',
+        usuario=usuario,
+        notas=notas,
+    )
+    db.session.add(sesion)
+    db.session.flush()
+
+    caja = AlmacenCajaSurtidoCaja(
+        sesion_id=sesion.id,
+        numero_caja=1,
+        estado='abierta',
+    )
+    db.session.add(caja)
+    db.session.commit()
+
+    return jsonify({'ok': True, 'sesion': _serialize_almacen_caja_surtido_sesion(sesion)}), 201
+
+
+@app.route('/api/almacen/cajas-surtido/sesiones/<int:sesion_id>', methods=['GET'])
+@login_required
+@requires_any_permission([('almacen', 'view'), ('catalog', 'edit')])
+def api_almacen_cajas_surtido_obtener_sesion(sesion_id):
+    if not _ensure_almacen_cajas_surtido_tables():
+        return jsonify({'error': 'No se pudo preparar módulo de cajas surtido'}), 500
+
+    sesion = AlmacenCajaSurtidoSesion.query.get_or_404(sesion_id)
+    return jsonify({'ok': True, 'sesion': _serialize_almacen_caja_surtido_sesion(sesion)})
+
+
+@app.route('/api/almacen/cajas-surtido/sesiones/<int:sesion_id>/lecturas', methods=['POST'])
+@login_required
+@requires_any_permission([('almacen', 'edit'), ('catalog', 'edit')])
+def api_almacen_cajas_surtido_registrar_lectura(sesion_id):
+    if not _ensure_almacen_cajas_surtido_tables():
+        return jsonify({'error': 'No se pudo preparar módulo de cajas surtido'}), 500
+
+    sesion = AlmacenCajaSurtidoSesion.query.get_or_404(sesion_id)
+    if sesion.estado != 'abierta':
+        return jsonify({'error': 'La sesión ya está cerrada'}), 409
+
+    data = request.get_json() or {}
+    try:
+        peso_kg = float(data.get('peso_kg') or 0)
+    except Exception:
+        return jsonify({'error': 'peso_kg inválido'}), 400
+
+    if peso_kg <= 0:
+        return jsonify({'error': 'peso_kg debe ser mayor a 0'}), 400
+
+    origen = (data.get('origen') or 'manual').strip().lower() or 'manual'
+    if origen not in ('manual', 'bascula'):
+        origen = 'manual'
+
+    lectura = AlmacenCajaSurtidoLecturaBascula(
+        sesion_id=sesion.id,
+        peso_kg=peso_kg,
+        origen=origen,
+        raw_payload=(data.get('raw_payload') or '').strip() or None,
+        usuario=_current_username_for_audit(get_current_user()),
+    )
+    db.session.add(lectura)
+    db.session.commit()
+
+    return jsonify({'ok': True, 'lectura': lectura.to_dict()})
+
+
+@app.route('/api/almacen/cajas-surtido/sesiones/<int:sesion_id>/items', methods=['POST'])
+@login_required
+@requires_any_permission([('almacen', 'edit'), ('catalog', 'edit')])
+def api_almacen_cajas_surtido_agregar_item(sesion_id):
+    if not _ensure_almacen_cajas_surtido_tables():
+        return jsonify({'error': 'No se pudo preparar módulo de cajas surtido'}), 500
+
+    sesion = AlmacenCajaSurtidoSesion.query.get_or_404(sesion_id)
+    if sesion.estado != 'abierta':
+        return jsonify({'error': 'La sesión ya está cerrada'}), 409
+
+    caja = (
+        AlmacenCajaSurtidoCaja.query
+        .filter_by(sesion_id=sesion.id, estado='abierta')
+        .order_by(AlmacenCajaSurtidoCaja.id.desc())
+        .first()
+    )
+    if not caja:
+        caja = AlmacenCajaSurtidoCaja(sesion_id=sesion.id, numero_caja=max(1, int(sesion.caja_actual_numero or 1)), estado='abierta')
+        db.session.add(caja)
+        db.session.flush()
+
+    data = request.get_json() or {}
+    producto_codigo = (data.get('producto_codigo') or '').strip()
+    producto_nombre = (data.get('producto_nombre') or '').strip() or None
+
+    try:
+        piezas = int(data.get('piezas') or 0)
+    except Exception:
+        return jsonify({'error': 'piezas inválidas'}), 400
+
+    if not producto_codigo:
+        return jsonify({'error': 'producto_codigo es requerido'}), 400
+    if piezas <= 0:
+        return jsonify({'error': 'piezas debe ser mayor a 0'}), 400
+
+    lectura_id = data.get('lectura_id')
+    lectura = None
+    if lectura_id:
+        lectura = AlmacenCajaSurtidoLecturaBascula.query.filter_by(id=int(lectura_id), sesion_id=sesion.id).first()
+    if not lectura:
+        lectura = (
+            AlmacenCajaSurtidoLecturaBascula.query
+            .filter_by(sesion_id=sesion.id)
+            .order_by(AlmacenCajaSurtidoLecturaBascula.id.desc())
+            .first()
+        )
+
+    if lectura:
+        peso_kg = float(lectura.peso_kg or 0.0)
+        fuente_peso = lectura.origen or 'manual'
+    else:
+        try:
+            peso_kg = float(data.get('peso_kg') or 0)
+        except Exception:
+            return jsonify({'error': 'No hay lectura disponible y peso_kg es inválido'}), 400
+        if peso_kg <= 0:
+            return jsonify({'error': 'No hay lectura disponible y peso_kg debe ser mayor a 0'}), 400
+        fuente_peso = 'manual'
+
+    peso_unitario = peso_kg / float(piezas)
+
+    item = AlmacenCajaSurtidoItem(
+        sesion_id=sesion.id,
+        caja_id=caja.id,
+        lectura_id=lectura.id if lectura else None,
+        producto_codigo=producto_codigo,
+        producto_nombre=producto_nombre,
+        piezas=piezas,
+        peso_kg=peso_kg,
+        peso_unitario_kg=peso_unitario,
+        fuente_peso=fuente_peso,
+        usuario=_current_username_for_audit(get_current_user()),
+    )
+    db.session.add(item)
+
+    caja.piezas_totales = int(caja.piezas_totales or 0) + piezas
+    caja.peso_total_kg = float(caja.peso_total_kg or 0.0) + peso_kg
+
+    db.session.commit()
+
+    return jsonify({'ok': True, 'sesion': _serialize_almacen_caja_surtido_sesion(sesion)})
+
+
+@app.route('/api/almacen/cajas-surtido/sesiones/<int:sesion_id>/cerrar-caja', methods=['POST'])
+@login_required
+@requires_any_permission([('almacen', 'edit'), ('catalog', 'edit')])
+def api_almacen_cajas_surtido_cerrar_caja(sesion_id):
+    if not _ensure_almacen_cajas_surtido_tables():
+        return jsonify({'error': 'No se pudo preparar módulo de cajas surtido'}), 500
+
+    sesion = AlmacenCajaSurtidoSesion.query.get_or_404(sesion_id)
+    if sesion.estado != 'abierta':
+        return jsonify({'error': 'La sesión ya está cerrada'}), 409
+
+    caja = (
+        AlmacenCajaSurtidoCaja.query
+        .filter_by(sesion_id=sesion.id, estado='abierta')
+        .order_by(AlmacenCajaSurtidoCaja.id.desc())
+        .first()
+    )
+    if not caja:
+        return jsonify({'error': 'No hay una caja abierta'}), 409
+    if int(caja.piezas_totales or 0) <= 0:
+        return jsonify({'error': 'No puedes cerrar una caja vacía'}), 409
+
+    caja.estado = 'cerrada'
+    caja.fecha_cierre = datetime.utcnow()
+    sesion.total_cajas_cerradas = int(sesion.total_cajas_cerradas or 0) + 1
+    sesion.caja_actual_numero = int(caja.numero_caja or 1) + 1
+
+    nueva_caja = AlmacenCajaSurtidoCaja(
+        sesion_id=sesion.id,
+        numero_caja=sesion.caja_actual_numero,
+        estado='abierta',
+    )
+    db.session.add(nueva_caja)
+    db.session.commit()
+
+    return jsonify({'ok': True, 'sesion': _serialize_almacen_caja_surtido_sesion(sesion)})
+
+
+@app.route('/api/almacen/cajas-surtido/sesiones/<int:sesion_id>/finalizar', methods=['POST'])
+@login_required
+@requires_any_permission([('almacen', 'edit'), ('catalog', 'edit')])
+def api_almacen_cajas_surtido_finalizar(sesion_id):
+    if not _ensure_almacen_cajas_surtido_tables():
+        return jsonify({'error': 'No se pudo preparar módulo de cajas surtido'}), 500
+
+    sesion = AlmacenCajaSurtidoSesion.query.get_or_404(sesion_id)
+    if sesion.estado != 'abierta':
+        return jsonify({'ok': True, 'sesion': _serialize_almacen_caja_surtido_sesion(sesion)})
+
+    cajas = (
+        AlmacenCajaSurtidoCaja.query
+        .filter_by(sesion_id=sesion.id)
+        .order_by(AlmacenCajaSurtidoCaja.id.asc())
+        .all()
+    )
+    cajas_cerradas_con_items = [c for c in cajas if c.estado == 'cerrada' and int(c.piezas_totales or 0) > 0]
+    caja_abierta = next((c for c in cajas if c.estado == 'abierta'), None)
+
+    if caja_abierta and int(caja_abierta.piezas_totales or 0) > 0:
+        caja_abierta.estado = 'cerrada'
+        caja_abierta.fecha_cierre = datetime.utcnow()
+        cajas_cerradas_con_items.append(caja_abierta)
+        sesion.total_cajas_cerradas = max(int(sesion.total_cajas_cerradas or 0), len(cajas_cerradas_con_items))
+    elif caja_abierta and int(caja_abierta.piezas_totales or 0) == 0 and len(cajas) > 1:
+        db.session.delete(caja_abierta)
+
+    if not cajas_cerradas_con_items:
+        return jsonify({'error': 'No hay cajas con contenido para finalizar'}), 409
+
+    sesion.estado = 'cerrada'
+    sesion.fecha_cierre = datetime.utcnow()
+
+    ok_sync, reason_sync = _sync_cajas_surtido_to_sheets(sesion)
+    sesion.google_sync_estado = 'synced' if ok_sync else 'error'
+    sesion.google_sync_error = None if ok_sync else reason_sync
+
+    db.session.commit()
+
+    return jsonify({
+        'ok': True,
+        'sync': {'ok': ok_sync, 'reason': reason_sync},
+        'sesion': _serialize_almacen_caja_surtido_sesion(sesion),
+    })
+
+
 @app.route('/facturacion')
 @login_required
 @requires_any_permission([('facturacion', 'view'), ('catalog', 'edit')])
@@ -5314,7 +5689,7 @@ def api_crear_tecnico():
     return jsonify({'mensaje': 'Técnico creado', 'tecnico': tecnico.to_dict()}), 201
 
 
-@app.route('/api/tecnicos/<int:tid>', methods=['PUT'])
+@app.route('/api/tecnicos/<int:tid>', methods=['PUT', 'POST'])
 @login_required
 def api_editar_tecnico(tid):
     user = get_current_user()

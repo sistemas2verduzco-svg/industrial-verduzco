@@ -355,7 +355,7 @@ document.getElementById('formTecnico').addEventListener('submit', async function
     if (fotoFile) fd.append('foto', fotoFile);
 
     const url = id ? `/api/tecnicos/${id}` : '/api/tecnicos';
-    const method = id ? 'PUT' : 'POST';
+    const method = 'POST';
 
     document.getElementById('btnGuardar').disabled = true;
     try {
