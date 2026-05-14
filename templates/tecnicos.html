@@ -47,6 +47,21 @@
         .check-item { display:flex; align-items:center; gap:7px; padding:6px 8px; border:1px solid #e5e7eb; border-radius:8px; background:#fafafa; }
         .check-item input[type=checkbox] { width:16px; height:16px; accent-color:#0f5f34; }
         .check-item span { font-size:.82rem; color:#1f2937; font-weight:600; line-height:1.2; }
+        .signature-panel-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:8px; }
+        .signature-card { border:1px solid #d1d5db; border-radius:10px; background:#fff; padding:8px; }
+        .signature-card .sig-title { font-size:.78rem; color:#4b5563; font-weight:700; margin-bottom:6px; }
+        .signature-pad {
+            width:100%;
+            height:110px;
+            border:1.5px dashed #9ca3af;
+            border-radius:8px;
+            background:#fafafa;
+            touch-action:none;
+            cursor:crosshair;
+            display:block;
+        }
+        .sig-actions { display:flex; justify-content:space-between; align-items:center; margin-top:6px; gap:8px; }
+        .sig-help { font-size:.7rem; color:#6b7280; }
         .form-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
         .empty-state { text-align:center; padding:60px 20px; color:#888; }
         .empty-state .icon { font-size:56px; margin-bottom:12px; }
@@ -180,14 +195,24 @@
 
                 <div class="form-group">
                     <label>Firmas para credencial seguridad (opcional)</label>
-                    <span class="field-title">Sube firma de CRI y de Supervisión como imagen</span>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                        <div>
-                            <label style="font-size:.78rem;color:#4b5563;font-weight:700;">Firma de Validación CRI</label>
+                    <span class="field-title">Puedes dibujar firma en pantalla o subir imagen</span>
+                    <div class="signature-panel-grid">
+                        <div class="signature-card">
+                            <div class="sig-title">Firma de Validación CRI</div>
+                            <canvas id="sigPadCri" class="signature-pad"></canvas>
+                            <div class="sig-actions">
+                                <span class="sig-help">Firma con mouse o dedo</span>
+                                <button type="button" class="btn-sm btn-secondary" id="btnClearSigCri">Limpiar</button>
+                            </div>
                             <input type="file" id="tecFirmaCri" accept="image/png,image/jpeg,image/jpg,image/webp">
                         </div>
-                        <div>
-                            <label style="font-size:.78rem;color:#4b5563;font-weight:700;">Firma de Validación Supervisión</label>
+                        <div class="signature-card">
+                            <div class="sig-title">Firma de Validación Supervisión</div>
+                            <canvas id="sigPadSupervision" class="signature-pad"></canvas>
+                            <div class="sig-actions">
+                                <span class="sig-help">Firma con mouse o dedo</span>
+                                <button type="button" class="btn-sm btn-secondary" id="btnClearSigSupervision">Limpiar</button>
+                            </div>
                             <input type="file" id="tecFirmaSupervision" accept="image/png,image/jpeg,image/jpg,image/webp">
                         </div>
                     </div>
@@ -224,6 +249,95 @@
 
 <script>
 let todosLosTecnicos = [];
+const signaturePads = {};
+
+function initSignaturePad(canvasId, clearBtnId, key) {
+    const canvas = document.getElementById(canvasId);
+    const clearBtn = document.getElementById(clearBtnId);
+    if (!canvas || !clearBtn) return;
+
+    const ctx = canvas.getContext('2d');
+    signaturePads[key] = { canvas, ctx, drawing: false, hasStroke: false };
+
+    function resizeCanvas() {
+        const ratio = Math.max(window.devicePixelRatio || 1, 1);
+        const w = canvas.clientWidth;
+        const h = canvas.clientHeight;
+        canvas.width = Math.floor(w * ratio);
+        canvas.height = Math.floor(h * ratio);
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = 2.1;
+        ctx.strokeStyle = '#111827';
+        clearSignaturePad(key);
+    }
+
+    function getPos(evt) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: evt.clientX - rect.left,
+            y: evt.clientY - rect.top,
+        };
+    }
+
+    canvas.addEventListener('pointerdown', function(evt) {
+        evt.preventDefault();
+        const pad = signaturePads[key];
+        pad.drawing = true;
+        const p = getPos(evt);
+        pad.ctx.beginPath();
+        pad.ctx.moveTo(p.x, p.y);
+        pad.ctx.lineTo(p.x + 0.01, p.y + 0.01);
+        pad.ctx.stroke();
+        pad.hasStroke = true;
+    });
+
+    canvas.addEventListener('pointermove', function(evt) {
+        const pad = signaturePads[key];
+        if (!pad || !pad.drawing) return;
+        evt.preventDefault();
+        const p = getPos(evt);
+        pad.ctx.lineTo(p.x, p.y);
+        pad.ctx.stroke();
+    });
+
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(function(name) {
+        canvas.addEventListener(name, function() {
+            const pad = signaturePads[key];
+            if (pad) pad.drawing = false;
+        });
+    });
+
+    clearBtn.addEventListener('click', function() {
+        clearSignaturePad(key);
+    });
+
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+}
+
+function clearSignaturePad(key) {
+    const pad = signaturePads[key];
+    if (!pad) return;
+    const { ctx, canvas } = pad;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.fillStyle = '#fafafa';
+    ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+    ctx.restore();
+    pad.hasStroke = false;
+}
+
+function signaturePadToBlob(key) {
+    const pad = signaturePads[key];
+    if (!pad || !pad.hasStroke) return Promise.resolve(null);
+    return new Promise(function(resolve) {
+        pad.canvas.toBlob(function(blob) {
+            resolve(blob || null);
+        }, 'image/png', 0.95);
+    });
+}
 
 async function cargarTecnicos() {
     try {
@@ -327,6 +441,8 @@ function abrirModalNuevo() {
     document.getElementById('docsActualesList').innerHTML = '';
     document.getElementById('firmasActualesWrap').style.display = 'none';
     document.getElementById('firmasActualesList').innerHTML = '';
+    clearSignaturePad('cri');
+    clearSignaturePad('supervision');
     ['espAlturas','espManiobrasBaja','espElectricos','espTrabajosCaliente','espEspaciosConfinados','espExcavaciones','espMaquinaria']
         .forEach(id => { document.getElementById(id).checked = false; });
     // Por defecto un año adelante
@@ -354,6 +470,8 @@ function editarTecnico(t) {
     document.getElementById('tecDocumentos').value = '';
     document.getElementById('tecFirmaCri').value = '';
     document.getElementById('tecFirmaSupervision').value = '';
+    clearSignaturePad('cri');
+    clearSignaturePad('supervision');
     document.getElementById('espAlturas').checked = !!t.esp_alturas;
     document.getElementById('espManiobrasBaja').checked = !!t.esp_maniobras_baja;
     document.getElementById('espElectricos').checked = !!t.esp_electricos;
@@ -463,9 +581,19 @@ document.getElementById('formTecnico').addEventListener('submit', async function
         fd.append('documentos_pdf', file);
     });
     const firmaCriFile = document.getElementById('tecFirmaCri').files[0];
-    if (firmaCriFile) fd.append('firma_cri', firmaCriFile);
+    if (firmaCriFile) {
+        fd.append('firma_cri', firmaCriFile);
+    } else {
+        const sigCriBlob = await signaturePadToBlob('cri');
+        if (sigCriBlob) fd.append('firma_cri', sigCriBlob, 'firma_cri.png');
+    }
     const firmaSupervisionFile = document.getElementById('tecFirmaSupervision').files[0];
-    if (firmaSupervisionFile) fd.append('firma_supervision', firmaSupervisionFile);
+    if (firmaSupervisionFile) {
+        fd.append('firma_supervision', firmaSupervisionFile);
+    } else {
+        const sigSupBlob = await signaturePadToBlob('supervision');
+        if (sigSupBlob) fd.append('firma_supervision', sigSupBlob, 'firma_supervision.png');
+    }
 
     const url = id ? `/api/tecnicos/${id}` : '/api/tecnicos';
     const method = 'POST';
@@ -502,6 +630,8 @@ document.getElementById('modalTecnico').addEventListener('click', function(e) {
 });
 
 cargarTecnicos();
+initSignaturePad('sigPadCri', 'btnClearSigCri', 'cri');
+initSignaturePad('sigPadSupervision', 'btnClearSigSupervision', 'supervision');
 </script>
 </body>
 </html>
