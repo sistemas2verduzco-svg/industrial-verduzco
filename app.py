@@ -5526,6 +5526,7 @@ def verificar_tecnico_publico(token):
     template_data = {
         'logo_url': '/static/logo.png',
         'tecnico': tecnico,
+        'documentos_pdf': _list_tecnico_pdf_docs(tecnico.id) if tecnico else [],
         'estado_visual': 'invalido',
         'mensaje_estado': 'Credencial invalida o expirada',
         'motivo': 'Token no encontrado',
@@ -5596,6 +5597,62 @@ def reportar_problema_verificacion(token):
 
 TECNICOS_FOTO_DIR = os.path.join('uploads', 'tecnicos', 'fotos')
 os.makedirs(TECNICOS_FOTO_DIR, exist_ok=True)
+TECNICOS_DOCS_DIR = os.path.join('uploads', 'tecnicos', 'docs')
+os.makedirs(TECNICOS_DOCS_DIR, exist_ok=True)
+
+
+def _allowed_pdf_file(filename):
+    if not filename or '.' not in filename:
+        return False
+    return filename.rsplit('.', 1)[1].lower() == 'pdf'
+
+
+def _list_tecnico_pdf_docs(tecnico_id):
+    prefix = f"tec_{int(tecnico_id)}_"
+    docs = []
+    try:
+        for name in os.listdir(TECNICOS_DOCS_DIR):
+            if not name.lower().endswith('.pdf'):
+                continue
+            if not name.startswith(prefix):
+                continue
+            abs_path = os.path.join(TECNICOS_DOCS_DIR, name)
+            mtime = os.path.getmtime(abs_path)
+            docs.append({
+                'filename': name,
+                'url': f'/uploads/tecnicos/docs/{name}',
+                'updated_at': datetime.utcfromtimestamp(mtime).isoformat(),
+            })
+    except Exception:
+        return []
+
+    docs.sort(key=lambda d: d['updated_at'], reverse=True)
+    return docs
+
+
+def _save_tecnico_pdf_files(tecnico_id, files):
+    saved = []
+    if not files:
+        return saved
+
+    for f in files:
+        if not f or not (f.filename or '').strip():
+            continue
+        original = secure_filename(f.filename)
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        suffix = uuid.uuid4().hex[:8]
+        final_name = f"tec_{int(tecnico_id)}_{ts}_{suffix}_{original}"
+        abs_path = os.path.join(TECNICOS_DOCS_DIR, final_name)
+        f.save(abs_path)
+        saved.append(final_name)
+
+    return saved
+
+
+def _tecnico_to_api(tecnico):
+    data = tecnico.to_dict()
+    data['documentos_pdf'] = _list_tecnico_pdf_docs(tecnico.id)
+    return data
 
 @app.route('/tecnicos')
 @login_required
@@ -5613,7 +5670,7 @@ def api_list_tecnicos():
     if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
         return jsonify({'error': 'Permiso denegado'}), 403
     tecnicos = Tecnico.query.order_by(Tecnico.creado_en.desc()).all()
-    return jsonify({'tecnicos': [t.to_dict() for t in tecnicos]})
+    return jsonify({'tecnicos': [_tecnico_to_api(t) for t in tecnicos]})
 
 
 @app.route('/api/tecnicos', methods=['POST'])
@@ -5630,6 +5687,14 @@ def api_crear_tecnico():
 
     if not nombre or not empresa or not numero_empleado or not fecha_exp_str:
         return jsonify({'error': 'nombre, empresa, numero_empleado y fecha_expiracion son requeridos'}), 400
+
+    pdf_files = [
+        f for f in request.files.getlist('documentos_pdf')
+        if f and (f.filename or '').strip()
+    ]
+    for pf in pdf_files:
+        if not _allowed_pdf_file(pf.filename):
+            return jsonify({'error': 'Solo se permiten archivos PDF en documentos del técnico'}), 400
 
     if Tecnico.query.filter_by(numero_empleado=numero_empleado).first():
         return jsonify({'error': f'Ya existe un técnico con número de empleado {numero_empleado}'}), 409
@@ -5680,13 +5745,16 @@ def api_crear_tecnico():
     db.session.add(tecnico)
     db.session.flush()  # genera el id y token_qr
 
+    if pdf_files:
+        _save_tecnico_pdf_files(tecnico.id, pdf_files)
+
     try:
         _save_tecnico_qr_image(tecnico)
     except Exception as exc:
         logger.warning(f'No se pudo pre-generar QR para técnico nuevo: {exc}')
 
     db.session.commit()
-    return jsonify({'mensaje': 'Técnico creado', 'tecnico': tecnico.to_dict()}), 201
+    return jsonify({'mensaje': 'Técnico creado', 'tecnico': _tecnico_to_api(tecnico)}), 201
 
 
 @app.route('/api/tecnicos/<int:tid>', methods=['PUT', 'POST'])
@@ -5717,6 +5785,14 @@ def api_editar_tecnico(tid):
         except ValueError:
             return jsonify({'error': 'fecha_expiracion debe ser YYYY-MM-DD'}), 400
 
+    pdf_files = [
+        f for f in request.files.getlist('documentos_pdf')
+        if f and (f.filename or '').strip()
+    ]
+    for pf in pdf_files:
+        if not _allowed_pdf_file(pf.filename):
+            return jsonify({'error': 'Solo se permiten archivos PDF en documentos del técnico'}), 400
+
     for field in ('puesto', 'nss', 'curp', 'tipo_sangre', 'alergias', 'contacto_emergencia', 'antiguedad'):
         val = (request.form.get(field) or '').strip()
         if val:
@@ -5744,8 +5820,11 @@ def api_editar_tecnico(tid):
             f.save(os.path.join(TECNICOS_FOTO_DIR, fname))
             tecnico.foto = f'/uploads/tecnicos/fotos/{fname}'
 
+    if pdf_files:
+        _save_tecnico_pdf_files(tecnico.id, pdf_files)
+
     db.session.commit()
-    return jsonify({'mensaje': 'Técnico actualizado', 'tecnico': tecnico.to_dict()})
+    return jsonify({'mensaje': 'Técnico actualizado', 'tecnico': _tecnico_to_api(tecnico)})
 
 
 @app.route('/api/tecnicos/<int:tid>/estado', methods=['POST'])
@@ -5791,6 +5870,11 @@ def servir_foto_tecnico(filename):
 @app.route('/uploads/tecnicos/qr/<filename>')
 def servir_qr_tecnico(filename):
     return send_from_directory(os.path.abspath(TECNICOS_QR_DIR), filename)
+
+
+@app.route('/uploads/tecnicos/docs/<filename>')
+def servir_doc_tecnico(filename):
+    return send_from_directory(os.path.abspath(TECNICOS_DOCS_DIR), filename)
 
 
 @app.route('/tecnicos/<int:tid>/credencial')

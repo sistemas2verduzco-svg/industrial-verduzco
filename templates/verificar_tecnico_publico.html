@@ -147,7 +147,7 @@
         </div>
 
         <!-- Identificación -->
-        <div class="section-title">Datos de Identificaci&#243;n</div>
+        <div class="section-title">Datos Completos del Empleado</div>
         <div class="data-grid">
             <div>
                 <div class="data-label">N&#250;m. de Empleado</div>
@@ -157,24 +157,30 @@
                 <div class="data-label">Empresa</div>
                 <div class="data-value">{{ tecnico.empresa }}</div>
             </div>
-            {% if tecnico.antiguedad %}
             <div>
                 <div class="data-label">Antig&#252;edad</div>
-                <div class="data-value">{{ tecnico.antiguedad }}</div>
+                <div class="data-value">{{ tecnico.antiguedad or 'N/D' }}</div>
             </div>
-            {% endif %}
-            {% if tecnico.nss %}
             <div>
                 <div class="data-label">NSS</div>
-                <div class="data-value">{{ tecnico.nss }}</div>
+                <div class="data-value">{{ tecnico.nss or 'N/D' }}</div>
             </div>
-            {% endif %}
-            {% if tecnico.curp %}
             <div>
                 <div class="data-label">CURP</div>
-                <div class="data-value" style="font-size:.82rem;">{{ tecnico.curp }}</div>
+                <div class="data-value" style="font-size:.82rem;">{{ tecnico.curp or 'N/D' }}</div>
             </div>
-            {% endif %}
+            <div>
+                <div class="data-label">Puesto / Cargo</div>
+                <div class="data-value">{{ tecnico.puesto or 'T&#233;cnico Industrial' }}</div>
+            </div>
+            <div>
+                <div class="data-label">Estado administrativo</div>
+                <div class="data-value {{ 'hi' if tecnico.estado == 'activo' else 'warn' }}">{{ tecnico.estado|upper }}</div>
+            </div>
+            <div>
+                <div class="data-label">Token QR</div>
+                <div class="data-value" style="font-size:.75rem;">{{ tecnico.token_qr or 'N/D' }}</div>
+            </div>
         </div>
 
         <!-- Vigencia -->
@@ -193,26 +199,44 @@
         <div class="emergency">
             <div class="emergency-title">&#9888; Informaci&#243;n M&#233;dica de Emergencia</div>
             <div class="data-grid">
-                {% if tecnico.tipo_sangre %}
                 <div>
                     <div class="data-label">Tipo de Sangre</div>
-                    <div class="data-value" style="color:#7c5a00;font-weight:700;">{{ tecnico.tipo_sangre }}</div>
+                    <div class="data-value" style="color:#7c5a00;font-weight:700;">{{ tecnico.tipo_sangre or 'N/D' }}</div>
                 </div>
-                {% endif %}
-                {% if tecnico.alergias %}
                 <div>
                     <div class="data-label">Alergias</div>
-                    <div class="data-value" style="color:#7c5a00;">{{ tecnico.alergias }}</div>
+                    <div class="data-value" style="color:#7c5a00;">{{ tecnico.alergias or 'N/D' }}</div>
                 </div>
-                {% endif %}
-                {% if tecnico.contacto_emergencia %}
                 <div>
                     <div class="data-label">Contacto de Emergencia</div>
-                    <div class="data-value" style="color:#7c5a00;">{{ tecnico.contacto_emergencia }}</div>
+                    <div class="data-value" style="color:#7c5a00;">{{ tecnico.contacto_emergencia or 'N/D' }}</div>
                 </div>
-                {% endif %}
             </div>
         </div>
+        {% endif %}
+
+        <div class="section-title">Especialidades Autorizadas</div>
+        <div class="data-grid">
+            <div><div class="data-label">Alturas</div><div class="data-value {{ 'hi' if tecnico.esp_alturas else '' }}">{{ 'SI' if tecnico.esp_alturas else 'NO' }}</div></div>
+            <div><div class="data-label">Maniobras a baja</div><div class="data-value {{ 'hi' if tecnico.esp_maniobras_baja else '' }}">{{ 'SI' if tecnico.esp_maniobras_baja else 'NO' }}</div></div>
+            <div><div class="data-label">El&#233;ctricos</div><div class="data-value {{ 'hi' if tecnico.esp_electricos else '' }}">{{ 'SI' if tecnico.esp_electricos else 'NO' }}</div></div>
+            <div><div class="data-label">Trabajos en caliente</div><div class="data-value {{ 'hi' if tecnico.esp_trabajos_caliente else '' }}">{{ 'SI' if tecnico.esp_trabajos_caliente else 'NO' }}</div></div>
+            <div><div class="data-label">Espacios confinados</div><div class="data-value {{ 'hi' if tecnico.esp_espacios_confinados else '' }}">{{ 'SI' if tecnico.esp_espacios_confinados else 'NO' }}</div></div>
+            <div><div class="data-label">Excavaciones</div><div class="data-value {{ 'hi' if tecnico.esp_excavaciones else '' }}">{{ 'SI' if tecnico.esp_excavaciones else 'NO' }}</div></div>
+            <div><div class="data-label">Maquinaria</div><div class="data-value {{ 'hi' if tecnico.esp_maquinaria else '' }}">{{ 'SI' if tecnico.esp_maquinaria else 'NO' }}</div></div>
+        </div>
+
+        <div class="section-title">Documentos PDF</div>
+        {% if documentos_pdf and documentos_pdf|length > 0 %}
+        <div style="display:flex;flex-direction:column;gap:8px;">
+            {% for doc in documentos_pdf %}
+            <a href="{{ doc.url }}" target="_blank" rel="noopener noreferrer" style="font-size:.88rem;color:#1e5b8f;text-decoration:none;word-break:break-all;">
+                &#128196; {{ doc.filename }}
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="data-value">Sin documentos PDF cargados</div>
         {% endif %}
 
         <p style="font-size:.75rem;color:var(--muted);margin-top:16px;">

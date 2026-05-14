@@ -168,6 +168,17 @@
                 </div>
 
                 <div class="form-group">
+                    <label>Documentos PDF del técnico (opcional)</label>
+                    <span class="field-title">Constancias, cursos, documentos de respaldo</span>
+                    <input type="file" id="tecDocumentos" accept="application/pdf,.pdf" multiple>
+                    <span class="form-hint">Puedes subir varios PDFs al mismo tiempo. Se agregan al expediente del técnico.</span>
+                    <div id="docsActualesWrap" style="display:none;margin-top:8px;">
+                        <div style="font-size:.78rem;color:#374151;font-weight:700;margin-bottom:6px;">PDFs cargados actualmente</div>
+                        <div id="docsActualesList" style="display:flex;flex-direction:column;gap:5px;"></div>
+                    </div>
+                </div>
+
+                <div class="form-group">
                     <label>Tipos de trabajo autorizados (tache en credencial seguridad)</label>
                     <span class="field-title">Marca las especialidades validadas para este trabajador</span>
                     <div class="checks-grid">
@@ -240,6 +251,9 @@ function renderTecnicos(lista) {
             ? `<div class="expiry-text ${proximoExp?'expiry-near':''}">Vigente hasta: ${exp.toLocaleDateString('es-MX')}</div>`
             : '';
 
+        const docsCount = Array.isArray(t.documentos_pdf) ? t.documentos_pdf.length : 0;
+        const docsText = docsCount ? `<div class="expiry-text">PDFs: ${docsCount}</div>` : '';
+
         const toggleLabel = t.estado === 'activo' ? 'Suspender' : 'Activar';
         const toggleClass = t.estado === 'activo' ? 'btn-warning' : 'btn-success';
 
@@ -254,6 +268,7 @@ function renderTecnicos(lista) {
                 <div class="tec-card-empresa">${esc(t.empresa)}</div>
                 <div class="tec-card-num"># ${esc(t.numero_empleado)}</div>
                 ${expText}
+                ${docsText}
                 <div style="margin-top:8px">${estadoBadge}</div>
             </div>
             <div class="tec-card-footer">
@@ -285,6 +300,9 @@ function abrirModalNuevo() {
     document.getElementById('tecContacto').value = '';
     document.getElementById('tecAntiguedad').value = '';
     document.getElementById('tecFoto').value = '';
+    document.getElementById('tecDocumentos').value = '';
+    document.getElementById('docsActualesWrap').style.display = 'none';
+    document.getElementById('docsActualesList').innerHTML = '';
     ['espAlturas','espManiobrasBaja','espElectricos','espTrabajosCaliente','espEspaciosConfinados','espExcavaciones','espMaquinaria']
         .forEach(id => { document.getElementById(id).checked = false; });
     // Por defecto un año adelante
@@ -309,6 +327,7 @@ function editarTecnico(t) {
     document.getElementById('tecAntiguedad').value = t.antiguedad || '';
     document.getElementById('tecExpiracion').value = (t.fecha_expiracion||'').slice(0,10);
     document.getElementById('tecFoto').value = '';
+    document.getElementById('tecDocumentos').value = '';
     document.getElementById('espAlturas').checked = !!t.esp_alturas;
     document.getElementById('espManiobrasBaja').checked = !!t.esp_maniobras_baja;
     document.getElementById('espElectricos').checked = !!t.esp_electricos;
@@ -316,9 +335,35 @@ function editarTecnico(t) {
     document.getElementById('espEspaciosConfinados').checked = !!t.esp_espacios_confinados;
     document.getElementById('espExcavaciones').checked = !!t.esp_excavaciones;
     document.getElementById('espMaquinaria').checked = !!t.esp_maquinaria;
+    renderDocsExistentes(t.documentos_pdf || []);
     document.getElementById('modalTitulo').textContent = 'Editar Técnico';
     document.getElementById('btnGuardar').textContent = 'Guardar cambios';
     document.getElementById('modalTecnico').classList.add('active');
+}
+
+function renderDocsExistentes(documentos) {
+    const wrap = document.getElementById('docsActualesWrap');
+    const list = document.getElementById('docsActualesList');
+    list.innerHTML = '';
+
+    if (!Array.isArray(documentos) || !documentos.length) {
+        wrap.style.display = 'none';
+        return;
+    }
+
+    documentos.forEach(function(doc) {
+        const row = document.createElement('a');
+        row.href = doc.url;
+        row.target = '_blank';
+        row.rel = 'noopener noreferrer';
+        row.style.fontSize = '.78rem';
+        row.style.color = '#0f5f34';
+        row.style.textDecoration = 'none';
+        row.textContent = 'PDF: ' + (doc.filename || 'Documento');
+        list.appendChild(row);
+    });
+
+    wrap.style.display = 'block';
 }
 
 function cerrarModal() {
@@ -353,6 +398,10 @@ document.getElementById('formTecnico').addEventListener('submit', async function
     });
     const fotoFile = document.getElementById('tecFoto').files[0];
     if (fotoFile) fd.append('foto', fotoFile);
+    const docsFiles = Array.from(document.getElementById('tecDocumentos').files || []);
+    docsFiles.forEach(function(file) {
+        fd.append('documentos_pdf', file);
+    });
 
     const url = id ? `/api/tecnicos/${id}` : '/api/tecnicos';
     const method = 'POST';
