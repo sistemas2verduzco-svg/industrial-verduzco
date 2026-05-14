@@ -320,17 +320,22 @@
         .wm-firma-box { flex: 1; }
         .wm-firma-line {
             border-bottom: .4mm solid #777;
-            height: 3.2mm; margin-bottom: .4mm;
+            height: 5.6mm; margin-bottom: .4mm;
             display: flex;
             align-items: flex-end;
             justify-content: center;
             overflow: hidden;
         }
         .wm-firma-img {
-            max-height: 3mm;
+            max-height: 5.2mm;
             max-width: 100%;
             object-fit: contain;
-            filter: contrast(1.2);
+            filter: contrast(1.45) brightness(.9);
+        }
+        .wm-firma-empty {
+            font-size: 2.9pt;
+            color: #9e9e9e;
+            transform: translateY(-.2mm);
         }
         .wm-firma-label { font-size: 3.2pt; color: #666; text-align: center; line-height: 1.3; }
 
@@ -598,6 +603,8 @@
                             <div class="wm-firma-line">
                                 {% if firma_cri_url %}
                                     <img class="wm-firma-img" src="{{ firma_cri_url }}" alt="Firma CRI">
+                                {% else %}
+                                    <span class="wm-firma-empty">Sin firma</span>
                                 {% endif %}
                             </div>
                             <div class="wm-firma-label">Firma de Validaci&oacute;n de CRI</div>
@@ -606,6 +613,8 @@
                             <div class="wm-firma-line">
                                 {% if firma_supervision_url %}
                                     <img class="wm-firma-img" src="{{ firma_supervision_url }}" alt="Firma Supervisi&oacute;n">
+                                {% else %}
+                                    <span class="wm-firma-empty">Sin firma</span>
                                 {% endif %}
                             </div>
                             <div class="wm-firma-label">Firma de Validaci&oacute;n Supervisi&oacute;n</div>

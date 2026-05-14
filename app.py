@@ -5648,7 +5648,11 @@ def _get_tecnico_signature_url(tecnico_id, sig_type):
         name = f"tec_{int(tecnico_id)}_{sig_type}.{ext}"
         abs_path = os.path.join(TECNICOS_FIRMAS_DIR, name)
         if os.path.exists(abs_path):
-            return f'/uploads/tecnicos/firmas/{name}'
+            try:
+                v = int(os.path.getmtime(abs_path))
+            except Exception:
+                v = int(time())
+            return f'/uploads/tecnicos/firmas/{name}?v={v}'
     return None
 
 
