@@ -296,10 +296,12 @@
             font-weight: 700;
             color: #1a1a1a;
             text-align: right;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 26mm;
+            white-space: normal;
+            overflow: visible;
+            text-overflow: clip;
+            max-width: none;
+            word-break: break-word;
+            line-height: 1.2;
         }
         .na { color: #bbb !important; font-weight: 400 !important; }
 
