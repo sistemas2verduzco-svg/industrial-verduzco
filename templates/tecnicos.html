@@ -48,20 +48,77 @@
         .check-item input[type=checkbox] { width:16px; height:16px; accent-color:#0f5f34; }
         .check-item span { font-size:.82rem; color:#1f2937; font-weight:600; line-height:1.2; }
         .signature-panel-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:8px; }
-        .signature-card { border:1px solid #d1d5db; border-radius:10px; background:#fff; padding:8px; }
-        .signature-card .sig-title { font-size:.78rem; color:#4b5563; font-weight:700; margin-bottom:6px; }
-        .signature-pad {
-            width:100%;
-            height:110px;
-            border:1.5px dashed #9ca3af;
+        .signature-card { border:1px solid #d1d5db; border-radius:10px; background:#fff; padding:10px; }
+        .signature-card .sig-title { font-size:.78rem; color:#4b5563; font-weight:700; margin-bottom:8px; }
+        .sig-preview-wrap {
+            height:70px;
+            border:1px dashed #cbd5e1;
             border-radius:8px;
-            background:#fafafa;
+            background:#fff;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            overflow:hidden;
+            margin-bottom:8px;
+        }
+        .sig-preview {
+            max-width:100%;
+            max-height:100%;
+            display:none;
+        }
+        .sig-placeholder {
+            font-size:.75rem;
+            color:#6b7280;
+        }
+        .sig-actions { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+        .sig-modal-overlay {
+            display:none;
+            position:fixed;
+            inset:0;
+            z-index:1200;
+            background:rgba(0,0,0,.72);
+            align-items:center;
+            justify-content:center;
+            padding:12px;
+        }
+        .sig-modal-overlay.active { display:flex; }
+        .sig-modal-box {
+            width:min(680px, 100%);
+            background:#fff;
+            border-radius:12px;
+            overflow:hidden;
+            box-shadow:0 12px 40px rgba(0,0,0,.3);
+        }
+        .sig-modal-head {
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            padding:12px 14px;
+            border-bottom:1px solid #e5e7eb;
+        }
+        .sig-modal-title { font-weight:800; color:#111827; font-size:.96rem; }
+        .sig-modal-body { padding:12px 14px; }
+        .sig-modal-help { font-size:.78rem; color:#4b5563; margin-bottom:8px; }
+        .sig-modal-pad {
+            width:100%;
+            height:220px;
+            border:2px dashed #94a3b8;
+            border-radius:10px;
+            background:#ffffff;
             touch-action:none;
             cursor:crosshair;
             display:block;
         }
-        .sig-actions { display:flex; justify-content:space-between; align-items:center; margin-top:6px; gap:8px; }
-        .sig-help { font-size:.7rem; color:#6b7280; }
+        .sig-modal-actions {
+            display:flex;
+            justify-content:flex-end;
+            gap:8px;
+            margin-top:10px;
+        }
+        @media (max-width: 700px) {
+            .signature-panel-grid { grid-template-columns:1fr; }
+            .sig-modal-pad { height:260px; }
+        }
         .form-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
         .empty-state { text-align:center; padding:60px 20px; color:#888; }
         .empty-state .icon { font-size:56px; margin-bottom:12px; }
@@ -195,32 +252,38 @@
 
                 <div class="form-group">
                     <label>Firmas para credencial seguridad (opcional)</label>
-                    <span class="field-title">Puedes dibujar firma en pantalla o subir imagen</span>
+                    <span class="field-title">Firma en ventana t&aacute;ctil (dedo en m&oacute;vil o mouse en PC)</span>
                     <div class="signature-panel-grid">
                         <div class="signature-card">
                             <div class="sig-title">Firma de Validación CRI</div>
-                            <canvas id="sigPadCri" class="signature-pad"></canvas>
-                            <div class="sig-actions">
-                                <span class="sig-help">Firma con mouse o dedo</span>
-                                <button type="button" class="btn-sm btn-secondary" id="btnClearSigCri">Limpiar</button>
+                            <div class="sig-preview-wrap">
+                                <img id="sigPreviewCri" class="sig-preview" alt="Vista previa firma CRI">
+                                <span id="sigPlaceholderCri" class="sig-placeholder">Sin firma capturada</span>
                             </div>
-                            <input type="file" id="tecFirmaCri" accept="image/png,image/jpeg,image/jpg,image/webp">
+                            <div class="sig-actions">
+                                <button type="button" class="btn-sm btn-primary" onclick="openSignatureModal('cri')">Firmar</button>
+                                <button type="button" class="btn-sm btn-secondary" onclick="resetSignatureState('cri')">Limpiar</button>
+                            </div>
+                            <input type="file" id="tecFirmaCri" accept="image/png,image/jpeg,image/jpg,image/webp" style="display:none;">
                         </div>
                         <div class="signature-card">
                             <div class="sig-title">Firma de Validación Supervisión</div>
-                            <canvas id="sigPadSupervision" class="signature-pad"></canvas>
-                            <div class="sig-actions">
-                                <span class="sig-help">Firma con mouse o dedo</span>
-                                <button type="button" class="btn-sm btn-secondary" id="btnClearSigSupervision">Limpiar</button>
+                            <div class="sig-preview-wrap">
+                                <img id="sigPreviewSupervision" class="sig-preview" alt="Vista previa firma Supervisi&oacute;n">
+                                <span id="sigPlaceholderSupervision" class="sig-placeholder">Sin firma capturada</span>
                             </div>
-                            <input type="file" id="tecFirmaSupervision" accept="image/png,image/jpeg,image/jpg,image/webp">
+                            <div class="sig-actions">
+                                <button type="button" class="btn-sm btn-primary" onclick="openSignatureModal('supervision')">Firmar</button>
+                                <button type="button" class="btn-sm btn-secondary" onclick="resetSignatureState('supervision')">Limpiar</button>
+                            </div>
+                            <input type="file" id="tecFirmaSupervision" accept="image/png,image/jpeg,image/jpg,image/webp" style="display:none;">
                         </div>
                     </div>
                     <div id="firmasActualesWrap" style="display:none;margin-top:8px;">
                         <div style="font-size:.78rem;color:#374151;font-weight:700;margin-bottom:6px;">Firmas cargadas actualmente</div>
                         <div id="firmasActualesList" style="display:flex;flex-direction:column;gap:5px;"></div>
                     </div>
-                    <span class="form-hint">Formatos permitidos: PNG, JPG, JPEG, WEBP.</span>
+                    <span class="form-hint">El trazo se guarda en negro para imprimir mejor en credencial.</span>
                 </div>
 
                 <div class="form-group">
@@ -247,19 +310,58 @@
     </div>
 </div>
 
+<div class="sig-modal-overlay" id="sigModal">
+    <div class="sig-modal-box">
+        <div class="sig-modal-head">
+            <div class="sig-modal-title" id="sigModalTitle">Firma</div>
+            <button type="button" class="btn-sm btn-secondary" onclick="closeSignatureModal()">Cerrar</button>
+        </div>
+        <div class="sig-modal-body">
+            <div class="sig-modal-help">Firma dentro del recuadro con tu dedo o mouse. Se guardar&aacute; en negro para la credencial.</div>
+            <canvas id="sigModalCanvas" class="sig-modal-pad"></canvas>
+            <div class="sig-modal-actions">
+                <button type="button" class="btn-sm btn-secondary" id="sigModalClearBtn">Limpiar</button>
+                <button type="button" class="btn-sm btn-primary" id="sigModalSaveBtn">Guardar firma</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 let todosLosTecnicos = [];
-const signaturePads = {};
+const signatureState = {
+    cri: { blob: null, previewUrl: '', sourceUrl: '' },
+    supervision: { blob: null, previewUrl: '', sourceUrl: '' }
+};
+let signatureModalReady = false;
+let activeSignatureKey = null;
+let sigModalDrawing = false;
+let sigModalHasStroke = false;
 
-function initSignaturePad(canvasId, clearBtnId, key) {
-    const canvas = document.getElementById(canvasId);
-    const clearBtn = document.getElementById(clearBtnId);
-    if (!canvas || !clearBtn) return;
+function getSigElementsByKey(key) {
+    return key === 'cri'
+        ? {
+            preview: document.getElementById('sigPreviewCri'),
+            placeholder: document.getElementById('sigPlaceholderCri'),
+            file: document.getElementById('tecFirmaCri')
+        }
+        : {
+            preview: document.getElementById('sigPreviewSupervision'),
+            placeholder: document.getElementById('sigPlaceholderSupervision'),
+            file: document.getElementById('tecFirmaSupervision')
+        };
+}
 
+function initSignatureModal() {
+    if (signatureModalReady) return;
+    signatureModalReady = true;
+
+    const canvas = document.getElementById('sigModalCanvas');
+    const clearBtn = document.getElementById('sigModalClearBtn');
+    const saveBtn = document.getElementById('sigModalSaveBtn');
     const ctx = canvas.getContext('2d');
-    signaturePads[key] = { canvas, ctx, drawing: false, hasStroke: false };
 
-    function resizeCanvas() {
+    function resizeModalCanvas() {
         const ratio = Math.max(window.devicePixelRatio || 1, 1);
         const w = canvas.clientWidth;
         const h = canvas.clientHeight;
@@ -268,75 +370,134 @@ function initSignaturePad(canvasId, clearBtnId, key) {
         ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-        ctx.lineWidth = 2.1;
-        ctx.strokeStyle = '#111827';
-        clearSignaturePad(key);
+        ctx.lineWidth = 2.4;
+        ctx.strokeStyle = '#000000';
+        clearSignatureModalCanvas();
     }
 
     function getPos(evt) {
         const rect = canvas.getBoundingClientRect();
-        return {
-            x: evt.clientX - rect.left,
-            y: evt.clientY - rect.top,
-        };
+        return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
     }
 
     canvas.addEventListener('pointerdown', function(evt) {
         evt.preventDefault();
-        const pad = signaturePads[key];
-        pad.drawing = true;
+        sigModalDrawing = true;
         const p = getPos(evt);
-        pad.ctx.beginPath();
-        pad.ctx.moveTo(p.x, p.y);
-        pad.ctx.lineTo(p.x + 0.01, p.y + 0.01);
-        pad.ctx.stroke();
-        pad.hasStroke = true;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x + 0.01, p.y + 0.01);
+        ctx.stroke();
+        sigModalHasStroke = true;
     });
 
     canvas.addEventListener('pointermove', function(evt) {
-        const pad = signaturePads[key];
-        if (!pad || !pad.drawing) return;
+        if (!sigModalDrawing) return;
         evt.preventDefault();
         const p = getPos(evt);
-        pad.ctx.lineTo(p.x, p.y);
-        pad.ctx.stroke();
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
     });
 
     ['pointerup', 'pointerleave', 'pointercancel'].forEach(function(name) {
-        canvas.addEventListener(name, function() {
-            const pad = signaturePads[key];
-            if (pad) pad.drawing = false;
-        });
+        canvas.addEventListener(name, function() { sigModalDrawing = false; });
     });
 
-    clearBtn.addEventListener('click', function() {
-        clearSignaturePad(key);
-    });
+    clearBtn.addEventListener('click', clearSignatureModalCanvas);
+    saveBtn.addEventListener('click', saveSignatureFromModal);
+    window.addEventListener('resize', resizeModalCanvas);
 
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
+    resizeModalCanvas();
 }
 
-function clearSignaturePad(key) {
-    const pad = signaturePads[key];
-    if (!pad) return;
-    const { ctx, canvas } = pad;
+function clearSignatureModalCanvas() {
+    const canvas = document.getElementById('sigModalCanvas');
+    const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.save();
-    ctx.fillStyle = '#fafafa';
-    ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
-    ctx.restore();
-    pad.hasStroke = false;
+    sigModalHasStroke = false;
 }
 
-function signaturePadToBlob(key) {
-    const pad = signaturePads[key];
-    if (!pad || !pad.hasStroke) return Promise.resolve(null);
-    return new Promise(function(resolve) {
-        pad.canvas.toBlob(function(blob) {
-            resolve(blob || null);
-        }, 'image/png', 0.95);
-    });
+function openSignatureModal(key) {
+    initSignatureModal();
+    activeSignatureKey = key;
+    const title = key === 'cri' ? 'Firma de Validación CRI' : 'Firma de Validación Supervisión';
+    document.getElementById('sigModalTitle').textContent = title;
+    clearSignatureModalCanvas();
+    document.getElementById('sigModal').classList.add('active');
+}
+
+function closeSignatureModal() {
+    document.getElementById('sigModal').classList.remove('active');
+    activeSignatureKey = null;
+    sigModalDrawing = false;
+}
+
+function updateSignaturePreview(key, url) {
+    const refs = getSigElementsByKey(key);
+    if (!refs.preview || !refs.placeholder) return;
+    if (url) {
+        refs.preview.src = url;
+        refs.preview.style.display = 'block';
+        refs.placeholder.style.display = 'none';
+    } else {
+        refs.preview.removeAttribute('src');
+        refs.preview.style.display = 'none';
+        refs.placeholder.style.display = 'inline';
+    }
+}
+
+function saveSignatureFromModal() {
+    if (!activeSignatureKey) return;
+    if (!sigModalHasStroke) {
+        alert('Primero firma dentro del recuadro.');
+        return;
+    }
+    const canvas = document.getElementById('sigModalCanvas');
+    canvas.toBlob(function(blob) {
+        if (!blob) return;
+        const state = signatureState[activeSignatureKey];
+        if (state.previewUrl && state.previewUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(state.previewUrl);
+        }
+        state.blob = blob;
+        state.sourceUrl = '';
+        state.previewUrl = URL.createObjectURL(blob);
+        updateSignaturePreview(activeSignatureKey, state.previewUrl);
+        const refs = getSigElementsByKey(activeSignatureKey);
+        if (refs.file) refs.file.value = '';
+        closeSignatureModal();
+    }, 'image/png', 1.0);
+}
+
+function resetSignatureState(key) {
+    const state = signatureState[key];
+    if (!state) return;
+    if (state.previewUrl && state.previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(state.previewUrl);
+    }
+    state.blob = null;
+    state.previewUrl = '';
+    state.sourceUrl = '';
+    const refs = getSigElementsByKey(key);
+    if (refs.file) refs.file.value = '';
+    updateSignaturePreview(key, '');
+}
+
+function setSignatureFromServerUrl(key, url) {
+    const state = signatureState[key];
+    if (!state) return;
+    if (state.previewUrl && state.previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(state.previewUrl);
+    }
+    state.blob = null;
+    state.sourceUrl = url || '';
+    state.previewUrl = url || '';
+    updateSignaturePreview(key, state.previewUrl);
+}
+
+function signatureStateToBlob(key) {
+    const state = signatureState[key];
+    return Promise.resolve(state && state.blob ? state.blob : null);
 }
 
 async function cargarTecnicos() {
@@ -441,8 +602,8 @@ function abrirModalNuevo() {
     document.getElementById('docsActualesList').innerHTML = '';
     document.getElementById('firmasActualesWrap').style.display = 'none';
     document.getElementById('firmasActualesList').innerHTML = '';
-    clearSignaturePad('cri');
-    clearSignaturePad('supervision');
+    resetSignatureState('cri');
+    resetSignatureState('supervision');
     ['espAlturas','espManiobrasBaja','espElectricos','espTrabajosCaliente','espEspaciosConfinados','espExcavaciones','espMaquinaria']
         .forEach(id => { document.getElementById(id).checked = false; });
     // Por defecto un año adelante
@@ -470,8 +631,8 @@ function editarTecnico(t) {
     document.getElementById('tecDocumentos').value = '';
     document.getElementById('tecFirmaCri').value = '';
     document.getElementById('tecFirmaSupervision').value = '';
-    clearSignaturePad('cri');
-    clearSignaturePad('supervision');
+    resetSignatureState('cri');
+    resetSignatureState('supervision');
     document.getElementById('espAlturas').checked = !!t.esp_alturas;
     document.getElementById('espManiobrasBaja').checked = !!t.esp_maniobras_baja;
     document.getElementById('espElectricos').checked = !!t.esp_electricos;
@@ -519,10 +680,15 @@ function renderFirmasExistentes(t) {
     const firmas = [];
     if (t && t.firma_cri_url) {
         firmas.push({ label: 'Firma CRI', url: t.firma_cri_url });
+        setSignatureFromServerUrl('cri', t.firma_cri_url);
     }
     if (t && t.firma_supervision_url) {
         firmas.push({ label: 'Firma Supervisión', url: t.firma_supervision_url });
+        setSignatureFromServerUrl('supervision', t.firma_supervision_url);
     }
+
+    if (!(t && t.firma_cri_url)) setSignatureFromServerUrl('cri', '');
+    if (!(t && t.firma_supervision_url)) setSignatureFromServerUrl('supervision', '');
 
     if (!firmas.length) {
         wrap.style.display = 'none';
@@ -584,14 +750,14 @@ document.getElementById('formTecnico').addEventListener('submit', async function
     if (firmaCriFile) {
         fd.append('firma_cri', firmaCriFile);
     } else {
-        const sigCriBlob = await signaturePadToBlob('cri');
+        const sigCriBlob = await signatureStateToBlob('cri');
         if (sigCriBlob) fd.append('firma_cri', sigCriBlob, 'firma_cri.png');
     }
     const firmaSupervisionFile = document.getElementById('tecFirmaSupervision').files[0];
     if (firmaSupervisionFile) {
         fd.append('firma_supervision', firmaSupervisionFile);
     } else {
-        const sigSupBlob = await signaturePadToBlob('supervision');
+        const sigSupBlob = await signatureStateToBlob('supervision');
         if (sigSupBlob) fd.append('firma_supervision', sigSupBlob, 'firma_supervision.png');
     }
 
@@ -629,9 +795,12 @@ document.getElementById('modalTecnico').addEventListener('click', function(e) {
     if (e.target === this) cerrarModal();
 });
 
+document.getElementById('sigModal').addEventListener('click', function(e) {
+    if (e.target === this) closeSignatureModal();
+});
+
 cargarTecnicos();
-initSignaturePad('sigPadCri', 'btnClearSigCri', 'cri');
-initSignaturePad('sigPadSupervision', 'btnClearSigSupervision', 'supervision');
+initSignatureModal();
 </script>
 </body>
 </html>
