@@ -8,7 +8,9 @@
         :root {
             --card-base-w: 54mm;
             --card-base-h: 85.6mm;
-            --card-scale: 1.4;
+            --card-scale-screen: 1.4;
+            --card-scale-print: 1.62;
+            --card-scale: var(--card-scale-screen);
             --card-print-w: calc(var(--card-base-w) * var(--card-scale));
             --card-print-h: calc(var(--card-base-h) * var(--card-scale));
         }
@@ -345,6 +347,9 @@
             margin: 8mm;
         }
         @media print {
+            :root {
+                --card-scale: var(--card-scale-print);
+            }
             html, body {
                 background: #fff !important;
                 margin: 0 !important;
@@ -361,9 +366,8 @@
 
             .card-wrapper {
                 display: grid !important;
-                grid-template-columns: repeat(2, var(--card-print-w)) !important;
-                column-gap: 10mm !important;
-                row-gap: 8mm !important;
+                grid-template-columns: var(--card-print-w) !important;
+                row-gap: 6mm !important;
                 justify-content: center !important;
                 align-items: start !important;
                 padding: 0 !important;
