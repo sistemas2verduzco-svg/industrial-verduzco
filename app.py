@@ -5637,10 +5637,48 @@ def _save_tecnico_signature_file(tecnico_id, file_obj, sig_type):
     except Exception:
         pass
 
-    final_name = f"tec_{int(tecnico_id)}_{sig_type}.{ext}"
-    abs_path = os.path.join(TECNICOS_FIRMAS_DIR, final_name)
-    file_obj.save(abs_path)
-    return f'/uploads/tecnicos/firmas/{final_name}'
+    # Normaliza y recorta espacio vacío para que la firma se vea grande en la credencial.
+    try:
+        from PIL import Image, ImageOps
+
+        file_obj.stream.seek(0)
+        img = Image.open(file_obj.stream)
+        img = ImageOps.exif_transpose(img)
+        rgba = img.convert('RGBA')
+
+        alpha = rgba.split()[-1]
+        alpha_bbox = alpha.getbbox()
+
+        gray = rgba.convert('L')
+        dark_mask = gray.point(lambda p: 255 if p < 245 else 0)
+        dark_bbox = dark_mask.getbbox()
+
+        bbox = alpha_bbox or dark_bbox
+        if bbox:
+            pad = 16
+            left = max(0, bbox[0] - pad)
+            top = max(0, bbox[1] - pad)
+            right = min(rgba.width, bbox[2] + pad)
+            bottom = min(rgba.height, bbox[3] + pad)
+            rgba = rgba.crop((left, top, right, bottom))
+
+        # Escala consistente para impresión nítida.
+        target_h = 280
+        if rgba.height > 0 and rgba.height != target_h:
+            target_w = max(1, int((rgba.width * target_h) / rgba.height))
+            rgba = rgba.resize((target_w, target_h), Image.Resampling.LANCZOS)
+
+        final_name = f"tec_{int(tecnico_id)}_{sig_type}.png"
+        abs_path = os.path.join(TECNICOS_FIRMAS_DIR, final_name)
+        rgba.save(abs_path, format='PNG', optimize=True)
+        return f'/uploads/tecnicos/firmas/{final_name}'
+    except Exception:
+        # Fallback simple si PIL falla por cualquier razón.
+        file_obj.stream.seek(0)
+        final_name = f"tec_{int(tecnico_id)}_{sig_type}.{ext}"
+        abs_path = os.path.join(TECNICOS_FIRMAS_DIR, final_name)
+        file_obj.save(abs_path)
+        return f'/uploads/tecnicos/firmas/{final_name}'
 
 
 def _get_tecnico_signature_url(tecnico_id, sig_type):
