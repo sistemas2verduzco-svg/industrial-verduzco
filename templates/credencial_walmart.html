@@ -361,7 +361,7 @@
 <div class="top-controls">
     <div class="ctrl-row">
         <button class="btn btn-back" onclick="history.back()">&#8592; Volver</button>
-        <button class="btn btn-print" onclick="window.print()">&#128424; Imprimir Credencial Seguridad</button>
+        <button class="btn btn-print" onclick="printCredencialSeguridad()">&#128424; Imprimir Credencial Seguridad</button>
     </div>
     <p class="hint">Tama&ntilde;o CR80 est&aacute;ndar (54 &times; 85.6&thinsp;mm) &mdash; Credencial de Seguridad</p>
 </div>
@@ -587,5 +587,22 @@
     </div>
 
 </div><!-- /card-wrapper -->
+
+<script>
+function printCredencialSeguridad() {
+    const instrucciones = [
+        'Antes de imprimir o guardar PDF confirma:',
+        '1) Escala: 100% (tamano real)',
+        '2) Graficos de fondo: ACTIVADO',
+        '3) Encabezado y pie: DESACTIVADO',
+        '',
+        'Presiona Aceptar para abrir impresion.'
+    ].join('\n');
+
+    if (window.confirm(instrucciones)) {
+        window.print();
+    }
+}
+</script>
 </body>
 </html>
