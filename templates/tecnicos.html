@@ -337,6 +337,7 @@ let signatureModalReady = false;
 let activeSignatureKey = null;
 let sigModalDrawing = false;
 let sigModalHasStroke = false;
+let sigModalResizeFn = null;
 
 function getSigElementsByKey(key) {
     return key === 'cri'
@@ -363,8 +364,8 @@ function initSignatureModal() {
 
     function resizeModalCanvas() {
         const ratio = Math.max(window.devicePixelRatio || 1, 1);
-        const w = canvas.clientWidth;
-        const h = canvas.clientHeight;
+        const w = Math.max(canvas.clientWidth, 320);
+        const h = Math.max(canvas.clientHeight, 180);
         canvas.width = Math.floor(w * ratio);
         canvas.height = Math.floor(h * ratio);
         ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -406,6 +407,7 @@ function initSignatureModal() {
     clearBtn.addEventListener('click', clearSignatureModalCanvas);
     saveBtn.addEventListener('click', saveSignatureFromModal);
     window.addEventListener('resize', resizeModalCanvas);
+    sigModalResizeFn = resizeModalCanvas;
 
     resizeModalCanvas();
 }
@@ -422,8 +424,11 @@ function openSignatureModal(key) {
     activeSignatureKey = key;
     const title = key === 'cri' ? 'Firma de Validación CRI' : 'Firma de Validación Supervisión';
     document.getElementById('sigModalTitle').textContent = title;
-    clearSignatureModalCanvas();
     document.getElementById('sigModal').classList.add('active');
+    requestAnimationFrame(function() {
+        if (sigModalResizeFn) sigModalResizeFn();
+        clearSignatureModalCanvas();
+    });
 }
 
 function closeSignatureModal() {
