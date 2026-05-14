@@ -367,6 +367,19 @@
         @media print {
             html, body { background: #fff; margin: 0; padding: 0; }
             .top-controls, .side-label { display: none !important; }
+            .corp-card,
+            .corp-card *,
+            .corp-card::before,
+            .corp-card::after,
+            .corp-header,
+            .corp-header::after,
+            .back-wave,
+            .back-wave::before,
+            .corp-stripe {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
             .card-wrapper {
                 display: grid !important;
                 grid-template-columns: repeat(2, var(--card-print-w)) !important;
@@ -389,7 +402,7 @@
 <div class="top-controls">
     <div class="ctrl-row">
         <button class="btn btn-back" onclick="history.back()">&#8592; Volver</button>
-        <button class="btn btn-print" onclick="window.print()">&#128424; Imprimir Credencial</button>
+        <button class="btn btn-print" onclick="printCredencialVerduzco()">&#128424; Imprimir Credencial</button>
     </div>
     <p class="hint">Formato ampliado para impresi&oacute;n (140% sobre CR80). Usa escala 100% al guardar PDF.</p>
 </div>
@@ -508,5 +521,24 @@
     </div>
 
 </div>
+
+<script>
+function printCredencialVerduzco() {
+    const msg = [
+        'Configuracion obligatoria para imprimir a color:',
+        '1) Graficos de fondo: ACTIVADO',
+        '2) Escala: 100% (tamano real)',
+        '3) Encabezado y pie: DESACTIVADO',
+        '',
+        'Si no pinta color, usa "Imprimir usando el dialogo del sistema".',
+        '',
+        'Presiona Aceptar para abrir impresion.'
+    ].join('\n');
+
+    if (window.confirm(msg)) {
+        window.print();
+    }
+}
+</script>
 </body>
 </html>
