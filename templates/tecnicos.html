@@ -179,6 +179,26 @@
                 </div>
 
                 <div class="form-group">
+                    <label>Firmas para credencial seguridad (opcional)</label>
+                    <span class="field-title">Sube firma de CRI y de Supervisión como imagen</span>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                        <div>
+                            <label style="font-size:.78rem;color:#4b5563;font-weight:700;">Firma de Validación CRI</label>
+                            <input type="file" id="tecFirmaCri" accept="image/png,image/jpeg,image/jpg,image/webp">
+                        </div>
+                        <div>
+                            <label style="font-size:.78rem;color:#4b5563;font-weight:700;">Firma de Validación Supervisión</label>
+                            <input type="file" id="tecFirmaSupervision" accept="image/png,image/jpeg,image/jpg,image/webp">
+                        </div>
+                    </div>
+                    <div id="firmasActualesWrap" style="display:none;margin-top:8px;">
+                        <div style="font-size:.78rem;color:#374151;font-weight:700;margin-bottom:6px;">Firmas cargadas actualmente</div>
+                        <div id="firmasActualesList" style="display:flex;flex-direction:column;gap:5px;"></div>
+                    </div>
+                    <span class="form-hint">Formatos permitidos: PNG, JPG, JPEG, WEBP.</span>
+                </div>
+
+                <div class="form-group">
                     <label>Tipos de trabajo autorizados (tache en credencial seguridad)</label>
                     <span class="field-title">Marca las especialidades validadas para este trabajador</span>
                     <div class="checks-grid">
@@ -301,8 +321,12 @@ function abrirModalNuevo() {
     document.getElementById('tecAntiguedad').value = '';
     document.getElementById('tecFoto').value = '';
     document.getElementById('tecDocumentos').value = '';
+    document.getElementById('tecFirmaCri').value = '';
+    document.getElementById('tecFirmaSupervision').value = '';
     document.getElementById('docsActualesWrap').style.display = 'none';
     document.getElementById('docsActualesList').innerHTML = '';
+    document.getElementById('firmasActualesWrap').style.display = 'none';
+    document.getElementById('firmasActualesList').innerHTML = '';
     ['espAlturas','espManiobrasBaja','espElectricos','espTrabajosCaliente','espEspaciosConfinados','espExcavaciones','espMaquinaria']
         .forEach(id => { document.getElementById(id).checked = false; });
     // Por defecto un año adelante
@@ -328,6 +352,8 @@ function editarTecnico(t) {
     document.getElementById('tecExpiracion').value = (t.fecha_expiracion||'').slice(0,10);
     document.getElementById('tecFoto').value = '';
     document.getElementById('tecDocumentos').value = '';
+    document.getElementById('tecFirmaCri').value = '';
+    document.getElementById('tecFirmaSupervision').value = '';
     document.getElementById('espAlturas').checked = !!t.esp_alturas;
     document.getElementById('espManiobrasBaja').checked = !!t.esp_maniobras_baja;
     document.getElementById('espElectricos').checked = !!t.esp_electricos;
@@ -336,6 +362,7 @@ function editarTecnico(t) {
     document.getElementById('espExcavaciones').checked = !!t.esp_excavaciones;
     document.getElementById('espMaquinaria').checked = !!t.esp_maquinaria;
     renderDocsExistentes(t.documentos_pdf || []);
+    renderFirmasExistentes(t);
     document.getElementById('modalTitulo').textContent = 'Editar Técnico';
     document.getElementById('btnGuardar').textContent = 'Guardar cambios';
     document.getElementById('modalTecnico').classList.add('active');
@@ -360,6 +387,39 @@ function renderDocsExistentes(documentos) {
         row.style.color = '#0f5f34';
         row.style.textDecoration = 'none';
         row.textContent = 'PDF: ' + (doc.filename || 'Documento');
+        list.appendChild(row);
+    });
+
+    wrap.style.display = 'block';
+}
+
+function renderFirmasExistentes(t) {
+    const wrap = document.getElementById('firmasActualesWrap');
+    const list = document.getElementById('firmasActualesList');
+    list.innerHTML = '';
+
+    const firmas = [];
+    if (t && t.firma_cri_url) {
+        firmas.push({ label: 'Firma CRI', url: t.firma_cri_url });
+    }
+    if (t && t.firma_supervision_url) {
+        firmas.push({ label: 'Firma Supervisión', url: t.firma_supervision_url });
+    }
+
+    if (!firmas.length) {
+        wrap.style.display = 'none';
+        return;
+    }
+
+    firmas.forEach(function(item) {
+        const row = document.createElement('a');
+        row.href = item.url;
+        row.target = '_blank';
+        row.rel = 'noopener noreferrer';
+        row.style.fontSize = '.78rem';
+        row.style.color = '#0f5f34';
+        row.style.textDecoration = 'none';
+        row.textContent = item.label;
         list.appendChild(row);
     });
 
@@ -402,6 +462,10 @@ document.getElementById('formTecnico').addEventListener('submit', async function
     docsFiles.forEach(function(file) {
         fd.append('documentos_pdf', file);
     });
+    const firmaCriFile = document.getElementById('tecFirmaCri').files[0];
+    if (firmaCriFile) fd.append('firma_cri', firmaCriFile);
+    const firmaSupervisionFile = document.getElementById('tecFirmaSupervision').files[0];
+    if (firmaSupervisionFile) fd.append('firma_supervision', firmaSupervisionFile);
 
     const url = id ? `/api/tecnicos/${id}` : '/api/tecnicos';
     const method = 'POST';

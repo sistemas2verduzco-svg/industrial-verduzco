@@ -5599,12 +5599,57 @@ TECNICOS_FOTO_DIR = os.path.join('uploads', 'tecnicos', 'fotos')
 os.makedirs(TECNICOS_FOTO_DIR, exist_ok=True)
 TECNICOS_DOCS_DIR = os.path.join('uploads', 'tecnicos', 'docs')
 os.makedirs(TECNICOS_DOCS_DIR, exist_ok=True)
+TECNICOS_FIRMAS_DIR = os.path.join('uploads', 'tecnicos', 'firmas')
+os.makedirs(TECNICOS_FIRMAS_DIR, exist_ok=True)
+
+SIGNATURE_ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
 
 
 def _allowed_pdf_file(filename):
     if not filename or '.' not in filename:
         return False
     return filename.rsplit('.', 1)[1].lower() == 'pdf'
+
+
+def _allowed_signature_file(filename):
+    if not filename or '.' not in filename:
+        return False
+    return filename.rsplit('.', 1)[1].lower() in SIGNATURE_ALLOWED_EXTENSIONS
+
+
+def _save_tecnico_signature_file(tecnico_id, file_obj, sig_type):
+    if not file_obj or not (file_obj.filename or '').strip():
+        return None
+
+    original = secure_filename(file_obj.filename)
+    ext = original.rsplit('.', 1)[1].lower() if '.' in original else 'png'
+    if ext not in SIGNATURE_ALLOWED_EXTENSIONS:
+        return None
+
+    prefix = f"tec_{int(tecnico_id)}_{sig_type}."
+    try:
+        for name in os.listdir(TECNICOS_FIRMAS_DIR):
+            if name.startswith(prefix):
+                try:
+                    os.remove(os.path.join(TECNICOS_FIRMAS_DIR, name))
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    final_name = f"tec_{int(tecnico_id)}_{sig_type}.{ext}"
+    abs_path = os.path.join(TECNICOS_FIRMAS_DIR, final_name)
+    file_obj.save(abs_path)
+    return f'/uploads/tecnicos/firmas/{final_name}'
+
+
+def _get_tecnico_signature_url(tecnico_id, sig_type):
+    for ext in ('png', 'jpg', 'jpeg', 'webp'):
+        name = f"tec_{int(tecnico_id)}_{sig_type}.{ext}"
+        abs_path = os.path.join(TECNICOS_FIRMAS_DIR, name)
+        if os.path.exists(abs_path):
+            return f'/uploads/tecnicos/firmas/{name}'
+    return None
 
 
 def _list_tecnico_pdf_docs(tecnico_id):
@@ -5652,6 +5697,8 @@ def _save_tecnico_pdf_files(tecnico_id, files):
 def _tecnico_to_api(tecnico):
     data = tecnico.to_dict()
     data['documentos_pdf'] = _list_tecnico_pdf_docs(tecnico.id)
+    data['firma_cri_url'] = _get_tecnico_signature_url(tecnico.id, 'cri')
+    data['firma_supervision_url'] = _get_tecnico_signature_url(tecnico.id, 'supervision')
     return data
 
 @app.route('/tecnicos')
@@ -5695,6 +5742,13 @@ def api_crear_tecnico():
     for pf in pdf_files:
         if not _allowed_pdf_file(pf.filename):
             return jsonify({'error': 'Solo se permiten archivos PDF en documentos del técnico'}), 400
+
+    firma_cri_file = request.files.get('firma_cri')
+    firma_supervision_file = request.files.get('firma_supervision')
+    if firma_cri_file and (firma_cri_file.filename or '').strip() and not _allowed_signature_file(firma_cri_file.filename):
+        return jsonify({'error': 'Firma CRI inválida. Solo PNG/JPG/JPEG/WEBP'}), 400
+    if firma_supervision_file and (firma_supervision_file.filename or '').strip() and not _allowed_signature_file(firma_supervision_file.filename):
+        return jsonify({'error': 'Firma Supervisión inválida. Solo PNG/JPG/JPEG/WEBP'}), 400
 
     if Tecnico.query.filter_by(numero_empleado=numero_empleado).first():
         return jsonify({'error': f'Ya existe un técnico con número de empleado {numero_empleado}'}), 409
@@ -5748,6 +5802,11 @@ def api_crear_tecnico():
     if pdf_files:
         _save_tecnico_pdf_files(tecnico.id, pdf_files)
 
+    if firma_cri_file and (firma_cri_file.filename or '').strip():
+        _save_tecnico_signature_file(tecnico.id, firma_cri_file, 'cri')
+    if firma_supervision_file and (firma_supervision_file.filename or '').strip():
+        _save_tecnico_signature_file(tecnico.id, firma_supervision_file, 'supervision')
+
     try:
         _save_tecnico_qr_image(tecnico)
     except Exception as exc:
@@ -5793,6 +5852,13 @@ def api_editar_tecnico(tid):
         if not _allowed_pdf_file(pf.filename):
             return jsonify({'error': 'Solo se permiten archivos PDF en documentos del técnico'}), 400
 
+    firma_cri_file = request.files.get('firma_cri')
+    firma_supervision_file = request.files.get('firma_supervision')
+    if firma_cri_file and (firma_cri_file.filename or '').strip() and not _allowed_signature_file(firma_cri_file.filename):
+        return jsonify({'error': 'Firma CRI inválida. Solo PNG/JPG/JPEG/WEBP'}), 400
+    if firma_supervision_file and (firma_supervision_file.filename or '').strip() and not _allowed_signature_file(firma_supervision_file.filename):
+        return jsonify({'error': 'Firma Supervisión inválida. Solo PNG/JPG/JPEG/WEBP'}), 400
+
     for field in ('puesto', 'nss', 'curp', 'tipo_sangre', 'alergias', 'contacto_emergencia', 'antiguedad'):
         val = (request.form.get(field) or '').strip()
         if val:
@@ -5822,6 +5888,11 @@ def api_editar_tecnico(tid):
 
     if pdf_files:
         _save_tecnico_pdf_files(tecnico.id, pdf_files)
+
+    if firma_cri_file and (firma_cri_file.filename or '').strip():
+        _save_tecnico_signature_file(tecnico.id, firma_cri_file, 'cri')
+    if firma_supervision_file and (firma_supervision_file.filename or '').strip():
+        _save_tecnico_signature_file(tecnico.id, firma_supervision_file, 'supervision')
 
     db.session.commit()
     return jsonify({'mensaje': 'Técnico actualizado', 'tecnico': _tecnico_to_api(tecnico)})
@@ -5877,6 +5948,11 @@ def servir_doc_tecnico(filename):
     return send_from_directory(os.path.abspath(TECNICOS_DOCS_DIR), filename)
 
 
+@app.route('/uploads/tecnicos/firmas/<filename>')
+def servir_firma_tecnico(filename):
+    return send_from_directory(os.path.abspath(TECNICOS_FIRMAS_DIR), filename)
+
+
 @app.route('/tecnicos/<int:tid>/credencial')
 @login_required
 def credencial_tecnico(tid):
@@ -5911,7 +5987,16 @@ def credencial_walmart(tid):
             logger.warning(f'No se pudo generar QR para credencial seguridad: {exc}')
     now = datetime.utcnow()
     vigente = tecnico.esta_vigente(now)
-    return render_template('credencial_walmart.html', tecnico=tecnico, vigente=vigente, now=now)
+    firma_cri_url = _get_tecnico_signature_url(tecnico.id, 'cri')
+    firma_supervision_url = _get_tecnico_signature_url(tecnico.id, 'supervision')
+    return render_template(
+        'credencial_walmart.html',
+        tecnico=tecnico,
+        vigente=vigente,
+        now=now,
+        firma_cri_url=firma_cri_url,
+        firma_supervision_url=firma_supervision_url,
+    )
 
 
 # ==================== MÓDULO HOJAS DE RUTA NUEVO ====================
