@@ -5,6 +5,13 @@
     <title>Credencial Seguridad &mdash; {{ tecnico.nombre }}</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --card-base-w: 54mm;
+            --card-base-h: 85.6mm;
+            --card-scale: 1.4;
+            --card-print-w: calc(var(--card-base-w) * var(--card-scale));
+            --card-print-h: calc(var(--card-base-h) * var(--card-scale));
+        }
         html, body {
             background: #c8d0da;
             font-family: 'Arial', 'Segoe UI', sans-serif;
@@ -30,6 +37,10 @@
             display: flex; flex-direction: column; align-items: center;
             gap: 28px; padding-bottom: 48px;
         }
+        .card-item {
+            width: var(--card-print-w);
+            min-height: calc(var(--card-print-h) + 10mm);
+        }
         .side-label {
             text-align: center; font-size: .72rem; color: #888;
             margin-bottom: 5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase;
@@ -37,10 +48,12 @@
 
         /* ══ TARJETA BASE  54 x 85.6 mm ══ */
         .wm-card {
-            width: 54mm; height: 85.6mm; position: relative;
+            width: var(--card-base-w); height: var(--card-base-h); position: relative;
             border-radius: 3.5mm; overflow: hidden;
             box-shadow: 0 8px 32px rgba(0,0,0,.35);
             background: #fff; page-break-inside: avoid; flex-shrink: 0;
+            transform: scale(var(--card-scale));
+            transform-origin: top left;
         }
         /* punch hole */
         .wm-card::before {
@@ -333,7 +346,7 @@
 
             .card-wrapper {
                 display: grid !important;
-                grid-template-columns: repeat(2, 54mm) !important;
+                grid-template-columns: repeat(2, var(--card-print-w)) !important;
                 column-gap: 10mm !important;
                 row-gap: 8mm !important;
                 justify-content: center !important;
@@ -347,8 +360,8 @@
             }
 
             .wm-card {
-                width: 54mm !important;
-                height: 85.6mm !important;
+                width: var(--card-base-w) !important;
+                height: var(--card-base-h) !important;
                 box-shadow: none !important;
                 border: .25mm solid #bdbdbd !important;
                 overflow: hidden !important;
@@ -363,7 +376,7 @@
         <button class="btn btn-back" onclick="history.back()">&#8592; Volver</button>
         <button class="btn btn-print" onclick="printCredencialSeguridad()">&#128424; Imprimir Credencial Seguridad</button>
     </div>
-    <p class="hint">Tama&ntilde;o CR80 est&aacute;ndar (54 &times; 85.6&thinsp;mm) &mdash; Credencial de Seguridad</p>
+    <p class="hint">Formato ampliado para impresi&oacute;n (140% sobre CR80) &mdash; Credencial de Seguridad</p>
 </div>
 
 <div class="card-wrapper">
