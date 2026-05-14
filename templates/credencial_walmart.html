@@ -312,15 +312,47 @@
         .wm-firma-label { font-size: 3.2pt; color: #666; text-align: center; line-height: 1.3; }
 
         /* ══ PRINT ══ */
+        @page {
+            size: A4 portrait;
+            margin: 8mm;
+        }
         @media print {
-            html, body { background: #fff; margin: 0; padding: 0; }
-            .top-controls, .side-label { display: none !important; }
-            .card-wrapper {
-                flex-direction: row !important; flex-wrap: wrap !important;
-                align-items: flex-start !important; justify-content: center !important;
-                gap: 10mm !important; padding: 8mm !important;
+            html, body {
+                background: #fff !important;
+                margin: 0 !important;
+                padding: 0 !important;
             }
-            .wm-card { box-shadow: none !important; border: .25mm solid #ccc !important; }
+            .top-controls, .side-label { display: none !important; }
+
+            /* Fuerza impresión de colores/fondos en Chrome/Edge/WebKit */
+            .wm-card,
+            .wm-card * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+
+            .card-wrapper {
+                display: grid !important;
+                grid-template-columns: repeat(2, 54mm) !important;
+                column-gap: 10mm !important;
+                row-gap: 8mm !important;
+                justify-content: center !important;
+                align-items: start !important;
+                padding: 0 !important;
+            }
+
+            .card-item {
+                break-inside: avoid !important;
+                page-break-inside: avoid !important;
+            }
+
+            .wm-card {
+                width: 54mm !important;
+                height: 85.6mm !important;
+                box-shadow: none !important;
+                border: .25mm solid #bdbdbd !important;
+                overflow: hidden !important;
+            }
         }
     </style>
 </head>
