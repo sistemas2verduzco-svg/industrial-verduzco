@@ -753,6 +753,10 @@
                         <label>Orden de trabajo (manual)</label>
                         <input id="orden_trabajo" name="orden_trabajo" type="text" placeholder="Ej: OT-2026-015">
                     </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <input id="hoja_en_produccion" name="hoja_en_produccion" type="checkbox">
+                        <label for="hoja_en_produccion" style="margin:0;">Hoja de ruta en producción</label>
+                    </div>
                     {% if not nuevo_modulo %}
                     <div id="contpaq_ot_field">
                         <label>OT pendiente CONTPAQ (auto por clave)</label>
@@ -843,6 +847,7 @@
                         <th>Historial Piezas</th>
                         <th>Almacen</th>
                         <th>Orden Trabajo</th>
+                        <th>Hoja producción</th>
                         <th>Comentarios</th>
                         <th>Scrap QC</th>
                         <th>Estado</th>
@@ -880,6 +885,7 @@
                         </td>
                         <td>{{ h.almacen or '' }}</td>
                         <td>{{ h.orden_trabajo or '' }}</td>
+                        <td style="text-align:center; font-size:18px;">{% if h.hoja_en_produccion %}✓{% endif %}</td>
                         <td>{{ h.comentarios or '' }}</td>
                         <td>
                             {% if h.scrap_qc %}
@@ -936,6 +942,7 @@
                                 data-cantidad="{{ h.cantidad_piezas or '' }}"
                                 data-almacen="{{ (h.almacen or '')|e }}"
                                 data-orden="{{ (h.orden_trabajo or '')|e }}"
+                                data-hoja-en-produccion="{{ 'true' if h.hoja_en_produccion else 'false' }}"
                                 data-estado="{{ (h.estado or '')|e }}"
                                 data-comentarios='{{ (h.comentarios or "")|tojson }}'
                                 onclick="abrirModalEdicion(this)">
@@ -1087,6 +1094,10 @@
                 <div>
                     <label>Orden de trabajo</label>
                     <input type="text" id="edit_orden" placeholder="Ej: OT-2026-015">
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="edit_hoja_en_produccion">
+                    <label for="edit_hoja_en_produccion" style="margin:0;">Hoja de ruta en producción</label>
                 </div>
                 <div style="grid-column: 1 / -1;">
                     <label>Comentarios</label>
@@ -1780,13 +1791,8 @@
                 cantidad_piezas: parseInt(document.getElementById('cantidad_piezas').value, 10),
                 almacen: document.getElementById('almacen').value,
                 orden_trabajo: document.getElementById('orden_trabajo').value.trim(),
-                comentarios: document.getElementById('comentarios').value.trim()
-            };
-
-            if (IS_ENTREGAS_FORM && tipoHoja === 'entrega') {
-                const otSel = document.getElementById('contpaq_ot_detail_id');
-                if (otSel && otSel.value) {
-                    payload.contpaq_ot_detail_id = parseInt(otSel.value, 10);
+                    comentarios: document.getElementById('comentarios').value.trim(),
+                    hoja_en_produccion: document.getElementById('hoja_en_produccion').checked
                 }
             }
 
@@ -1865,6 +1871,7 @@
             document.getElementById('edit_cantidad').value = btn.dataset.cantidad || '';
             document.getElementById('edit_almacen').value = btn.dataset.almacen || '';
             document.getElementById('edit_orden').value = btn.dataset.orden || '';
+            document.getElementById('edit_hoja_en_produccion').checked = btn.dataset.hojaEnProduccion === 'true';
             document.getElementById('edit_estado').value = btn.dataset.estado || 'activa';
             try {
                 const comentarios = JSON.parse(btn.getAttribute('data-comentarios') || '""');
@@ -1890,6 +1897,7 @@
                 almacen: document.getElementById('edit_almacen').value,
                 orden_trabajo: document.getElementById('edit_orden').value.trim(),
                 comentarios: document.getElementById('edit_comentarios').value.trim(),
+                hoja_en_produccion: document.getElementById('edit_hoja_en_produccion').checked,
                 estado: document.getElementById('edit_estado').value
             };
 

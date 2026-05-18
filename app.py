@@ -7143,6 +7143,7 @@ def hojas_ruta_entregas_form():
             'impresion_parcial_total': (impresion_parcial_totales.get(h.id, {}).get('total_impreso', 0)),
             'impresion_parcial_movs': (impresion_parcial_totales.get(h.id, {}).get('movimientos', 0)),
             'historial_cargas': historial_cargas_por_hoja.get(h.id, []),
+            'hoja_en_produccion': bool(h.hoja_en_produccion),
             'fecha_salida': h.fecha_salida.isoformat() if h.fecha_salida else None,
             'fecha_creacion': h.fecha_creacion.isoformat() if h.fecha_creacion else None,
         })
@@ -7551,6 +7552,7 @@ def api_crear_hoja_ruta():
             fecha_termino=None,
             aprobada=False,
             rechazada=False,
+            hoja_en_produccion=str(data.get('hoja_en_produccion') or '').strip().lower() in ('1', 'true', 'yes', 'on'),
             scrap=None,
             retrabajo=None,
             supervisor=firma_ing_jose or None,
@@ -7719,6 +7721,8 @@ def api_actualizar_hoja_ruta(hoja_id):
         cantidad_anterior = int(hoja.cantidad_piezas or 0)
         hoja.cantidad_piezas = cantidad
         _registrar_carga_piezas_hoja(hoja, cantidad_anterior, cantidad, _current_username_for_audit(user), origen='edicion')
+    if 'hoja_en_produccion' in data:
+        hoja.hoja_en_produccion = str(data.get('hoja_en_produccion') or '').strip().lower() in ('1', 'true', 'yes', 'on')
 
     # Regla de negocio: descripcion de hoja siempre proviene de la clave actual.
     if hoja.pn:

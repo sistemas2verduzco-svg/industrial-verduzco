@@ -652,6 +652,7 @@ class HojaRutaEntrega(db.Model):
     fecha_termino = db.Column(db.DateTime, nullable=True)
     aprobada = db.Column(db.Boolean, default=False)
     rechazada = db.Column(db.Boolean, default=False)
+    hoja_en_produccion = db.Column(db.Boolean, default=False)
     scrap = db.Column(db.String(255), nullable=True)
     retrabajo = db.Column(db.String(255), nullable=True)
     supervisor = db.Column(db.String(200), nullable=True)
@@ -694,6 +695,7 @@ class HojaRutaEntrega(db.Model):
             'rechazada': self.rechazada,
             'scrap': self.scrap,
             'retrabajo': self.retrabajo,
+            'hoja_en_produccion': self.hoja_en_produccion,
             'supervisor': self.supervisor,
             'operador': self.operador,
             'eficiencia': self.eficiencia,
@@ -847,6 +849,130 @@ class FacturacionRegistro(db.Model):
 
     hoja_ruta = db.relationship('HojaRutaEntrega', backref='facturacion_registros')
     flujo = db.relationship('HojaRutaFlujoLogistica', backref='facturacion_registros')
+
+
+class AlmacenCajaSurtidoSesion(db.Model):
+    """Sesión de surtido en almacén para agrupar cajas e items pesados."""
+    __tablename__ = 'almacen_cajas_surtido_sesiones'
+
+    id = db.Column(db.Integer, primary_key=True)
+    pedido_referencia = db.Column(db.String(120), nullable=False, index=True)
+    estado = db.Column(db.String(20), nullable=False, default='abierta', index=True)
+    caja_actual_numero = db.Column(db.Integer, nullable=False, default=1)
+    total_cajas_cerradas = db.Column(db.Integer, nullable=False, default=0)
+    usuario = db.Column(db.String(120), nullable=True)
+    notas = db.Column(db.Text, nullable=True)
+    google_sync_estado = db.Column(db.String(20), nullable=False, default='pendiente')
+    google_sync_error = db.Column(db.Text, nullable=True)
+    fecha_inicio = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    fecha_cierre = db.Column(db.DateTime, nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'pedido_referencia': self.pedido_referencia,
+            'estado': self.estado,
+            'caja_actual_numero': self.caja_actual_numero,
+            'total_cajas_cerradas': self.total_cajas_cerradas,
+            'usuario': self.usuario,
+            'notas': self.notas,
+            'google_sync_estado': self.google_sync_estado,
+            'google_sync_error': self.google_sync_error,
+            'fecha_inicio': self.fecha_inicio.isoformat() if self.fecha_inicio else None,
+            'fecha_cierre': self.fecha_cierre.isoformat() if self.fecha_cierre else None,
+        }
+
+
+class AlmacenCajaSurtidoCaja(db.Model):
+    """Caja individual dentro de una sesión de surtido."""
+    __tablename__ = 'almacen_cajas_surtido_cajas'
+
+    id = db.Column(db.Integer, primary_key=True)
+    sesion_id = db.Column(db.Integer, db.ForeignKey('almacen_cajas_surtido_sesiones.id'), nullable=False, index=True)
+    numero_caja = db.Column(db.Integer, nullable=False)
+    estado = db.Column(db.String(20), nullable=False, default='abierta', index=True)
+    piezas_totales = db.Column(db.Integer, nullable=False, default=0)
+    peso_total_kg = db.Column(db.Float, nullable=False, default=0.0)
+    fecha_apertura = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    fecha_cierre = db.Column(db.DateTime, nullable=True)
+
+    sesion = db.relationship('AlmacenCajaSurtidoSesion', backref='cajas')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'sesion_id': self.sesion_id,
+            'numero_caja': self.numero_caja,
+            'estado': self.estado,
+            'piezas_totales': self.piezas_totales,
+            'peso_total_kg': round(float(self.peso_total_kg or 0.0), 4),
+            'fecha_apertura': self.fecha_apertura.isoformat() if self.fecha_apertura else None,
+            'fecha_cierre': self.fecha_cierre.isoformat() if self.fecha_cierre else None,
+        }
+
+
+class AlmacenCajaSurtidoLecturaBascula(db.Model):
+    """Lecturas de peso (manual o báscula) por sesión."""
+    __tablename__ = 'almacen_cajas_surtido_lecturas_bascula'
+
+    id = db.Column(db.Integer, primary_key=True)
+    sesion_id = db.Column(db.Integer, db.ForeignKey('almacen_cajas_surtido_sesiones.id'), nullable=False, index=True)
+    peso_kg = db.Column(db.Float, nullable=False)
+    origen = db.Column(db.String(20), nullable=False, default='manual')
+    raw_payload = db.Column(db.Text, nullable=True)
+    usuario = db.Column(db.String(120), nullable=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    sesion = db.relationship('AlmacenCajaSurtidoSesion', backref='lecturas_bascula')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'sesion_id': self.sesion_id,
+            'peso_kg': round(float(self.peso_kg or 0.0), 4),
+            'origen': self.origen,
+            'raw_payload': self.raw_payload,
+            'usuario': self.usuario,
+            'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,
+        }
+
+
+class AlmacenCajaSurtidoItem(db.Model):
+    """Items empacados por caja en una sesión de surtido."""
+    __tablename__ = 'almacen_cajas_surtido_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    sesion_id = db.Column(db.Integer, db.ForeignKey('almacen_cajas_surtido_sesiones.id'), nullable=False, index=True)
+    caja_id = db.Column(db.Integer, db.ForeignKey('almacen_cajas_surtido_cajas.id'), nullable=False, index=True)
+    lectura_id = db.Column(db.Integer, db.ForeignKey('almacen_cajas_surtido_lecturas_bascula.id'), nullable=True, index=True)
+    producto_codigo = db.Column(db.String(120), nullable=False, index=True)
+    producto_nombre = db.Column(db.String(255), nullable=True)
+    piezas = db.Column(db.Integer, nullable=False)
+    peso_kg = db.Column(db.Float, nullable=False)
+    peso_unitario_kg = db.Column(db.Float, nullable=False)
+    fuente_peso = db.Column(db.String(20), nullable=False, default='manual')
+    usuario = db.Column(db.String(120), nullable=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    sesion = db.relationship('AlmacenCajaSurtidoSesion', backref='items_surtido')
+    caja = db.relationship('AlmacenCajaSurtidoCaja', backref='items')
+    lectura = db.relationship('AlmacenCajaSurtidoLecturaBascula', backref='items')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'sesion_id': self.sesion_id,
+            'caja_id': self.caja_id,
+            'lectura_id': self.lectura_id,
+            'producto_codigo': self.producto_codigo,
+            'producto_nombre': self.producto_nombre,
+            'piezas': self.piezas,
+            'peso_kg': round(float(self.peso_kg or 0.0), 4),
+            'peso_unitario_kg': round(float(self.peso_unitario_kg or 0.0), 6),
+            'fuente_peso': self.fuente_peso,
+            'usuario': self.usuario,
+            'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,
+        }
 
 
 class EstacionTrabajo(db.Model):
