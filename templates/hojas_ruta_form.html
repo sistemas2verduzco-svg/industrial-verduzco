@@ -1791,10 +1791,9 @@
                 cantidad_piezas: parseInt(document.getElementById('cantidad_piezas').value, 10),
                 almacen: document.getElementById('almacen').value,
                 orden_trabajo: document.getElementById('orden_trabajo').value.trim(),
-                    comentarios: document.getElementById('comentarios').value.trim(),
-                    hoja_en_produccion: document.getElementById('hoja_en_produccion').checked
-                }
-            }
+                comentarios: document.getElementById('comentarios').value.trim(),
+                hoja_en_produccion: document.getElementById('hoja_en_produccion').checked
+            };
 
             if (!payload.clave_id || !payload.calidad || !payload.cantidad_piezas || !payload.almacen) {
                 alert('Completa los campos obligatorios');
