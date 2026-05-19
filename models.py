@@ -1178,6 +1178,7 @@ class ContpaqSyncRun(db.Model):
     pedido_detalles_upserted = db.Column(db.Integer, nullable=False, default=0)
     remisiones_upserted = db.Column(db.Integer, nullable=False, default=0)
     remision_detalles_upserted = db.Column(db.Integer, nullable=False, default=0)
+    notas_venta_upserted = db.Column(db.Integer, nullable=False, default=0)
 
     def to_dict(self):
         return {
@@ -1190,6 +1191,7 @@ class ContpaqSyncRun(db.Model):
             'pedido_detalles_upserted': self.pedido_detalles_upserted,
             'remisiones_upserted': self.remisiones_upserted,
             'remision_detalles_upserted': self.remision_detalles_upserted,
+            'notas_venta_upserted': self.notas_venta_upserted,
         }
 
 
@@ -1313,6 +1315,45 @@ class ContpaqRemisionDetalle(db.Model):
             'cantidad': self.cantidad,
             'precio_unitario': self.precio_unitario,
             'total_partida': self.total_partida,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class ContpaqNotaVenta(db.Model):
+    __tablename__ = 'contpaq_notas_venta'
+
+    id = db.Column(db.Integer, primary_key=True)
+    document_id = db.Column(db.BigInteger, nullable=False, unique=True, index=True)
+    source_document_id = db.Column(db.BigInteger, nullable=True, index=True)
+    destination_document_id = db.Column(db.BigInteger, nullable=True, index=True)
+    doc_folio = db.Column(db.String(80), nullable=False, index=True)
+    cliente = db.Column(db.String(255), nullable=True, index=True)
+    sucursal = db.Column(db.String(255), nullable=True, index=True)
+    fecha_documento = db.Column(db.DateTime, nullable=True, index=True)
+    subtotal = db.Column(db.Float, nullable=True)
+    total = db.Column(db.Float, nullable=True)
+    total_paid = db.Column(db.Float, nullable=True)
+    total_invoice_paid = db.Column(db.Float, nullable=True)
+    total_invoice_balance = db.Column(db.Float, nullable=True)
+    balance = db.Column(db.Float, nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'document_id': self.document_id,
+            'source_document_id': self.source_document_id,
+            'destination_document_id': self.destination_document_id,
+            'doc_folio': self.doc_folio,
+            'cliente': self.cliente,
+            'sucursal': self.sucursal,
+            'fecha_documento': self.fecha_documento.isoformat() if self.fecha_documento else None,
+            'subtotal': self.subtotal,
+            'total': self.total,
+            'total_paid': self.total_paid,
+            'total_invoice_paid': self.total_invoice_paid,
+            'total_invoice_balance': self.total_invoice_balance,
+            'balance': self.balance,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
 

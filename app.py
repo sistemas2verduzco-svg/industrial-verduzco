@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, AlertaBuzonGeneral, Tecnico, LogVerificacion
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqNotaVenta, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, AlertaBuzonGeneral, Tecnico, LogVerificacion
 from auth import AuthManager
 from email_manager import EmailManager
 import os
@@ -2175,6 +2175,32 @@ WHERE i.DeletedOn IS NULL
 """
 
 
+CONTPAQ_NOTAS_VENTA_QUERY = """
+SELECT
+    d.DocumentID,
+    ISNULL(d.FolioPrefix, '') + ISNULL(d.Folio, '') AS DocFolio,
+    be.OfficialName AS BusinessEntityName,
+    COALESCE(depotDoc.DepotName, dep.DepotName, '') AS Sucursal,
+    d.DateDocument,
+    d.SourceDocumentID,
+    d.DestinationDocumentID,
+    CASE WHEN d.CancelledOn IS NULL THEN d.SubTotal ELSE 0 END AS SubTotal,
+    CASE WHEN d.CancelledOn IS NULL THEN d.Total ELSE 0 END AS Total,
+    CASE WHEN ISNULL(inv.TotalPaid, 0) > 0 THEN inv.TotalPaid ELSE COALESCE(d.TotalPaid, 0) END AS TotalInvoicePaid,
+    COALESCE(d.Total, 0) - CASE WHEN ISNULL(inv.TotalPaid, 0) > 0 THEN inv.TotalPaid ELSE COALESCE(d.TotalPaid, 0) END AS TotalInvoiceBalance
+FROM dbo.docDocument d
+LEFT JOIN dbo.vwLBSBusinessEntityList be ON d.BusinessEntityID = be.BusinessEntityID
+LEFT JOIN dbo.docDocumentExtra dxe ON d.DocumentID = dxe.DocumentID
+LEFT JOIN dbo.orgDepot depotDoc ON dxe.BusinessEntityDepotID = depotDoc.DepotID
+LEFT JOIN dbo.orgDepot dep ON d.DepotID = dep.DepotID
+LEFT JOIN dbo.vwLBSDocCustomerSalesTotalInvoiced inv ON d.DocumentID = inv.DocumentID
+WHERE d.ModuleID = 158
+  AND d.DateDocument >= ?
+  AND d.DeletedOn IS NULL
+  AND d.CancelledOn IS NULL
+"""
+
+
 CONTPAQ_SUPPLIER_OT_QUERY = """
 SELECT
         dbo.docDocument.DocumentID,
@@ -2230,6 +2256,7 @@ def _upsert_contpaq_data(payload):
         'pedido_detalles_upserted': 0,
         'remisiones_upserted': 0,
         'remision_detalles_upserted': 0,
+        'notas_venta_upserted': 0,
     }
 
     pedidos_map = {}
@@ -2295,6 +2322,39 @@ def _upsert_contpaq_data(payload):
         remision.updated_at = datetime.utcnow()
         remisiones_map[doc_id] = remision
         stats['remisiones_upserted'] += 1
+
+    db.session.flush()
+
+    for row in payload.get('notas_venta', []):
+        doc_id = int(row.get('DocumentID') or 0)
+        if doc_id <= 0:
+            continue
+        nota = ContpaqNotaVenta.query.filter_by(document_id=doc_id).first()
+        if not nota:
+            nota = ContpaqNotaVenta(document_id=doc_id)
+            db.session.add(nota)
+        nota.doc_folio = str(row.get('DocFolio') or '').strip()
+        nota.cliente = str(row.get('BusinessEntityName') or '').strip()
+        nota.sucursal = str(row.get('Sucursal') or '').strip()
+        nota.fecha_documento = _parse_datetime(row.get('DateDocument'))
+        source_id = row.get('SourceDocumentID')
+        destination_id = row.get('DestinationDocumentID')
+        try:
+            nota.source_document_id = int(source_id) if source_id is not None else None
+        except Exception:
+            nota.source_document_id = None
+        try:
+            nota.destination_document_id = int(destination_id) if destination_id is not None else None
+        except Exception:
+            nota.destination_document_id = None
+        nota.subtotal = _to_float(row.get('SubTotal'))
+        nota.total = _to_float(row.get('Total'))
+        nota.total_paid = _to_float(row.get('TotalPaid'))
+        nota.total_invoice_paid = _to_float(row.get('TotalInvoicePaid'))
+        nota.total_invoice_balance = _to_float(row.get('TotalInvoiceBalance'))
+        nota.balance = _to_float(row.get('TotalInvoiceBalance'))
+        nota.updated_at = datetime.utcnow()
+        stats['notas_venta_upserted'] += 1
 
     db.session.flush()
 
@@ -3223,6 +3283,7 @@ def run_contpaq_sync(trigger='manual'):
             'pedidos_detalle': _contpaq_fetch_rows(CONTPAQ_PEDIDOS_DETALLE_QUERY, params),
             'remisiones': _contpaq_fetch_rows(CONTPAQ_REMISIONES_QUERY, params),
             'remisiones_detalle': _contpaq_fetch_rows(CONTPAQ_REMISIONES_DETALLE_QUERY, params),
+            'notas_venta': _contpaq_fetch_rows(CONTPAQ_NOTAS_VENTA_QUERY, (start_date,)),
         }
 
         stats = _upsert_contpaq_data(payload)
@@ -3231,12 +3292,14 @@ def run_contpaq_sync(trigger='manual'):
         sync_run.message = (
             f"cliente={CONTPAQ_CUSTOMER_NAME} desde={start_date.isoformat()} "
             f"pedidos={len(payload['pedidos'])} detalle_pedidos={len(payload['pedidos_detalle'])} "
-            f"remisiones={len(payload['remisiones'])} detalle_remisiones={len(payload['remisiones_detalle'])}"
+            f"remisiones={len(payload['remisiones'])} detalle_remisiones={len(payload['remisiones_detalle'])} "
+            f"notas_venta={len(payload['notas_venta'])}"
         )
         sync_run.pedidos_upserted = stats['pedidos_upserted']
         sync_run.pedido_detalles_upserted = stats['pedido_detalles_upserted']
         sync_run.remisiones_upserted = stats['remisiones_upserted']
         sync_run.remision_detalles_upserted = stats['remision_detalles_upserted']
+        sync_run.notas_venta_upserted = stats['notas_venta_upserted']
         db.session.commit()
 
         logger.info(f"[CONTPAQ] Sincronizacion OK run={sync_run.id} stats={stats}")
@@ -12323,6 +12386,7 @@ def api_contpaq_sync_push():
         sync_run.pedido_detalles_upserted = stats['pedido_detalles_upserted']
         sync_run.remisiones_upserted = stats['remisiones_upserted']
         sync_run.remision_detalles_upserted = stats['remision_detalles_upserted']
+        sync_run.notas_venta_upserted = stats['notas_venta_upserted']
         db.session.commit()
         return jsonify({'ok': True, 'run_id': sync_run.id, 'stats': stats}), 200
     except Exception as exc:
