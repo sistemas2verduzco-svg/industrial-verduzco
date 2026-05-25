@@ -1572,6 +1572,9 @@ def _sync_hoja_estado_with_checks(hoja, estaciones=None, now_dt=None):
     """Sincroniza el estado de hoja contra sus checks de procesos.
     Regla: completada solo si todas las estaciones estan completadas.
     """
+    if (hoja.estado or '').strip().lower() == 'cancelada':
+        return False
+
     if estaciones is None:
         estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).all()
 
@@ -7698,6 +7701,7 @@ def api_actualizar_hoja_ruta(hoja_id):
     """Actualizar campos editables de una hoja de ruta."""
     hoja = HojaRutaEntrega.query.get_or_404(hoja_id)
     data = request.get_json() or {}
+    estado_change_dt = None
 
     user = get_current_user()
     hoja_field_permissions = {
@@ -7733,7 +7737,17 @@ def api_actualizar_hoja_ruta(hoja_id):
             }), 409
     
     if 'estado' in data:
-        hoja.estado = data['estado']
+        estado_in = (data.get('estado') or '').strip().lower()
+        allowed_estados = {'activa', 'pausada', 'completada', 'cancelada'}
+        if estado_in not in allowed_estados:
+            return jsonify({'error': 'estado invalido'}), 400
+
+        estado_change_dt = datetime.utcnow()
+        hoja.estado = estado_in
+        if estado_in in {'completada', 'cancelada'}:
+            hoja.fecha_termino = hoja.fecha_termino or estado_change_dt
+        else:
+            hoja.fecha_termino = None
     if 'clave_id' in data and data.get('clave_id') is not None:
         try:
             clave_id = int(data.get('clave_id'))
@@ -7799,6 +7813,22 @@ def api_actualizar_hoja_ruta(hoja_id):
         maquina_tipo=maquina.tipo if maquina else None,
         fallback_total_time=hoja.total_tiempo,
     )
+
+    if (hoja.estado or '').lower() == 'cancelada' and hoja.maquina_id:
+        maq = Máquina.query.get(hoja.maquina_id)
+        if maq and bool(getattr(maq, 'activo', False)):
+            restantes = HojaRutaEntrega.query.filter(
+                HojaRutaEntrega.maquina_id == maq.id,
+                HojaRutaEntrega.id != hoja.id,
+                HojaRutaEntrega.estado.in_(['activa', 'pausada'])
+            ).all()
+            restantes = _order_machine_queue_items(restantes)
+            siguiente = _pick_machine_active_hoja(restantes)
+            if siguiente:
+                _pause_other_machine_hojas(HojaRutaEntrega, maq.id, siguiente.id, estado_change_dt or datetime.utcnow())
+                _resume_or_activate_hoja(siguiente, estado_change_dt or datetime.utcnow())
+            else:
+                maq.activo = False
     
     db.session.commit()
     logger.info(f"[HOJAS_RUTA] Hoja actualizada: {hoja_id}")
@@ -8179,6 +8209,8 @@ def api_activar_hoja_maquina(maquina_id):
     hoja = HojaRutaEntrega.query.get_or_404(hoja_id)
     if hoja.maquina_id != maq.id:
         return jsonify({'error': 'La hoja no está asignada a esta máquina'}), 409
+    if (hoja.estado or '').strip().lower() == 'cancelada':
+        return jsonify({'error': 'La hoja está cancelada. Cambia su estado antes de volver a activarla.'}), 409
 
     try:
         now_dt = datetime.utcnow()
@@ -8200,6 +8232,8 @@ def api_check_proceso_estacion(estacion_id):
     """Marcar/desmarcar proceso de estación y avanzar automáticamente al siguiente pendiente."""
     estacion = EstacionTrabajo.query.get_or_404(estacion_id)
     hoja = HojaRutaEntrega.query.get_or_404(estacion.hoja_ruta_id)
+    if (hoja.estado or '').strip().lower() == 'cancelada':
+        return jsonify({'error': 'La hoja está cancelada. Reactivala desde Hojas Entregas antes de mover procesos.'}), 409
     data = request.get_json() or {}
     completada = bool(data.get('completada', False))
 

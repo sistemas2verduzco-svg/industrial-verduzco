@@ -936,6 +936,7 @@
                                 type="button"
                                 class="btn-edit"
                                 data-hoja-id="{{ h.id }}"
+                                data-serie="{{ (h.serie or ('HOJA ' ~ h.id))|e }}"
                                 data-clave-id="{{ h.clave_id or '' }}"
                                 data-clave="{{ (h.clave or '')|e }}"
                                 data-calidad="{{ (h.calidad or '')|e }}"
@@ -1061,6 +1062,7 @@
         <div class="modal-card">
             <h3 style="margin:0 0 12px 0;">Editar Hoja de Ruta</h3>
             <input type="hidden" id="edit_hoja_id">
+            <input type="hidden" id="edit_serie_label">
 
             <div class="grid">
                 <div>
@@ -1109,6 +1111,7 @@
                         <option value="activa">activa</option>
                         <option value="pausada">pausada</option>
                         <option value="completada">completada</option>
+                        <option value="cancelada">cancelada</option>
                     </select>
                 </div>
                 <div style="grid-column: 1 / -1;">
@@ -1120,6 +1123,9 @@
             </div>
 
             <div class="modal-actions">
+                {% if has_permission('hojas_entregas', 'edit') or has_permission('hojas', 'edit') or has_permission('catalog', 'edit') or current_user.es_admin %}
+                <button id="editCancelButton" class="btn btn-delete" type="button" onclick="cancelarHojaDesdeModal()">Marcar como cancelada</button>
+                {% endif %}
                 <button class="btn btn-secondary" type="button" onclick="cerrarModalEdicion()">Cancelar</button>
                 <button class="btn btn-primary" type="button" onclick="guardarEdicionHoja()">Guardar cambios</button>
             </div>
@@ -1151,6 +1157,7 @@
                         <option value="activa">Activa</option>
                         <option value="pausada">Pausada</option>
                         <option value="completada">Completada</option>
+                        <option value="cancelada">Cancelada</option>
                     </select>
                 </div>
                 <div>
@@ -1855,6 +1862,7 @@
 
         function abrirModalEdicion(btn) {
             document.getElementById('edit_hoja_id').value = btn.dataset.hojaId || '';
+            document.getElementById('edit_serie_label').value = btn.dataset.serie || ('HOJA ' + (btn.dataset.hojaId || ''));
             const editClave = document.getElementById('edit_clave_id');
             if (editClave) {
                 const claveId = btn.dataset.claveId || '';
@@ -1930,6 +1938,54 @@
             } catch (err) {
                 console.error(err);
                 alert('Error: ' + err.message);
+            }
+        }
+
+        async function cancelarHojaDesdeModal() {
+            const hojaId = parseInt(document.getElementById('edit_hoja_id').value, 10);
+            const serie = document.getElementById('edit_serie_label').value || ('HOJA ' + hojaId);
+            const btn = document.getElementById('editCancelButton');
+
+            if (!hojaId) {
+                alert('No se pudo identificar la hoja.');
+                return;
+            }
+
+            if (!confirm('¿Marcar la hoja ' + serie + ' como cancelada?\n\nLa hoja dejara de estar disponible para operar procesos hasta que su estado cambie manualmente.')) {
+                return;
+            }
+
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Cancelando...';
+            }
+
+            try {
+                const res = await fetch(API_HOJAS_BASE + '/' + hojaId, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ estado: 'cancelada' })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    throw new Error(data.error || 'No se pudo cancelar la hoja');
+                }
+
+                alert('Hoja cancelada correctamente');
+                cerrarModalEdicion();
+                if (window.platformRefreshNow) {
+                    window.platformRefreshNow();
+                } else {
+                    window.location.reload();
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Error: ' + err.message);
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Marcar como cancelada';
+                }
             }
         }
 

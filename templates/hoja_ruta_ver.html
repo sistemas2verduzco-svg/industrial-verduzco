@@ -55,6 +55,12 @@
       border-color: var(--accent);
     }
 
+    .btn-danger {
+      background: #b91c1c;
+      color: #fff;
+      border-color: #991b1b;
+    }
+
     .paper {
       background: var(--panel);
       border: 1px solid var(--line);
@@ -150,6 +156,7 @@
     .st-activa { background: #d1fae5; color: #065f46; }
     .st-pausada { background: #fef3c7; color: #92400e; }
     .st-completada { background: #dbeafe; color: #1e3a8a; }
+    .st-cancelada { background: #fee2e2; color: #991b1b; }
 
     .head-grid {
       display: grid;
@@ -487,7 +494,12 @@
     <div class="sheet-shell">
       <div class="toolbar no-print">
         <a href="{{ volver_url or '/hojas_ruta_form' }}" class="btn">← Volver a formulario</a>
-        <button class="btn btn-primary" onclick="window.print()">Imprimir hoja</button>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          {% if (has_permission('hojas_entregas', 'edit') or has_permission('hojas', 'edit') or has_permission('catalog', 'edit') or current_user.es_admin) and (hoja.estado or '') != 'cancelada' %}
+          <button id="btnCancelarHoja" class="btn btn-danger" type="button" onclick="cancelarHoja()">Marcar como cancelada</button>
+          {% endif %}
+          <button class="btn btn-primary" onclick="window.print()">Imprimir hoja</button>
+        </div>
       </div>
 
       <div class="paper">
@@ -676,6 +688,42 @@ Fecha: {{ hoja.scrap_qc.fecha or 'N/A' }}</div>
       if (!autoPrint) return;
       setTimeout(function() { window.print(); }, 450);
     })();
+
+    async function cancelarHoja() {
+      var hojaId = {{ hoja.id|tojson }};
+      var serie = {{ (hoja.nombre or ('HOJA ' ~ hoja.id))|tojson }};
+      var btn = document.getElementById('btnCancelarHoja');
+
+      if (!window.confirm('¿Marcar la hoja ' + serie + ' como cancelada?\n\nLa hoja dejara de estar disponible para operar procesos hasta que su estado cambie manualmente.')) {
+        return;
+      }
+
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Cancelando...';
+      }
+
+      try {
+        var res = await fetch('/api/hojas_ruta/' + hojaId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ estado: 'cancelada' })
+        });
+        var data = await res.json().catch(function() { return {}; });
+        if (!res.ok) {
+          throw new Error((data && data.error) || ('HTTP ' + res.status));
+        }
+        alert('Hoja cancelada correctamente.');
+        window.location.reload();
+      } catch (err) {
+        alert('Error: ' + (err.message || err));
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Marcar como cancelada';
+        }
+      }
+    }
   </script>
 </body>
 </html>
