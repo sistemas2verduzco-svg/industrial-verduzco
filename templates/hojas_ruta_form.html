@@ -949,6 +949,15 @@
                                 onclick="abrirModalEdicion(this)">
                                 Editar
                             </button>
+                            {% if has_permission('hojas_entregas', 'edit') or has_permission('hojas', 'edit') or has_permission('catalog', 'edit') or current_user.es_admin %}
+                            <button
+                                type="button"
+                                class="btn-delete"
+                                {% if (h.estado or '') == 'cancelada' %}disabled title="La hoja ya está cancelada"{% endif %}
+                                onclick="cancelarHojaDesdeFormulario({{ h.id }}, '{{ (h.serie or ('HOJA ' ~ h.id))|e }}', this)">
+                                {% if (h.estado or '') == 'cancelada' %}Cancelada{% else %}Cancelar{% endif %}
+                            </button>
+                            {% endif %}
                             <button
                                 type="button"
                                 class="btn-delete"
@@ -1946,6 +1955,10 @@
             const serie = document.getElementById('edit_serie_label').value || ('HOJA ' + hojaId);
             const btn = document.getElementById('editCancelButton');
 
+            await cancelarHojaDesdeFormulario(hojaId, serie, btn, { closeModal: true });
+        }
+
+        async function cancelarHojaDesdeFormulario(hojaId, serie, btn = null, options = {}) {
             if (!hojaId) {
                 alert('No se pudo identificar la hoja.');
                 return;
@@ -1955,6 +1968,7 @@
                 return;
             }
 
+            const originalText = btn ? btn.textContent : '';
             if (btn) {
                 btn.disabled = true;
                 btn.textContent = 'Cancelando...';
@@ -1973,7 +1987,9 @@
                 }
 
                 alert('Hoja cancelada correctamente');
-                cerrarModalEdicion();
+                if (options.closeModal) {
+                    cerrarModalEdicion();
+                }
                 if (window.platformRefreshNow) {
                     window.platformRefreshNow();
                 } else {
@@ -1984,7 +2000,7 @@
                 alert('Error: ' + err.message);
                 if (btn) {
                     btn.disabled = false;
-                    btn.textContent = 'Marcar como cancelada';
+                    btn.textContent = originalText || 'Cancelar';
                 }
             }
         }
