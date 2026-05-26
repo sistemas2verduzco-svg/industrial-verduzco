@@ -70,7 +70,31 @@
             font-size:.75rem;
             color:#6b7280;
         }
-        .sig-actions { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+        .sig-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+        .sig-link-wrap {
+            display:none;
+            margin-top:8px;
+            gap:6px;
+            align-items:center;
+        }
+        .sig-link-wrap.active { display:flex; }
+        .sig-link-input {
+            flex:1;
+            min-width:0;
+            border:1px solid #cbd5e1;
+            border-radius:8px;
+            padding:7px 8px;
+            font-size:.75rem;
+            color:#334155;
+            background:#f8fafc;
+        }
+        .sig-link-note {
+            display:block;
+            margin-top:6px;
+            font-size:.72rem;
+            color:#64748b;
+            line-height:1.35;
+        }
         .sig-modal-overlay {
             display:none;
             position:fixed;
@@ -262,8 +286,14 @@
                             </div>
                             <div class="sig-actions">
                                 <button type="button" class="btn-sm btn-primary" onclick="openSignatureModal('cri')">Firmar</button>
+                                <button type="button" class="btn-sm btn-success" onclick="generarLinkFirma('cri')">Generar link</button>
                                 <button type="button" class="btn-sm btn-secondary" onclick="resetSignatureState('cri')">Limpiar</button>
                             </div>
+                            <div class="sig-link-wrap" id="sigLinkWrapCri">
+                                <input type="text" id="sigLinkCri" class="sig-link-input" readonly>
+                                <button type="button" class="btn-sm btn-secondary" onclick="copiarFirmaGenerada('cri')">Copiar</button>
+                            </div>
+                            <span class="sig-link-note">Si el técnico no está contigo, guarda el registro y genera un link para que firme desde su celular.</span>
                             <input type="file" id="tecFirmaCri" accept="image/png,image/jpeg,image/jpg,image/webp" style="display:none;">
                         </div>
                         <div class="signature-card">
@@ -274,8 +304,14 @@
                             </div>
                             <div class="sig-actions">
                                 <button type="button" class="btn-sm btn-primary" onclick="openSignatureModal('supervision')">Firmar</button>
+                                <button type="button" class="btn-sm btn-success" onclick="generarLinkFirma('supervision')">Generar link</button>
                                 <button type="button" class="btn-sm btn-secondary" onclick="resetSignatureState('supervision')">Limpiar</button>
                             </div>
+                            <div class="sig-link-wrap" id="sigLinkWrapSupervision">
+                                <input type="text" id="sigLinkSupervision" class="sig-link-input" readonly>
+                                <button type="button" class="btn-sm btn-secondary" onclick="copiarFirmaGenerada('supervision')">Copiar</button>
+                            </div>
+                            <span class="sig-link-note">Úsalo cuando la persona que valida no esté aquí y necesites recibir su firma a distancia.</span>
                             <input type="file" id="tecFirmaSupervision" accept="image/png,image/jpeg,image/jpg,image/webp" style="display:none;">
                         </div>
                     </div>
@@ -350,6 +386,18 @@ function getSigElementsByKey(key) {
             preview: document.getElementById('sigPreviewSupervision'),
             placeholder: document.getElementById('sigPlaceholderSupervision'),
             file: document.getElementById('tecFirmaSupervision')
+        };
+}
+
+function getSigLinkElementsByKey(key) {
+    return key === 'cri'
+        ? {
+            wrap: document.getElementById('sigLinkWrapCri'),
+            input: document.getElementById('sigLinkCri')
+        }
+        : {
+            wrap: document.getElementById('sigLinkWrapSupervision'),
+            input: document.getElementById('sigLinkSupervision')
         };
 }
 
@@ -505,6 +553,36 @@ function signatureStateToBlob(key) {
     return Promise.resolve(state && state.blob ? state.blob : null);
 }
 
+function clearGeneratedSignatureLink(key) {
+    const refs = getSigLinkElementsByKey(key);
+    if (!refs.wrap || !refs.input) return;
+    refs.input.value = '';
+    refs.wrap.classList.remove('active');
+}
+
+function setGeneratedSignatureLink(key, url) {
+    const refs = getSigLinkElementsByKey(key);
+    if (!refs.wrap || !refs.input) return;
+    refs.input.value = url || '';
+    refs.wrap.classList.toggle('active', !!url);
+}
+
+async function copyTextToClipboard(text, successMessage) {
+    const normalized = String(text || '').trim();
+    if (!normalized) return false;
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(normalized);
+            if (successMessage) alert(successMessage + '\n' + normalized);
+            return true;
+        }
+    } catch (err) {
+        console.warn('Clipboard API no disponible', err);
+    }
+    window.prompt('Copia este texto:', normalized);
+    return true;
+}
+
 async function cargarTecnicos() {
     try {
         const r = await fetch('/api/tecnicos');
@@ -609,6 +687,8 @@ function abrirModalNuevo() {
     document.getElementById('firmasActualesList').innerHTML = '';
     resetSignatureState('cri');
     resetSignatureState('supervision');
+    clearGeneratedSignatureLink('cri');
+    clearGeneratedSignatureLink('supervision');
     ['espAlturas','espManiobrasBaja','espElectricos','espTrabajosCaliente','espEspaciosConfinados','espExcavaciones','espMaquinaria']
         .forEach(id => { document.getElementById(id).checked = false; });
     // Por defecto un año adelante
@@ -638,6 +718,8 @@ function editarTecnico(t) {
     document.getElementById('tecFirmaSupervision').value = '';
     resetSignatureState('cri');
     resetSignatureState('supervision');
+    clearGeneratedSignatureLink('cri');
+    clearGeneratedSignatureLink('supervision');
     document.getElementById('espAlturas').checked = !!t.esp_alturas;
     document.getElementById('espManiobrasBaja').checked = !!t.esp_maniobras_baja;
     document.getElementById('espElectricos').checked = !!t.esp_electricos;
@@ -719,6 +801,39 @@ function cerrarModal() {
     document.getElementById('modalTecnico').classList.remove('active');
 }
 
+async function generarLinkFirma(key) {
+    const tecnicoId = parseInt(document.getElementById('tecId').value || '0', 10);
+    if (!tecnicoId) {
+        alert('Primero guarda el técnico y después genera el link de firma.');
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/tecnicos/${tecnicoId}/signature-link`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sig_type: key })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            throw new Error(data.error || 'No se pudo generar el link');
+        }
+        setGeneratedSignatureLink(key, data.url || '');
+        await copyTextToClipboard(data.url || '', 'Link de firma copiado.');
+    } catch (err) {
+        alert('Error: ' + (err.message || err));
+    }
+}
+
+function copiarFirmaGenerada(key) {
+    const refs = getSigLinkElementsByKey(key);
+    if (!refs || !refs.input || !refs.input.value) {
+        alert('Primero genera el link.');
+        return;
+    }
+    copyTextToClipboard(refs.input.value, 'Link de firma copiado.');
+}
+
 document.getElementById('formTecnico').addEventListener('submit', async function(e) {
     e.preventDefault();
     const id = document.getElementById('tecId').value;
@@ -792,7 +907,7 @@ async function toggleEstado(id, estadoActual) {
 }
 
 function copiarLink(url) {
-    navigator.clipboard.writeText(url).then(() => alert('Link copiado:\n' + url));
+    copyTextToClipboard(url, 'Link copiado:');
 }
 
 // Cerrar modal al click fuera

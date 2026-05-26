@@ -25,6 +25,7 @@ import sys
 import threading
 import requests
 import qrcode
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 from urllib.parse import urlencode
@@ -5667,8 +5668,19 @@ TECNICOS_DOCS_DIR = os.path.join('uploads', 'tecnicos', 'docs')
 os.makedirs(TECNICOS_DOCS_DIR, exist_ok=True)
 TECNICOS_FIRMAS_DIR = os.path.join('uploads', 'tecnicos', 'firmas')
 os.makedirs(TECNICOS_FIRMAS_DIR, exist_ok=True)
+TECNICOS_SIGNATURE_LINKS_DIR = os.path.join('uploads', 'tecnicos', 'signature_links')
+os.makedirs(TECNICOS_SIGNATURE_LINKS_DIR, exist_ok=True)
 
 SIGNATURE_ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
+TECNICO_SIGNATURE_TOKEN_SALT = 'tecnicos-public-signature'
+TECNICO_SIGNATURE_LINK_MAX_AGE_SECONDS = max(
+    3600,
+    int(os.getenv('TECNICO_SIGNATURE_LINK_MAX_AGE_SECONDS', '604800') or '604800')
+)
+TECNICO_SIGNATURE_LABELS = {
+    'cri': 'Firma de Validación CRI',
+    'supervision': 'Firma de Validación Supervisión',
+}
 
 
 def _allowed_pdf_file(filename):
@@ -5681,6 +5693,137 @@ def _allowed_signature_file(filename):
     if not filename or '.' not in filename:
         return False
     return filename.rsplit('.', 1)[1].lower() in SIGNATURE_ALLOWED_EXTENSIONS
+
+
+def _valid_tecnico_signature_type(sig_type):
+    return (sig_type or '').strip().lower() in TECNICO_SIGNATURE_LABELS
+
+
+def _tecnico_signature_label(sig_type):
+    return TECNICO_SIGNATURE_LABELS.get((sig_type or '').strip().lower(), 'Firma')
+
+
+def _tecnico_signature_serializer():
+    return URLSafeTimedSerializer(app.secret_key)
+
+
+def _tecnico_signature_link_state_path(tecnico_id, sig_type):
+    sig_type_txt = (sig_type or '').strip().lower()
+    if not _valid_tecnico_signature_type(sig_type_txt):
+        return None
+    return os.path.join(TECNICOS_SIGNATURE_LINKS_DIR, f'tec_{int(tecnico_id)}_{sig_type_txt}.json')
+
+
+def _load_tecnico_signature_link_state(tecnico_id, sig_type):
+    path = _tecnico_signature_link_state_path(tecnico_id, sig_type)
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            payload = json.load(f)
+        return payload if isinstance(payload, dict) else None
+    except Exception:
+        return None
+
+
+def _save_tecnico_signature_link_state(tecnico_id, sig_type, payload):
+    path = _tecnico_signature_link_state_path(tecnico_id, sig_type)
+    if not path:
+        return False
+    try:
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(payload or {}, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception:
+        return False
+
+
+def _build_tecnico_signature_token(tecnico_id, sig_type):
+    sig_type_txt = (sig_type or '').strip().lower()
+    token_id = uuid.uuid4().hex
+    _save_tecnico_signature_link_state(
+        tecnico_id,
+        sig_type_txt,
+        {
+            'token_id': token_id,
+            'tecnico_id': int(tecnico_id),
+            'sig_type': sig_type_txt,
+            'created_at': datetime.utcnow().isoformat(),
+            'used_at': None,
+        },
+    )
+    serializer = _tecnico_signature_serializer()
+    return serializer.dumps(
+        {
+            'tid': int(tecnico_id),
+            'sig_type': sig_type_txt,
+            'token_id': token_id,
+        },
+        salt=TECNICO_SIGNATURE_TOKEN_SALT,
+    )
+
+
+def _resolve_tecnico_signature_token(token, max_age=None):
+    serializer = _tecnico_signature_serializer()
+    try:
+        payload = serializer.loads(
+            token,
+            salt=TECNICO_SIGNATURE_TOKEN_SALT,
+            max_age=max_age or TECNICO_SIGNATURE_LINK_MAX_AGE_SECONDS,
+        )
+    except SignatureExpired:
+        return None, 'expirado'
+    except BadSignature:
+        return None, 'invalido'
+
+    try:
+        tecnico_id = int(payload.get('tid') or 0)
+    except Exception:
+        tecnico_id = 0
+
+    sig_type = (payload.get('sig_type') or '').strip().lower()
+    token_id = (payload.get('token_id') or '').strip()
+    if tecnico_id <= 0 or not _valid_tecnico_signature_type(sig_type):
+        return None, 'invalido'
+    if not token_id:
+        return None, 'invalido'
+
+    state = _load_tecnico_signature_link_state(tecnico_id, sig_type)
+    if not state:
+        return None, 'invalido'
+    if (state.get('token_id') or '').strip() != token_id:
+        return None, 'invalido'
+    if (state.get('used_at') or '').strip():
+        return None, 'consumido'
+
+    tecnico = Tecnico.query.get(tecnico_id)
+    if not tecnico:
+        return None, 'invalido'
+
+    return {
+        'tecnico': tecnico,
+        'sig_type': sig_type,
+        'sig_label': _tecnico_signature_label(sig_type),
+        'token_id': token_id,
+    }, None
+
+
+def _build_tecnico_signature_public_url(tecnico_id, sig_type):
+    token = _build_tecnico_signature_token(tecnico_id, sig_type)
+    return url_for('tecnico_firma_publica', token=token, _external=True)
+
+
+def _mark_tecnico_signature_token_consumed(tecnico_id, sig_type, token_id):
+    state = _load_tecnico_signature_link_state(tecnico_id, sig_type)
+    if not state:
+        return False
+    if (state.get('token_id') or '').strip() != (token_id or '').strip():
+        return False
+    if (state.get('used_at') or '').strip():
+        return True
+
+    state['used_at'] = datetime.utcnow().isoformat()
+    return _save_tecnico_signature_link_state(tecnico_id, sig_type, state)
 
 
 def _save_tecnico_signature_file(tecnico_id, file_obj, sig_type):
@@ -6039,6 +6182,107 @@ def api_descargar_qr_tecnico(tid):
         return jsonify({'error': 'Archivo QR no encontrado'}), 404
     return send_from_directory(os.path.abspath(TECNICOS_QR_DIR), filename, as_attachment=True,
                                download_name=f'QR_{tecnico.numero_empleado}.png')
+
+
+@app.route('/api/tecnicos/<int:tid>/signature-link', methods=['POST'])
+@login_required
+def api_generar_link_firma_tecnico(tid):
+    user = get_current_user()
+    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+        return jsonify({'error': 'Permiso denegado'}), 403
+
+    tecnico = Tecnico.query.get_or_404(tid)
+    payload = request.get_json(silent=True) or request.form or {}
+    sig_type = (payload.get('sig_type') or '').strip().lower()
+    if not _valid_tecnico_signature_type(sig_type):
+        return jsonify({'error': 'Tipo de firma inválido'}), 400
+
+    return jsonify({
+        'ok': True,
+        'sig_type': sig_type,
+        'sig_label': _tecnico_signature_label(sig_type),
+        'url': _build_tecnico_signature_public_url(tecnico.id, sig_type),
+        'expires_in_seconds': TECNICO_SIGNATURE_LINK_MAX_AGE_SECONDS,
+    }), 200
+
+
+@app.route('/tecnicos/firma/<token>', methods=['GET', 'POST'])
+def tecnico_firma_publica(token):
+    resolved, error_code = _resolve_tecnico_signature_token(token)
+
+    if request.method == 'POST':
+        if error_code == 'expirado':
+            return jsonify({'error': 'El link para firmar ya expiró. Solicita uno nuevo.'}), 410
+        if error_code == 'consumido':
+            return jsonify({'error': 'Este link de firma ya fue utilizado. Solicita uno nuevo si necesitas recapturarla.'}), 410
+        if error_code:
+            return jsonify({'error': 'El link para firmar es inválido.'}), 404
+
+        signature_file = request.files.get('signature_file')
+        if not signature_file or not (signature_file.filename or '').strip():
+            return jsonify({'error': 'Adjunta una firma válida antes de guardar.'}), 400
+        if not _allowed_signature_file(signature_file.filename):
+            return jsonify({'error': 'Formato inválido. Usa PNG/JPG/JPEG/WEBP.'}), 400
+
+        tecnico = resolved['tecnico']
+        sig_type = resolved['sig_type']
+        token_id = resolved['token_id']
+        try:
+            saved_url = _save_tecnico_signature_file(tecnico.id, signature_file, sig_type)
+            if not saved_url:
+                return jsonify({'error': 'No se pudo guardar la firma.'}), 500
+            tecnico.actualizado_en = datetime.utcnow()
+            db.session.commit()
+            _mark_tecnico_signature_token_consumed(tecnico.id, sig_type, token_id)
+            return jsonify({
+                'ok': True,
+                'message': f"{resolved['sig_label']} guardada correctamente.",
+                'signature_url': _get_tecnico_signature_url(tecnico.id, sig_type),
+            }), 200
+        except Exception as exc:
+            db.session.rollback()
+            logger.error(f'Error guardando firma pública técnico={tecnico.id} tipo={sig_type}: {exc}', exc_info=True)
+            return jsonify({'error': 'No se pudo guardar la firma en este momento.'}), 500
+
+    template_data = {
+        'page_status': 'ready',
+        'tecnico': None,
+        'sig_type': None,
+        'sig_label': 'Firma',
+        'signature_url': None,
+        'max_age_hours': max(1, int(round(TECNICO_SIGNATURE_LINK_MAX_AGE_SECONDS / 3600))),
+    }
+
+    if error_code == 'expirado':
+        template_data.update({
+            'page_status': 'expired',
+            'error_message': 'El link para firmar ya expiró. Solicita uno nuevo al área responsable.',
+        })
+        return render_template('tecnico_firma_publica.html', **template_data), 410
+
+    if error_code == 'consumido':
+        template_data.update({
+            'page_status': 'used',
+            'error_message': 'Este link de firma ya fue utilizado y no puede volver a usarse.',
+        })
+        return render_template('tecnico_firma_publica.html', **template_data), 410
+
+    if error_code:
+        template_data.update({
+            'page_status': 'invalid',
+            'error_message': 'El link para firmar es inválido o ya no está disponible.',
+        })
+        return render_template('tecnico_firma_publica.html', **template_data), 404
+
+    tecnico = resolved['tecnico']
+    sig_type = resolved['sig_type']
+    template_data.update({
+        'tecnico': tecnico,
+        'sig_type': sig_type,
+        'sig_label': resolved['sig_label'],
+        'signature_url': _get_tecnico_signature_url(tecnico.id, sig_type),
+    })
+    return render_template('tecnico_firma_publica.html', **template_data), 200
 
 
 @app.route('/uploads/tecnicos/fotos/<filename>')
