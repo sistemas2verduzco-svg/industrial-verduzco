@@ -398,7 +398,7 @@
         <button class="btn btn-print" onclick="printCredencialSeguridad()">&#128424; Imprimir Credencial Seguridad</button>
         <button type="button" class="btn btn-jpg" id="btnJpgSeguridad" onclick="downloadCredencialSeguridadJpg()">&#128247; Descargar JPG</button>
     </div>
-    <p class="hint">Imprimir/PDF: escala 100% y gr&aacute;ficos de fondo activados. JPG: descarga frente y reverso (~300 DPI, CR80).</p>
+    <p class="hint">JPG: generado en servidor (300 DPI, logo n&iacute;tido). Imprimir/PDF: escala 100% y gr&aacute;ficos de fondo activados.</p>
 </div>
 
 <div class="card-wrapper">
@@ -635,7 +635,6 @@
 
 </div><!-- /card-wrapper -->
 
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" crossorigin="anonymous"></script>
 <script src="{{ url_for('static', filename='js/credencial_jpg_export.js') }}"></script>
 <script>
 const CREDENCIAL_EMPLEADO_ID = {{ tecnico.numero_empleado|tojson }};
@@ -643,6 +642,7 @@ const CREDENCIAL_EMPLEADO_ID = {{ tecnico.numero_empleado|tojson }};
 function downloadCredencialSeguridadJpg() {
     exportCredentialCards({
         cardSelector: '.card-item .wm-card',
+        exportBaseUrl: '/tecnicos/{{ tecnico.id }}/credencial-seguridad/export',
         prefix: 'credencial_seguridad',
         empleadoId: CREDENCIAL_EMPLEADO_ID,
         sides: ['frente', 'reverso'],

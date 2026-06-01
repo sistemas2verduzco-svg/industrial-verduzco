@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash, abort
 from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqNotaVenta, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, AlertaBuzonGeneral, Tecnico, LogVerificacion
 from auth import AuthManager
 from email_manager import EmailManager
@@ -6305,6 +6305,45 @@ def servir_firma_tecnico(filename):
     return send_from_directory(os.path.abspath(TECNICOS_FIRMAS_DIR), filename)
 
 
+def _get_tecnico_signature_abs_path(tecnico_id, sig_type):
+    for ext in ('png', 'jpg', 'jpeg', 'webp'):
+        name = f'tec_{int(tecnico_id)}_{sig_type}.{ext}'
+        abs_path = os.path.join(TECNICOS_FIRMAS_DIR, name)
+        if os.path.exists(abs_path):
+            return abs_path
+    return None
+
+
+def _send_credencial_jpeg(tecnico, variant, lado, vigente=True):
+    from credencial_export import render_credencial_jpeg
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    try:
+        data = render_credencial_jpeg(
+            tecnico,
+            variant,
+            lado,
+            base_dir,
+            firma_cri_path=_get_tecnico_signature_abs_path(tecnico.id, 'cri'),
+            firma_supervision_path=_get_tecnico_signature_abs_path(tecnico.id, 'supervision'),
+            vigente=vigente,
+        )
+    except ValueError:
+        abort(404)
+    except Exception as exc:
+        logger.exception('Error generando JPG de credencial: %s', exc)
+        abort(500)
+    num = getattr(tecnico, 'numero_empleado', None) or tecnico.id
+    prefix = 'credencial_seguridad' if variant == 'seguridad' else 'credencial'
+    fname = f'{prefix}_{num}_{lado}.jpg'
+    return send_file(
+        BytesIO(data),
+        mimetype='image/jpeg',
+        as_attachment=True,
+        download_name=fname,
+    )
+
+
 @app.route('/tecnicos/<int:tid>/credencial')
 @login_required
 def credencial_tecnico(tid):
@@ -6322,6 +6361,18 @@ def credencial_tecnico(tid):
     now = datetime.utcnow()
     vigente = tecnico.esta_vigente(now)
     return render_template('credencial_tecnico.html', tecnico=tecnico, vigente=vigente, now=now)
+
+
+@app.route('/tecnicos/<int:tid>/credencial/export/<lado>.jpg')
+@login_required
+def credencial_tecnico_export_jpg(tid, lado):
+    user = get_current_user()
+    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+        return render_template('403.html'), 403
+    tecnico = Tecnico.query.get_or_404(tid)
+    now = datetime.utcnow()
+    vigente = tecnico.esta_vigente(now)
+    return _send_credencial_jpeg(tecnico, 'corporativa', lado, vigente=vigente)
 
 
 @app.route('/tecnicos/<int:tid>/credencial-seguridad')
@@ -6349,6 +6400,18 @@ def credencial_walmart(tid):
         firma_cri_url=firma_cri_url,
         firma_supervision_url=firma_supervision_url,
     )
+
+
+@app.route('/tecnicos/<int:tid>/credencial-seguridad/export/<lado>.jpg')
+@login_required
+def credencial_seguridad_export_jpg(tid, lado):
+    user = get_current_user()
+    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+        return render_template('403.html'), 403
+    tecnico = Tecnico.query.get_or_404(tid)
+    now = datetime.utcnow()
+    vigente = tecnico.esta_vigente(now)
+    return _send_credencial_jpeg(tecnico, 'seguridad', lado, vigente=vigente)
 
 
 # ==================== MÓDULO HOJAS DE RUTA NUEVO ====================
