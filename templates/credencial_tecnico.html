@@ -41,6 +41,8 @@
         .btn:hover { opacity: .85; }
         .btn-back  { background: #546e7a; color: #fff; }
         .btn-print { background: #0f5f34; color: #fff; }
+        .btn-jpg   { background: #1565c0; color: #fff; }
+        .btn:disabled { opacity: .55; cursor: wait; }
         .hint { text-align: center; color: #666; font-size: .8rem; }
 
         /* ══ WRAPPER ══ */
@@ -409,8 +411,9 @@
     <div class="ctrl-row">
         <button class="btn btn-back" onclick="history.back()">&#8592; Volver</button>
         <button class="btn btn-print" onclick="printCredencialVerduzco()">&#128424; Imprimir Credencial</button>
+        <button type="button" class="btn btn-jpg" id="btnJpgVerduzco" onclick="downloadCredencialVerduzcoJpg()">&#128247; Descargar JPG</button>
     </div>
-    <p class="hint">Formato ampliado para impresi&oacute;n (140% sobre CR80). Usa escala 100% al guardar PDF.</p>
+    <p class="hint">Imprimir/PDF: escala 100% y gr&aacute;ficos de fondo activados. JPG: descarga frente y reverso (~300 DPI, CR80).</p>
 </div>
 
 <div class="card-wrapper">
@@ -528,7 +531,21 @@
 
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" crossorigin="anonymous"></script>
+<script src="{{ url_for('static', filename='js/credencial_jpg_export.js') }}"></script>
 <script>
+const CREDENCIAL_EMPLEADO_ID = {{ tecnico.numero_empleado|tojson }};
+
+function downloadCredencialVerduzcoJpg() {
+    exportCredentialCards({
+        cardSelector: '.card-item .corp-card',
+        prefix: 'credencial',
+        empleadoId: CREDENCIAL_EMPLEADO_ID,
+        sides: ['frente', 'reverso'],
+        buttonEl: document.getElementById('btnJpgVerduzco'),
+    });
+}
+
 function printCredencialVerduzco() {
     const msg = [
         'Configuracion obligatoria para imprimir a color:',
