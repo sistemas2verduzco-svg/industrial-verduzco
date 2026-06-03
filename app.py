@@ -2272,12 +2272,12 @@ def _upsert_contpaq_data(payload):
         if not pedido:
             pedido = ContpaqPedido(document_id=doc_id)
             db.session.add(pedido)
-        pedido.doc_folio = str(row.get('DocFolio') or '').strip()
+        pedido.doc_folio = _contpaq_clip(row.get('DocFolio'), 80)
         pedido.serie = _serie_from_folio(pedido.doc_folio)
-        pedido.cliente = str(row.get('BusinessEntityName') or '').strip()
-        pedido.sucursal = str(row.get('Sucursal') or '').strip()
-        pedido.titulo = _contpaq_norm_text(row.get('Title'))
-        pedido.periodo_semana = _contpaq_norm_text(row.get('PeriodWeek'))
+        pedido.cliente = _contpaq_clip(row.get('BusinessEntityName'), 255)
+        pedido.sucursal = _contpaq_clip(row.get('Sucursal'), 255)
+        pedido.titulo = _contpaq_clip(_contpaq_norm_text(row.get('Title')), 255)
+        pedido.periodo_semana = _contpaq_clip(_contpaq_norm_text(row.get('PeriodWeek')), 30)
         pedido.fecha_documento = _parse_datetime(row.get('DateDocument'))
         pedido.updated_at = datetime.utcnow()
         pedidos_map[doc_id] = pedido
@@ -2314,9 +2314,9 @@ def _upsert_contpaq_data(payload):
         if not remision:
             remision = ContpaqRemision(document_id=doc_id)
             db.session.add(remision)
-        remision.doc_folio = str(row.get('DocFolio') or '').strip()
-        remision.cliente = str(row.get('BusinessEntityName') or '').strip()
-        remision.sucursal = str(row.get('Sucursal') or '').strip()
+        remision.doc_folio = _contpaq_clip(row.get('DocFolio'), 80)
+        remision.cliente = _contpaq_clip(row.get('BusinessEntityName'), 255)
+        remision.sucursal = _contpaq_clip(row.get('Sucursal'), 255)
         remision.fecha_documento = _parse_datetime(row.get('DateDocument'))
         source_id = row.get('SourceDocumentID')
         try:
@@ -3108,6 +3108,13 @@ def _contpaq_norm_text(value):
     return re.sub(r'\s+', ' ', raw)
 
 
+def _contpaq_clip(value, max_len):
+    text = str(value or '').strip()
+    if max_len and len(text) > max_len:
+        return text[:max_len]
+    return text
+
+
 def _contpaq_norm_qty(value):
     try:
         numeric = float(str(value).replace(',', '').strip())
@@ -3374,6 +3381,9 @@ def log_access_y_cierre_por_hora():
         path = request.path
         # skip static files and health checks
         if path.startswith('/static') or path.startswith('/favicon'):
+            return
+        # sync push: payload grande; no registrar en access_logs
+        if path.startswith('/api/contpaq/') and path.endswith('/sync/push'):
             return
 
         _apply_machine_schedule()
@@ -12710,15 +12720,16 @@ def api_contpaq_sync_push():
     if not isinstance(payload, dict):
         return jsonify({'error': 'Payload invalido'}), 400
 
-    sync_run = ContpaqSyncRun(
-        status='running',
-        started_at=datetime.utcnow(),
-        message='started_by=push_api'
-    )
-    db.session.add(sync_run)
-    db.session.commit()
-
+    sync_run = None
     try:
+        sync_run = ContpaqSyncRun(
+            status='running',
+            started_at=datetime.utcnow(),
+            message='started_by=push_api'
+        )
+        db.session.add(sync_run)
+        db.session.commit()
+
         stats = _upsert_contpaq_data(payload)
         sync_run.status = 'success'
         sync_run.finished_at = datetime.utcnow()
@@ -12731,15 +12742,20 @@ def api_contpaq_sync_push():
         db.session.commit()
         return jsonify({'ok': True, 'run_id': sync_run.id, 'stats': stats}), 200
     except Exception as exc:
+        logger.error('[CONTPAQ] Error push agente: %s', exc, exc_info=True)
         db.session.rollback()
-        run = ContpaqSyncRun.query.get(sync_run.id)
-        if run:
-            run.status = 'error'
-            run.finished_at = datetime.utcnow()
-            run.message = str(exc)
-            db.session.add(run)
-            db.session.commit()
-        return jsonify({'ok': False, 'error': str(exc), 'run_id': sync_run.id}), 500
+        run_id = getattr(sync_run, 'id', None)
+        if run_id:
+            try:
+                run = ContpaqSyncRun.query.get(run_id)
+                if run:
+                    run.status = 'error'
+                    run.finished_at = datetime.utcnow()
+                    run.message = str(exc)[:2000]
+                    db.session.commit()
+            except Exception:
+                db.session.rollback()
+        return jsonify({'ok': False, 'error': str(exc), 'run_id': run_id}), 500
 
 
 @app.route('/api/contpaq/supplier_ot/sync/push', methods=['POST'])
