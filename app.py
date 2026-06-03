@@ -2249,6 +2249,38 @@ WHERE dbo.vwLBSProductsToDeliver.QtyToBeDelivered > 0
 """
 
 
+def _ensure_contpaq_notas_venta_schema():
+    """Aplica migracion minima de notas de venta si falta en BD de produccion."""
+    try:
+        db.session.execute(db.text("""
+            CREATE TABLE IF NOT EXISTS contpaq_notas_venta (
+                id SERIAL PRIMARY KEY,
+                document_id BIGINT NOT NULL UNIQUE,
+                source_document_id BIGINT,
+                destination_document_id BIGINT,
+                doc_folio VARCHAR(80) NOT NULL,
+                cliente VARCHAR(255),
+                sucursal VARCHAR(255),
+                fecha_documento TIMESTAMP,
+                subtotal DOUBLE PRECISION,
+                total DOUBLE PRECISION,
+                total_paid DOUBLE PRECISION,
+                total_invoice_paid DOUBLE PRECISION,
+                total_invoice_balance DOUBLE PRECISION,
+                balance DOUBLE PRECISION,
+                updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+            )
+        """))
+        db.session.execute(db.text("""
+            ALTER TABLE contpaq_sync_runs
+            ADD COLUMN IF NOT EXISTS notas_venta_upserted INTEGER NOT NULL DEFAULT 0
+        """))
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        logger.warning('[CONTPAQ] No se pudo asegurar schema notas_venta: %s', exc)
+
+
 def _upsert_contpaq_data(payload):
     pedidos = payload.get('pedidos') or []
     pedidos_detalle = payload.get('pedidos_detalle') or []
@@ -3281,6 +3313,7 @@ def run_contpaq_sync(trigger='manual'):
 
     try:
         logger.info('[CONTPAQ] Iniciando sincronizacion hacia nube...')
+        _ensure_contpaq_notas_venta_schema()
         if not CONTPAQ_CUSTOMER_NAME:
             raise RuntimeError('CONTPAQ_CUSTOMER_NAME vacio.')
 
@@ -12722,6 +12755,7 @@ def api_contpaq_sync_push():
 
     sync_run = None
     try:
+        _ensure_contpaq_notas_venta_schema()
         sync_run = ContpaqSyncRun(
             status='running',
             started_at=datetime.utcnow(),
