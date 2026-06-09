@@ -11903,6 +11903,59 @@ def actualizar_ingeniero(ingeniero_id):
 
 # ==================== PROCESOS Y CLAVES - ADMIN PANEL ====================
 
+def _build_claves_procesos_export_rows(solo_activas=False):
+    """Filas para exportar clave + descripción + cada proceso en secuencia."""
+    q = ClaveProducto.query.order_by(ClaveProducto.clave.asc())
+    if solo_activas:
+        q = q.filter_by(activo=True)
+    rows = []
+    for clave in q.all():
+        procesos = (
+            ClaveProceso.query.filter_by(clave_id=clave.id)
+            .order_by(ClaveProceso.orden.asc(), ClaveProceso.id.asc())
+            .all()
+        )
+        if not procesos:
+            rows.append({
+                'clave': clave.clave,
+                'descripcion_clave': _clean_nullable_text(clave.nombre) or '',
+                'notas_clave': _clean_nullable_text(clave.notas) or '',
+                'clave_activa': 'SI' if clave.activo else 'NO',
+                'orden': '',
+                'proceso_codigo': '',
+                'proceso_nombre': '',
+                'proceso_descripcion': '',
+                'operacion': '',
+                'centro_trabajo': '',
+                't_e': '',
+                't_tct': '',
+                't_tco': '',
+                't_to': '',
+                'notas_proceso': '',
+            })
+            continue
+        for cp in procesos:
+            proc = cp.proceso
+            rows.append({
+                'clave': clave.clave,
+                'descripcion_clave': _clean_nullable_text(clave.nombre) or '',
+                'notas_clave': _clean_nullable_text(clave.notas) or '',
+                'clave_activa': 'SI' if clave.activo else 'NO',
+                'orden': cp.orden,
+                'proceso_codigo': _clean_nullable_text(proc.codigo) if proc else '',
+                'proceso_nombre': _clean_nullable_text(proc.nombre) if proc else '',
+                'proceso_descripcion': _clean_nullable_text(proc.descripcion) if proc else '',
+                'operacion': _clean_nullable_text(cp.operacion) or (_clean_nullable_text(proc.operacion) if proc else ''),
+                'centro_trabajo': _clean_nullable_text(cp.centro_trabajo) or (_clean_nullable_text(proc.centro_trabajo) if proc else ''),
+                't_e': _clean_nullable_text(cp.t_e) or '',
+                't_tct': _clean_nullable_text(cp.t_tct) or '',
+                't_tco': _clean_nullable_text(cp.t_tco) or '',
+                't_to': _clean_nullable_text(cp.t_to) or '',
+                'notas_proceso': _clean_nullable_text(cp.notas) or '',
+            })
+    return rows
+
+
 @app.route('/procesos')
 @login_required
 @requires_any_permission([('procesos', 'view'), ('procesos', 'edit'), ('procesos', 'update'), ('procesos', 'create'), ('procesos', 'delete')])
@@ -11917,6 +11970,32 @@ def procesos_panel():
     except Exception as e:
         logger.error(f"Error cargando panel de procesos: {e}")
         return render_template('procesos_admin.html', claves=[], procesos=[], clave_sel=None, error=str(e))
+
+
+@app.route('/procesos/export.csv', methods=['GET'])
+@login_required
+@requires_any_permission([('procesos', 'view'), ('procesos', 'edit'), ('procesos', 'update'), ('procesos', 'create'), ('procesos', 'delete')])
+def procesos_claves_export_csv():
+    """Exporta informe completo: claves, descripción y todos sus procesos."""
+    try:
+        solo_activas = (request.args.get('solo_activas') or '').strip().lower() in ('1', 'true', 'yes', 'on')
+        rows = _build_claves_procesos_export_rows(solo_activas=solo_activas)
+        columns = [
+            'clave', 'descripcion_clave', 'notas_clave', 'clave_activa', 'orden',
+            'proceso_codigo', 'proceso_nombre', 'proceso_descripcion',
+            'operacion', 'centro_trabajo', 't_e', 't_tct', 't_tco', 't_to', 'notas_proceso',
+        ]
+        df = pd.DataFrame(rows, columns=columns)
+        csv_data = df.to_csv(index=False, encoding='utf-8-sig')
+        stamp = datetime.utcnow().strftime('%Y%m%d')
+        suffix = '_activas' if solo_activas else '_todas'
+        response = make_response(csv_data)
+        response.headers['Content-Type'] = 'text/csv; charset=utf-8'
+        response.headers['Content-Disposition'] = f'attachment; filename=claves_procesos{suffix}_{stamp}.csv'
+        return response
+    except Exception as exc:
+        logger.error(f'Error exportando claves/procesos CSV: {exc}', exc_info=True)
+        return jsonify({'error': str(exc)}), 500
 
 
 @app.route('/procesos/clave/save', methods=['POST'])
