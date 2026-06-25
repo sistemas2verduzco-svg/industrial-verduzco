@@ -259,8 +259,9 @@
             flex: 1;
             display: flex;
             flex-direction: column;
-            padding: 7mm 4mm 4mm;
+            padding: 6.5mm 4mm 7mm;
             overflow: hidden;
+            min-height: 0;
         }
         .back-name {
             font-size: 9pt;
@@ -273,7 +274,7 @@
             width: 36mm;
             height: .5mm;
             background: linear-gradient(90deg, transparent, #0f5f34 30%, #0f5f34 70%, transparent);
-            margin: 2mm auto 3mm;
+            margin: 1.5mm auto 2mm;
         }
         /* tabla de datos */
         .back-table {
@@ -283,7 +284,7 @@
         .back-table tr { border-bottom: .3mm solid #f0f0f0; }
         .back-table tr:last-child { border-bottom: none; }
         .back-table td {
-            padding: 1mm 1mm;
+            padding: 0.65mm 1mm;
             vertical-align: middle;
         }
         .back-table td.lbl {
@@ -309,22 +310,23 @@
         }
         .na { color: #bbb !important; font-weight: 400 !important; }
 
-        /* ola verde con QR — sin solapamiento */
+        /* ola verde con QR — curva contenida, sin tapar Vencimiento */
         .back-wave {
-            height: 28mm;
+            height: 26mm;
             background: linear-gradient(145deg, #0d5c32 0%, #1b7a42 60%, #0f5f34 100%);
             position: relative;
             flex-shrink: 0;
             border-radius: 0 0 3.5mm 3.5mm;
+            margin-top: -1mm;
         }
         /* curva superior de la ola */
         .back-wave::before {
             content: '';
             position: absolute;
-            top: -5.5mm;
+            top: -3mm;
             left: -4mm;
             width: 62mm;
-            height: 11mm;
+            height: 7mm;
             background: linear-gradient(145deg, #0d5c32, #0f5f34);
             border-radius: 50% 50% 0 0;
         }

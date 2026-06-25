@@ -622,13 +622,14 @@ def _render_corporativa_reverso(tecnico, base_dir: str) -> Image.Image:
     img = Image.new('RGB', (w, h), '#ffffff')
     draw = ImageDraw.Draw(img)
 
-    wave_h = mm(28)
+    wave_h = mm(26)
+    curve_inset = mm(3)
     white_h = h - wave_h
-    y = mm(7)
+    y = mm(6.5)
     nombre = getattr(tecnico, 'nombre', '') or ''
     y = _draw_text_center(draw, nombre, w // 2, y, 9, '#1a1a1a', bold=True, max_width=w - mm(8))
     div_w = mm(36)
-    draw.rectangle([(w - div_w) // 2, y + mm(2), (w + div_w) // 2, y + mm(2.5)], fill='#0f5f34')
+    draw.rectangle([(w - div_w) // 2, y + mm(1.5), (w + div_w) // 2, y + mm(2)], fill='#0f5f34')
 
     rows = [
         ('NSS', getattr(tecnico, 'nss', None) or 'N/A'),
@@ -648,21 +649,23 @@ def _render_corporativa_reverso(tecnico, base_dir: str) -> Image.Image:
             else '—',
         ),
     ]
-    y += mm(5)
+    y += mm(3.5)
     pad = mm(4)
+    row_h = mm(3.1)
+    safe_bottom = white_h - curve_inset - mm(1.5)
     for lbl, val in rows:
         _draw_text_left(draw, lbl.upper(), pad, y, 4, '#888888', bold=True)
         na = val in ('N/A', '—', '')
         _draw_text_right(draw, val, w - pad, y, 5.2, '#bbbbbb' if na else '#1a1a1a')
-        y += mm(3.5)
-        if y > white_h - mm(6):
+        y += row_h
+        if y > safe_bottom:
             break
 
     draw.rectangle([0, white_h, w, h], fill='#0f5f34')
-    draw.ellipse([-mm(4), white_h - mm(6), w + mm(4), white_h + mm(5)], fill='#0f5f34')
+    draw.ellipse([-mm(4), white_h - curve_inset, w + mm(4), white_h + mm(3.5)], fill='#0f5f34')
 
     qr = _open_image(_resolve_upload(getattr(tecnico, 'qr_imagen', None), base_dir))
-    qy = white_h + mm(3.5)
+    qy = white_h + mm(2.5)
     if qr:
         _paste_contain(img, qr, mm(4), qy, mm(17), mm(17))
     scan_x = mm(24)
