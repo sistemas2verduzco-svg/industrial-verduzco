@@ -13511,6 +13511,32 @@ def api_maquinaria_odoo_test():
         return jsonify({'ok': False, 'configured': True, 'error': str(exc)}), 502
 
 
+@app.route('/api/maquinaria/odoo/databases')
+@login_required
+def api_maquinaria_odoo_databases():
+    """Lista las bases de datos del servidor Odoo (solo admin).
+
+    Util cuando Odoo es auto-alojado y no se conoce el nombre exacto de la base.
+    Algunos servidores lo tienen deshabilitado (list_db = False).
+    """
+    user = get_current_user()
+    if not (user and user.es_admin):
+        return jsonify({'ok': False, 'error': 'Solo administradores'}), 403
+    if not OdooClient.is_configured():
+        return jsonify({'ok': False, 'error': 'Odoo no configurado'}), 400
+    try:
+        client = OdooClient.from_env()
+        dbs = client.list_databases()
+        return jsonify({'ok': True, 'databases': dbs, 'detected_db': client.db})
+    except OdooError as exc:
+        return jsonify({
+            'ok': False,
+            'error': str(exc),
+            'hint': 'Si el servidor tiene list_db deshabilitado, pide el nombre '
+                    'exacto de la base al administrador de Odoo y ponlo en ODOO_DB.',
+        }), 502
+
+
 @app.route('/api/maquinaria/odoo/discover')
 @login_required
 def api_maquinaria_odoo_discover():

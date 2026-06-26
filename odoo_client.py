@@ -133,6 +133,22 @@ class OdooClient:
         endpoint = f'{self.url}/xmlrpc/2/{path}'
         return xmlrpc.client.ServerProxy(endpoint, allow_none=True)
 
+    def list_databases(self) -> List[str]:
+        """Intenta listar las bases de datos del servidor (servicio 'db').
+
+        Muchos Odoo lo deshabilitan (list_db = False); en ese caso lanza OdooError.
+        """
+        prev = socket.getdefaulttimeout()
+        socket.setdefaulttimeout(self.timeout)
+        try:
+            db_proxy = self._proxy('db')
+            result = db_proxy.list()
+            return [str(x) for x in (result or [])]
+        except (xmlrpc.client.Fault, xmlrpc.client.ProtocolError, OSError) as exc:
+            raise OdooError(f'No se pudo listar bases de datos: {exc}') from exc
+        finally:
+            socket.setdefaulttimeout(prev)
+
     def version(self) -> Dict[str, Any]:
         prev = socket.getdefaulttimeout()
         socket.setdefaulttimeout(self.timeout)
