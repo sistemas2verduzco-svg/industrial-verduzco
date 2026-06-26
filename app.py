@@ -13002,8 +13002,24 @@ def _maquinaria_tables_status():
 def _ensure_maquinaria_ordenes_extension_tables():
     """Asegura tablas extendidas de OT (snapshot BOM + procesos OT) sin depender de migración manual."""
     try:
-        MaquinariaOrdenBOMItem.__table__.create(bind=db.engine, checkfirst=True)
         MaquinariaOrdenProceso.__table__.create(bind=db.engine, checkfirst=True)
+        MaquinariaOrdenBOMItem.__table__.create(bind=db.engine, checkfirst=True)
+        # Columnas nuevas del flujo de OT por solicitud (idempotente en Postgres)
+        alter_stmts = [
+            "ALTER TABLE maquinaria_ordenes_trabajo ADD COLUMN IF NOT EXISTS solicitud_id INTEGER",
+            "ALTER TABLE maquinaria_ordenes_trabajo ADD COLUMN IF NOT EXISTS descripcion TEXT",
+            "ALTER TABLE maquinaria_ordenes_trabajo ADD COLUMN IF NOT EXISTS bom_id INTEGER",
+            "ALTER TABLE maquinaria_ordenes_trabajo ADD COLUMN IF NOT EXISTS orden_compra_name VARCHAR(120)",
+            "ALTER TABLE maquinaria_ordenes_trabajo ADD COLUMN IF NOT EXISTS orden_compra_odoo_id BIGINT",
+            "ALTER TABLE maquinaria_ordenes_trabajo ADD COLUMN IF NOT EXISTS cliente VARCHAR(255)",
+            "ALTER TABLE maquinaria_orden_bom_items ADD COLUMN IF NOT EXISTS proceso_id INTEGER",
+        ]
+        with db.engine.begin() as conn:
+            for stmt in alter_stmts:
+                try:
+                    conn.execute(text(stmt))
+                except Exception as col_exc:
+                    logger.warning(f"OT extensión columna omitida: {col_exc}")
         return True
     except Exception as exc:
         logger.error(f"No se pudieron asegurar tablas OT extensión: {exc}", exc_info=True)
@@ -13146,63 +13162,12 @@ def maquinaria_ordenes_page():
     ready, missing = _maquinaria_tables_status()
     if ready:
         _ensure_maquinaria_ordenes_extension_tables()
-    ordenes = MaquinariaOrdenTrabajo.query.order_by(MaquinariaOrdenTrabajo.id.desc()).limit(60).all() if ready else []
-    pedidos = MaquinariaPedido.query.order_by(MaquinariaPedido.id.desc()).limit(80).all() if ready else []
-    pedidos_selector_data = []
-    if ready:
-        pedidos_for_group = MaquinariaPedido.query.order_by(MaquinariaPedido.id.desc()).all()
-        doc_ids = list({int(p.contpaq_document_id) for p in pedidos_for_group if p.contpaq_document_id})
-        contpaq_lines_by_doc = {}
-        if doc_ids:
-            contpaq_rows = MaquinariaContpaqPedidoDetalle.query.filter(
-                MaquinariaContpaqPedidoDetalle.document_id.in_(doc_ids)
-            ).order_by(MaquinariaContpaqPedidoDetalle.document_id.asc(), MaquinariaContpaqPedidoDetalle.line_number.asc()).all()
-            for row in contpaq_rows:
-                contpaq_lines_by_doc.setdefault(int(row.document_id), []).append({
-                    'pedido_id': None,
-                    'line_number': int(row.line_number or 0),
-                    'clave_maquina': row.product_key or '',
-                    'descripcion_maquina': row.description or '',
-                    'cantidad': max(1, int(row.quantity or 1)),
-                    'estado': 'contpaq',
-                })
-
-        grouped = {}
-        for p in pedidos_for_group:
-            group_key = f"contpaq:{p.contpaq_document_id}" if p.contpaq_document_id else f"pedido:{p.id}"
-            if group_key not in grouped:
-                grouped[group_key] = {
-                    'group_key': group_key,
-                    'source_pedido_id': p.id,
-                    'folio_interno': p.folio_interno or '',
-                    'cliente': p.cliente or '',
-                    'contpaq_document_id': p.contpaq_document_id,
-                    'lineas': [],
-                }
-            if not p.contpaq_document_id:
-                grouped[group_key]['lineas'].append({
-                    'pedido_id': p.id,
-                    'line_number': None,
-                    'clave_maquina': p.clave_maquina or '',
-                    'descripcion_maquina': p.descripcion_maquina or '',
-                    'cantidad': int(p.cantidad or 1),
-                    'estado': p.estado or '',
-                })
-
-        for g in grouped.values():
-            docid = g.get('contpaq_document_id')
-            if docid and docid in contpaq_lines_by_doc:
-                g['lineas'] = contpaq_lines_by_doc.get(docid, [])
-
-        pedidos_selector_data = list(grouped.values())
-        pedidos_selector_data.sort(key=lambda g: g.get('source_pedido_id', 0), reverse=True)
+    ordenes = MaquinariaOrdenTrabajo.query.order_by(MaquinariaOrdenTrabajo.id.desc()).limit(200).all() if ready else []
     return render_template(
         'maquinaria_ordenes_trabajo.html',
         setup_required=not ready,
         missing_tables=missing,
         ordenes=ordenes,
-        pedidos=pedidos,
-        pedidos_selector_data=pedidos_selector_data,
     )
 
 
@@ -13236,6 +13201,163 @@ def api_maquinaria_orden_detalle(orden_id):
     bom_items = [i.to_dict() for i in sorted((orden.bom_items_ot or []), key=lambda x: x.id)]
     procesos = [p.to_dict() for p in sorted((orden.procesos_ot or []), key=lambda x: (x.orden or 0, x.id or 0))]
     return jsonify({'ok': True, 'orden': orden.to_dict(), 'bom_items': bom_items, 'procesos': procesos})
+
+
+@app.route('/maquinaria/ordenes-trabajo/<int:orden_id>/editar')
+@login_required
+@requires_any_permission([('maquinaria_ordenes', 'view'), ('maquinaria_ordenes', 'edit'), ('maquinaria_ordenes', 'create'), ('maquinaria_ordenes', 'update')])
+def maquinaria_orden_builder_page(orden_id):
+    ready, missing = _maquinaria_tables_status()
+    if not ready:
+        return redirect(url_for('maquinaria_ordenes_page'))
+    _ensure_maquinaria_ordenes_extension_tables()
+    orden = MaquinariaOrdenTrabajo.query.get_or_404(orden_id)
+    boms = MaquinariaBOM.query.filter_by(estado='activo').order_by(MaquinariaBOM.clave_maquina.asc()).all()
+    return render_template('maquinaria_orden_builder.html', orden=orden, boms=boms)
+
+
+@app.route('/api/maquinaria/ordenes-trabajo/<int:orden_id>/asignar-bom', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_ordenes', 'edit'), ('maquinaria_ordenes', 'create'), ('maquinaria_ordenes', 'update')])
+def api_maquinaria_orden_asignar_bom(orden_id):
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return jsonify({'ok': False, 'error': 'Tablas de Maquinaria no disponibles'}), 503
+    _ensure_maquinaria_ordenes_extension_tables()
+    orden = MaquinariaOrdenTrabajo.query.get_or_404(orden_id)
+    payload = request.get_json(silent=True) or {}
+    bom_id = payload.get('bom_id')
+    try:
+        bom_id = int(bom_id)
+    except Exception:
+        return jsonify({'ok': False, 'error': 'bom_id invalido'}), 400
+    bom = MaquinariaBOM.query.get(bom_id)
+    if not bom:
+        return jsonify({'ok': False, 'error': 'BOM no encontrado'}), 404
+    try:
+        # Reemplaza el snapshot de piezas con el BOM seleccionado (se pierden asignaciones previas)
+        MaquinariaOrdenBOMItem.query.filter_by(orden_trabajo_id=orden.id).delete()
+        for comp in sorted((bom.componentes or []), key=lambda x: x.id):
+            db.session.add(MaquinariaOrdenBOMItem(
+                orden_trabajo_id=orden.id,
+                bom_id=bom.id,
+                proceso_id=None,
+                codigo_componente=comp.codigo_componente,
+                nombre_componente=comp.nombre_componente,
+                cantidad=comp.cantidad,
+                unidad=comp.unidad,
+                proceso_base=comp.proceso_base,
+            ))
+        orden.bom_id = bom.id
+        orden.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'ok': True, 'bom': bom.to_dict()})
+    except Exception as exc:
+        db.session.rollback()
+        logger.error(f'[OT] Error al asignar BOM: {exc}', exc_info=True)
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/maquinaria/ordenes-trabajo/<int:orden_id>/procesos', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_ordenes', 'edit'), ('maquinaria_ordenes', 'create'), ('maquinaria_ordenes', 'update')])
+def api_maquinaria_orden_proceso_add(orden_id):
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return jsonify({'ok': False, 'error': 'Tablas de Maquinaria no disponibles'}), 503
+    _ensure_maquinaria_ordenes_extension_tables()
+    orden = MaquinariaOrdenTrabajo.query.get_or_404(orden_id)
+    payload = request.get_json(silent=True) or {}
+    nombre = (payload.get('nombre') or '').strip()
+    if not nombre:
+        return jsonify({'ok': False, 'error': 'El nombre del proceso es obligatorio'}), 400
+    try:
+        max_orden = db.session.query(func.max(MaquinariaOrdenProceso.orden)).filter_by(orden_trabajo_id=orden.id).scalar() or 0
+        proc = MaquinariaOrdenProceso(
+            orden_trabajo_id=orden.id,
+            orden=int(max_orden) + 1,
+            nombre=nombre,
+            centro_trabajo=(payload.get('centro_trabajo') or '').strip() or None,
+            operacion=(payload.get('operacion') or '').strip() or None,
+        )
+        db.session.add(proc)
+        db.session.commit()
+        return jsonify({'ok': True, 'proceso': proc.to_dict()})
+    except Exception as exc:
+        db.session.rollback()
+        logger.error(f'[OT] Error al agregar proceso: {exc}', exc_info=True)
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/maquinaria/orden-procesos/<int:proceso_id>/update', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_ordenes', 'edit'), ('maquinaria_ordenes', 'update')])
+def api_maquinaria_orden_proceso_update(proceso_id):
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return jsonify({'ok': False, 'error': 'Tablas de Maquinaria no disponibles'}), 503
+    proc = MaquinariaOrdenProceso.query.get_or_404(proceso_id)
+    payload = request.get_json(silent=True) or {}
+    try:
+        if 'nombre' in payload:
+            nombre = (payload.get('nombre') or '').strip()
+            if nombre:
+                proc.nombre = nombre
+        if 'centro_trabajo' in payload:
+            proc.centro_trabajo = (payload.get('centro_trabajo') or '').strip() or None
+        if 'operacion' in payload:
+            proc.operacion = (payload.get('operacion') or '').strip() or None
+        proc.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'ok': True, 'proceso': proc.to_dict()})
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/maquinaria/orden-procesos/<int:proceso_id>/delete', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_ordenes', 'delete'), ('maquinaria_ordenes', 'edit'), ('maquinaria_ordenes', 'update')])
+def api_maquinaria_orden_proceso_delete(proceso_id):
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return jsonify({'ok': False, 'error': 'Tablas de Maquinaria no disponibles'}), 503
+    proc = MaquinariaOrdenProceso.query.get_or_404(proceso_id)
+    try:
+        # Las piezas asignadas a este proceso vuelven a "sin asignar"
+        MaquinariaOrdenBOMItem.query.filter_by(proceso_id=proc.id).update({'proceso_id': None})
+        db.session.delete(proc)
+        db.session.commit()
+        return jsonify({'ok': True})
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/maquinaria/orden-bom-items/<int:item_id>/asignar-proceso', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_ordenes', 'edit'), ('maquinaria_ordenes', 'update')])
+def api_maquinaria_orden_item_asignar_proceso(item_id):
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return jsonify({'ok': False, 'error': 'Tablas de Maquinaria no disponibles'}), 503
+    item = MaquinariaOrdenBOMItem.query.get_or_404(item_id)
+    payload = request.get_json(silent=True) or {}
+    proceso_id = payload.get('proceso_id')
+    try:
+        if proceso_id in (None, '', 0, '0'):
+            item.proceso_id = None
+        else:
+            proceso_id = int(proceso_id)
+            proc = MaquinariaOrdenProceso.query.get(proceso_id)
+            if not proc or proc.orden_trabajo_id != item.orden_trabajo_id:
+                return jsonify({'ok': False, 'error': 'Proceso invalido'}), 400
+            item.proceso_id = proc.id
+        db.session.commit()
+        return jsonify({'ok': True, 'item': item.to_dict()})
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(exc)}), 500
 
 
 @app.route('/maquinaria/ordenes-trabajo/<int:orden_id>/imprimir')
@@ -13916,12 +14038,48 @@ def api_maquinaria_solicitud_generar(solicitud_id):
     if not sol.items:
         return jsonify({'ok': False, 'error': 'La solicitud no tiene productos'}), 400
     try:
+        _ensure_maquinaria_ordenes_extension_tables()
+
+        def _new_ot_folio(idx):
+            base = f"OT-{sol.folio}-{idx:02d}"
+            folio = base
+            bump = 1
+            while MaquinariaOrdenTrabajo.query.filter_by(folio_ot=folio).first() is not None:
+                folio = f"{base}-{bump}"
+                bump += 1
+            return folio
+
+        creadas = 0
+        # Evita duplicar OT si la solicitud ya se habia generado antes
+        ya_generadas = MaquinariaOrdenTrabajo.query.filter_by(solicitud_id=sol.id).count()
+        if ya_generadas == 0:
+            for idx, item in enumerate(sorted(sol.items, key=lambda x: x.id), start=1):
+                ot = MaquinariaOrdenTrabajo(
+                    folio_ot=_new_ot_folio(idx),
+                    solicitud_id=sol.id,
+                    clave_maquina=(item.clave or '').strip().upper() or 'SIN-CLAVE',
+                    descripcion=item.descripcion or '',
+                    cantidad=max(1, int(item.cantidad or 1)),
+                    estado='planeacion',
+                    orden_compra_name=sol.orden_compra_name,
+                    orden_compra_odoo_id=sol.orden_compra_odoo_id,
+                    cliente=sol.cliente,
+                    created_by=getattr(user, 'usuario', None) or getattr(user, 'nombre', None),
+                )
+                db.session.add(ot)
+                creadas += 1
+
         sol.estado = 'solicitado'
         sol.updated_at = datetime.utcnow()
         db.session.commit()
-        return jsonify({'ok': True, 'solicitud': sol.to_dict(include_items=True)})
+        return jsonify({
+            'ok': True,
+            'solicitud': sol.to_dict(include_items=True),
+            'ordenes_creadas': creadas,
+        })
     except Exception as exc:
         db.session.rollback()
+        logger.error(f'[SOLICITUD] Error al generar OT: {exc}', exc_info=True)
         return jsonify({'ok': False, 'error': str(exc)}), 500
 
 

@@ -1791,9 +1791,17 @@ class MaquinariaOrdenTrabajo(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     folio_ot = db.Column(db.String(80), nullable=False, unique=True, index=True)
     pedido_id = db.Column(db.Integer, db.ForeignKey('maquinaria_pedidos.id'), nullable=True, index=True)
+    # Nuevo flujo: la OT nace de una solicitud (pedido Odoo tomado + OC relacionada)
+    solicitud_id = db.Column(db.Integer, db.ForeignKey('maquinaria_solicitudes.id'), nullable=True, index=True)
     clave_maquina = db.Column(db.String(120), nullable=False, index=True)
+    descripcion = db.Column(db.Text, nullable=True)
     cantidad = db.Column(db.Integer, nullable=False, default=1)
     estado = db.Column(db.String(40), nullable=False, default='planeacion', index=True)
+    # BOM asignado (manual) y snapshot de la OC relacionada (solo referencia)
+    bom_id = db.Column(db.Integer, db.ForeignKey('maquinaria_boms.id'), nullable=True, index=True)
+    orden_compra_name = db.Column(db.String(120), nullable=True)
+    orden_compra_odoo_id = db.Column(db.BigInteger, nullable=True, index=True)
+    cliente = db.Column(db.String(255), nullable=True)
     fecha_objetivo = db.Column(db.DateTime, nullable=True)
     notas = db.Column(db.Text, nullable=True)
     created_by = db.Column(db.String(100), nullable=True)
@@ -1801,15 +1809,22 @@ class MaquinariaOrdenTrabajo(db.Model):
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     pedido = db.relationship('MaquinariaPedido', backref='ordenes_trabajo')
+    bom = db.relationship('MaquinariaBOM', foreign_keys=[bom_id])
 
     def to_dict(self):
         return {
             'id': self.id,
             'folio_ot': self.folio_ot,
             'pedido_id': self.pedido_id,
+            'solicitud_id': self.solicitud_id,
             'clave_maquina': self.clave_maquina,
+            'descripcion': self.descripcion,
             'cantidad': self.cantidad,
             'estado': self.estado,
+            'bom_id': self.bom_id,
+            'orden_compra_name': self.orden_compra_name,
+            'orden_compra_odoo_id': self.orden_compra_odoo_id,
+            'cliente': self.cliente,
             'fecha_objetivo': self.fecha_objetivo.isoformat() if self.fecha_objetivo else None,
             'notas': self.notas,
             'created_by': self.created_by,
@@ -1824,6 +1839,8 @@ class MaquinariaOrdenBOMItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     orden_trabajo_id = db.Column(db.Integer, db.ForeignKey('maquinaria_ordenes_trabajo.id'), nullable=False, index=True)
     bom_id = db.Column(db.Integer, db.ForeignKey('maquinaria_boms.id'), nullable=True, index=True)
+    # Proceso al que se asigna esta pieza (drag & drop). Null = sin asignar.
+    proceso_id = db.Column(db.Integer, db.ForeignKey('maquinaria_orden_procesos.id', ondelete='SET NULL'), nullable=True, index=True)
     codigo_componente = db.Column(db.String(120), nullable=False, index=True)
     nombre_componente = db.Column(db.String(255), nullable=False)
     cantidad = db.Column(db.Float, nullable=False, default=1)
@@ -1840,6 +1857,7 @@ class MaquinariaOrdenBOMItem(db.Model):
             'id': self.id,
             'orden_trabajo_id': self.orden_trabajo_id,
             'bom_id': self.bom_id,
+            'proceso_id': self.proceso_id,
             'codigo_componente': self.codigo_componente,
             'nombre_componente': self.nombre_componente,
             'cantidad': self.cantidad,

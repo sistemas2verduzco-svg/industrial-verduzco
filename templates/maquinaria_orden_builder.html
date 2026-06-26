@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OT {{ orden.folio_ot }} - Procesos y BOM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .bld { display:grid; gap:16px; }
+        .panel { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; }
+        .muted { color:#64748b; font-size:13px; }
+        .head-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:10px; }
+        .head-item .k { font-size:11px; color:#94a3b8; text-transform:uppercase; letter-spacing:.04em; }
+        .head-item .v { font-size:15px; font-weight:700; color:#0f172a; }
+        .chip { display:inline-flex; align-items:center; border-radius:999px; padding:3px 10px; font-size:12px; font-weight:700; }
+        .chip-ok { background:#dcfce7; color:#166534; border:1px solid #86efac; }
+        .chip-empty { background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; }
+        .btn { border:1px solid #d1d5db; border-radius:8px; background:#fff; cursor:pointer; padding:9px 14px; font-size:13px; font-weight:600; color:#0f172a; }
+        .btn:hover { background:#f1f5f9; }
+        .btn-primary { background:#0f766e; color:#fff; border-color:#0f766e; }
+        .btn-primary:hover { background:#0d6157; }
+        .btn-danger { border-color:#fecaca; background:#fff1f2; color:#b91c1c; }
+        .field { padding:9px 11px; border:1px solid #d1d5db; border-radius:8px; font-size:13px; box-sizing:border-box; }
+
+        .board { display:grid; grid-template-columns: 320px 1fr; gap:16px; align-items:start; }
+        @media (max-width: 1000px){ .board { grid-template-columns:1fr; } }
+
+        .col-title { font-weight:800; color:#334155; margin:0 0 10px 0; display:flex; align-items:center; gap:8px; }
+        .count-badge { background:#e2e8f0; color:#475569; border-radius:999px; font-size:12px; padding:1px 8px; font-weight:700; }
+
+        .dropzone { min-height:60px; display:grid; gap:8px; padding:8px; border-radius:10px; border:2px dashed transparent; transition:.12s; }
+        .dropzone.drag-over { border-color:#14b8a6; background:#f0fdfa; }
+
+        .piece { background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px; cursor:grab; display:flex; justify-content:space-between; gap:10px; align-items:center; }
+        .piece:active { cursor:grabbing; }
+        .piece.dragging { opacity:.45; }
+        .piece .pc-code { font-weight:700; font-size:13px; color:#0f172a; }
+        .piece .pc-name { font-size:12px; color:#64748b; }
+        .piece .pc-qty { font-size:12px; font-weight:700; color:#0f766e; white-space:nowrap; }
+        .drag-handle { color:#94a3b8; font-size:16px; }
+
+        .proc-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px,1fr)); gap:14px; }
+        .proc-card { border:1px solid #e2e8f0; border-radius:12px; background:#fff; }
+        .proc-card-head { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; border-bottom:1px solid #eef2f7; background:#f8fafc; border-radius:12px 12px 0 0; }
+        .proc-card-head .num { background:#0f766e; color:#fff; width:24px; height:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:12px; font-weight:800; flex:none; }
+        .proc-name-in { border:0; background:transparent; font-weight:700; font-size:14px; color:#0f172a; width:100%; padding:2px 4px; }
+        .proc-name-in:focus { outline:1px solid #cbd5e1; border-radius:6px; background:#fff; }
+        .proc-meta { padding:6px 12px; }
+        .proc-meta input { width:100%; border:1px dashed #e2e8f0; border-radius:6px; padding:5px 8px; font-size:12px; box-sizing:border-box; }
+        .toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#0f172a; color:#fff; padding:10px 16px; border-radius:8px; font-size:13px; opacity:0; transition:.2s; z-index:90; }
+        .toast.show { opacity:1; }
+    </style>
+</head>
+<body data-orden-id="{{ orden.id }}">
+    {% include '_sidebar.html' %}
+    <div class="container bld" style="padding-top:20px; max-width:none; padding-left:14px; padding-right:14px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+            <a class="btn" href="/maquinaria/ordenes-trabajo">&larr; Ordenes</a>
+            <h2 style="margin:0;">OT {{ orden.folio_ot }}</h2>
+            <a class="btn" href="/maquinaria/ordenes-trabajo/{{ orden.id }}/imprimir" target="_blank" style="margin-left:auto;">Imprimir</a>
+        </div>
+
+        <div class="panel">
+            <div class="head-grid">
+                <div class="head-item"><div class="k">Clave maquina</div><div class="v">{{ orden.clave_maquina }}</div></div>
+                <div class="head-item"><div class="k">Descripcion</div><div class="v" style="font-weight:500;">{{ orden.descripcion or '-' }}</div></div>
+                <div class="head-item"><div class="k">Cantidad</div><div class="v">{{ orden.cantidad }}</div></div>
+                <div class="head-item"><div class="k">Cliente</div><div class="v" style="font-weight:500;">{{ orden.cliente or '-' }}</div></div>
+                <div class="head-item"><div class="k">Orden de compra</div><div class="v">{{ orden.orden_compra_name or '-' }}</div></div>
+                <div class="head-item"><div class="k">Estado</div><div class="v"><span class="chip chip-empty">{{ orden.estado }}</span></div></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="col-title">1. Asignar BOM a la orden</div>
+            <div class="muted" style="margin-bottom:10px;">Elige el BOM de la maquina. Al asignarlo se cargan sus piezas para acomodarlas en los procesos. <b>Cambiar el BOM reemplaza las piezas y sus asignaciones.</b></div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                <select id="bomSelect" class="field" style="min-width:340px;">
+                    <option value="">— Selecciona un BOM —</option>
+                    {% for b in boms %}
+                    <option value="{{ b.id }}" {% if orden.bom_id == b.id %}selected{% endif %}>{{ b.clave_maquina }} — {{ b.nombre_maquina }}{% if b.version %} (v{{ b.version }}){% endif %}</option>
+                    {% endfor %}
+                </select>
+                <button class="btn btn-primary" onclick="asignarBom()">Asignar BOM</button>
+                <span id="bomStatus" class="muted"></span>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="col-title">2. Procesos y piezas <span class="muted" style="font-weight:500;">— arrastra cada pieza al proceso donde se usa</span></div>
+            <div class="board">
+                <div>
+                    <div class="col-title">Piezas sin asignar <span id="unassignedCount" class="count-badge">0</span></div>
+                    <div id="unassignedZone" class="dropzone" data-proceso="" style="background:#f8fafc; border:2px dashed #e2e8f0;"></div>
+                </div>
+                <div>
+                    <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+                        <input id="newProcName" class="field" placeholder="Nombre del proceso (ej. Corte, Soldadura)" style="flex:1; min-width:220px;">
+                        <input id="newProcCentro" class="field" placeholder="Centro de trabajo (opcional)" style="min-width:180px;">
+                        <button class="btn btn-primary" onclick="addProceso()">+ Agregar proceso</button>
+                    </div>
+                    <div id="procGrid" class="proc-grid"></div>
+                    <div id="noProc" class="muted" style="padding:18px; text-align:center; display:none;">Aun no hay procesos. Agrega el primero arriba.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        const ORDEN_ID = document.body.dataset.ordenId;
+        let STATE = { orden: null, items: [], procesos: [] };
+        let draggingItemId = null;
+
+        function toast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg; t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 1800);
+        }
+
+        async function loadData() {
+            const r = await fetch('/api/maquinaria/ordenes-trabajo/' + ORDEN_ID);
+            const d = await r.json();
+            if (!d.ok) { toast(d.error || 'Error al cargar'); return; }
+            STATE.orden = d.orden;
+            STATE.items = d.bom_items || [];
+            STATE.procesos = d.procesos || [];
+            render();
+        }
+
+        function pieceEl(item) {
+            const el = document.createElement('div');
+            el.className = 'piece';
+            el.draggable = true;
+            el.dataset.itemId = item.id;
+            const qty = (item.cantidad % 1 === 0) ? item.cantidad : item.cantidad;
+            el.innerHTML = `
+                <div>
+                    <div class="pc-code">${item.codigo_componente || ''}</div>
+                    <div class="pc-name">${item.nombre_componente || ''}</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="pc-qty">${qty}${item.unidad ? ' ' + item.unidad : ''}</span>
+                    <span class="drag-handle">⠿</span>
+                </div>`;
+            el.addEventListener('dragstart', () => { draggingItemId = item.id; el.classList.add('dragging'); });
+            el.addEventListener('dragend', () => { draggingItemId = null; el.classList.remove('dragging'); });
+            return el;
+        }
+
+        function wireDropzone(zone, procesoId) {
+            zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
+            zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+            zone.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                zone.classList.remove('drag-over');
+                if (!draggingItemId) return;
+                await asignarProceso(draggingItemId, procesoId);
+            });
+        }
+
+        function render() {
+            // Piezas sin asignar
+            const uz = document.getElementById('unassignedZone');
+            uz.innerHTML = '';
+            const unassigned = STATE.items.filter(i => !i.proceso_id);
+            unassigned.forEach(i => uz.appendChild(pieceEl(i)));
+            document.getElementById('unassignedCount').textContent = unassigned.length;
+            wireDropzone(uz, '');
+
+            // Procesos
+            const grid = document.getElementById('procGrid');
+            grid.innerHTML = '';
+            document.getElementById('noProc').style.display = STATE.procesos.length ? 'none' : 'block';
+            STATE.procesos.forEach((p, idx) => {
+                const card = document.createElement('div');
+                card.className = 'proc-card';
+                const itemsHere = STATE.items.filter(i => i.proceso_id === p.id);
+                card.innerHTML = `
+                    <div class="proc-card-head">
+                        <span class="num">${idx + 1}</span>
+                        <input class="proc-name-in" value="${(p.nombre || '').replace(/"/g,'&quot;')}" onchange="renameProceso(${p.id}, this.value)">
+                        <button class="btn btn-danger" style="padding:5px 9px;" onclick="deleteProceso(${p.id})">✕</button>
+                    </div>
+                    <div class="proc-meta">
+                        <input value="${(p.centro_trabajo || '').replace(/"/g,'&quot;')}" placeholder="Centro de trabajo" onchange="setCentro(${p.id}, this.value)">
+                    </div>
+                    <div class="dropzone proc-zone" data-proceso="${p.id}" style="padding:10px 12px 14px;"></div>`;
+                grid.appendChild(card);
+                const zone = card.querySelector('.proc-zone');
+                itemsHere.forEach(i => zone.appendChild(pieceEl(i)));
+                if (!itemsHere.length) {
+                    const hint = document.createElement('div');
+                    hint.className = 'muted';
+                    hint.style.cssText = 'text-align:center; padding:8px; font-size:12px;';
+                    hint.textContent = 'Suelta piezas aqui';
+                    zone.appendChild(hint);
+                }
+                wireDropzone(zone, p.id);
+            });
+        }
+
+        async function asignarBom() {
+            const bomId = document.getElementById('bomSelect').value;
+            if (!bomId) { toast('Selecciona un BOM'); return; }
+            if (STATE.items.length && !confirm('Cambiar el BOM reemplaza las piezas actuales y sus asignaciones. ¿Continuar?')) return;
+            const r = await fetch('/api/maquinaria/ordenes-trabajo/' + ORDEN_ID + '/asignar-bom', {
+                method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ bom_id: bomId })
+            });
+            const d = await r.json();
+            if (d.ok) { toast('BOM asignado'); document.getElementById('bomStatus').textContent = 'BOM: ' + d.bom.clave_maquina; await loadData(); }
+            else { toast(d.error || 'No se pudo asignar'); }
+        }
+
+        async function addProceso() {
+            const nombre = document.getElementById('newProcName').value.trim();
+            const centro = document.getElementById('newProcCentro').value.trim();
+            if (!nombre) { toast('Escribe el nombre del proceso'); return; }
+            const r = await fetch('/api/maquinaria/ordenes-trabajo/' + ORDEN_ID + '/procesos', {
+                method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ nombre, centro_trabajo: centro })
+            });
+            const d = await r.json();
+            if (d.ok) { document.getElementById('newProcName').value=''; document.getElementById('newProcCentro').value=''; await loadData(); }
+            else { toast(d.error || 'No se pudo agregar'); }
+        }
+
+        async function renameProceso(id, nombre) {
+            await fetch('/api/maquinaria/orden-procesos/' + id + '/update', {
+                method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ nombre })
+            });
+        }
+        async function setCentro(id, centro_trabajo) {
+            await fetch('/api/maquinaria/orden-procesos/' + id + '/update', {
+                method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ centro_trabajo })
+            });
+        }
+        async function deleteProceso(id) {
+            if (!confirm('Eliminar este proceso? Sus piezas volveran a "sin asignar".')) return;
+            const r = await fetch('/api/maquinaria/orden-procesos/' + id + '/delete', { method: 'POST' });
+            const d = await r.json();
+            if (d.ok) { await loadData(); } else { toast(d.error || 'No se pudo eliminar'); }
+        }
+        async function asignarProceso(itemId, procesoId) {
+            const r = await fetch('/api/maquinaria/orden-bom-items/' + itemId + '/asignar-proceso', {
+                method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ proceso_id: procesoId || null })
+            });
+            const d = await r.json();
+            if (d.ok) { await loadData(); } else { toast(d.error || 'No se pudo mover'); }
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
