@@ -2193,6 +2193,82 @@ class OdooOrdenCompraLinea(db.Model):
         }
 
 
+class MaquinariaSolicitud(db.Model):
+    """Solicitud de pedido dentro de la plataforma.
+
+    Puede nacer de un pedido de venta de Odoo (tipo 'odoo') o ser un pedido de
+    stock capturado manualmente (tipo 'stock'). Se le puede relacionar una orden
+    de compra de Odoo (solo referencia, Odoo no se edita).
+    """
+    __tablename__ = 'maquinaria_solicitudes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    folio = db.Column(db.String(80), nullable=False, unique=True, index=True)
+    tipo = db.Column(db.String(20), nullable=False, default='odoo', index=True)  # 'odoo' | 'stock'
+
+    # Origen: pedido de venta Odoo (snapshot, sin tocar Odoo)
+    origen_pedido_odoo_id = db.Column(db.BigInteger, nullable=True, index=True)
+    origen_pedido_name = db.Column(db.String(120), nullable=True)
+    cliente = db.Column(db.String(255), nullable=True)
+    sucursal = db.Column(db.String(255), nullable=True)
+
+    # Orden de compra Odoo relacionada (solo referencia)
+    orden_compra_odoo_id = db.Column(db.BigInteger, nullable=True, index=True)
+    orden_compra_name = db.Column(db.String(120), nullable=True)
+
+    estado = db.Column(db.String(30), nullable=False, default='tomado', index=True)  # 'tomado' | 'solicitado'
+    notas = db.Column(db.Text, nullable=True)
+    created_by = db.Column(db.String(100), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    items = db.relationship('MaquinariaSolicitudItem', backref='solicitud', lazy=True, cascade='all, delete-orphan')
+
+    def to_dict(self, include_items=False):
+        data = {
+            'id': self.id,
+            'folio': self.folio,
+            'tipo': self.tipo,
+            'origen_pedido_odoo_id': self.origen_pedido_odoo_id,
+            'origen_pedido_name': self.origen_pedido_name,
+            'cliente': self.cliente,
+            'sucursal': self.sucursal,
+            'orden_compra_odoo_id': self.orden_compra_odoo_id,
+            'orden_compra_name': self.orden_compra_name,
+            'estado': self.estado,
+            'notas': self.notas,
+            'created_by': self.created_by,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'items_count': len(self.items) if self.items is not None else 0,
+        }
+        if include_items:
+            data['items'] = [it.to_dict() for it in sorted(self.items, key=lambda x: x.id)]
+        return data
+
+
+class MaquinariaSolicitudItem(db.Model):
+    """Producto de una solicitud: clave, descripcion y cantidad (sin precios)."""
+    __tablename__ = 'maquinaria_solicitud_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    solicitud_id = db.Column(db.Integer, db.ForeignKey('maquinaria_solicitudes.id', ondelete='CASCADE'), nullable=False, index=True)
+    clave = db.Column(db.String(120), nullable=True, index=True)
+    descripcion = db.Column(db.Text, nullable=True)
+    cantidad = db.Column(db.Float, nullable=False, default=1)
+    origen_linea_odoo_id = db.Column(db.BigInteger, nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'solicitud_id': self.solicitud_id,
+            'clave': self.clave,
+            'descripcion': self.descripcion,
+            'cantidad': self.cantidad,
+            'origen_linea_odoo_id': self.origen_linea_odoo_id,
+        }
+
+
 class AlertaBuzonGeneral(db.Model):
     __tablename__ = 'alertas_buzon_general'
 

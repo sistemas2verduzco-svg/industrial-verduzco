@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash, abort
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqNotaVenta, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, OdooSyncRun, OdooPedidoVenta, OdooPedidoVentaLinea, OdooOrdenCompra, OdooOrdenCompraLinea, AlertaBuzonGeneral, Tecnico, LogVerificacion
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqNotaVenta, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, OdooSyncRun, OdooPedidoVenta, OdooPedidoVentaLinea, OdooOrdenCompra, OdooOrdenCompraLinea, MaquinariaSolicitud, MaquinariaSolicitudItem, AlertaBuzonGeneral, Tecnico, LogVerificacion
 from auth import AuthManager
 from email_manager import EmailManager
 from odoo_client import OdooClient, OdooError
@@ -13585,14 +13585,17 @@ ODOO_TABLES = [
     'odoo_pedidos_venta_lineas',
     'odoo_ordenes_compra',
     'odoo_ordenes_compra_lineas',
+    'maquinaria_solicitudes',
+    'maquinaria_solicitud_items',
 ]
 
 
 def _ensure_odoo_tables():
-    """Crea las tablas de Odoo si no existen (sin depender de migracion manual)."""
+    """Crea las tablas de Odoo y solicitudes si no existen (sin migracion manual)."""
     try:
         for model_cls in (OdooSyncRun, OdooPedidoVenta, OdooPedidoVentaLinea,
-                          OdooOrdenCompra, OdooOrdenCompraLinea):
+                          OdooOrdenCompra, OdooOrdenCompraLinea,
+                          MaquinariaSolicitud, MaquinariaSolicitudItem):
             model_cls.__table__.create(bind=db.engine, checkfirst=True)
         return True
     except Exception as exc:
@@ -13659,14 +13662,279 @@ def maquinaria_odoo_page():
         OdooOrdenCompra.date_order.desc(), OdooOrdenCompra.id.desc()
     ).limit(100).all()
     last_run = OdooSyncRun.query.order_by(OdooSyncRun.id.desc()).first()
+    solicitudes = MaquinariaSolicitud.query.order_by(MaquinariaSolicitud.id.desc()).limit(100).all()
     return render_template(
         'maquinaria_odoo.html',
         pedidos=[p.to_dict() for p in pedidos],
         ordenes=[o.to_dict() for o in ordenes],
+        solicitudes=[s.to_dict() for s in solicitudes],
         last_run=last_run.to_dict() if last_run else None,
         configured=OdooClient.is_configured(),
         is_admin=bool(user and user.es_admin),
     )
+
+
+def _can_use_maquinaria_solicitudes(user):
+    return bool(user and (user.es_admin
+                          or user.has_permission('maquinaria_pedidos', 'view')
+                          or user.has_permission('maquinaria_ordenes', 'view')))
+
+
+def _new_solicitud_folio():
+    base = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
+    folio = f"SOL-{base}"
+    bump = 1
+    while MaquinariaSolicitud.query.filter_by(folio=folio).first() is not None:
+        folio = f"SOL-{base}-{bump}"
+        bump += 1
+    return folio
+
+
+@app.route('/api/maquinaria/odoo/pedidos/<int:odoo_id>/detalle')
+@login_required
+def api_maquinaria_odoo_pedido_detalle(odoo_id):
+    """Detalle de un pedido de venta Odoo: solo clave, descripcion y cantidad."""
+    user = get_current_user()
+    if not _can_use_maquinaria_solicitudes(user):
+        return jsonify({'ok': False, 'error': 'Sin permiso'}), 403
+    _ensure_odoo_tables()
+    pedido = OdooPedidoVenta.query.filter_by(odoo_id=odoo_id).first()
+    if not pedido:
+        return jsonify({'ok': False, 'error': 'Pedido no encontrado'}), 404
+    items = []
+    for ln in sorted(pedido.lineas, key=lambda x: (x.sequence or 0, x.id)):
+        items.append({
+            'clave': ln.product_key or '',
+            'descripcion': ln.description or ln.product_name or '',
+            'cantidad': ln.product_uom_qty or 0,
+            'odoo_linea_id': ln.odoo_id,
+        })
+    return jsonify({'ok': True, 'pedido': pedido.to_dict(), 'items': items})
+
+
+@app.route('/api/maquinaria/odoo/pedidos/<int:odoo_id>/tomar', methods=['POST'])
+@login_required
+def api_maquinaria_odoo_pedido_tomar(odoo_id):
+    """Toma un pedido de venta Odoo y crea una solicitud en la plataforma."""
+    user = get_current_user()
+    if not _can_use_maquinaria_solicitudes(user):
+        return jsonify({'ok': False, 'error': 'Sin permiso'}), 403
+    _ensure_odoo_tables()
+    pedido = OdooPedidoVenta.query.filter_by(odoo_id=odoo_id).first()
+    if not pedido:
+        return jsonify({'ok': False, 'error': 'Pedido no encontrado'}), 404
+    try:
+        solicitud = MaquinariaSolicitud(
+            folio=_new_solicitud_folio(),
+            tipo='odoo',
+            origen_pedido_odoo_id=pedido.odoo_id,
+            origen_pedido_name=pedido.name,
+            cliente=pedido.partner_name,
+            sucursal=pedido.sucursal,
+            estado='tomado',
+            created_by=session.get('user'),
+        )
+        db.session.add(solicitud)
+        db.session.flush()
+        for ln in sorted(pedido.lineas, key=lambda x: (x.sequence or 0, x.id)):
+            if not (ln.product_key or ln.description or ln.product_name):
+                continue
+            db.session.add(MaquinariaSolicitudItem(
+                solicitud_id=solicitud.id,
+                clave=(ln.product_key or '')[:120],
+                descripcion=ln.description or ln.product_name or '',
+                cantidad=float(ln.product_uom_qty or 0) or 1,
+                origen_linea_odoo_id=ln.odoo_id,
+            ))
+        db.session.commit()
+        return jsonify({'ok': True, 'solicitud': solicitud.to_dict(include_items=True)})
+    except Exception as exc:
+        db.session.rollback()
+        logger.error(f'[SOLICITUD] Error al tomar pedido: {exc}', exc_info=True)
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/maquinaria/odoo/ordenes-compra')
+@login_required
+def api_maquinaria_odoo_ordenes_compra():
+    """Lista ordenes de compra de Odoo para la ventana de relacion (con busqueda)."""
+    user = get_current_user()
+    if not _can_use_maquinaria_solicitudes(user):
+        return jsonify({'ok': False, 'error': 'Sin permiso'}), 403
+    _ensure_odoo_tables()
+    q = (request.args.get('q') or '').strip()
+    query = OdooOrdenCompra.query
+    if q:
+        like = f"%{q}%"
+        query = query.filter(db.or_(
+            OdooOrdenCompra.name.ilike(like),
+            OdooOrdenCompra.partner_name.ilike(like),
+            OdooOrdenCompra.origin.ilike(like),
+        ))
+    ordenes = query.order_by(OdooOrdenCompra.date_order.desc(), OdooOrdenCompra.id.desc()).limit(80).all()
+    return jsonify({'ok': True, 'ordenes': [o.to_dict() for o in ordenes]})
+
+
+@app.route('/api/maquinaria/odoo/ordenes-compra/<int:odoo_id>/detalle')
+@login_required
+def api_maquinaria_odoo_orden_compra_detalle(odoo_id):
+    """Detalle especifico de una orden de compra Odoo."""
+    user = get_current_user()
+    if not _can_use_maquinaria_solicitudes(user):
+        return jsonify({'ok': False, 'error': 'Sin permiso'}), 403
+    _ensure_odoo_tables()
+    orden = OdooOrdenCompra.query.filter_by(odoo_id=odoo_id).first()
+    if not orden:
+        return jsonify({'ok': False, 'error': 'Orden de compra no encontrada'}), 404
+    return jsonify({'ok': True, 'orden': orden.to_dict(include_lines=True)})
+
+
+@app.route('/api/maquinaria/solicitudes', methods=['GET'])
+@login_required
+def api_maquinaria_solicitudes_list():
+    user = get_current_user()
+    if not _can_use_maquinaria_solicitudes(user):
+        return jsonify({'ok': False, 'error': 'Sin permiso'}), 403
+    _ensure_odoo_tables()
+    sols = MaquinariaSolicitud.query.order_by(MaquinariaSolicitud.id.desc()).limit(100).all()
+    return jsonify({'ok': True, 'solicitudes': [s.to_dict() for s in sols]})
+
+
+@app.route('/api/maquinaria/solicitudes/<int:solicitud_id>', methods=['GET'])
+@login_required
+def api_maquinaria_solicitud_detalle(solicitud_id):
+    user = get_current_user()
+    if not _can_use_maquinaria_solicitudes(user):
+        return jsonify({'ok': False, 'error': 'Sin permiso'}), 403
+    _ensure_odoo_tables()
+    sol = MaquinariaSolicitud.query.get(solicitud_id)
+    if not sol:
+        return jsonify({'ok': False, 'error': 'Solicitud no encontrada'}), 404
+    return jsonify({'ok': True, 'solicitud': sol.to_dict(include_items=True)})
+
+
+@app.route('/api/maquinaria/solicitudes/stock', methods=['POST'])
+@login_required
+def api_maquinaria_solicitud_stock_create():
+    """Crea una solicitud de pedido de stock capturada en la plataforma."""
+    user = get_current_user()
+    if not _can_use_maquinaria_solicitudes(user):
+        return jsonify({'ok': False, 'error': 'Sin permiso'}), 403
+    _ensure_odoo_tables()
+    payload = request.get_json(silent=True) or {}
+    items = payload.get('items') or []
+    items_validos = []
+    for it in items:
+        clave = (str(it.get('clave') or '')).strip()
+        descripcion = (str(it.get('descripcion') or '')).strip()
+        try:
+            cantidad = float(it.get('cantidad') or 0)
+        except Exception:
+            cantidad = 0
+        if not clave and not descripcion:
+            continue
+        items_validos.append((clave[:120], descripcion, cantidad if cantidad > 0 else 1))
+    if not items_validos:
+        return jsonify({'ok': False, 'error': 'Agrega al menos un producto con clave o descripcion'}), 400
+    try:
+        solicitud = MaquinariaSolicitud(
+            folio=_new_solicitud_folio(),
+            tipo='stock',
+            cliente=(str(payload.get('cliente') or 'STOCK')).strip()[:255] or 'STOCK',
+            notas=(str(payload.get('notas') or '')).strip() or None,
+            estado='tomado',
+            created_by=session.get('user'),
+        )
+        db.session.add(solicitud)
+        db.session.flush()
+        for clave, descripcion, cantidad in items_validos:
+            db.session.add(MaquinariaSolicitudItem(
+                solicitud_id=solicitud.id,
+                clave=clave,
+                descripcion=descripcion,
+                cantidad=cantidad,
+            ))
+        db.session.commit()
+        return jsonify({'ok': True, 'solicitud': solicitud.to_dict(include_items=True)})
+    except Exception as exc:
+        db.session.rollback()
+        logger.error(f'[SOLICITUD] Error al crear stock: {exc}', exc_info=True)
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/maquinaria/solicitudes/<int:solicitud_id>/relacionar-oc', methods=['POST'])
+@login_required
+def api_maquinaria_solicitud_relacionar_oc(solicitud_id):
+    """Relaciona una orden de compra de Odoo a la solicitud (solo referencia)."""
+    user = get_current_user()
+    if not _can_use_maquinaria_solicitudes(user):
+        return jsonify({'ok': False, 'error': 'Sin permiso'}), 403
+    _ensure_odoo_tables()
+    sol = MaquinariaSolicitud.query.get(solicitud_id)
+    if not sol:
+        return jsonify({'ok': False, 'error': 'Solicitud no encontrada'}), 404
+    payload = request.get_json(silent=True) or {}
+    oc_odoo_id = payload.get('orden_compra_odoo_id')
+    try:
+        oc_odoo_id = int(oc_odoo_id)
+    except Exception:
+        return jsonify({'ok': False, 'error': 'orden_compra_odoo_id invalido'}), 400
+    orden = OdooOrdenCompra.query.filter_by(odoo_id=oc_odoo_id).first()
+    if not orden:
+        return jsonify({'ok': False, 'error': 'Orden de compra no encontrada'}), 404
+    try:
+        sol.orden_compra_odoo_id = orden.odoo_id
+        sol.orden_compra_name = orden.name
+        sol.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'ok': True, 'solicitud': sol.to_dict()})
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/maquinaria/solicitudes/<int:solicitud_id>/generar', methods=['POST'])
+@login_required
+def api_maquinaria_solicitud_generar(solicitud_id):
+    """Genera la solicitud (la deja lista para continuar el proceso en la plataforma)."""
+    user = get_current_user()
+    if not _can_use_maquinaria_solicitudes(user):
+        return jsonify({'ok': False, 'error': 'Sin permiso'}), 403
+    _ensure_odoo_tables()
+    sol = MaquinariaSolicitud.query.get(solicitud_id)
+    if not sol:
+        return jsonify({'ok': False, 'error': 'Solicitud no encontrada'}), 404
+    if not sol.orden_compra_odoo_id:
+        return jsonify({'ok': False, 'error': 'Primero relaciona una orden de compra'}), 400
+    if not sol.items:
+        return jsonify({'ok': False, 'error': 'La solicitud no tiene productos'}), 400
+    try:
+        sol.estado = 'solicitado'
+        sol.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'ok': True, 'solicitud': sol.to_dict(include_items=True)})
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/maquinaria/solicitudes/<int:solicitud_id>/delete', methods=['POST'])
+@login_required
+def api_maquinaria_solicitud_delete(solicitud_id):
+    user = get_current_user()
+    if not _can_use_maquinaria_solicitudes(user):
+        return jsonify({'ok': False, 'error': 'Sin permiso'}), 403
+    _ensure_odoo_tables()
+    sol = MaquinariaSolicitud.query.get(solicitud_id)
+    if not sol:
+        return jsonify({'ok': False, 'error': 'Solicitud no encontrada'}), 404
+    try:
+        db.session.delete(sol)
+        db.session.commit()
+        return jsonify({'ok': True})
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({'ok': False, 'error': str(exc)}), 500
 
 
 def _odoo_scheduler_loop():

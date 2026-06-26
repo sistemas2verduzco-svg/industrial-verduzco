@@ -14,17 +14,23 @@
         .odoo-status {
             font-size: 13px; color: #475569;
             background: #f1f5f9; border: 1px solid #e2e8f0;
-            border-radius: 8px; padding: 8px 12px;
+            border-radius: 8px; padding: 8px 12px; flex: 1; min-width: 240px;
         }
         .odoo-status b { color: #0f172a; }
         .odoo-status .ok { color: #15803d; font-weight: 700; }
         .odoo-status .err { color: #b91c1c; font-weight: 700; }
-        .btn-sync {
-            border: 0; background: #7c3aed; color: #fff; font-weight: 700;
-            border-radius: 8px; padding: 10px 16px; cursor: pointer; font-size: 14px;
-        }
-        .btn-sync:disabled { opacity: .6; cursor: wait; }
-        .odoo-tabs { display: flex; gap: 8px; margin: 6px 0 12px; }
+        .btn { border: 0; border-radius: 8px; padding: 10px 16px; cursor: pointer; font-size: 13px; font-weight: 700; color: #fff; }
+        .btn:disabled { opacity: .6; cursor: wait; }
+        .btn-sync { background: #7c3aed; }
+        .btn-stock { background: #0f766e; }
+        .btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 6px; }
+        .btn-take { background: #2563eb; }
+        .btn-link { background: #0891b2; }
+        .btn-gen { background: #16a34a; }
+        .btn-view { background: #64748b; }
+        .btn-del { background: #dc2626; }
+        .btn-ghost { background: #fff; color: #334155; border: 1px solid #d1d5db; }
+        .odoo-tabs { display: flex; gap: 8px; margin: 6px 0 12px; flex-wrap: wrap; }
         .odoo-tab {
             border: 1px solid #d1d5db; background: #fff; color: #334155;
             border-radius: 8px; padding: 8px 14px; cursor: pointer; font-weight: 700; font-size: 13px;
@@ -42,9 +48,36 @@
         .pill-draft { background: #fef9c3; color: #854d0e; }
         .pill-done { background: #dbeafe; color: #1e40af; }
         .pill-cancel { background: #fee2e2; color: #991b1b; }
+        .pill-tomado { background: #e0e7ff; color: #3730a3; }
+        .pill-solicitado { background: #dcfce7; color: #166534; }
+        .pill-stock { background: #fef3c7; color: #92400e; }
+        .pill-odoo { background: #ede9fe; color: #6d28d9; }
         .muted { color: #94a3b8; }
         .num { text-align: right; font-variant-numeric: tabular-nums; }
         .hidden { display: none; }
+        /* modal */
+        .modal-back {
+            position: fixed; inset: 0; background: rgba(15,23,42,.55);
+            display: none; align-items: flex-start; justify-content: center; z-index: 1000;
+            padding: 40px 14px; overflow-y: auto;
+        }
+        .modal-back.show { display: flex; }
+        .modal {
+            background: #fff; border-radius: 12px; width: min(860px, 100%);
+            box-shadow: 0 20px 60px rgba(0,0,0,.3); overflow: hidden;
+        }
+        .modal-head {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 18px; border-bottom: 1px solid #eef2f7;
+        }
+        .modal-head h3 { margin: 0; font-size: 16px; }
+        .modal-body { padding: 16px 18px; max-height: 62vh; overflow-y: auto; }
+        .modal-foot { padding: 12px 18px; border-top: 1px solid #eef2f7; display: flex; justify-content: flex-end; gap: 8px; }
+        .x-close { border: 0; background: transparent; font-size: 22px; cursor: pointer; color: #94a3b8; line-height: 1; }
+        .field { width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; }
+        .oc-row { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; margin-bottom: 8px; }
+        .oc-row .oc-detail { margin-top: 8px; }
+        .search-row { display: flex; gap: 8px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
@@ -52,8 +85,8 @@
     <div class="container odoo-page">
         <h2 style="margin:0 0 6px 0;">Maquinaria y Ensamble - Odoo</h2>
         <div style="color:#64748b; font-size:13px; margin-bottom:14px;">
-            Pedidos de venta y ordenes de compra (orden de trabajo) sincronizados desde Odoo.
-            Los pedidos para stock se capturan en la plataforma; estos datos llegan automaticos de Odoo.
+            Pedidos de venta y ordenes de compra (orden de trabajo) consultados desde Odoo (solo lectura).
+            El proceso vive en la plataforma: toma un pedido, relacionalo a una orden de compra y genera la solicitud.
         </div>
 
         {% if not configured %}
@@ -65,9 +98,7 @@
         <div class="odoo-toolbar">
             <div class="odoo-status" id="odooStatus">
                 {% if last_run %}
-                    Ultima sincronizacion:
-                    <b>{{ last_run.finished_at or last_run.started_at }}</b>
-                    &mdash; estado
+                    Ultima sincronizacion: <b>{{ last_run.finished_at or last_run.started_at }}</b> &mdash; estado
                     {% if last_run.status == 'ok' %}<span class="ok">OK</span>
                     {% elif last_run.status == 'error' %}<span class="err">ERROR</span>
                     {% else %}<b>{{ last_run.status }}</b>{% endif %}
@@ -76,22 +107,27 @@
                     Aun no se ha sincronizado con Odoo.
                 {% endif %}
             </div>
-            {% if is_admin %}
-            <button class="btn-sync" id="btnSync" onclick="sincronizarOdoo()">Sincronizar ahora</button>
-            {% endif %}
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="btn btn-stock" onclick="abrirStock()">+ Pedido de stock</button>
+                {% if is_admin %}
+                <button class="btn btn-sync" id="btnSync" onclick="sincronizarOdoo()">Sincronizar ahora</button>
+                {% endif %}
+            </div>
         </div>
 
         <div class="odoo-tabs">
             <button class="odoo-tab active" data-tab="pedidos" onclick="cambiarTab('pedidos')">Pedidos de venta ({{ pedidos|length }})</button>
             <button class="odoo-tab" data-tab="ordenes" onclick="cambiarTab('ordenes')">Ordenes de compra / OT ({{ ordenes|length }})</button>
+            <button class="odoo-tab" data-tab="solicitudes" onclick="cambiarTab('solicitudes')">Solicitudes ({{ solicitudes|length }})</button>
         </div>
 
+        <!-- PEDIDOS DE VENTA -->
         <div class="odoo-card" id="tab-pedidos">
             <table class="odoo-table">
                 <thead>
                     <tr>
                         <th>Folio</th><th>Cliente</th><th>Sucursal</th><th>Titulo</th>
-                        <th>Fecha</th><th>Entrega</th><th>Estado</th><th class="num">Total</th><th>Moneda</th>
+                        <th>Fecha</th><th>Entrega</th><th>Estado</th><th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -110,22 +146,22 @@
                             {% elif p.state == 'cancel' %}<span class="pill pill-cancel">Cancelado</span>
                             {% else %}{{ p.state or '' }}{% endif %}
                         </td>
-                        <td class="num">{{ '{:,.2f}'.format(p.amount_total) if p.amount_total is not none else '' }}</td>
-                        <td>{{ p.currency or '' }}</td>
+                        <td><button class="btn btn-take btn-sm" onclick="verPedido({{ p.odoo_id }}, '{{ (p.name or '')|e }}')">Ver / Tomar</button></td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="9" class="muted" style="padding:18px; text-align:center;">Sin pedidos sincronizados todavia.</td></tr>
+                    <tr><td colspan="8" class="muted" style="padding:18px; text-align:center;">Sin pedidos sincronizados todavia.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
 
+        <!-- ORDENES DE COMPRA -->
         <div class="odoo-card hidden" id="tab-ordenes">
             <table class="odoo-table">
                 <thead>
                     <tr>
                         <th>Folio</th><th>Proveedor</th><th>Referencia</th><th>Origen</th>
-                        <th>Fecha</th><th>Planeada</th><th>Estado</th><th class="num">Total</th><th>Moneda</th>
+                        <th>Fecha</th><th>Estado</th><th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -136,7 +172,6 @@
                         <td>{{ o.partner_ref or '' }}</td>
                         <td>{{ o.origin or '' }}</td>
                         <td>{{ (o.date_order or '')[:10] }}</td>
-                        <td>{{ (o.date_planned or '')[:10] }}</td>
                         <td>
                             {% if o.state == 'purchase' %}<span class="pill pill-sale">Compra</span>
                             {% elif o.state == 'draft' or o.state == 'sent' %}<span class="pill pill-draft">{{ o.state }}</span>
@@ -144,51 +179,318 @@
                             {% elif o.state == 'cancel' %}<span class="pill pill-cancel">Cancelado</span>
                             {% else %}{{ o.state or '' }}{% endif %}
                         </td>
-                        <td class="num">{{ '{:,.2f}'.format(o.amount_total) if o.amount_total is not none else '' }}</td>
-                        <td>{{ o.currency or '' }}</td>
+                        <td><button class="btn btn-view btn-sm" onclick="verOrdenCompra({{ o.odoo_id }}, '{{ (o.name or '')|e }}')">Ver detalle</button></td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="9" class="muted" style="padding:18px; text-align:center;">Sin ordenes de compra sincronizadas todavia.</td></tr>
+                    <tr><td colspan="7" class="muted" style="padding:18px; text-align:center;">Sin ordenes de compra sincronizadas todavia.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- SOLICITUDES -->
+        <div class="odoo-card hidden" id="tab-solicitudes">
+            <table class="odoo-table">
+                <thead>
+                    <tr>
+                        <th>Folio</th><th>Tipo</th><th>Origen pedido</th><th>Cliente</th>
+                        <th>Orden de compra</th><th>Productos</th><th>Estado</th><th></th>
+                    </tr>
+                </thead>
+                <tbody id="solicitudesBody">
+                    {% for s in solicitudes %}
+                    <tr data-sid="{{ s.id }}">
+                        <td><b>{{ s.folio }}</b></td>
+                        <td>
+                            {% if s.tipo == 'stock' %}<span class="pill pill-stock">Stock</span>
+                            {% else %}<span class="pill pill-odoo">Odoo</span>{% endif %}
+                        </td>
+                        <td>{{ s.origen_pedido_name or '-' }}</td>
+                        <td>{{ s.cliente or '-' }}</td>
+                        <td>{{ s.orden_compra_name or '' }}{% if not s.orden_compra_name %}<span class="muted">sin relacionar</span>{% endif %}</td>
+                        <td class="num">{{ s.items_count }}</td>
+                        <td>
+                            {% if s.estado == 'solicitado' %}<span class="pill pill-solicitado">Solicitado</span>
+                            {% else %}<span class="pill pill-tomado">Tomado</span>{% endif %}
+                        </td>
+                        <td style="display:flex; gap:5px; flex-wrap:wrap;">
+                            <button class="btn btn-view btn-sm" onclick="verSolicitud({{ s.id }})">Ver</button>
+                            <button class="btn btn-link btn-sm" onclick="abrirRelacionar({{ s.id }}, '{{ s.folio }}')">Relacionar OC</button>
+                            {% if s.estado != 'solicitado' %}
+                            <button class="btn btn-gen btn-sm" onclick="generarSolicitud({{ s.id }})">Generar</button>
+                            {% endif %}
+                            <button class="btn btn-del btn-sm" onclick="eliminarSolicitud({{ s.id }})">X</button>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="8" class="muted" style="padding:18px; text-align:center;">Sin solicitudes todavia. Toma un pedido o crea uno de stock.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
     </div>
 
-    <script>
-        function cambiarTab(tab) {
-            document.querySelectorAll('.odoo-tab').forEach(function (b) {
-                b.classList.toggle('active', b.dataset.tab === tab);
-            });
-            document.getElementById('tab-pedidos').classList.toggle('hidden', tab !== 'pedidos');
-            document.getElementById('tab-ordenes').classList.toggle('hidden', tab !== 'ordenes');
-        }
+    <!-- MODAL: detalle/tomar pedido -->
+    <div class="modal-back" id="pedidoModal">
+        <div class="modal">
+            <div class="modal-head">
+                <h3 id="pedidoModalTitle">Detalle del pedido</h3>
+                <button class="x-close" onclick="cerrar('pedidoModal')">&times;</button>
+            </div>
+            <div class="modal-body" id="pedidoModalBody">Cargando...</div>
+            <div class="modal-foot">
+                <button class="btn btn-ghost" onclick="cerrar('pedidoModal')">Cerrar</button>
+                <button class="btn btn-take" id="btnTomarPedido" onclick="tomarPedido()">Tomar este pedido</button>
+            </div>
+        </div>
+    </div>
 
+    <!-- MODAL: orden de compra (ver detalle o relacionar) -->
+    <div class="modal-back" id="ocModal">
+        <div class="modal">
+            <div class="modal-head">
+                <h3 id="ocModalTitle">Ordenes de compra</h3>
+                <button class="x-close" onclick="cerrar('ocModal')">&times;</button>
+            </div>
+            <div class="modal-body" id="ocModalBody">Cargando...</div>
+            <div class="modal-foot">
+                <button class="btn btn-ghost" onclick="cerrar('ocModal')">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: pedido de stock -->
+    <div class="modal-back" id="stockModal">
+        <div class="modal">
+            <div class="modal-head">
+                <h3>Nuevo pedido de stock (plataforma)</h3>
+                <button class="x-close" onclick="cerrar('stockModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px;">
+                    <input id="stockCliente" class="field" placeholder="Cliente / Referencia (opcional)">
+                    <input id="stockNotas" class="field" placeholder="Notas (opcional)">
+                </div>
+                <table class="odoo-table" id="stockItemsTable">
+                    <thead><tr><th style="width:30%;">Clave</th><th>Descripcion</th><th style="width:90px;">Cantidad</th><th></th></tr></thead>
+                    <tbody id="stockItemsBody"></tbody>
+                </table>
+                <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="agregarFilaStock()">+ Agregar producto</button>
+            </div>
+            <div class="modal-foot">
+                <button class="btn btn-ghost" onclick="cerrar('stockModal')">Cancelar</button>
+                <button class="btn btn-stock" onclick="guardarStock()">Crear solicitud de stock</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: ver solicitud -->
+    <div class="modal-back" id="solModal">
+        <div class="modal">
+            <div class="modal-head">
+                <h3 id="solModalTitle">Solicitud</h3>
+                <button class="x-close" onclick="cerrar('solModal')">&times;</button>
+            </div>
+            <div class="modal-body" id="solModalBody">Cargando...</div>
+            <div class="modal-foot">
+                <button class="btn btn-ghost" onclick="cerrar('solModal')">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var currentPedidoId = null;
+        var currentRelacionarSid = null;
+
+        function cambiarTab(tab) {
+            document.querySelectorAll('.odoo-tab').forEach(function (b) { b.classList.toggle('active', b.dataset.tab === tab); });
+            ['pedidos', 'ordenes', 'solicitudes'].forEach(function (t) {
+                document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab);
+            });
+        }
+        function cerrar(id) { document.getElementById(id).classList.remove('show'); }
+        function abrir(id) { document.getElementById(id).classList.add('show'); }
+        function esc(s) { return (s === null || s === undefined) ? '' : String(s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
+        function fmtNum(n) { return (n === null || n === undefined) ? '' : Number(n).toLocaleString('es-MX', { maximumFractionDigits: 2 }); }
+
+        // ---- Sincronizar ----
         function sincronizarOdoo() {
             var btn = document.getElementById('btnSync');
             var status = document.getElementById('odooStatus');
-            btn.disabled = true;
-            btn.textContent = 'Sincronizando...';
+            btn.disabled = true; btn.textContent = 'Sincronizando...';
             status.innerHTML = 'Sincronizando con Odoo, espera unos segundos...';
-            fetch('/api/maquinaria/odoo/sync', { method: 'POST', headers: { 'X-Requested-With': 'fetch' } })
-                .then(function (r) { return r.json(); })
+            fetch('/api/maquinaria/odoo/sync', { method: 'POST' }).then(function (r) { return r.json(); })
                 .then(function (data) {
                     if (data.ok) {
-                        var run = data.run || {};
-                        status.innerHTML = 'Sincronizacion <span class="ok">OK</span>: ' + (run.message || '') +
-                            '<div style="margin-top:4px;">Recargando...</div>';
-                        setTimeout(function () { window.location.reload(); }, 1200);
+                        status.innerHTML = 'Sincronizacion <span class="ok">OK</span>: ' + esc((data.run || {}).message || '') + '<div>Recargando...</div>';
+                        setTimeout(function () { location.reload(); }, 1200);
                     } else {
-                        status.innerHTML = 'Sincronizacion <span class="err">ERROR</span>: ' + (data.error || 'desconocido');
-                        btn.disabled = false;
-                        btn.textContent = 'Sincronizar ahora';
+                        status.innerHTML = 'Sincronizacion <span class="err">ERROR</span>: ' + esc(data.error || '');
+                        btn.disabled = false; btn.textContent = 'Sincronizar ahora';
                     }
-                })
-                .catch(function (err) {
-                    status.innerHTML = 'Error de red: ' + err;
-                    btn.disabled = false;
-                    btn.textContent = 'Sincronizar ahora';
+                }).catch(function (e) { status.innerHTML = 'Error de red: ' + esc(e); btn.disabled = false; btn.textContent = 'Sincronizar ahora'; });
+        }
+
+        // ---- Ver / tomar pedido ----
+        function verPedido(odooId, name) {
+            currentPedidoId = odooId;
+            document.getElementById('pedidoModalTitle').textContent = 'Pedido ' + name;
+            document.getElementById('pedidoModalBody').innerHTML = 'Cargando...';
+            abrir('pedidoModal');
+            fetch('/api/maquinaria/odoo/pedidos/' + odooId + '/detalle').then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (!data.ok) { document.getElementById('pedidoModalBody').innerHTML = '<span class="err">' + esc(data.error) + '</span>'; return; }
+                    var rows = (data.items || []).map(function (it) {
+                        return '<tr><td><b>' + esc(it.clave) + '</b></td><td>' + esc(it.descripcion) + '</td><td class="num">' + fmtNum(it.cantidad) + '</td></tr>';
+                    }).join('');
+                    if (!rows) rows = '<tr><td colspan="3" class="muted">Sin productos.</td></tr>';
+                    document.getElementById('pedidoModalBody').innerHTML =
+                        '<table class="odoo-table"><thead><tr><th>Clave</th><th>Descripcion</th><th class="num">Cantidad</th></tr></thead><tbody>' + rows + '</tbody></table>';
                 });
+        }
+        function tomarPedido() {
+            if (!currentPedidoId) return;
+            var btn = document.getElementById('btnTomarPedido');
+            btn.disabled = true; btn.textContent = 'Tomando...';
+            fetch('/api/maquinaria/odoo/pedidos/' + currentPedidoId + '/tomar', { method: 'POST' }).then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.ok) { location.reload(); }
+                    else { alert('Error: ' + (data.error || '')); btn.disabled = false; btn.textContent = 'Tomar este pedido'; }
+                }).catch(function (e) { alert('Error de red: ' + e); btn.disabled = false; btn.textContent = 'Tomar este pedido'; });
+        }
+
+        // ---- Ver orden de compra (solo detalle) ----
+        function verOrdenCompra(odooId, name) {
+            currentRelacionarSid = null;
+            document.getElementById('ocModalTitle').textContent = 'Orden de compra ' + name;
+            document.getElementById('ocModalBody').innerHTML = 'Cargando...';
+            abrir('ocModal');
+            fetch('/api/maquinaria/odoo/ordenes-compra/' + odooId + '/detalle').then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (!data.ok) { document.getElementById('ocModalBody').innerHTML = '<span class="err">' + esc(data.error) + '</span>'; return; }
+                    document.getElementById('ocModalBody').innerHTML = renderOCDetalle(data.orden);
+                });
+        }
+        function renderOCDetalle(o) {
+            var rows = (o.lineas || []).map(function (l) {
+                return '<tr><td><b>' + esc(l.product_key) + '</b></td><td>' + esc(l.description || l.product_name) + '</td><td class="num">' + fmtNum(l.product_qty) + '</td><td>' + esc(l.unit) + '</td></tr>';
+            }).join('');
+            if (!rows) rows = '<tr><td colspan="4" class="muted">Sin lineas.</td></tr>';
+            return '<div style="margin-bottom:8px; font-size:13px;"><b>Proveedor:</b> ' + esc(o.partner_name) +
+                ' &nbsp; <b>Fecha:</b> ' + esc((o.date_order || '').substring(0, 10)) +
+                ' &nbsp; <b>Origen:</b> ' + esc(o.origin || '-') + '</div>' +
+                '<table class="odoo-table"><thead><tr><th>Clave</th><th>Descripcion</th><th class="num">Cantidad</th><th>Unidad</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        }
+
+        // ---- Relacionar OC a una solicitud ----
+        function abrirRelacionar(sid, folio) {
+            currentRelacionarSid = sid;
+            document.getElementById('ocModalTitle').textContent = 'Relacionar orden de compra a ' + folio;
+            abrir('ocModal');
+            cargarOrdenesCompra('');
+        }
+        function cargarOrdenesCompra(q) {
+            document.getElementById('ocModalBody').innerHTML =
+                '<div class="search-row"><input class="field" id="ocSearch" placeholder="Buscar folio, proveedor, origen..." value="' + esc(q) + '">' +
+                '<button class="btn btn-ghost btn-sm" onclick="cargarOrdenesCompra(document.getElementById(\'ocSearch\').value)">Buscar</button></div>' +
+                '<div id="ocList">Cargando...</div>';
+            fetch('/api/maquinaria/odoo/ordenes-compra?q=' + encodeURIComponent(q)).then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (!data.ok) { document.getElementById('ocList').innerHTML = '<span class="err">' + esc(data.error) + '</span>'; return; }
+                    var html = (data.ordenes || []).map(function (o) {
+                        return '<div class="oc-row" id="ocrow-' + o.odoo_id + '">' +
+                            '<div style="display:flex; justify-content:space-between; gap:8px; align-items:center;">' +
+                            '<div><b>' + esc(o.name) + '</b> &mdash; ' + esc(o.partner_name || '') +
+                            ' <span class="muted">' + esc((o.date_order || '').substring(0, 10)) + '</span></div>' +
+                            '<div style="display:flex; gap:6px;">' +
+                            '<button class="btn btn-ghost btn-sm" onclick="toggleOCDetalle(' + o.odoo_id + ')">Detalle</button>' +
+                            '<button class="btn btn-link btn-sm" onclick="relacionarOC(' + o.odoo_id + ')">Relacionar</button>' +
+                            '</div></div><div class="oc-detail hidden" id="ocdet-' + o.odoo_id + '"></div></div>';
+                    }).join('');
+                    document.getElementById('ocList').innerHTML = html || '<span class="muted">Sin ordenes de compra.</span>';
+                });
+        }
+        function toggleOCDetalle(odooId) {
+            var box = document.getElementById('ocdet-' + odooId);
+            if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
+            box.classList.remove('hidden'); box.innerHTML = 'Cargando...';
+            fetch('/api/maquinaria/odoo/ordenes-compra/' + odooId + '/detalle').then(function (r) { return r.json(); })
+                .then(function (data) { box.innerHTML = data.ok ? renderOCDetalle(data.orden) : '<span class="err">' + esc(data.error) + '</span>'; });
+        }
+        function relacionarOC(odooId) {
+            if (!currentRelacionarSid) return;
+            fetch('/api/maquinaria/solicitudes/' + currentRelacionarSid + '/relacionar-oc', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ orden_compra_odoo_id: odooId })
+            }).then(function (r) { return r.json(); })
+                .then(function (data) { if (data.ok) { location.reload(); } else { alert('Error: ' + (data.error || '')); } });
+        }
+
+        // ---- Pedido de stock ----
+        function abrirStock() {
+            document.getElementById('stockItemsBody').innerHTML = '';
+            document.getElementById('stockCliente').value = '';
+            document.getElementById('stockNotas').value = '';
+            agregarFilaStock(); agregarFilaStock();
+            abrir('stockModal');
+        }
+        function agregarFilaStock() {
+            var tr = document.createElement('tr');
+            tr.innerHTML = '<td><input class="field stock-clave" placeholder="Clave"></td>' +
+                '<td><input class="field stock-desc" placeholder="Descripcion"></td>' +
+                '<td><input class="field stock-cant" type="number" min="0" step="any" value="1"></td>' +
+                '<td><button class="btn btn-del btn-sm" onclick="this.closest(\'tr\').remove()">X</button></td>';
+            document.getElementById('stockItemsBody').appendChild(tr);
+        }
+        function guardarStock() {
+            var items = [];
+            document.querySelectorAll('#stockItemsBody tr').forEach(function (tr) {
+                var clave = tr.querySelector('.stock-clave').value.trim();
+                var desc = tr.querySelector('.stock-desc').value.trim();
+                var cant = parseFloat(tr.querySelector('.stock-cant').value) || 0;
+                if (clave || desc) items.push({ clave: clave, descripcion: desc, cantidad: cant });
+            });
+            if (!items.length) { alert('Agrega al menos un producto.'); return; }
+            fetch('/api/maquinaria/solicitudes/stock', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cliente: document.getElementById('stockCliente').value, notas: document.getElementById('stockNotas').value, items: items })
+            }).then(function (r) { return r.json(); })
+                .then(function (data) { if (data.ok) { location.reload(); } else { alert('Error: ' + (data.error || '')); } });
+        }
+
+        // ---- Ver solicitud ----
+        function verSolicitud(sid) {
+            document.getElementById('solModalTitle').textContent = 'Solicitud';
+            document.getElementById('solModalBody').innerHTML = 'Cargando...';
+            abrir('solModal');
+            fetch('/api/maquinaria/solicitudes/' + sid).then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (!data.ok) { document.getElementById('solModalBody').innerHTML = '<span class="err">' + esc(data.error) + '</span>'; return; }
+                    var s = data.solicitud;
+                    var rows = (s.items || []).map(function (it) {
+                        return '<tr><td><b>' + esc(it.clave) + '</b></td><td>' + esc(it.descripcion) + '</td><td class="num">' + fmtNum(it.cantidad) + '</td></tr>';
+                    }).join('');
+                    if (!rows) rows = '<tr><td colspan="3" class="muted">Sin productos.</td></tr>';
+                    document.getElementById('solModalTitle').textContent = 'Solicitud ' + esc(s.folio);
+                    document.getElementById('solModalBody').innerHTML =
+                        '<div style="font-size:13px; margin-bottom:8px;"><b>Tipo:</b> ' + esc(s.tipo) +
+                        ' &nbsp; <b>Cliente:</b> ' + esc(s.cliente || '-') +
+                        ' &nbsp; <b>Pedido:</b> ' + esc(s.origen_pedido_name || '-') +
+                        ' &nbsp; <b>Orden de compra:</b> ' + esc(s.orden_compra_name || 'sin relacionar') +
+                        ' &nbsp; <b>Estado:</b> ' + esc(s.estado) + '</div>' +
+                        '<table class="odoo-table"><thead><tr><th>Clave</th><th>Descripcion</th><th class="num">Cantidad</th></tr></thead><tbody>' + rows + '</tbody></table>';
+                });
+        }
+
+        function generarSolicitud(sid) {
+            if (!confirm('Generar la solicitud para continuar el proceso?')) return;
+            fetch('/api/maquinaria/solicitudes/' + sid + '/generar', { method: 'POST' }).then(function (r) { return r.json(); })
+                .then(function (data) { if (data.ok) { location.reload(); } else { alert('Error: ' + (data.error || '')); } });
+        }
+        function eliminarSolicitud(sid) {
+            if (!confirm('Eliminar esta solicitud?')) return;
+            fetch('/api/maquinaria/solicitudes/' + sid + '/delete', { method: 'POST' }).then(function (r) { return r.json(); })
+                .then(function (data) { if (data.ok) { location.reload(); } else { alert('Error: ' + (data.error || '')); } });
         }
     </script>
 </body>
