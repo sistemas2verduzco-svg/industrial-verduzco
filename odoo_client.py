@@ -31,6 +31,7 @@ import os
 import socket
 import xmlrpc.client
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 
 class OdooError(Exception):
@@ -39,6 +40,21 @@ class OdooError(Exception):
 
 def _clean(value: Optional[str]) -> str:
     return (value or '').strip()
+
+
+def _derive_db_from_url(url: str) -> str:
+    """Deduce el nombre de la base desde el subdominio (Odoo Online *.odoo.com).
+
+    Ej: https://miempresa.odoo.com -> 'miempresa'. Para dominios propios devuelve
+    el primer segmento del host como mejor aproximacion.
+    """
+    host = urlparse(_clean(url)).hostname or ''
+    if not host:
+        return ''
+    parts = host.split('.')
+    if len(parts) >= 3 and parts[-2] == 'odoo' and parts[-1] == 'com':
+        return parts[0]
+    return parts[0] if parts else ''
 
 
 class OdooClient:
@@ -72,14 +88,14 @@ class OdooClient:
     @classmethod
     def from_env(cls) -> 'OdooClient':
         url = _clean(os.getenv('ODOO_URL'))
-        db = _clean(os.getenv('ODOO_DB'))
+        db = _clean(os.getenv('ODOO_DB')) or _derive_db_from_url(url)
         username = _clean(os.getenv('ODOO_USERNAME'))
         secret = _clean(os.getenv('ODOO_API_KEY')) or _clean(os.getenv('ODOO_PASSWORD'))
         if not url or not db or not username or not secret:
             missing = [
                 name for name, val in (
                     ('ODOO_URL', url),
-                    ('ODOO_DB', db),
+                    ('ODOO_DB (no se pudo deducir del URL)', db),
                     ('ODOO_USERNAME', username),
                     ('ODOO_API_KEY/ODOO_PASSWORD', secret),
                 ) if not val
@@ -105,7 +121,7 @@ class OdooClient:
     @staticmethod
     def is_configured() -> bool:
         url = _clean(os.getenv('ODOO_URL'))
-        db = _clean(os.getenv('ODOO_DB'))
+        db = _clean(os.getenv('ODOO_DB')) or _derive_db_from_url(url)
         username = _clean(os.getenv('ODOO_USERNAME'))
         secret = _clean(os.getenv('ODOO_API_KEY')) or _clean(os.getenv('ODOO_PASSWORD'))
         return bool(url and db and username and secret)
