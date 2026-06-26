@@ -13504,6 +13504,11 @@ def api_maquinaria_odoo_test():
         }), 400
     try:
         client = OdooClient.from_env()
+        # Permite probar nombres de base sin editar el .env: ...?db=NOMBRE
+        db_override = (request.args.get('db') or '').strip()
+        if db_override:
+            client.db = db_override
+            client._uid = None
         info = client.test_connection()
         info['configured'] = True
         return jsonify(info)
