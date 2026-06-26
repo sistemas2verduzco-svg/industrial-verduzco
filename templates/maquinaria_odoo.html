@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maquinaria y Ensamble - Odoo</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .odoo-page { max-width: none; width: auto; padding: 20px 12px; }
+        .odoo-toolbar {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 12px; flex-wrap: wrap; margin-bottom: 14px;
+        }
+        .odoo-status {
+            font-size: 13px; color: #475569;
+            background: #f1f5f9; border: 1px solid #e2e8f0;
+            border-radius: 8px; padding: 8px 12px;
+        }
+        .odoo-status b { color: #0f172a; }
+        .odoo-status .ok { color: #15803d; font-weight: 700; }
+        .odoo-status .err { color: #b91c1c; font-weight: 700; }
+        .btn-sync {
+            border: 0; background: #7c3aed; color: #fff; font-weight: 700;
+            border-radius: 8px; padding: 10px 16px; cursor: pointer; font-size: 14px;
+        }
+        .btn-sync:disabled { opacity: .6; cursor: wait; }
+        .odoo-tabs { display: flex; gap: 8px; margin: 6px 0 12px; }
+        .odoo-tab {
+            border: 1px solid #d1d5db; background: #fff; color: #334155;
+            border-radius: 8px; padding: 8px 14px; cursor: pointer; font-weight: 700; font-size: 13px;
+        }
+        .odoo-tab.active { background: #0f766e; color: #fff; border-color: #0f766e; }
+        .odoo-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px; }
+        table.odoo-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+        table.odoo-table th, table.odoo-table td {
+            text-align: left; padding: 7px 9px; border-bottom: 1px solid #eef2f7; white-space: nowrap;
+        }
+        table.odoo-table th { color: #64748b; text-transform: uppercase; font-size: 11px; letter-spacing: .3px; }
+        table.odoo-table tr:hover td { background: #f8fafc; }
+        .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+        .pill-sale { background: #dcfce7; color: #15803d; }
+        .pill-draft { background: #fef9c3; color: #854d0e; }
+        .pill-done { background: #dbeafe; color: #1e40af; }
+        .pill-cancel { background: #fee2e2; color: #991b1b; }
+        .muted { color: #94a3b8; }
+        .num { text-align: right; font-variant-numeric: tabular-nums; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    {% include '_sidebar.html' %}
+    <div class="container odoo-page">
+        <h2 style="margin:0 0 6px 0;">Maquinaria y Ensamble - Odoo</h2>
+        <div style="color:#64748b; font-size:13px; margin-bottom:14px;">
+            Pedidos de venta y ordenes de compra (orden de trabajo) sincronizados desde Odoo.
+            Los pedidos para stock se capturan en la plataforma; estos datos llegan automaticos de Odoo.
+        </div>
+
+        {% if not configured %}
+        <div style="background:#fff3cd; border:1px solid #ffe69c; color:#664d03; border-radius:8px; padding:10px; margin-bottom:12px;">
+            Odoo aun no esta configurado. Define ODOO_URL, ODOO_DB, ODOO_USERNAME y ODOO_API_KEY en el .env del servidor.
+        </div>
+        {% endif %}
+
+        <div class="odoo-toolbar">
+            <div class="odoo-status" id="odooStatus">
+                {% if last_run %}
+                    Ultima sincronizacion:
+                    <b>{{ last_run.finished_at or last_run.started_at }}</b>
+                    &mdash; estado
+                    {% if last_run.status == 'ok' %}<span class="ok">OK</span>
+                    {% elif last_run.status == 'error' %}<span class="err">ERROR</span>
+                    {% else %}<b>{{ last_run.status }}</b>{% endif %}
+                    {% if last_run.message %}<div style="margin-top:4px;">{{ last_run.message }}</div>{% endif %}
+                {% else %}
+                    Aun no se ha sincronizado con Odoo.
+                {% endif %}
+            </div>
+            {% if is_admin %}
+            <button class="btn-sync" id="btnSync" onclick="sincronizarOdoo()">Sincronizar ahora</button>
+            {% endif %}
+        </div>
+
+        <div class="odoo-tabs">
+            <button class="odoo-tab active" data-tab="pedidos" onclick="cambiarTab('pedidos')">Pedidos de venta ({{ pedidos|length }})</button>
+            <button class="odoo-tab" data-tab="ordenes" onclick="cambiarTab('ordenes')">Ordenes de compra / OT ({{ ordenes|length }})</button>
+        </div>
+
+        <div class="odoo-card" id="tab-pedidos">
+            <table class="odoo-table">
+                <thead>
+                    <tr>
+                        <th>Folio</th><th>Cliente</th><th>Sucursal</th><th>Titulo</th>
+                        <th>Fecha</th><th>Entrega</th><th>Estado</th><th class="num">Total</th><th>Moneda</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in pedidos %}
+                    <tr>
+                        <td><b>{{ p.name or '-' }}</b></td>
+                        <td>{{ p.partner_name or '-' }}</td>
+                        <td>{{ p.sucursal or '' }}</td>
+                        <td>{{ p.titulo or '' }}</td>
+                        <td>{{ (p.date_order or '')[:10] }}</td>
+                        <td>{{ (p.commitment_date or '')[:10] }}</td>
+                        <td>
+                            {% if p.state == 'sale' %}<span class="pill pill-sale">Venta</span>
+                            {% elif p.state == 'draft' or p.state == 'sent' %}<span class="pill pill-draft">{{ p.state }}</span>
+                            {% elif p.state == 'done' %}<span class="pill pill-done">Hecho</span>
+                            {% elif p.state == 'cancel' %}<span class="pill pill-cancel">Cancelado</span>
+                            {% else %}{{ p.state or '' }}{% endif %}
+                        </td>
+                        <td class="num">{{ '{:,.2f}'.format(p.amount_total) if p.amount_total is not none else '' }}</td>
+                        <td>{{ p.currency or '' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="9" class="muted" style="padding:18px; text-align:center;">Sin pedidos sincronizados todavia.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="odoo-card hidden" id="tab-ordenes">
+            <table class="odoo-table">
+                <thead>
+                    <tr>
+                        <th>Folio</th><th>Proveedor</th><th>Referencia</th><th>Origen</th>
+                        <th>Fecha</th><th>Planeada</th><th>Estado</th><th class="num">Total</th><th>Moneda</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for o in ordenes %}
+                    <tr>
+                        <td><b>{{ o.name or '-' }}</b></td>
+                        <td>{{ o.partner_name or '-' }}</td>
+                        <td>{{ o.partner_ref or '' }}</td>
+                        <td>{{ o.origin or '' }}</td>
+                        <td>{{ (o.date_order or '')[:10] }}</td>
+                        <td>{{ (o.date_planned or '')[:10] }}</td>
+                        <td>
+                            {% if o.state == 'purchase' %}<span class="pill pill-sale">Compra</span>
+                            {% elif o.state == 'draft' or o.state == 'sent' %}<span class="pill pill-draft">{{ o.state }}</span>
+                            {% elif o.state == 'done' %}<span class="pill pill-done">Hecho</span>
+                            {% elif o.state == 'cancel' %}<span class="pill pill-cancel">Cancelado</span>
+                            {% else %}{{ o.state or '' }}{% endif %}
+                        </td>
+                        <td class="num">{{ '{:,.2f}'.format(o.amount_total) if o.amount_total is not none else '' }}</td>
+                        <td>{{ o.currency or '' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="9" class="muted" style="padding:18px; text-align:center;">Sin ordenes de compra sincronizadas todavia.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        function cambiarTab(tab) {
+            document.querySelectorAll('.odoo-tab').forEach(function (b) {
+                b.classList.toggle('active', b.dataset.tab === tab);
+            });
+            document.getElementById('tab-pedidos').classList.toggle('hidden', tab !== 'pedidos');
+            document.getElementById('tab-ordenes').classList.toggle('hidden', tab !== 'ordenes');
+        }
+
+        function sincronizarOdoo() {
+            var btn = document.getElementById('btnSync');
+            var status = document.getElementById('odooStatus');
+            btn.disabled = true;
+            btn.textContent = 'Sincronizando...';
+            status.innerHTML = 'Sincronizando con Odoo, espera unos segundos...';
+            fetch('/api/maquinaria/odoo/sync', { method: 'POST', headers: { 'X-Requested-With': 'fetch' } })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (data.ok) {
+                        var run = data.run || {};
+                        status.innerHTML = 'Sincronizacion <span class="ok">OK</span>: ' + (run.message || '') +
+                            '<div style="margin-top:4px;">Recargando...</div>';
+                        setTimeout(function () { window.location.reload(); }, 1200);
+                    } else {
+                        status.innerHTML = 'Sincronizacion <span class="err">ERROR</span>: ' + (data.error || 'desconocido');
+                        btn.disabled = false;
+                        btn.textContent = 'Sincronizar ahora';
+                    }
+                })
+                .catch(function (err) {
+                    status.innerHTML = 'Error de red: ' + err;
+                    btn.disabled = false;
+                    btn.textContent = 'Sincronizar ahora';
+                });
+        }
+    </script>
+</body>
+</html>

@@ -76,6 +76,9 @@
         {% if has_permission('maquinaria_pedidos', 'view') or current_user and current_user.es_admin %}
         <a href="/maquinaria/pedidos" class="sb-link" data-base="/maquinaria/pedidos"><span>📥</span> <span>Pedidos</span></a>
         {% endif %}
+        {% if has_permission('maquinaria_pedidos', 'view') or has_permission('maquinaria_ordenes', 'view') or current_user and current_user.es_admin %}
+        <a href="/maquinaria/odoo" class="sb-link" data-base="/maquinaria/odoo"><span>🔄</span> <span>Odoo (Pedidos/OT)</span></a>
+        {% endif %}
         {% if has_permission('maquinaria_ordenes', 'view') or current_user and current_user.es_admin %}
         <a href="/maquinaria/ordenes-trabajo" class="sb-link" data-base="/maquinaria/ordenes-trabajo"><span>🧾</span> <span>Ordenes</span></a>
         {% endif %}

@@ -1,8 +1,9 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash, abort
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqNotaVenta, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, AlertaBuzonGeneral, Tecnico, LogVerificacion
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqNotaVenta, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, OdooSyncRun, OdooPedidoVenta, OdooPedidoVentaLinea, OdooOrdenCompra, OdooOrdenCompraLinea, AlertaBuzonGeneral, Tecnico, LogVerificacion
 from auth import AuthManager
 from email_manager import EmailManager
 from odoo_client import OdooClient, OdooError
+from odoo_sync import run_odoo_sync
 import os
 import json
 from dotenv import load_dotenv
@@ -1911,6 +1912,12 @@ CONTPAQ_MM_MAX_WEEKS = max(CONTPAQ_MM_MIN_WEEKS, float(os.getenv('CONTPAQ_MM_MAX
 
 # Odoo (Maquinaria y Ensamble: pedidos de venta y ordenes de trabajo)
 ODOO_SYNC_ENABLED = os.getenv('ODOO_SYNC_ENABLED', '0').strip().lower() in ('1', 'true', 'yes', 'on')
+ODOO_SYNC_INTERVAL_MINUTES = max(2, int(os.getenv('ODOO_SYNC_INTERVAL_MINUTES', '15') or 15))
+ODOO_SYNC_STARTUP_DELAY_SECONDS = max(5, int(os.getenv('ODOO_SYNC_STARTUP_DELAY_SECONDS', '40') or 40))
+_ODOO_SYNC_THREAD = None
+_ODOO_SYNC_STOP = threading.Event()
+_ODOO_SCHEDULER_INIT = False
+_ODOO_SYNC_LOCK = threading.Lock()
 
 _CONTPAQ_SYNC_LOCK = threading.Lock()
 _CONTPAQ_SYNC_THREAD = None
@@ -3414,6 +3421,7 @@ def log_access_y_cierre_por_hora():
     try:
         _start_contpaq_scheduler_once()
         _start_machine_schedule_scheduler_once()
+        _start_odoo_scheduler_once()
 
         path = request.path
         # skip static files and health checks
@@ -13571,6 +13579,129 @@ def api_maquinaria_odoo_discover():
         return jsonify({'ok': False, 'error': str(exc)}), 502
 
 
+ODOO_TABLES = [
+    'odoo_sync_runs',
+    'odoo_pedidos_venta',
+    'odoo_pedidos_venta_lineas',
+    'odoo_ordenes_compra',
+    'odoo_ordenes_compra_lineas',
+]
+
+
+def _ensure_odoo_tables():
+    """Crea las tablas de Odoo si no existen (sin depender de migracion manual)."""
+    try:
+        for model_cls in (OdooSyncRun, OdooPedidoVenta, OdooPedidoVentaLinea,
+                          OdooOrdenCompra, OdooOrdenCompraLinea):
+            model_cls.__table__.create(bind=db.engine, checkfirst=True)
+        return True
+    except Exception as exc:
+        logger.error(f"No se pudieron asegurar tablas de Odoo: {exc}", exc_info=True)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return False
+
+
+def _run_odoo_sync_guarded(trigger='manual'):
+    """Ejecuta el sync de Odoo evitando corridas solapadas."""
+    if not _ODOO_SYNC_LOCK.acquire(blocking=False):
+        return {'ok': False, 'error': 'Ya hay una sincronizacion de Odoo en curso.'}
+    try:
+        _ensure_odoo_tables()
+        return run_odoo_sync(trigger=trigger)
+    finally:
+        _ODOO_SYNC_LOCK.release()
+
+
+@app.route('/api/maquinaria/odoo/sync', methods=['POST'])
+@login_required
+def api_maquinaria_odoo_sync():
+    """Fuerza una sincronizacion con Odoo (solo admin)."""
+    user = get_current_user()
+    if not (user and user.es_admin):
+        return jsonify({'ok': False, 'error': 'Solo administradores'}), 403
+    if not OdooClient.is_configured():
+        return jsonify({'ok': False, 'error': 'Odoo no configurado'}), 400
+    result = _run_odoo_sync_guarded(trigger='manual')
+    return jsonify(result), (200 if result.get('ok') else 502)
+
+
+@app.route('/api/maquinaria/odoo/sync/last')
+@login_required
+def api_maquinaria_odoo_sync_last():
+    """Devuelve el estado de la ultima sincronizacion con Odoo."""
+    user = get_current_user()
+    if not (user and user.es_admin):
+        return jsonify({'ok': False, 'error': 'Solo administradores'}), 403
+    try:
+        _ensure_odoo_tables()
+        run = OdooSyncRun.query.order_by(OdooSyncRun.id.desc()).first()
+        return jsonify({'ok': True, 'last_sync': run.to_dict() if run else None})
+    except Exception as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
+@app.route('/maquinaria/odoo')
+@login_required
+def maquinaria_odoo_page():
+    """Vista de pedidos de venta y ordenes de compra (OT) traidos de Odoo."""
+    user = get_current_user()
+    if not (user and (user.es_admin or user.has_permission('maquinaria_pedidos', 'view')
+                      or user.has_permission('maquinaria_ordenes', 'view'))):
+        return render_template('403.html'), 403
+    _ensure_odoo_tables()
+    pedidos = OdooPedidoVenta.query.order_by(
+        OdooPedidoVenta.date_order.desc(), OdooPedidoVenta.id.desc()
+    ).limit(100).all()
+    ordenes = OdooOrdenCompra.query.order_by(
+        OdooOrdenCompra.date_order.desc(), OdooOrdenCompra.id.desc()
+    ).limit(100).all()
+    last_run = OdooSyncRun.query.order_by(OdooSyncRun.id.desc()).first()
+    return render_template(
+        'maquinaria_odoo.html',
+        pedidos=[p.to_dict() for p in pedidos],
+        ordenes=[o.to_dict() for o in ordenes],
+        last_run=last_run.to_dict() if last_run else None,
+        configured=OdooClient.is_configured(),
+        is_admin=bool(user and user.es_admin),
+    )
+
+
+def _odoo_scheduler_loop():
+    sleep(ODOO_SYNC_STARTUP_DELAY_SECONDS)
+    while not _ODOO_SYNC_STOP.is_set():
+        try:
+            with app.app_context():
+                _run_odoo_sync_guarded(trigger='scheduler')
+        except Exception as exc:
+            logger.error(f'[ODOO] Error en scheduler: {exc}', exc_info=True)
+        total_wait = ODOO_SYNC_INTERVAL_MINUTES * 60
+        waited = 0
+        while waited < total_wait and not _ODOO_SYNC_STOP.is_set():
+            sleep(1)
+            waited += 1
+
+
+def _start_odoo_scheduler_once():
+    global _ODOO_SYNC_THREAD
+    global _ODOO_SCHEDULER_INIT
+    if _ODOO_SCHEDULER_INIT:
+        return
+    _ODOO_SCHEDULER_INIT = True
+    if not ODOO_SYNC_ENABLED:
+        logger.info('[ODOO] Scheduler deshabilitado por ODOO_SYNC_ENABLED=0')
+        return
+    _ODOO_SYNC_THREAD = threading.Thread(
+        target=_odoo_scheduler_loop,
+        name='odoo-sync-scheduler',
+        daemon=True,
+    )
+    _ODOO_SYNC_THREAD.start()
+    logger.info('[ODOO] Scheduler iniciado (cada %s min)', ODOO_SYNC_INTERVAL_MINUTES)
+
+
 @app.route('/maquinaria/estaciones')
 @login_required
 @requires_any_permission([('maquinaria_estaciones', 'view'), ('maquinaria_estaciones', 'edit'), ('maquinaria_estaciones', 'create'), ('maquinaria_estaciones', 'update'), ('maquinaria_estaciones', 'delete')])
@@ -14143,4 +14274,5 @@ def internal_error(error):
 if __name__ == '__main__':
     _start_contpaq_scheduler_once()
     _start_machine_schedule_scheduler_once()
+    _start_odoo_scheduler_once()
     app.run(host='0.0.0.0', port=5000, debug=False)

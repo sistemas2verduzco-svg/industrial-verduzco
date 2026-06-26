@@ -1969,6 +1969,230 @@ class MaquinariaAlmacenResguardo(db.Model):
         }
 
 
+class OdooSyncRun(db.Model):
+    """Bitacora de cada corrida de sincronizacion con Odoo."""
+    __tablename__ = 'odoo_sync_runs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    started_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    finished_at = db.Column(db.DateTime, nullable=True)
+    status = db.Column(db.String(20), nullable=False, default='running')
+    trigger = db.Column(db.String(30), nullable=True)
+    message = db.Column(db.Text, nullable=True)
+    pedidos_upserted = db.Column(db.Integer, nullable=False, default=0)
+    pedido_lineas_upserted = db.Column(db.Integer, nullable=False, default=0)
+    ordenes_compra_upserted = db.Column(db.Integer, nullable=False, default=0)
+    orden_compra_lineas_upserted = db.Column(db.Integer, nullable=False, default=0)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'started_at': self.started_at.isoformat() if self.started_at else None,
+            'finished_at': self.finished_at.isoformat() if self.finished_at else None,
+            'status': self.status,
+            'trigger': self.trigger,
+            'message': self.message,
+            'pedidos_upserted': self.pedidos_upserted,
+            'pedido_lineas_upserted': self.pedido_lineas_upserted,
+            'ordenes_compra_upserted': self.ordenes_compra_upserted,
+            'orden_compra_lineas_upserted': self.orden_compra_lineas_upserted,
+        }
+
+
+class OdooPedidoVenta(db.Model):
+    """Pedido de venta (sale.order) traido de Odoo."""
+    __tablename__ = 'odoo_pedidos_venta'
+
+    id = db.Column(db.Integer, primary_key=True)
+    odoo_id = db.Column(db.BigInteger, nullable=False, unique=True, index=True)
+    name = db.Column(db.String(120), nullable=True, index=True)
+    partner_odoo_id = db.Column(db.BigInteger, nullable=True, index=True)
+    partner_name = db.Column(db.String(255), nullable=True, index=True)
+    date_order = db.Column(db.DateTime, nullable=True, index=True)
+    commitment_date = db.Column(db.DateTime, nullable=True)
+    validity_date = db.Column(db.DateTime, nullable=True)
+    state = db.Column(db.String(40), nullable=True, index=True)
+    amount_untaxed = db.Column(db.Float, nullable=True)
+    amount_tax = db.Column(db.Float, nullable=True)
+    amount_total = db.Column(db.Float, nullable=True)
+    currency = db.Column(db.String(20), nullable=True)
+    sales_rep = db.Column(db.String(255), nullable=True)
+    company = db.Column(db.String(255), nullable=True)
+    warehouse = db.Column(db.String(255), nullable=True)
+    sucursal = db.Column(db.String(255), nullable=True, index=True)
+    titulo = db.Column(db.String(255), nullable=True)
+    client_order_ref = db.Column(db.String(255), nullable=True)
+    origin = db.Column(db.String(255), nullable=True)
+    comments = db.Column(db.Text, nullable=True)
+    odoo_write_date = db.Column(db.DateTime, nullable=True, index=True)
+    synced_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    lineas = db.relationship('OdooPedidoVentaLinea', backref='pedido', lazy=True, cascade='all, delete-orphan')
+
+    def to_dict(self, include_lines=False):
+        data = {
+            'id': self.id,
+            'odoo_id': self.odoo_id,
+            'name': self.name,
+            'partner_name': self.partner_name,
+            'date_order': self.date_order.isoformat() if self.date_order else None,
+            'commitment_date': self.commitment_date.isoformat() if self.commitment_date else None,
+            'validity_date': self.validity_date.isoformat() if self.validity_date else None,
+            'state': self.state,
+            'amount_untaxed': self.amount_untaxed,
+            'amount_tax': self.amount_tax,
+            'amount_total': self.amount_total,
+            'currency': self.currency,
+            'sales_rep': self.sales_rep,
+            'company': self.company,
+            'warehouse': self.warehouse,
+            'sucursal': self.sucursal,
+            'titulo': self.titulo,
+            'client_order_ref': self.client_order_ref,
+            'origin': self.origin,
+            'comments': self.comments,
+            'odoo_write_date': self.odoo_write_date.isoformat() if self.odoo_write_date else None,
+            'synced_at': self.synced_at.isoformat() if self.synced_at else None,
+        }
+        if include_lines:
+            data['lineas'] = [l.to_dict() for l in sorted(self.lineas, key=lambda x: (x.sequence or 0, x.id))]
+        return data
+
+
+class OdooPedidoVentaLinea(db.Model):
+    """Linea de pedido de venta (sale.order.line) de Odoo."""
+    __tablename__ = 'odoo_pedidos_venta_lineas'
+
+    id = db.Column(db.Integer, primary_key=True)
+    pedido_id = db.Column(db.Integer, db.ForeignKey('odoo_pedidos_venta.id', ondelete='CASCADE'), nullable=False, index=True)
+    odoo_id = db.Column(db.BigInteger, nullable=False, unique=True, index=True)
+    odoo_order_id = db.Column(db.BigInteger, nullable=True, index=True)
+    sequence = db.Column(db.Integer, nullable=True)
+    product_odoo_id = db.Column(db.BigInteger, nullable=True, index=True)
+    product_key = db.Column(db.String(120), nullable=True, index=True)
+    product_name = db.Column(db.String(500), nullable=True)
+    description = db.Column(db.Text, nullable=True)
+    product_uom_qty = db.Column(db.Float, nullable=True)
+    qty_delivered = db.Column(db.Float, nullable=True)
+    price_unit = db.Column(db.Float, nullable=True)
+    price_subtotal = db.Column(db.Float, nullable=True)
+    price_total = db.Column(db.Float, nullable=True)
+    unit = db.Column(db.String(60), nullable=True)
+    synced_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'pedido_id': self.pedido_id,
+            'odoo_id': self.odoo_id,
+            'sequence': self.sequence,
+            'product_key': self.product_key,
+            'product_name': self.product_name,
+            'description': self.description,
+            'product_uom_qty': self.product_uom_qty,
+            'qty_delivered': self.qty_delivered,
+            'price_unit': self.price_unit,
+            'price_subtotal': self.price_subtotal,
+            'price_total': self.price_total,
+            'unit': self.unit,
+        }
+
+
+class OdooOrdenCompra(db.Model):
+    """Orden de compra (purchase.order) de Odoo. Internamente se trata como Orden de Trabajo."""
+    __tablename__ = 'odoo_ordenes_compra'
+
+    id = db.Column(db.Integer, primary_key=True)
+    odoo_id = db.Column(db.BigInteger, nullable=False, unique=True, index=True)
+    name = db.Column(db.String(120), nullable=True, index=True)
+    partner_odoo_id = db.Column(db.BigInteger, nullable=True, index=True)
+    partner_name = db.Column(db.String(255), nullable=True, index=True)
+    date_order = db.Column(db.DateTime, nullable=True, index=True)
+    date_approve = db.Column(db.DateTime, nullable=True)
+    date_planned = db.Column(db.DateTime, nullable=True)
+    state = db.Column(db.String(40), nullable=True, index=True)
+    amount_untaxed = db.Column(db.Float, nullable=True)
+    amount_tax = db.Column(db.Float, nullable=True)
+    amount_total = db.Column(db.Float, nullable=True)
+    currency = db.Column(db.String(20), nullable=True)
+    origin = db.Column(db.String(255), nullable=True)
+    partner_ref = db.Column(db.String(255), nullable=True)
+    company = db.Column(db.String(255), nullable=True)
+    user_name = db.Column(db.String(255), nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    odoo_write_date = db.Column(db.DateTime, nullable=True, index=True)
+    synced_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    lineas = db.relationship('OdooOrdenCompraLinea', backref='orden', lazy=True, cascade='all, delete-orphan')
+
+    def to_dict(self, include_lines=False):
+        data = {
+            'id': self.id,
+            'odoo_id': self.odoo_id,
+            'name': self.name,
+            'partner_name': self.partner_name,
+            'date_order': self.date_order.isoformat() if self.date_order else None,
+            'date_approve': self.date_approve.isoformat() if self.date_approve else None,
+            'date_planned': self.date_planned.isoformat() if self.date_planned else None,
+            'state': self.state,
+            'amount_untaxed': self.amount_untaxed,
+            'amount_tax': self.amount_tax,
+            'amount_total': self.amount_total,
+            'currency': self.currency,
+            'origin': self.origin,
+            'partner_ref': self.partner_ref,
+            'company': self.company,
+            'user_name': self.user_name,
+            'notes': self.notes,
+            'odoo_write_date': self.odoo_write_date.isoformat() if self.odoo_write_date else None,
+            'synced_at': self.synced_at.isoformat() if self.synced_at else None,
+        }
+        if include_lines:
+            data['lineas'] = [l.to_dict() for l in sorted(self.lineas, key=lambda x: (x.sequence or 0, x.id))]
+        return data
+
+
+class OdooOrdenCompraLinea(db.Model):
+    """Linea de orden de compra (purchase.order.line) de Odoo."""
+    __tablename__ = 'odoo_ordenes_compra_lineas'
+
+    id = db.Column(db.Integer, primary_key=True)
+    orden_id = db.Column(db.Integer, db.ForeignKey('odoo_ordenes_compra.id', ondelete='CASCADE'), nullable=False, index=True)
+    odoo_id = db.Column(db.BigInteger, nullable=False, unique=True, index=True)
+    odoo_order_id = db.Column(db.BigInteger, nullable=True, index=True)
+    sequence = db.Column(db.Integer, nullable=True)
+    product_odoo_id = db.Column(db.BigInteger, nullable=True, index=True)
+    product_key = db.Column(db.String(120), nullable=True, index=True)
+    product_name = db.Column(db.String(500), nullable=True)
+    description = db.Column(db.Text, nullable=True)
+    product_qty = db.Column(db.Float, nullable=True)
+    qty_received = db.Column(db.Float, nullable=True)
+    price_unit = db.Column(db.Float, nullable=True)
+    price_subtotal = db.Column(db.Float, nullable=True)
+    price_total = db.Column(db.Float, nullable=True)
+    unit = db.Column(db.String(60), nullable=True)
+    date_planned = db.Column(db.DateTime, nullable=True)
+    synced_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'orden_id': self.orden_id,
+            'odoo_id': self.odoo_id,
+            'sequence': self.sequence,
+            'product_key': self.product_key,
+            'product_name': self.product_name,
+            'description': self.description,
+            'product_qty': self.product_qty,
+            'qty_received': self.qty_received,
+            'price_unit': self.price_unit,
+            'price_subtotal': self.price_subtotal,
+            'price_total': self.price_total,
+            'unit': self.unit,
+            'date_planned': self.date_planned.isoformat() if self.date_planned else None,
+        }
+
+
 class AlertaBuzonGeneral(db.Model):
     __tablename__ = 'alertas_buzon_general'
 

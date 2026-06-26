@@ -67,6 +67,7 @@ class OdooClient:
         *,
         timeout: int = 30,
         model_sale_order: str = 'sale.order',
+        model_purchase_order: str = 'purchase.order',
         model_work_order: str = 'mrp.production',
         model_bom: str = 'mrp.bom',
     ) -> None:
@@ -76,6 +77,7 @@ class OdooClient:
         self.secret = secret or ''
         self.timeout = max(5, int(timeout or 30))
         self.model_sale_order = _clean(model_sale_order) or 'sale.order'
+        self.model_purchase_order = _clean(model_purchase_order) or 'purchase.order'
         self.model_work_order = _clean(model_work_order) or 'mrp.production'
         self.model_bom = _clean(model_bom) or 'mrp.bom'
         self._uid: Optional[int] = None
@@ -114,6 +116,7 @@ class OdooClient:
             secret=secret,
             timeout=timeout,
             model_sale_order=os.getenv('ODOO_MODEL_SALE_ORDER', 'sale.order'),
+            model_purchase_order=os.getenv('ODOO_MODEL_PURCHASE_ORDER', 'purchase.order'),
             model_work_order=os.getenv('ODOO_MODEL_WORK_ORDER', 'mrp.production'),
             model_bom=os.getenv('ODOO_MODEL_BOM', 'mrp.bom'),
         )
@@ -219,6 +222,29 @@ class OdooClient:
             {'attributes': ['string', 'type', 'relation', 'required']},
         )
 
+    def available_fields(self, model: str) -> set:
+        try:
+            return set(self.fields_get(model).keys())
+        except OdooError:
+            return set()
+
+    def search_read_safe(self, model: str, domain: Optional[List[Any]] = None,
+                         fields: Optional[List[str]] = None, *, limit: int = 0,
+                         offset: int = 0, order: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Como search_read pero descarta campos que no existan en el modelo.
+
+        Evita errores cuando un campo (p.ej. x_studio_*) no esta en esta instancia.
+        """
+        wanted = fields or []
+        if wanted:
+            available = self.available_fields(model)
+            use_fields = [f for f in wanted if f in available] or None
+        else:
+            use_fields = None
+        return self.search_read(
+            model, domain, use_fields, limit=limit, offset=offset, order=order
+        )
+
     def model_exists(self, model: str) -> bool:
         try:
             rows = self.search_read(
@@ -248,13 +274,9 @@ class OdooClient:
                 'name': self.model_sale_order,
                 'exists': self.model_exists(self.model_sale_order),
             },
-            'work_order': {
-                'name': self.model_work_order,
-                'exists': self.model_exists(self.model_work_order),
-            },
-            'bom': {
-                'name': self.model_bom,
-                'exists': self.model_exists(self.model_bom),
+            'purchase_order': {
+                'name': self.model_purchase_order,
+                'exists': self.model_exists(self.model_purchase_order),
             },
         }
         result['ok'] = True
