@@ -55,14 +55,14 @@
         .muted { color: #94a3b8; }
         .num { text-align: right; font-variant-numeric: tabular-nums; }
         .hidden { display: none; }
-        /* modal */
-        .modal-back {
+        /* modal (clases propias para no chocar con .modal global de styles.css) */
+        .odoo-modal-back {
             position: fixed; inset: 0; background: rgba(15,23,42,.55);
-            display: none; align-items: flex-start; justify-content: center; z-index: 1000;
+            display: none; align-items: flex-start; justify-content: center; z-index: 4000;
             padding: 40px 14px; overflow-y: auto;
         }
-        .modal-back.show { display: flex; }
-        .modal {
+        .odoo-modal-back.show { display: flex; }
+        .odoo-modal {
             background: #fff; border-radius: 12px; width: min(860px, 100%);
             box-shadow: 0 20px 60px rgba(0,0,0,.3); overflow: hidden;
         }
@@ -231,8 +231,8 @@
     </div>
 
     <!-- MODAL: detalle/tomar pedido -->
-    <div class="modal-back" id="pedidoModal">
-        <div class="modal">
+    <div class="odoo-modal-back" id="pedidoModal">
+        <div class="odoo-modal">
             <div class="modal-head">
                 <h3 id="pedidoModalTitle">Detalle del pedido</h3>
                 <button class="x-close" onclick="cerrar('pedidoModal')">&times;</button>
@@ -246,8 +246,8 @@
     </div>
 
     <!-- MODAL: orden de compra (ver detalle o relacionar) -->
-    <div class="modal-back" id="ocModal">
-        <div class="modal">
+    <div class="odoo-modal-back" id="ocModal">
+        <div class="odoo-modal">
             <div class="modal-head">
                 <h3 id="ocModalTitle">Ordenes de compra</h3>
                 <button class="x-close" onclick="cerrar('ocModal')">&times;</button>
@@ -260,8 +260,8 @@
     </div>
 
     <!-- MODAL: pedido de stock -->
-    <div class="modal-back" id="stockModal">
-        <div class="modal">
+    <div class="odoo-modal-back" id="stockModal">
+        <div class="odoo-modal">
             <div class="modal-head">
                 <h3>Nuevo pedido de stock (plataforma)</h3>
                 <button class="x-close" onclick="cerrar('stockModal')">&times;</button>
@@ -285,8 +285,8 @@
     </div>
 
     <!-- MODAL: ver solicitud -->
-    <div class="modal-back" id="solModal">
-        <div class="modal">
+    <div class="odoo-modal-back" id="solModal">
+        <div class="odoo-modal">
             <div class="modal-head">
                 <h3 id="solModalTitle">Solicitud</h3>
                 <button class="x-close" onclick="cerrar('solModal')">&times;</button>
