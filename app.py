@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqNotaVenta, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, AlertaBuzonGeneral, Tecnico, LogVerificacion
 from auth import AuthManager
 from email_manager import EmailManager
+from odoo_client import OdooClient, OdooError
 import os
 import json
 from dotenv import load_dotenv
@@ -1907,6 +1908,9 @@ CONTPAQ_MAQUINARIA_START_DATE = os.getenv('CONTPAQ_MAQUINARIA_START_DATE', '2025
 CONTPAQ_MM_LOOKBACK_DAYS = max(14, int(os.getenv('CONTPAQ_MM_LOOKBACK_DAYS', '84') or 84))
 CONTPAQ_MM_MIN_WEEKS = max(1.0, float(os.getenv('CONTPAQ_MM_MIN_WEEKS', '2.0') or 2.0))
 CONTPAQ_MM_MAX_WEEKS = max(CONTPAQ_MM_MIN_WEEKS, float(os.getenv('CONTPAQ_MM_MAX_WEEKS', '6.0') or 6.0))
+
+# Odoo (Maquinaria y Ensamble: pedidos de venta y ordenes de trabajo)
+ODOO_SYNC_ENABLED = os.getenv('ODOO_SYNC_ENABLED', '0').strip().lower() in ('1', 'true', 'yes', 'on')
 
 _CONTPAQ_SYNC_LOCK = threading.Lock()
 _CONTPAQ_SYNC_THREAD = None
@@ -13474,11 +13478,66 @@ def maquinaria_boms_componentes_create(bom_id):
 
 @app.route('/maquinaria/claves-procesos')
 @login_required
-@requires_any_permission([('maquinaria_claves_procesos', 'view'), ('maquinaria_claves_procesos', 'edit'), ('maquinaria_claves_procesos', 'create'), ('maquinaria_claves_procesos', 'update'), ('maquinaria_claves_procesos', 'delete')])
 def maquinaria_claves_procesos_page():
-    claves = ClaveProducto.query.order_by(ClaveProducto.clave.asc()).limit(250).all()
-    procesos = ProcesoCatalogo.query.order_by(ProcesoCatalogo.nombre.asc()).limit(250).all()
-    return render_template('maquinaria_claves_procesos.html', claves=claves, procesos=procesos)
+    # Retirado del flujo de Maquinaria y Ensamble: el catalogo de produccion ya no
+    # forma parte de este modulo. Se conserva la ruta solo para redirigir enlaces viejos.
+    return redirect(url_for('maquinaria_pedidos_page'))
+
+
+@app.route('/api/maquinaria/odoo/test')
+@login_required
+def api_maquinaria_odoo_test():
+    """Diagnostico de conexion a Odoo (solo admin).
+
+    Verifica credenciales, version del servidor y existencia de los modelos clave
+    (sale.order / mrp.production / mrp.bom o los configurados via env).
+    """
+    user = get_current_user()
+    if not (user and user.es_admin):
+        return jsonify({'ok': False, 'error': 'Solo administradores'}), 403
+    if not OdooClient.is_configured():
+        return jsonify({
+            'ok': False,
+            'configured': False,
+            'error': 'Faltan variables de entorno de Odoo (ODOO_URL, ODOO_DB, '
+                     'ODOO_USERNAME y ODOO_API_KEY o ODOO_PASSWORD).',
+        }), 400
+    try:
+        client = OdooClient.from_env()
+        info = client.test_connection()
+        info['configured'] = True
+        return jsonify(info)
+    except OdooError as exc:
+        return jsonify({'ok': False, 'configured': True, 'error': str(exc)}), 502
+
+
+@app.route('/api/maquinaria/odoo/discover')
+@login_required
+def api_maquinaria_odoo_discover():
+    """Devuelve campos + un registro de ejemplo de un modelo Odoo (solo admin).
+
+    Sirve para mapear los campos reales de tu Odoo antes de programar el sync.
+    Uso: /api/maquinaria/odoo/discover?model=sale.order&sample=1
+    """
+    user = get_current_user()
+    if not (user and user.es_admin):
+        return jsonify({'ok': False, 'error': 'Solo administradores'}), 403
+    if not OdooClient.is_configured():
+        return jsonify({'ok': False, 'error': 'Odoo no configurado'}), 400
+    model = (request.args.get('model') or '').strip()
+    if not model:
+        return jsonify({'ok': False, 'error': 'Falta parametro model'}), 400
+    try:
+        sample = max(1, min(5, request.args.get('sample', type=int) or 1))
+    except Exception:
+        sample = 1
+    try:
+        client = OdooClient.from_env()
+        data = client.discover(model, sample=sample)
+        data['ok'] = True
+        return jsonify(data)
+    except OdooError as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 502
 
 
 @app.route('/maquinaria/estaciones')
