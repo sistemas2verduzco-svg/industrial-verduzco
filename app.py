@@ -13023,8 +13023,15 @@ def _maquinaria_bom_for_clave(clave_maquina):
 
 @app.route('/maquinaria/pedidos')
 @login_required
-@requires_any_permission([('maquinaria_pedidos', 'view'), ('maquinaria_pedidos', 'edit'), ('maquinaria_pedidos', 'create'), ('maquinaria_pedidos', 'update'), ('maquinaria_pedidos', 'delete')])
 def maquinaria_pedidos_page():
+    # Modulo de pedidos CONTPAQ retirado: ahora los pedidos vienen de Odoo.
+    return redirect(url_for('maquinaria_odoo_page'))
+
+
+@app.route('/maquinaria/pedidos-contpaq-legacy')
+@login_required
+@requires_any_permission([('maquinaria_pedidos', 'view'), ('maquinaria_pedidos', 'edit'), ('maquinaria_pedidos', 'create'), ('maquinaria_pedidos', 'update'), ('maquinaria_pedidos', 'delete')])
+def maquinaria_pedidos_legacy_page():
     ready, missing = _maquinaria_tables_status()
     pedidos_locales = []
     if ready:
