@@ -12182,8 +12182,15 @@ def procesos_base_delete(proc_id):
 @login_required
 @requires_permission('contpaq', 'view')
 def contpaq_conciliacion_page():
-    """Vista privada para consultar pedidos y su relacion con remisiones (sin menu)."""
-    return render_template('contpaq_conciliacion.html')
+    """Vista privada para consultar pedidos Odoo en conciliacion (sin menu)."""
+    _ensure_odoo_tables()
+    last_run = OdooSyncRun.query.order_by(OdooSyncRun.id.desc()).first()
+    return render_template(
+        'contpaq_conciliacion.html',
+        last_run=last_run,
+        odoo_sync_auto=ODOO_SYNC_ENABLED,
+        odoo_sync_interval=ODOO_SYNC_INTERVAL_MINUTES,
+    )
 
 
 @app.route('/contpaq/maximos-minimos')
@@ -13248,6 +13255,24 @@ def api_contpaq_sync():
     result = _run_odoo_sync_guarded(trigger=f"manual_conciliacion:{session.get('user')}")
     status = 200 if result.get('ok') else 500
     return jsonify(result), status
+
+
+@app.route('/api/contpaq/odoo/sync/last', methods=['GET'])
+@login_required
+@requires_permission('contpaq', 'view')
+def api_contpaq_odoo_sync_last():
+    """Estado de la ultima sincronizacion Odoo (para la vista de conciliacion)."""
+    try:
+        _ensure_odoo_tables()
+        run = OdooSyncRun.query.order_by(OdooSyncRun.id.desc()).first()
+        return jsonify({
+            'ok': True,
+            'last_sync': run.to_dict() if run else None,
+            'auto_enabled': ODOO_SYNC_ENABLED,
+            'interval_minutes': ODOO_SYNC_INTERVAL_MINUTES,
+        })
+    except Exception as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 500
 
 
 @app.route('/api/contpaq/sync/push', methods=['POST'])

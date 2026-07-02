@@ -60,6 +60,39 @@
             color: #ffffff;
         }
 
+        .btn-sync {
+            background: #7c3aed;
+            border-color: #6d28d9;
+            color: #ffffff;
+        }
+
+        .btn-sync:hover {
+            filter: brightness(0.95);
+        }
+
+        .sync-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            background: #f5f3ff;
+            border: 1px solid #ddd6fe;
+            border-radius: 10px;
+            padding: 12px 14px;
+            margin-bottom: 14px;
+        }
+
+        .sync-info {
+            font-size: 13px;
+            color: #312e81;
+            line-height: 1.45;
+        }
+
+        .sync-ok { color: #166534; font-weight: 700; }
+        .sync-err { color: #b91c1c; font-weight: 700; }
+        .sync-muted { color: #64748b; font-size: 12px; }
+
         .btn-secondary {
             background: #546e7a;
             border-color: #455a64;
@@ -189,7 +222,30 @@
 <body>
     <div class="conciliacion-wrap">
         <h2>Conciliacion Pedidos (Odoo)</h2>
-        <p class="muted">Vista privada sin menu lateral. Los pedidos se sincronizan desde Odoo (misma API de Maquinaria). Filtros combinables tipo Excel.</p>
+        <p class="muted">Vista privada sin menu lateral. Los pedidos se sincronizan desde Odoo (misma API de Maquinaria). Solo se muestran pedidos con sucursal.</p>
+
+        <div class="sync-bar">
+            <div class="sync-info" id="odooSyncInfo">
+                {% if odoo_sync_auto %}
+                <div><b>Sincronizacion automatica:</b> activa (cada {{ odoo_sync_interval }} min)</div>
+                {% else %}
+                <div><b>Sincronizacion automatica:</b> desactivada en el servidor</div>
+                <div class="sync-muted">Activa <code>ODOO_SYNC_ENABLED=1</code> en el .env para que se actualice solo.</div>
+                {% endif %}
+                <div id="odooSyncLast" style="margin-top:4px;">
+                    {% if last_run %}
+                    Ultima sync: <b>{{ (last_run.finished_at or last_run.started_at)|replace('T', ' ')[:19] }}</b>
+                    {% if last_run.status == 'ok' %}<span class="sync-ok">OK</span>{% elif last_run.status == 'error' %}<span class="sync-err">ERROR</span>{% else %}<b>{{ last_run.status }}</b>{% endif %}
+                    {% if last_run.message %}<span class="sync-muted"> — {{ last_run.message }}</span>{% endif %}
+                    {% else %}
+                    Aun no se ha sincronizado con Odoo.
+                    {% endif %}
+                </div>
+            </div>
+            {% if has_permission('contpaq', 'edit') %}
+            <button class="btn btn-sync" id="btnSync" type="button">Sincronizar ahora</button>
+            {% endif %}
+        </div>
 
         <div class="toolbar" style="grid-template-columns: repeat(4, minmax(180px, 1fr));">
             <input id="q" type="text" placeholder="Busqueda global (varios terminos)">
@@ -205,9 +261,6 @@
             <input id="fecha_hasta" type="date" title="Fecha hasta">
             <button class="btn btn-primary" id="btnBuscar">Aplicar filtros</button>
             <button class="btn btn-secondary" id="btnLimpiar">Limpiar</button>
-            {% if has_permission('contpaq', 'edit') %}
-            <button class="btn btn-secondary" id="btnSync">Sincronizar ahora</button>
-            {% endif %}
         </div>
 
         {% if has_permission('contpaq', 'edit') %}
@@ -553,19 +606,55 @@
             await cargar(1);
         }
 
+        async function refreshOdooSyncStatus() {
+            const el = document.getElementById('odooSyncLast');
+            if (!el) return;
+            try {
+                const resp = await fetch('/api/contpaq/odoo/sync/last');
+                const data = await resp.json();
+                if (!resp.ok || !data.ok) return;
+                const run = data.last_sync;
+                if (!run) {
+                    el.innerHTML = 'Aun no se ha sincronizado con Odoo.';
+                    return;
+                }
+                const when = (run.finished_at || run.started_at || '').replace('T', ' ').slice(0, 19);
+                let statusHtml = '';
+                if (run.status === 'ok') statusHtml = '<span class="sync-ok">OK</span>';
+                else if (run.status === 'error') statusHtml = '<span class="sync-err">ERROR</span>';
+                else statusHtml = `<b>${esc(run.status || '')}</b>`;
+                const msg = run.message ? `<span class="sync-muted"> — ${esc(run.message)}</span>` : '';
+                el.innerHTML = `Ultima sync: <b>${esc(when)}</b> ${statusHtml}${msg}`;
+            } catch (e) {
+                // silencioso
+            }
+        }
+
         async function syncNow() {
             const status = document.getElementById('status');
-            status.textContent = 'Sincronizando...';
-            const resp = await fetch('/api/contpaq/sync', { method: 'POST' });
-            const data = await resp.json();
-            if (!resp.ok) {
-                status.textContent = data.error || 'Error al sincronizar';
-                return;
+            const btn = document.getElementById('btnSync');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Sincronizando...';
             }
-
-            status.textContent = `Sincronizacion Odoo completa. Run #${data.run_id || ''}`;
-            currentPage = 1;
-            await cargar(1);
+            status.textContent = 'Sincronizando pedidos desde Odoo...';
+            try {
+                const resp = await fetch('/api/contpaq/sync', { method: 'POST' });
+                const data = await resp.json();
+                if (!resp.ok) {
+                    status.textContent = data.error || 'Error al sincronizar';
+                    return;
+                }
+                status.textContent = `Sincronizacion Odoo completa. Run #${data.run_id || ''}`;
+                await refreshOdooSyncStatus();
+                currentPage = 1;
+                await cargar(1);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Sincronizar ahora';
+                }
+            }
         }
 
         document.getElementById('btnBuscar').addEventListener('click', () => {
@@ -662,6 +751,7 @@
         });
 
         cargar(1);
+        refreshOdooSyncStatus();
     </script>
 </body>
 </html>
