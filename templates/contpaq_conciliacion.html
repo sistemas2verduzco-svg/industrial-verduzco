@@ -234,7 +234,7 @@
                 {% endif %}
                 <div id="odooSyncLast" style="margin-top:4px;">
                     {% if last_run %}
-                    Ultima sync: <b>{{ (last_run.finished_at or last_run.started_at)|replace('T', ' ')[:19] }}</b>
+                    Ultima sync: <b>{{ last_sync_label }}</b>
                     {% if last_run.status == 'ok' %}<span class="sync-ok">OK</span>{% elif last_run.status == 'error' %}<span class="sync-err">ERROR</span>{% else %}<b>{{ last_run.status }}</b>{% endif %}
                     {% if last_run.message %}<span class="sync-muted"> — {{ last_run.message }}</span>{% endif %}
                     {% else %}

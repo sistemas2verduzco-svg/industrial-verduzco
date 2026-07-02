@@ -12183,11 +12183,21 @@ def procesos_base_delete(proc_id):
 @requires_permission('contpaq', 'view')
 def contpaq_conciliacion_page():
     """Vista privada para consultar pedidos Odoo en conciliacion (sin menu)."""
-    _ensure_odoo_tables()
-    last_run = OdooSyncRun.query.order_by(OdooSyncRun.id.desc()).first()
+    last_run = None
+    last_sync_label = ''
+    try:
+        _ensure_odoo_tables()
+        last_run = OdooSyncRun.query.order_by(OdooSyncRun.id.desc()).first()
+        if last_run:
+            sync_dt = last_run.finished_at or last_run.started_at
+            if sync_dt:
+                last_sync_label = sync_dt.strftime('%Y-%m-%d %H:%M:%S')
+    except Exception as exc:
+        logger.error(f'Error cargando estado Odoo en conciliacion: {exc}', exc_info=True)
     return render_template(
         'contpaq_conciliacion.html',
         last_run=last_run,
+        last_sync_label=last_sync_label,
         odoo_sync_auto=ODOO_SYNC_ENABLED,
         odoo_sync_interval=ODOO_SYNC_INTERVAL_MINUTES,
     )
@@ -12305,7 +12315,7 @@ def _build_conciliacion_odoo_response(
 
     pedidos_q = OdooPedidoVenta.query.filter(
         OdooPedidoVenta.sucursal.isnot(None),
-        func.coalesce(func.trim(OdooPedidoVenta.sucursal), '') != '',
+        func.length(func.trim(OdooPedidoVenta.sucursal)) > 0,
     )
 
     if cliente:
