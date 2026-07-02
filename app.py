@@ -12270,11 +12270,428 @@ def api_contpaq_maximos_minimos_export_csv():
         return jsonify({'error': str(exc)}), 500
 
 
+def _conciliacion_odoo_periodo_semana(pedido):
+    """Semana de negocio para un pedido Odoo (titulo o fecha del pedido)."""
+    titulo_key = _contpaq_title_week_key(pedido.titulo, None, pedido.date_order)
+    if titulo_key:
+        return titulo_key
+    return _contpaq_week_label_from_date(pedido.date_order) or 'SIN SEMANA'
+
+
+def _build_conciliacion_odoo_response(
+    *,
+    q='',
+    folio='',
+    cliente='',
+    sucursal='',
+    titulo='',
+    fecha_desde_raw='',
+    fecha_hasta_raw='',
+    limit=120,
+    page=1,
+):
+    """Arma la respuesta de conciliacion leyendo pedidos sincronizados desde Odoo."""
+    _ensure_odoo_tables()
+
+    limit = max(1, min(int(limit or 120), 500))
+    page = max(1, int(page or 1))
+
+    pedidos_q = OdooPedidoVenta.query.filter(
+        OdooPedidoVenta.sucursal.isnot(None),
+        func.coalesce(func.trim(OdooPedidoVenta.sucursal), '') != '',
+    )
+
+    if cliente:
+        pedidos_q = pedidos_q.filter(OdooPedidoVenta.partner_name.ilike(f"%{cliente}%"))
+
+    if folio:
+        like_folio = f"%{folio}%"
+        pedidos_q = pedidos_q.filter(
+            db.or_(
+                OdooPedidoVenta.name.ilike(like_folio),
+                OdooPedidoVenta.client_order_ref.ilike(like_folio),
+            )
+        )
+
+    if sucursal:
+        pedidos_q = pedidos_q.filter(OdooPedidoVenta.sucursal.ilike(f"%{sucursal}%"))
+
+    if fecha_desde_raw:
+        fecha_desde = _parse_date(fecha_desde_raw)
+        if not fecha_desde:
+            return {'error': 'fecha_desde invalida. Usa YYYY-MM-DD'}, 400
+        pedidos_q = pedidos_q.filter(
+            OdooPedidoVenta.date_order >= datetime.combine(fecha_desde, datetime.min.time())
+        )
+
+    if fecha_hasta_raw:
+        fecha_hasta = _parse_date(fecha_hasta_raw)
+        if not fecha_hasta:
+            return {'error': 'fecha_hasta invalida. Usa YYYY-MM-DD'}, 400
+        pedidos_q = pedidos_q.filter(
+            OdooPedidoVenta.date_order < datetime.combine(fecha_hasta + timedelta(days=1), datetime.min.time())
+        )
+
+    if q:
+        terms = [t.strip() for t in q.split() if t.strip()]
+        for term in terms:
+            like = f"%{term}%"
+            pedidos_q = pedidos_q.filter(
+                db.or_(
+                    OdooPedidoVenta.titulo.ilike(like),
+                    OdooPedidoVenta.name.ilike(like),
+                    OdooPedidoVenta.sucursal.ilike(like),
+                    OdooPedidoVenta.partner_name.ilike(like),
+                    OdooPedidoVenta.client_order_ref.ilike(like),
+                    OdooPedidoVenta.origin.ilike(like),
+                )
+            )
+
+    ordered_q = pedidos_q.order_by(OdooPedidoVenta.date_order.desc(), OdooPedidoVenta.id.desc())
+    compare_pedidos = ordered_q.all()
+
+    if titulo:
+        titulo_norm = _contpaq_norm_text(titulo)
+        compare_pedidos = [
+            p for p in compare_pedidos
+            if titulo_norm in _contpaq_norm_text(p.titulo)
+            or titulo_norm in _contpaq_norm_text(_conciliacion_odoo_periodo_semana(p))
+            or titulo_norm in _contpaq_title_week_key(p.titulo, None, p.date_order)
+        ]
+
+    display_pedidos = list(compare_pedidos)
+
+    semana_options = sorted({
+        _contpaq_title_week_key(p.titulo, _conciliacion_odoo_periodo_semana(p), p.date_order)
+        for p in display_pedidos
+        if _contpaq_title_week_key(p.titulo, _conciliacion_odoo_periodo_semana(p), p.date_order)
+    })
+    sucursal_options = sorted({
+        str(p.sucursal or '').strip()
+        for p in display_pedidos
+        if str(p.sucursal or '').strip()
+    })
+
+    total_records = len(display_pedidos)
+    compare_map = {p.id: p for p in compare_pedidos}
+    compare_pedido_ids = [p.id for p in compare_pedidos]
+    offset = (page - 1) * limit
+    pedidos = display_pedidos[offset:offset + limit]
+
+    if not pedidos:
+        return {
+            'items': [],
+            'total': 0,
+            'page': page,
+            'limit': limit,
+            'total_records': total_records,
+            'total_pages': (total_records + limit - 1) // limit if total_records else 0,
+            'has_prev': page > 1,
+            'has_next': offset + limit < total_records,
+            'filter_options': {
+                'semanas': semana_options,
+                'sucursales': sucursal_options,
+            },
+        }, 200
+
+    def _query_odoo_lines(pedido_ids):
+        if not pedido_ids:
+            return []
+        rows = []
+        chunk_size = 500
+        for i in range(0, len(pedido_ids), chunk_size):
+            chunk = pedido_ids[i:i + chunk_size]
+            rows.extend(
+                OdooPedidoVentaLinea.query.filter(
+                    OdooPedidoVentaLinea.pedido_id.in_(chunk)
+                ).order_by(
+                    OdooPedidoVentaLinea.pedido_id.asc(),
+                    OdooPedidoVentaLinea.sequence.asc(),
+                    OdooPedidoVentaLinea.id.asc(),
+                ).all()
+            )
+        return rows
+
+    pedido_ids = [p.id for p in pedidos]
+    detalles = _query_odoo_lines(pedido_ids)
+    compare_detalles = _query_odoo_lines(compare_pedido_ids) if compare_pedido_ids else []
+
+    detalles_map = {}
+    for d in detalles:
+        detalles_map.setdefault(d.pedido_id, []).append(d)
+
+    visible_claves = {
+        _contpaq_norm_text(d.product_key)
+        for d in (detalles + compare_detalles)
+        if _contpaq_norm_text(d.product_key)
+    }
+    public_price_map = {}
+    if visible_claves:
+        public_price_map = {
+            _contpaq_norm_text(row.clave_producto): float(row.precio_publico)
+            for row in ContpaqPrecioPublico.query.filter(
+                ContpaqPrecioPublico.clave_producto.in_(list(visible_claves))
+            ).all()
+            if row.clave_producto is not None and row.precio_publico is not None
+        }
+
+    def _norm_txt(v):
+        return str(v or '').strip().upper()
+
+    def _norm_num(v):
+        try:
+            f = float(str(v).replace(',', '').strip())
+            if f.is_integer():
+                return str(int(f))
+            return f"{f:.4f}".rstrip('0').rstrip('.')
+        except Exception:
+            return _norm_txt(v)
+
+    import re as _re_sem
+
+    def _sem_year_strip(s):
+        v = _contpaq_norm_text(str(s or ''))
+        return _re_sem.sub(r'\s+DE\s+\d{4}\s*$', '', v).strip()
+
+    p_set = set()
+    for d in compare_detalles:
+        p_cmp = compare_map.get(d.pedido_id)
+        if not p_cmp:
+            continue
+        semana_cmp_norm = _sem_year_strip(
+            _contpaq_title_week_key(p_cmp.titulo, _conciliacion_odoo_periodo_semana(p_cmp), p_cmp.date_order)
+        )
+        sucursal_cmp_norm = _norm_txt(p_cmp.sucursal)
+        row_key_cmp = (
+            _norm_txt(d.product_key),
+            _norm_num(d.product_uom_qty),
+            semana_cmp_norm,
+            sucursal_cmp_norm,
+        )
+        p_set.add(row_key_cmp)
+
+    items = []
+    total_partidas = 0
+    total_importe = 0.0
+    total_remisiones = 0
+    semana_totales = {}
+
+    for p in pedidos:
+        pedido_rows = []
+        pedido_total = 0.0
+        semana_norm = _contpaq_title_week_key(p.titulo, _conciliacion_odoo_periodo_semana(p), p.date_order)
+        periodo_semana = _conciliacion_odoo_periodo_semana(p)
+
+        for d in detalles_map.get(p.id, []):
+            cantidad_num = _to_float(d.product_uom_qty)
+            precio_unit = _to_float(d.price_unit)
+            partida_total = _to_float(d.price_subtotal)
+            if partida_total is None and cantidad_num is not None and precio_unit is not None:
+                partida_total = round(cantidad_num * precio_unit, 2)
+            partida_total = float(partida_total or 0)
+            precio_publico = public_price_map.get(_norm_txt(d.product_key))
+            total_publico = round(cantidad_num * precio_publico, 2) if precio_publico is not None and cantidad_num is not None else None
+            diferencia_publico = round(total_publico - partida_total, 2) if total_publico is not None else None
+            pedido_total += partida_total
+            total_partidas += 1
+
+            pedido_rows.append({
+                'line_number': d.sequence,
+                'clave_producto': d.product_key,
+                'descripcion': d.description or d.product_name,
+                'cantidad': d.product_uom_qty,
+                'precio_unitario': precio_unit,
+                'total_partida': partida_total,
+                'precio_publico_unitario': precio_publico,
+                'total_partida_precio_publico': total_publico,
+                'diferencia_precio_publico': diferencia_publico,
+                'serie': '',
+                'folio': p.name,
+                'fecha_documento': p.date_order.isoformat() if p.date_order else None,
+                'es_inyectado': False,
+            })
+
+        total_importe += pedido_total
+        sem = periodo_semana or 'SIN SEMANA'
+        if sem not in semana_totales:
+            semana_totales[sem] = {'pedidos': 0, 'total': 0.0}
+        semana_totales[sem]['pedidos'] += 1
+        semana_totales[sem]['total'] += pedido_total
+
+        items.append({
+            'document_id': p.odoo_id,
+            'doc_folio': p.name,
+            'serie': '',
+            'cliente': p.partner_name,
+            'sucursal': p.sucursal,
+            'titulo': p.titulo,
+            'periodo_semana': periodo_semana,
+            'semana_match_key': semana_norm,
+            'fecha_documento': p.date_order.isoformat() if p.date_order else None,
+            'pedido_total': round(pedido_total, 2),
+            'detalles': pedido_rows,
+            'remisiones': [],
+        })
+
+    indice_q = ContpaqSucursalIndice.query
+    if sucursal:
+        indice_q = indice_q.filter(ContpaqSucursalIndice.sucursal.ilike(f"%{sucursal}%"))
+    if titulo:
+        indice_q = indice_q.filter(ContpaqSucursalIndice.semana.ilike(f"%{titulo}%"))
+
+    indice_rows = indice_q.all()
+    faltantes_indice = []
+    for idx in indice_rows:
+        row_key = (
+            _contpaq_norm_text(idx.clave_producto),
+            _contpaq_norm_qty(idx.cantidad),
+            _sem_year_strip(idx.semana),
+            _contpaq_norm_text(idx.sucursal),
+        )
+        if row_key in p_set:
+            continue
+        faltantes_indice.append({
+            'source_document_id': None,
+            'folio': idx.folio or '',
+            'semana': idx.semana,
+            'sucursal': idx.sucursal,
+            'clave_producto': idx.clave_producto,
+            'descripcion': idx.descripcion,
+            'cantidad': idx.cantidad,
+            'precio_unitario': None,
+            'origen': 'INDICE_SUCURSALES',
+            'line_number_origen': None,
+        })
+
+    faltantes_inyectados = 0
+    if page == 1:
+        ws_targets = {}
+        faltantes_line_counter = {}
+        for i, item in enumerate(items):
+            sem_k = _sem_year_strip(item.get('semana_match_key') or item.get('periodo_semana') or '')
+            key = (sem_k, _norm_txt(item.get('sucursal')))
+            if key not in ws_targets:
+                ws_targets[key] = i
+
+        for f in faltantes_indice:
+            sem_f = _sem_year_strip(str(f.get('semana') or '').strip())
+            key = (sem_f, _norm_txt(str(f.get('sucursal') or '').strip()))
+            target_idx = ws_targets.get(key)
+            if target_idx is None:
+                continue
+
+            cantidad = _to_float(f.get('cantidad'))
+            precio = _to_float(f.get('precio_unitario'))
+            total_partida = round(cantidad * precio, 2) if cantidad is not None and precio is not None else 0.0
+            precio_publico = public_price_map.get(_norm_txt(f.get('clave_producto')))
+            total_publico = round(cantidad * precio_publico, 2) if precio_publico is not None and cantidad is not None else None
+            diferencia_publico = round(total_publico - total_partida, 2) if total_publico is not None else None
+
+            target_item = items[target_idx]
+            target_item.setdefault('detalles', [])
+            faltantes_line_counter[target_idx] = faltantes_line_counter.get(target_idx, 0) + 1
+            target_item['detalles'].append({
+                'line_number': f"F-{faltantes_line_counter[target_idx]}",
+                'clave_producto': f.get('clave_producto'),
+                'descripcion': f.get('descripcion') or 'FALTANTE DESDE INDICE',
+                'cantidad': f.get('cantidad'),
+                'precio_unitario': precio,
+                'total_partida': total_partida,
+                'precio_publico_unitario': precio_publico,
+                'total_partida_precio_publico': total_publico,
+                'diferencia_precio_publico': diferencia_publico,
+                'origen_faltante': f.get('origen'),
+                'folio_origen': f.get('folio') or '',
+                'serie': '',
+                'folio': f.get('folio') or '',
+                'fecha_documento': None,
+                'es_inyectado': True,
+            })
+
+            target_item['pedido_total'] = round(_to_float(target_item.get('pedido_total')) + total_partida, 2)
+            target_item['es_faltante'] = True
+            total_partidas += 1
+            total_importe += total_partida
+            sem_target = target_item.get('periodo_semana') or sem_f
+            if sem_target not in semana_totales:
+                semana_totales[sem_target] = {'pedidos': 0, 'total': 0.0}
+            semana_totales[sem_target]['total'] += total_partida
+            faltantes_inyectados += 1
+
+    items.sort(
+        key=lambda x: (
+            x.get('periodo_semana') or '',
+            x.get('fecha_documento') or '',
+            str(x.get('doc_folio') or ''),
+        ),
+        reverse=True,
+    )
+
+    resumen = {
+        'total_pedidos': len(items),
+        'total_partidas': total_partidas,
+        'total_importe': round(total_importe, 2),
+        'total_remisiones': total_remisiones,
+        'total_faltantes_desde_indice': len(faltantes_indice),
+        'faltantes_inyectados': faltantes_inyectados,
+        'totales_por_semana': [
+            {
+                'semana': semana,
+                'pedidos': vals['pedidos'],
+                'total': round(vals['total'], 2),
+            }
+            for semana, vals in sorted(semana_totales.items(), key=lambda x: str(x[0]), reverse=True)
+        ],
+    }
+
+    return {
+        'items': items,
+        'total': len(items),
+        'resumen': resumen,
+        'filter_options': {
+            'semanas': semana_options,
+            'sucursales': sucursal_options,
+        },
+        'page': page,
+        'limit': limit,
+        'total_records': total_records,
+        'total_pages': (total_records + limit - 1) // limit if total_records else 0,
+        'has_prev': page > 1,
+        'has_next': offset + limit < total_records,
+        'fuente': 'odoo',
+    }, 200
+
+
 @app.route('/api/contpaq/conciliacion', methods=['GET'])
 @login_required
 @requires_permission('contpaq', 'view')
 def api_contpaq_conciliacion():
-    """Devuelve pedidos P-/D con detalle y remisiones relacionadas para consulta en UI."""
+    """Devuelve pedidos Odoo con detalle para conciliacion (mismas columnas que antes)."""
+    try:
+        payload, status = _build_conciliacion_odoo_response(
+            q=(request.args.get('q') or '').strip(),
+            folio=(request.args.get('folio') or '').strip(),
+            cliente=(request.args.get('cliente') or '').strip(),
+            sucursal=(request.args.get('sucursal') or '').strip(),
+            titulo=(request.args.get('titulo') or '').strip(),
+            fecha_desde_raw=(request.args.get('fecha_desde') or '').strip(),
+            fecha_hasta_raw=(request.args.get('fecha_hasta') or '').strip(),
+            limit=request.args.get('limit', default=120, type=int),
+            page=request.args.get('page', default=1, type=int),
+        )
+        if 'error' in payload:
+            return jsonify(payload), status
+        return jsonify(payload), status
+    except Exception as e:
+        logger.error(f"Error consultando conciliacion Odoo: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/contpaq/conciliacion-contpaq-legacy', methods=['GET'])
+@login_required
+@requires_permission('contpaq', 'view')
+def api_contpaq_conciliacion_legacy():
+    """Respaldo: conciliacion leyendo pedidos CONTPAQ (ya no usada en UI principal)."""
     try:
         q = (request.args.get('q') or '').strip()
         folio = (request.args.get('folio') or '').strip()
@@ -12827,8 +13244,8 @@ def api_contpaq_conciliacion():
 @login_required
 @requires_permission('contpaq', 'edit')
 def api_contpaq_sync():
-    """Ejecuta sincronizacion manual de CONTPAQi hacia la BD de la nube."""
-    result = run_contpaq_sync(trigger=f"manual:{session.get('user')}")
+    """Ejecuta sincronizacion manual de pedidos Odoo para conciliacion."""
+    result = _run_odoo_sync_guarded(trigger=f"manual_conciliacion:{session.get('user')}")
     status = 200 if result.get('ok') else 500
     return jsonify(result), status
 

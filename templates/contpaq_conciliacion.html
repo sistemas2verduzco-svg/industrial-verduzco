@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Conciliacion CONTPAQi</title>
+    <title>Conciliacion Pedidos (Odoo)</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <style>
         .conciliacion-wrap {
@@ -188,8 +188,8 @@
 </head>
 <body>
     <div class="conciliacion-wrap">
-        <h2>Conciliacion CONTPAQi</h2>
-        <p class="muted">Vista privada sin menu lateral. Filtros combinables tipo Excel para buscar por multiples campos.</p>
+        <h2>Conciliacion Pedidos (Odoo)</h2>
+        <p class="muted">Vista privada sin menu lateral. Los pedidos se sincronizan desde Odoo (misma API de Maquinaria). Filtros combinables tipo Excel.</p>
 
         <div class="toolbar" style="grid-template-columns: repeat(4, minmax(180px, 1fr));">
             <input id="q" type="text" placeholder="Busqueda global (varios terminos)">
@@ -233,7 +233,7 @@
         {% else %}
         <div class="upload-box">
             <div class="section-title" style="margin-top:0;">Modo consulta</div>
-            <div class="muted">Tu usuario puede ver la conciliación CONTPAQ, pero no subir archivos ni ejecutar sincronización manual.</div>
+            <div class="muted">Tu usuario puede ver la conciliacion, pero no subir archivos ni ejecutar sincronizacion manual.</div>
         </div>
         {% endif %}
 
@@ -320,10 +320,11 @@
                 return;
             }
 
-            const pedidoRows = [];
             const remisionRows = [];
+            let cardsHtml = '';
 
             for (const pedido of items) {
+                const pedidoRows = [];
                 for (const d of (pedido.detalles || [])) {
                     pedidoRows.push({
                         semana: pedido.semana_match_key || pedido.titulo || pedido.periodo_semana || '',
@@ -361,32 +362,57 @@
                         });
                     }
                 }
-            }
 
-            const pedidoTotalSucursal = pedidoRows.reduce((acc, r) => acc + (Number(r.total) || 0), 0);
-            const pedidoTotalPublico = pedidoRows.reduce((acc, r) => acc + (Number(r.totalPublico) || 0), 0);
-            const pedidoTotalDiferencia = pedidoRows.reduce((acc, r) => acc + (Number(r.diferencia) || 0), 0);
+                const pedidoTotalSucursal = pedidoRows.reduce((acc, r) => acc + (Number(r.total) || 0), 0);
+                const pedidoTotalPublico = pedidoRows.reduce((acc, r) => acc + (Number(r.totalPublico) || 0), 0);
+                const pedidoTotalDiferencia = pedidoRows.reduce((acc, r) => acc + (Number(r.diferencia) || 0), 0);
 
-            let pedidoRowsHtml = '';
-            for (const r of pedidoRows) {
-                pedidoRowsHtml += `
-                    <tr>
-                        <td>${r.semana}</td>
-                        <td>${fmtDate(r.fecha)}</td>
-                        <td>${r.folio}</td>
-                        <td>${r.serie}</td>
-                        <td>${r.sucursal}</td>
-                        <td>${r.partida}</td>
-                        <td>${r.clave}</td>
-                        <td>${r.descripcion}</td>
-                        <td>${r.cantidad}</td>
-                        <td>${money(r.precio)}</td>
-                        <td>${money(r.total)}</td>
-                        <td>${money(r.precioPublico)}</td>
-                        <td>${money(r.totalPublico)}</td>
-                        <td>${money(r.diferencia)}</td>
-                        <td>${r.inyectado}</td>
-                    </tr>
+                let pedidoRowsHtml = '';
+                for (const r of pedidoRows) {
+                    pedidoRowsHtml += `
+                        <tr>
+                            <td>${esc(r.semana)}</td>
+                            <td>${fmtDate(r.fecha)}</td>
+                            <td>${esc(r.folio)}</td>
+                            <td>${esc(r.serie)}</td>
+                            <td>${esc(r.sucursal)}</td>
+                            <td>${esc(r.partida)}</td>
+                            <td>${esc(r.clave)}</td>
+                            <td>${esc(r.descripcion)}</td>
+                            <td>${esc(r.cantidad)}</td>
+                            <td>${money(r.precio)}</td>
+                            <td>${money(r.total)}</td>
+                            <td>${money(r.precioPublico)}</td>
+                            <td>${money(r.totalPublico)}</td>
+                            <td>${money(r.diferencia)}</td>
+                            <td>${esc(r.inyectado)}</td>
+                        </tr>
+                    `;
+                }
+
+                cardsHtml += `
+                    <div class="pedido-card">
+                        <div class="pedido-head">
+                            <div><b>Folio</b>${esc(pedido.doc_folio)}</div>
+                            <div><b>Cliente</b>${esc(pedido.cliente)}</div>
+                            <div><b>Sucursal</b>${esc(pedido.sucursal)}</div>
+                            <div><b>Semana</b>${esc(pedido.semana_match_key || pedido.periodo_semana || '')}</div>
+                        </div>
+                        <div class="section-title">Partidas del pedido</div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Semana</th><th>Fecha</th><th>Folio</th><th>Serie</th><th>Sucursal</th><th>Partida</th><th>Clave</th><th>Descripcion</th><th>Cantidad</th><th>Precio Unitario</th><th>Total Partida</th><th>Precio Publico</th><th>Total Partida Precio Publico</th><th>Diferencia</th><th>Inyectado</th>
+                                </tr>
+                            </thead>
+                            <tbody>${pedidoRowsHtml || '<tr><td colspan="15">Sin partidas</td></tr>'}</tbody>
+                        </table>
+                        <div class="summary-box" style="margin:0 12px 12px;">
+                            <div class="summary-line"><b>Total Partida:</b> ${money(pedido.pedido_total ?? pedidoTotalSucursal)}</div>
+                            <div class="summary-line"><b>Total Partida Precio Publico:</b> ${money(pedidoTotalPublico)}</div>
+                            <div class="summary-line"><b>Diferencia:</b> ${money(pedidoTotalDiferencia)}</div>
+                        </div>
+                    </div>
                 `;
             }
 
@@ -394,38 +420,22 @@
             for (const r of remisionRows) {
                 remRowsHtml += `
                     <tr>
-                        <td>${r.semana}</td>
-                        <td>${r.folio_pedido}</td>
-                        <td>${r.folio_remision}</td>
+                        <td>${esc(r.semana)}</td>
+                        <td>${esc(r.folio_pedido)}</td>
+                        <td>${esc(r.folio_remision)}</td>
                         <td>${fmtDate(r.fecha)}</td>
-                        <td>${r.sucursal}</td>
-                        <td>${r.partida}</td>
-                        <td>${r.clave}</td>
-                        <td>${r.descripcion}</td>
-                        <td>${r.cantidad}</td>
+                        <td>${esc(r.sucursal)}</td>
+                        <td>${esc(r.partida)}</td>
+                        <td>${esc(r.clave)}</td>
+                        <td>${esc(r.descripcion)}</td>
+                        <td>${esc(r.cantidad)}</td>
                         <td>${money(r.precio)}</td>
                         <td>${money(r.total)}</td>
                     </tr>
                 `;
             }
 
-            el.innerHTML = `
-                <div class="section-table">
-                    <div class="section-title">Pedidos / Partidas (tabla superior)</div>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Semana</th><th>Fecha</th><th>Folio</th><th>Serie</th><th>Sucursal</th><th>Partida</th><th>Clave</th><th>Descripcion</th><th>Cantidad</th><th>Precio Unitario</th><th>Total Partida</th><th>Precio Publico</th><th>Total Partida Precio Publico</th><th>Diferencia</th><th>Inyectado</th>
-                            </tr>
-                        </thead>
-                        <tbody>${pedidoRowsHtml || '<tr><td colspan="15">Sin partidas</td></tr>'}</tbody>
-                    </table>
-                </div>
-                <div class="summary-box">
-                    <div class="summary-line"><b>Total Partida:</b> ${money(pedidoTotalSucursal)}</div>
-                    <div class="summary-line"><b>Total Partida Precio Publico:</b> ${money(pedidoTotalPublico)}</div>
-                    <div class="summary-line"><b>Diferencia:</b> ${money(pedidoTotalDiferencia)}</div>
-                </div>
+            el.innerHTML = cardsHtml + `
                 <div id="remisionesTableWrap" class="section-table" style="display:block;">
                     <div class="section-title">Remisiones (tabla inferior)</div>
                     <table>
@@ -553,7 +563,7 @@
                 return;
             }
 
-            status.textContent = `Sincronizacion completa. Run #${data.run_id || ''}`;
+            status.textContent = `Sincronizacion Odoo completa. Run #${data.run_id || ''}`;
             currentPage = 1;
             await cargar(1);
         }
