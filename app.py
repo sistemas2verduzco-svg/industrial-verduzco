@@ -14218,8 +14218,40 @@ def maquinaria_ordenes_create():
 @requires_any_permission([('maquinaria_boms', 'view'), ('maquinaria_boms', 'edit'), ('maquinaria_boms', 'create'), ('maquinaria_boms', 'update'), ('maquinaria_boms', 'delete')])
 def maquinaria_boms_page():
     ready, missing = _maquinaria_tables_status()
-    boms = MaquinariaBOM.query.order_by(MaquinariaBOM.clave_maquina.asc()).all() if ready else []
-    return render_template('maquinaria_boms.html', setup_required=not ready, missing_tables=missing, boms=boms)
+    boms_index = []
+    bom_sel = None
+    componentes = []
+    if ready:
+        all_boms = MaquinariaBOM.query.order_by(MaquinariaBOM.clave_maquina.asc()).all()
+        for bom in all_boms:
+            boms_index.append({
+                'id': bom.id,
+                'clave_maquina': bom.clave_maquina,
+                'nombre_maquina': bom.nombre_maquina,
+                'version': bom.version or '',
+                'estado': bom.estado or 'activo',
+                'componentes_count': len(bom.componentes or []),
+                'procesos_count': len(bom.procesos_plantilla or []),
+            })
+        bom_id = request.args.get('bom_id', type=int)
+        if bom_id:
+            bom_sel = MaquinariaBOM.query.get(bom_id)
+            if bom_sel:
+                componentes = sorted(bom_sel.componentes or [], key=lambda c: c.id)
+    return render_template(
+        'maquinaria_boms.html',
+        setup_required=not ready,
+        missing_tables=missing,
+        boms_index=boms_index,
+        bom_sel=bom_sel,
+        componentes=componentes,
+    )
+
+
+def _maquinaria_boms_redirect(bom_id=None):
+    if bom_id:
+        return redirect(url_for('maquinaria_boms_page', bom_id=int(bom_id)))
+    return redirect(url_for('maquinaria_boms_page'))
 
 
 @app.route('/maquinaria/boms/create', methods=['POST'])
@@ -14240,8 +14272,8 @@ def maquinaria_boms_create():
         func.upper(func.trim(MaquinariaBOM.clave_maquina)) == clave_maquina
     ).first()
     if existente:
-        flash(f'Ya existe un BOM con la clave {clave_maquina}. Usa Editar para actualizarlo.', 'error')
-        return redirect(url_for('maquinaria_boms_page'))
+        flash(f'Ya existe un BOM con la clave {clave_maquina}. Abrelo desde el buscador para editarlo.', 'error')
+        return _maquinaria_boms_redirect(existente.id)
 
     bom = MaquinariaBOM(
         clave_maquina=clave_maquina,
@@ -14257,7 +14289,8 @@ def maquinaria_boms_create():
     except Exception as exc:
         db.session.rollback()
         flash(f'No se pudo crear el BOM: {exc}', 'error')
-    return redirect(url_for('maquinaria_boms_page'))
+        return redirect(url_for('maquinaria_boms_page'))
+    return _maquinaria_boms_redirect(bom.id)
 
 
 @app.route('/maquinaria/boms/<int:bom_id>/update', methods=['POST'])
@@ -14272,7 +14305,7 @@ def maquinaria_boms_update(bom_id):
     nombre_maquina = _clean_nullable_text(request.form.get('nombre_maquina', ''))
     if not nombre_maquina:
         flash('El nombre de maquina es obligatorio.', 'error')
-        return redirect(url_for('maquinaria_boms_page'))
+        return _maquinaria_boms_redirect(bom.id)
 
     bom.nombre_maquina = nombre_maquina
     bom.version = _clean_nullable_text(request.form.get('version', ''))
@@ -14285,7 +14318,7 @@ def maquinaria_boms_update(bom_id):
     except Exception as exc:
         db.session.rollback()
         flash(f'No se pudo actualizar: {exc}', 'error')
-    return redirect(url_for('maquinaria_boms_page'))
+    return _maquinaria_boms_redirect(bom.id)
 
 
 @app.route('/maquinaria/boms/<int:bom_id>/componentes/create', methods=['POST'])
@@ -14308,13 +14341,13 @@ def maquinaria_boms_componentes_create(bom_id):
     )
     if not comp.codigo_componente or not comp.nombre_componente:
         flash('Codigo y nombre del componente son obligatorios.', 'error')
-        return redirect(url_for('maquinaria_boms_page'))
+        return _maquinaria_boms_redirect(bom.id)
 
     db.session.add(comp)
     bom.updated_at = datetime.utcnow()
     db.session.commit()
     flash('Componente agregado.', 'success')
-    return redirect(url_for('maquinaria_boms_page'))
+    return _maquinaria_boms_redirect(bom.id)
 
 
 @app.route('/maquinaria/boms/<int:bom_id>/componentes/<int:comp_id>/update', methods=['POST'])
@@ -14336,7 +14369,7 @@ def maquinaria_boms_componentes_update(bom_id, comp_id):
         comp.bom.updated_at = datetime.utcnow()
     db.session.commit()
     flash('Componente actualizado.', 'success')
-    return redirect(url_for('maquinaria_boms_page'))
+    return _maquinaria_boms_redirect(bom_id)
 
 
 @app.route('/maquinaria/boms/<int:bom_id>/componentes/<int:comp_id>/delete', methods=['POST'])
@@ -14354,7 +14387,7 @@ def maquinaria_boms_componentes_delete(bom_id, comp_id):
         bom.updated_at = datetime.utcnow()
     db.session.commit()
     flash('Componente eliminado.', 'success')
-    return redirect(url_for('maquinaria_boms_page'))
+    return _maquinaria_boms_redirect(bom_id)
 
 
 @app.route('/maquinaria/procesos-maquina')

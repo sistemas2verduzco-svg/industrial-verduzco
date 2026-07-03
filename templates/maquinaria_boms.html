@@ -6,35 +6,61 @@
     <title>Maquinaria y Ensamble - BOMs</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <style>
-        .bom-page { display:grid; gap:14px; }
-        .panel { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:14px; }
-        .muted { color:#64748b; font-size:13px; }
-        .flash { padding:10px 12px; border-radius:8px; margin-bottom:10px; font-size:13px; }
-        .flash-success { background:#ecfdf5; border:1px solid #86efac; color:#166534; }
-        .flash-error { background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; }
-        .bom-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
-        .bom-title { font-size:16px; font-weight:800; color:#0f172a; }
-        .chip { display:inline-flex; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; }
-        .chip-ok { background:#dcfce7; color:#166534; }
-        .chip-off { background:#f1f5f9; color:#64748b; }
-        table { width:100%; border-collapse:collapse; font-size:13px; }
-        th, td { padding:7px 8px; border-bottom:1px solid #eef2f7; text-align:left; vertical-align:middle; }
-        th { background:#f8fafc; color:#475569; font-size:12px; }
-        .field { padding:7px 8px; border:1px solid #d1d5db; border-radius:6px; width:100%; box-sizing:border-box; font-size:13px; }
-        .btn { border:0; border-radius:6px; padding:8px 12px; font-weight:700; font-size:12px; cursor:pointer; color:#fff; }
-        .btn-blue { background:#1d4ed8; }
-        .btn-teal { background:#0f766e; }
-        .btn-gray { background:#64748b; }
-        .btn-red { background:#b91c1c; }
-        .grid-form { display:grid; gap:8px; align-items:end; }
-        .link-proc { font-size:12px; color:#1d4ed8; text-decoration:none; font-weight:600; }
+        .bom-page { display: grid; gap: 14px; max-width: 1180px; }
+        .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; }
+        .muted { color: #64748b; font-size: 13px; }
+        .flash { padding: 10px 12px; border-radius: 8px; margin-bottom: 10px; font-size: 13px; }
+        .flash-success { background: #ecfdf5; border: 1px solid #86efac; color: #166534; }
+        .flash-error { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+        .field { padding: 9px 10px; border: 1px solid #d1d5db; border-radius: 8px; width: 100%; box-sizing: border-box; font-size: 14px; }
+        .field:focus { outline: none; border-color: #1d4ed8; box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.12); }
+        .btn { border: 0; border-radius: 8px; padding: 9px 14px; font-weight: 700; font-size: 13px; cursor: pointer; color: #fff; }
+        .btn-blue { background: #1d4ed8; }
+        .btn-teal { background: #0f766e; }
+        .btn-gray { background: #64748b; }
+        .btn-red { background: #b91c1c; }
+        .btn-ghost { background: #f8fafc; color: #334155; border: 1px solid #e2e8f0; }
+        .search-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; }
+        .search-meta { margin-top: 8px; font-size: 12px; color: #64748b; }
+        .search-results { margin-top: 10px; border: 1px solid #e5e7eb; border-radius: 10px; max-height: 280px; overflow: auto; display: none; }
+        .search-results.open { display: block; }
+        .search-item { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid #f1f5f9; background: #fff; padding: 10px 12px; cursor: pointer; }
+        .search-item:hover, .search-item.active { background: #eff6ff; }
+        .search-item strong { color: #0f172a; font-size: 14px; }
+        .search-item span { display: block; font-size: 12px; color: #64748b; margin-top: 2px; }
+        .bom-hero { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; padding-bottom: 12px; border-bottom: 1px solid #eef2f7; margin-bottom: 14px; }
+        .bom-hero h3 { margin: 0; font-size: 20px; color: #0f172a; }
+        .chip { display: inline-flex; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+        .chip-ok { background: #dcfce7; color: #166534; }
+        .chip-off { background: #f1f5f9; color: #64748b; }
+        .stats { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+        .stat-pill { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; font-size: 12px; color: #475569; }
+        .section-title { font-size: 13px; font-weight: 800; color: #334155; text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 10px 0; }
+        .grid-meta { display: grid; grid-template-columns: 1.4fr 100px 1fr 120px auto; gap: 8px; align-items: end; }
+        .grid-add { display: grid; grid-template-columns: 1fr 1.3fr 90px 90px 1fr auto; gap: 8px; align-items: end; margin-top: 10px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { padding: 8px; border-bottom: 1px solid #eef2f7; text-align: left; vertical-align: middle; }
+        th { background: #f8fafc; color: #475569; font-size: 12px; }
+        .empty-workspace { text-align: center; padding: 36px 16px; color: #64748b; }
+        .empty-workspace strong { display: block; color: #334155; margin-bottom: 6px; font-size: 15px; }
+        details.create-box summary { cursor: pointer; font-weight: 700; color: #1d4ed8; font-size: 14px; }
+        details.create-box { border: 1px dashed #cbd5e1; border-radius: 10px; padding: 12px 14px; background: #f8fafc; }
+        details.create-box form { margin-top: 12px; }
+        .link-proc { font-size: 13px; color: #1d4ed8; text-decoration: none; font-weight: 700; }
+        .actions-top { display: flex; gap: 8px; flex-wrap: wrap; }
+        @media (max-width: 900px) {
+            .grid-meta, .grid-add { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
     {% include '_sidebar.html' %}
-    <div class="container bom-page" style="padding-top:20px; max-width:none; padding-left:10px; padding-right:10px;">
-        <h2 style="margin:0 0 4px 0;">Maquinaria y Ensamble - BOMs</h2>
-        <div class="muted" style="margin-bottom:10px;">Administra el BOM (componentes) por clave de maquina. Los procesos se cargan en <a href="/maquinaria/procesos-maquina">Procesos por maquina</a>.</div>
+    <div class="container bom-page" style="padding-top: 20px; padding-left: 10px; padding-right: 10px;">
+        <h2 style="margin: 0 0 4px 0;">Maquinaria y Ensamble — BOMs</h2>
+        <div class="muted" style="margin-bottom: 10px;">
+            Busca una maquina, abre su BOM y edita solo ese registro. Los procesos se definen en
+            <a href="/maquinaria/procesos-maquina">Procesos por maquina</a>.
+        </div>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
@@ -49,85 +75,239 @@
         {% endif %}
 
         <div class="panel">
-            <h3 style="margin:0 0 10px 0; font-size:16px;">Nuevo BOM</h3>
-            <form method="post" action="/maquinaria/boms/create" class="grid-form" style="grid-template-columns:1fr 1fr 120px 1fr 120px auto;">
-                <input class="field" type="text" name="clave_maquina" placeholder="Clave maquina *" required>
-                <input class="field" type="text" name="nombre_maquina" placeholder="Nombre maquina *" required>
-                <input class="field" type="text" name="version" placeholder="Version">
-                <input class="field" type="text" name="notas" placeholder="Notas">
-                <select class="field" name="estado"><option value="activo">activo</option><option value="inactivo">inactivo</option></select>
-                {% if has_permission('maquinaria_boms', 'create') or has_permission('maquinaria_boms', 'edit') or current_user.es_admin %}
-                <button class="btn btn-blue" type="submit">Crear BOM</button>
+            <div class="section-title">1. Buscar BOM</div>
+            <div class="search-row">
+                <div>
+                    <input id="bomSearch" class="field" type="search" placeholder="Clave o nombre de maquina (ej. TORNO, B-104...)" autocomplete="off">
+                    <div id="searchMeta" class="search-meta">{{ boms_index|length }} BOM(s) registrados</div>
+                    <div id="searchResults" class="search-results" role="listbox"></div>
+                </div>
+                {% if bom_sel %}
+                <a class="btn btn-ghost" href="/maquinaria/boms">Cerrar BOM</a>
                 {% endif %}
-            </form>
+            </div>
         </div>
 
-        {% for bom in boms %}
+        <details class="create-box panel" style="padding: 12px 16px;">
+            <summary>+ Crear BOM nuevo (solo si no existe)</summary>
+            {% if has_permission('maquinaria_boms', 'create') or has_permission('maquinaria_boms', 'edit') or current_user.es_admin %}
+            <form method="post" action="/maquinaria/boms/create" class="grid-meta">
+                <input class="field" type="text" name="clave_maquina" placeholder="Clave maquina *" required style="text-transform:uppercase;">
+                <input class="field" type="text" name="version" placeholder="Version">
+                <input class="field" type="text" name="nombre_maquina" placeholder="Nombre maquina *" required>
+                <select class="field" name="estado"><option value="activo">activo</option><option value="inactivo">inactivo</option></select>
+                <button class="btn btn-blue" type="submit">Crear y abrir</button>
+                <input class="field" type="text" name="notas" placeholder="Notas (opcional)" style="grid-column: 1 / -2;">
+            </form>
+            {% else %}
+            <div class="muted">No tienes permiso para crear BOMs.</div>
+            {% endif %}
+        </details>
+
+        {% if bom_sel %}
         <div class="panel">
-            <div class="bom-head">
+            <div class="bom-hero">
                 <div>
-                    <div class="bom-title">{{ bom.clave_maquina }} — {{ bom.nombre_maquina }}</div>
-                    <div class="muted" style="margin-top:4px;">
-                        {% if bom.version %}v{{ bom.version }} · {% endif %}
-                        <span class="chip {{ 'chip-ok' if bom.estado == 'activo' else 'chip-off' }}">{{ bom.estado }}</span>
-                        · {{ (bom.componentes or [])|length }} componente(s)
-                        · {{ (bom.procesos_plantilla or [])|length }} proceso(s) plantilla
+                    <h3>{{ bom_sel.clave_maquina }} — {{ bom_sel.nombre_maquina }}</h3>
+                    <div class="stats">
+                        <span class="chip {{ 'chip-ok' if bom_sel.estado == 'activo' else 'chip-off' }}">{{ bom_sel.estado }}</span>
+                        {% if bom_sel.version %}<span class="stat-pill">Version {{ bom_sel.version }}</span>{% endif %}
+                        <span class="stat-pill">{{ componentes|length }} componente(s)</span>
+                        <span class="stat-pill">{{ (bom_sel.procesos_plantilla or [])|length }} proceso(s)</span>
                     </div>
                 </div>
-                <a class="link-proc" href="/maquinaria/procesos-maquina?bom_id={{ bom.id }}">Editar procesos →</a>
+                <div class="actions-top">
+                    <a class="link-proc" href="/maquinaria/procesos-maquina?bom_id={{ bom_sel.id }}">Editar procesos →</a>
+                </div>
             </div>
 
+            <div class="section-title">2. Datos del BOM</div>
             {% if has_permission('maquinaria_boms', 'edit') or has_permission('maquinaria_boms', 'update') or current_user.es_admin %}
-            <form method="post" action="/maquinaria/boms/{{ bom.id }}/update" class="grid-form" style="grid-template-columns:1.2fr 120px 1fr 120px auto; margin-bottom:12px;">
-                <input class="field" type="text" name="nombre_maquina" value="{{ bom.nombre_maquina }}" required>
-                <input class="field" type="text" name="version" value="{{ bom.version or '' }}" placeholder="Version">
-                <input class="field" type="text" name="notas" value="{{ bom.notas or '' }}" placeholder="Notas">
+            <form method="post" action="/maquinaria/boms/{{ bom_sel.id }}/update" class="grid-meta">
+                <input class="field" type="text" name="nombre_maquina" value="{{ bom_sel.nombre_maquina }}" required>
+                <input class="field" type="text" name="version" value="{{ bom_sel.version or '' }}" placeholder="Version">
+                <input class="field" type="text" name="notas" value="{{ bom_sel.notas or '' }}" placeholder="Notas">
                 <select class="field" name="estado">
-                    <option value="activo" {% if bom.estado == 'activo' %}selected{% endif %}>activo</option>
-                    <option value="inactivo" {% if bom.estado == 'inactivo' %}selected{% endif %}>inactivo</option>
+                    <option value="activo" {% if bom_sel.estado == 'activo' %}selected{% endif %}>activo</option>
+                    <option value="inactivo" {% if bom_sel.estado == 'inactivo' %}selected{% endif %}>inactivo</option>
                 </select>
-                <button class="btn btn-gray" type="submit">Guardar BOM</button>
+                <button class="btn btn-gray" type="submit">Guardar datos</button>
             </form>
+            {% else %}
+            <div class="muted">{{ bom_sel.notas or 'Sin notas.' }}</div>
             {% endif %}
 
+            <div class="section-title" style="margin-top: 18px;">3. Componentes</div>
             {% if has_permission('maquinaria_boms', 'create') or has_permission('maquinaria_boms', 'edit') or current_user.es_admin %}
-            <form method="post" action="/maquinaria/boms/{{ bom.id }}/componentes/create" class="grid-form" style="grid-template-columns:1fr 1.2fr 90px 90px 1fr auto; margin-bottom:10px;">
+            <form method="post" action="/maquinaria/boms/{{ bom_sel.id }}/componentes/create" class="grid-add">
                 <input class="field" type="text" name="codigo_componente" placeholder="Codigo *" required>
-                <input class="field" type="text" name="nombre_componente" placeholder="Componente *" required>
-                <input class="field" type="number" step="0.01" min="0.01" name="cantidad" value="1">
+                <input class="field" type="text" name="nombre_componente" placeholder="Nombre componente *" required>
+                <input class="field" type="number" step="0.01" min="0.01" name="cantidad" value="1" title="Cantidad">
                 <input class="field" type="text" name="unidad" placeholder="Unidad">
                 <input class="field" type="text" name="proceso_base" placeholder="Proceso base">
-                <button class="btn btn-teal" type="submit">+ Componente</button>
+                <button class="btn btn-teal" type="submit">Agregar</button>
             </form>
             {% endif %}
 
-            <div style="display:grid; gap:8px;">
-                {% for c in bom.componentes %}
-                <div class="grid-form" style="grid-template-columns:1fr 1.2fr 80px 80px 1fr auto; background:#f8fafc; padding:8px; border-radius:8px; align-items:center;">
-                    <form method="post" action="/maquinaria/boms/{{ bom.id }}/componentes/{{ c.id }}/update" style="display:contents;">
-                        <input class="field" type="text" name="codigo_componente" value="{{ c.codigo_componente }}" required>
-                        <input class="field" type="text" name="nombre_componente" value="{{ c.nombre_componente }}" required>
-                        <input class="field" type="number" step="0.01" min="0.01" name="cantidad" value="{{ c.cantidad }}">
-                        <input class="field" type="text" name="unidad" value="{{ c.unidad or '' }}">
-                        <input class="field" type="text" name="proceso_base" value="{{ c.proceso_base or '' }}">
-                        {% if has_permission('maquinaria_boms', 'edit') or has_permission('maquinaria_boms', 'update') or current_user.es_admin %}
-                        <button class="btn btn-teal" type="submit">Guardar</button>
+            <div style="margin-top: 14px; overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Codigo</th>
+                            <th>Componente</th>
+                            <th>Cant.</th>
+                            <th>Unidad</th>
+                            <th>Proceso base</th>
+                            {% if has_permission('maquinaria_boms', 'edit') or has_permission('maquinaria_boms', 'update') or current_user.es_admin %}<th style="width:140px;"></th>{% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in componentes %}
+                        <tr>
+                            {% if has_permission('maquinaria_boms', 'edit') or has_permission('maquinaria_boms', 'update') or current_user.es_admin %}
+                            <form method="post" action="/maquinaria/boms/{{ bom_sel.id }}/componentes/{{ c.id }}/update" id="comp-form-{{ c.id }}"></form>
+                            <td><input class="field" form="comp-form-{{ c.id }}" name="codigo_componente" value="{{ c.codigo_componente }}" required></td>
+                            <td><input class="field" form="comp-form-{{ c.id }}" name="nombre_componente" value="{{ c.nombre_componente }}" required></td>
+                            <td><input class="field" form="comp-form-{{ c.id }}" type="number" step="0.01" min="0.01" name="cantidad" value="{{ c.cantidad }}" style="min-width:70px;"></td>
+                            <td><input class="field" form="comp-form-{{ c.id }}" name="unidad" value="{{ c.unidad or '' }}"></td>
+                            <td><input class="field" form="comp-form-{{ c.id }}" name="proceso_base" value="{{ c.proceso_base or '' }}"></td>
+                            <td style="white-space: nowrap;">
+                                <button class="btn btn-teal" form="comp-form-{{ c.id }}" type="submit">Guardar</button>
+                                {% if has_permission('maquinaria_boms', 'delete') or current_user.es_admin %}
+                                <button class="btn btn-red" form="del-comp-{{ c.id }}" type="submit" onclick="return confirm('Eliminar componente {{ c.codigo_componente }}?')">X</button>
+                                {% endif %}
+                            </td>
+                            {% else %}
+                            <td>{{ c.codigo_componente }}</td>
+                            <td>{{ c.nombre_componente }}</td>
+                            <td>{{ c.cantidad }}</td>
+                            <td>{{ c.unidad or '-' }}</td>
+                            <td>{{ c.proceso_base or '-' }}</td>
+                            {% endif %}
+                        </tr>
+                        {% if has_permission('maquinaria_boms', 'delete') or current_user.es_admin %}
+                        <form id="del-comp-{{ c.id }}" method="post" action="/maquinaria/boms/{{ bom_sel.id }}/componentes/{{ c.id }}/delete"></form>
                         {% endif %}
-                    </form>
-                    {% if has_permission('maquinaria_boms', 'delete') or current_user.es_admin %}
-                    <form method="post" action="/maquinaria/boms/{{ bom.id }}/componentes/{{ c.id }}/delete" style="grid-column:6;">
-                        <button class="btn btn-red" type="submit" onclick="return confirm('Eliminar componente?')">X</button>
-                    </form>
-                    {% endif %}
-                </div>
-                {% else %}
-                <div class="muted">Sin componentes. Agrega el primero arriba.</div>
-                {% endfor %}
+                        {% else %}
+                        <tr><td colspan="6" class="muted" style="padding: 16px;">Sin componentes. Agrega el primero arriba.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
         {% else %}
-        <div class="panel muted">Sin BOMs registrados. Crea el primero arriba.</div>
-        {% endfor %}
+        <div class="panel empty-workspace">
+            <strong>Selecciona un BOM para editar</strong>
+            Usa el buscador para localizar la maquina por clave o nombre.<br>
+            Solo se muestra un BOM a la vez para evitar ediciones accidentales.
+        </div>
+        {% endif %}
     </div>
+
+    <script>
+    (function () {
+        const bomsIndex = {{ boms_index|tojson }};
+        const selectedId = {{ bom_sel.id if bom_sel else 'null' }};
+        const searchInput = document.getElementById('bomSearch');
+        const searchResults = document.getElementById('searchResults');
+        const searchMeta = document.getElementById('searchMeta');
+        let activeIndex = -1;
+
+        function normalize(value) {
+            return String(value || '').trim().toLowerCase();
+        }
+
+        function labelFor(bom) {
+            const ver = bom.version ? ` · v${bom.version}` : '';
+            return `${bom.clave_maquina} — ${bom.nombre_maquina}${ver}`;
+        }
+
+        function metaFor(bom) {
+            return `${bom.estado} · ${bom.componentes_count} componente(s) · ${bom.procesos_count} proceso(s)`;
+        }
+
+        function openBom(id) {
+            if (!id) return;
+            window.location.href = '/maquinaria/boms?bom_id=' + encodeURIComponent(id);
+        }
+
+        function renderResults(items) {
+            searchResults.innerHTML = '';
+            if (!items.length) {
+                searchResults.classList.remove('open');
+                searchMeta.textContent = 'Sin coincidencias';
+                return;
+            }
+            items.slice(0, 40).forEach((bom, idx) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'search-item' + (idx === activeIndex ? ' active' : '');
+                btn.innerHTML = `<strong>${labelFor(bom)}</strong><span>${metaFor(bom)}</span>`;
+                btn.addEventListener('click', () => openBom(bom.id));
+                searchResults.appendChild(btn);
+            });
+            searchResults.classList.add('open');
+            searchMeta.textContent = `${items.length} coincidencia(s) · Enter para abrir la primera`;
+        }
+
+        function filterBoms() {
+            const q = normalize(searchInput.value);
+            activeIndex = -1;
+            if (!q) {
+                searchResults.classList.remove('open');
+                searchMeta.textContent = `${bomsIndex.length} BOM(s) registrados`;
+                return [];
+            }
+            return bomsIndex.filter(bom => {
+                const hay = [
+                    bom.clave_maquina,
+                    bom.nombre_maquina,
+                    bom.version,
+                    bom.estado,
+                ].map(normalize).join(' ');
+                return hay.includes(q) || normalize(bom.clave_maquina).startsWith(q);
+            });
+        }
+
+        if (searchInput) {
+            searchInput.addEventListener('input', () => renderResults(filterBoms()));
+            searchInput.addEventListener('focus', () => {
+                const items = filterBoms();
+                if (items.length) renderResults(items);
+            });
+            searchInput.addEventListener('keydown', (ev) => {
+                const items = filterBoms();
+                if (!items.length) return;
+                if (ev.key === 'ArrowDown') {
+                    ev.preventDefault();
+                    activeIndex = Math.min(activeIndex + 1, items.length - 1);
+                    renderResults(items);
+                } else if (ev.key === 'ArrowUp') {
+                    ev.preventDefault();
+                    activeIndex = Math.max(activeIndex - 1, 0);
+                    renderResults(items);
+                } else if (ev.key === 'Enter') {
+                    ev.preventDefault();
+                    const pick = items[Math.max(activeIndex, 0)];
+                    if (pick) openBom(pick.id);
+                } else if (ev.key === 'Escape') {
+                    searchResults.classList.remove('open');
+                }
+            });
+        }
+
+        document.addEventListener('click', (ev) => {
+            if (!searchResults || !searchInput) return;
+            if (!searchResults.contains(ev.target) && ev.target !== searchInput) {
+                searchResults.classList.remove('open');
+            }
+        });
+
+        if (selectedId && searchInput) {
+            const current = bomsIndex.find(b => Number(b.id) === Number(selectedId));
+            if (current) searchInput.value = current.clave_maquina;
+        }
+    })();
+    </script>
 </body>
 </html>
