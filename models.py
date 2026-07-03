@@ -1785,6 +1785,44 @@ class MaquinariaBOMComponente(db.Model):
         }
 
 
+class MaquinariaBOMProceso(db.Model):
+    """Plantilla de procesos por maquina (BOM). Se copian a la OT al asignar el BOM."""
+    __tablename__ = 'maquinaria_bom_procesos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    bom_id = db.Column(db.Integer, db.ForeignKey('maquinaria_boms.id', ondelete='CASCADE'), nullable=False, index=True)
+    orden = db.Column(db.Integer, nullable=False, default=1)
+    nombre = db.Column(db.String(180), nullable=False)
+    centro_trabajo = db.Column(db.String(120), nullable=True)
+    operacion = db.Column(db.Text, nullable=True)
+    t_e = db.Column(db.String(20), nullable=True)
+    t_tct = db.Column(db.String(20), nullable=True)
+    t_tco = db.Column(db.String(20), nullable=True)
+    t_to = db.Column(db.String(20), nullable=True)
+    notas = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    bom = db.relationship('MaquinariaBOM', backref=db.backref('procesos_plantilla', lazy=True, cascade='all, delete-orphan', order_by='MaquinariaBOMProceso.orden'))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'bom_id': self.bom_id,
+            'orden': self.orden,
+            'nombre': self.nombre,
+            'centro_trabajo': self.centro_trabajo,
+            'operacion': self.operacion,
+            't_e': self.t_e,
+            't_tct': self.t_tct,
+            't_tco': self.t_tco,
+            't_to': self.t_to,
+            'notas': self.notas,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class MaquinariaOrdenTrabajo(db.Model):
     __tablename__ = 'maquinaria_ordenes_trabajo'
 

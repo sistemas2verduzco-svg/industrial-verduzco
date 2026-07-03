@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash, abort
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqNotaVenta, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, OdooSyncRun, OdooPedidoVenta, OdooPedidoVentaLinea, OdooOrdenCompra, OdooOrdenCompraLinea, MaquinariaSolicitud, MaquinariaSolicitudItem, AlertaBuzonGeneral, Tecnico, LogVerificacion
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqNotaVenta, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaBOMProceso, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, OdooSyncRun, OdooPedidoVenta, OdooPedidoVentaLinea, OdooOrdenCompra, OdooOrdenCompraLinea, MaquinariaSolicitud, MaquinariaSolicitudItem, AlertaBuzonGeneral, Tecnico, LogVerificacion
 from auth import AuthManager
 from email_manager import EmailManager
 from odoo_client import OdooClient, OdooError
@@ -3622,6 +3622,8 @@ def _resolve_post_login_endpoint(user):
         return 'maquinaria_ordenes_page'
     if user.has_permission('maquinaria_boms', 'view'):
         return 'maquinaria_boms_page'
+    if user.has_permission('maquinaria_procesos', 'view'):
+        return 'maquinaria_procesos_maquina_page'
     if user.has_permission('maquinaria_claves_procesos', 'view'):
         return 'maquinaria_claves_procesos_page'
     if user.has_permission('maquinaria_estaciones', 'view'):
@@ -3864,6 +3866,7 @@ SIMPLE_PERMISSION_MODULES = [
     ('maquinaria_pedidos', 'Maquinaria y ensamble - Pedidos'),
     ('maquinaria_ordenes', 'Maquinaria y ensamble - Ordenes de trabajo'),
     ('maquinaria_boms', 'Maquinaria y ensamble - BOMs'),
+    ('maquinaria_procesos', 'Maquinaria y ensamble - Procesos por maquina'),
     ('maquinaria_claves_procesos', 'Maquinaria y ensamble - Claves y procesos'),
     ('maquinaria_estaciones', 'Maquinaria y ensamble - Estaciones de trabajo'),
     ('maquinaria_calidad', 'Maquinaria y ensamble - Calidad'),
@@ -13433,6 +13436,7 @@ MAQUINARIA_TABLES = [
     'maquinaria_contpaq_pedidos_detalle',
     'maquinaria_boms',
     'maquinaria_bom_componentes',
+    'maquinaria_bom_procesos',
     'maquinaria_ordenes_trabajo',
     'maquinaria_orden_bom_items',
     'maquinaria_orden_procesos',
@@ -13475,6 +13479,19 @@ def _ensure_maquinaria_ordenes_extension_tables():
         return True
     except Exception as exc:
         logger.error(f"No se pudieron asegurar tablas OT extensión: {exc}", exc_info=True)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return False
+
+
+def _ensure_maquinaria_bom_procesos_table():
+    try:
+        MaquinariaBOMProceso.__table__.create(bind=db.engine, checkfirst=True)
+        return True
+    except Exception as exc:
+        logger.error(f'No se pudo asegurar tabla maquinaria_bom_procesos: {exc}', exc_info=True)
         try:
             db.session.rollback()
         except Exception:
@@ -13702,11 +13719,80 @@ def api_maquinaria_orden_asignar_bom(orden_id):
             ))
         orden.bom_id = bom.id
         orden.updated_at = datetime.utcnow()
+        # Copiar procesos plantilla del BOM si la OT aun no tiene procesos
+        tiene_procesos = MaquinariaOrdenProceso.query.filter_by(orden_trabajo_id=orden.id).count() > 0
+        if not tiene_procesos:
+            _ensure_maquinaria_bom_procesos_table()
+            plantilla = MaquinariaBOMProceso.query.filter_by(bom_id=bom.id).order_by(
+                MaquinariaBOMProceso.orden.asc(), MaquinariaBOMProceso.id.asc()
+            ).all()
+            for pp in plantilla:
+                db.session.add(MaquinariaOrdenProceso(
+                    orden_trabajo_id=orden.id,
+                    orden=pp.orden,
+                    nombre=pp.nombre,
+                    centro_trabajo=pp.centro_trabajo,
+                    operacion=pp.operacion,
+                    t_e=pp.t_e,
+                    t_tct=pp.t_tct,
+                    t_tco=pp.t_tco,
+                    t_to=pp.t_to,
+                    notas=pp.notas,
+                ))
         db.session.commit()
-        return jsonify({'ok': True, 'bom': bom.to_dict()})
+        return jsonify({'ok': True, 'bom': bom.to_dict(), 'procesos_copiados': not tiene_procesos})
     except Exception as exc:
         db.session.rollback()
         logger.error(f'[OT] Error al asignar BOM: {exc}', exc_info=True)
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/maquinaria/ordenes-trabajo/<int:orden_id>/cargar-procesos-bom', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_ordenes', 'edit'), ('maquinaria_ordenes', 'create'), ('maquinaria_ordenes', 'update')])
+def api_maquinaria_orden_cargar_procesos_bom(orden_id):
+    """Copia los procesos plantilla del BOM asignado a la OT."""
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return jsonify({'ok': False, 'error': 'Tablas de Maquinaria no disponibles'}), 503
+    _ensure_maquinaria_ordenes_extension_tables()
+    _ensure_maquinaria_bom_procesos_table()
+    orden = MaquinariaOrdenTrabajo.query.get_or_404(orden_id)
+    if not orden.bom_id:
+        return jsonify({'ok': False, 'error': 'Primero asigna un BOM a la orden'}), 400
+    payload = request.get_json(silent=True) or {}
+    reemplazar = bool(payload.get('reemplazar'))
+    try:
+        existentes = MaquinariaOrdenProceso.query.filter_by(orden_trabajo_id=orden.id).count()
+        if existentes and not reemplazar:
+            return jsonify({'ok': False, 'error': 'La OT ya tiene procesos. Envia reemplazar:true para sustituirlos.'}), 400
+        if reemplazar and existentes:
+            MaquinariaOrdenBOMItem.query.filter_by(orden_trabajo_id=orden.id).update({'proceso_id': None})
+            MaquinariaOrdenProceso.query.filter_by(orden_trabajo_id=orden.id).delete()
+        plantilla = MaquinariaBOMProceso.query.filter_by(bom_id=orden.bom_id).order_by(
+            MaquinariaBOMProceso.orden.asc(), MaquinariaBOMProceso.id.asc()
+        ).all()
+        if not plantilla:
+            return jsonify({'ok': False, 'error': 'El BOM no tiene procesos plantilla cargados'}), 400
+        for pp in plantilla:
+            db.session.add(MaquinariaOrdenProceso(
+                orden_trabajo_id=orden.id,
+                orden=pp.orden,
+                nombre=pp.nombre,
+                centro_trabajo=pp.centro_trabajo,
+                operacion=pp.operacion,
+                t_e=pp.t_e,
+                t_tct=pp.t_tct,
+                t_tco=pp.t_tco,
+                t_to=pp.t_to,
+                notas=pp.notas,
+            ))
+        orden.updated_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'ok': True, 'procesos_copiados': len(plantilla)})
+    except Exception as exc:
+        db.session.rollback()
+        logger.error(f'[OT] Error al cargar procesos BOM: {exc}', exc_info=True)
         return jsonify({'ok': False, 'error': str(exc)}), 500
 
 
@@ -14011,6 +14097,8 @@ def maquinaria_ordenes_create():
 @requires_any_permission([('maquinaria_boms', 'view'), ('maquinaria_boms', 'edit'), ('maquinaria_boms', 'create'), ('maquinaria_boms', 'update'), ('maquinaria_boms', 'delete')])
 def maquinaria_boms_page():
     ready, missing = _maquinaria_tables_status()
+    if ready:
+        _ensure_maquinaria_bom_procesos_table()
     boms = MaquinariaBOM.query.order_by(MaquinariaBOM.clave_maquina.asc()).all() if ready else []
     return render_template('maquinaria_boms.html', setup_required=not ready, missing_tables=missing, boms=boms)
 
@@ -14023,9 +14111,17 @@ def maquinaria_boms_create():
     if not ready:
         return redirect(url_for('maquinaria_boms_page'))
 
-    clave_maquina = _clean_nullable_text(request.form.get('clave_maquina', ''))
+    clave_maquina = (_clean_nullable_text(request.form.get('clave_maquina', '')) or '').upper()
     nombre_maquina = _clean_nullable_text(request.form.get('nombre_maquina', ''))
     if not clave_maquina or not nombre_maquina:
+        flash('Clave y nombre de maquina son obligatorios.', 'error')
+        return redirect(url_for('maquinaria_boms_page'))
+
+    existente = MaquinariaBOM.query.filter(
+        func.upper(func.trim(MaquinariaBOM.clave_maquina)) == clave_maquina
+    ).first()
+    if existente:
+        flash(f'Ya existe un BOM con la clave {clave_maquina}. Usa Editar para actualizarlo.', 'error')
         return redirect(url_for('maquinaria_boms_page'))
 
     bom = MaquinariaBOM(
@@ -14033,9 +14129,43 @@ def maquinaria_boms_create():
         nombre_maquina=nombre_maquina,
         version=_clean_nullable_text(request.form.get('version', '')),
         notas=_clean_nullable_text(request.form.get('notas', '')),
+        estado=_clean_nullable_text(request.form.get('estado', '')) or 'activo',
     )
-    db.session.add(bom)
-    db.session.commit()
+    try:
+        db.session.add(bom)
+        db.session.commit()
+        flash(f'BOM {clave_maquina} creado.', 'success')
+    except Exception as exc:
+        db.session.rollback()
+        flash(f'No se pudo crear el BOM: {exc}', 'error')
+    return redirect(url_for('maquinaria_boms_page'))
+
+
+@app.route('/maquinaria/boms/<int:bom_id>/update', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_boms', 'edit'), ('maquinaria_boms', 'update')])
+def maquinaria_boms_update(bom_id):
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return redirect(url_for('maquinaria_boms_page'))
+
+    bom = MaquinariaBOM.query.get_or_404(bom_id)
+    nombre_maquina = _clean_nullable_text(request.form.get('nombre_maquina', ''))
+    if not nombre_maquina:
+        flash('El nombre de maquina es obligatorio.', 'error')
+        return redirect(url_for('maquinaria_boms_page'))
+
+    bom.nombre_maquina = nombre_maquina
+    bom.version = _clean_nullable_text(request.form.get('version', ''))
+    bom.notas = _clean_nullable_text(request.form.get('notas', ''))
+    bom.estado = _clean_nullable_text(request.form.get('estado', '')) or bom.estado or 'activo'
+    bom.updated_at = datetime.utcnow()
+    try:
+        db.session.commit()
+        flash(f'BOM {bom.clave_maquina} actualizado.', 'success')
+    except Exception as exc:
+        db.session.rollback()
+        flash(f'No se pudo actualizar: {exc}', 'error')
     return redirect(url_for('maquinaria_boms_page'))
 
 
@@ -14058,11 +14188,170 @@ def maquinaria_boms_componentes_create(bom_id):
         notas=_clean_nullable_text(request.form.get('notas', '')),
     )
     if not comp.codigo_componente or not comp.nombre_componente:
+        flash('Codigo y nombre del componente son obligatorios.', 'error')
         return redirect(url_for('maquinaria_boms_page'))
 
     db.session.add(comp)
+    bom.updated_at = datetime.utcnow()
     db.session.commit()
+    flash('Componente agregado.', 'success')
     return redirect(url_for('maquinaria_boms_page'))
+
+
+@app.route('/maquinaria/boms/<int:bom_id>/componentes/<int:comp_id>/update', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_boms', 'edit'), ('maquinaria_boms', 'update')])
+def maquinaria_boms_componentes_update(bom_id, comp_id):
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return redirect(url_for('maquinaria_boms_page'))
+
+    comp = MaquinariaBOMComponente.query.filter_by(id=comp_id, bom_id=bom_id).first_or_404()
+    comp.codigo_componente = _clean_nullable_text(request.form.get('codigo_componente', '')) or comp.codigo_componente
+    comp.nombre_componente = _clean_nullable_text(request.form.get('nombre_componente', '')) or comp.nombre_componente
+    comp.cantidad = max(0.01, request.form.get('cantidad', type=float) or comp.cantidad or 1.0)
+    comp.unidad = _clean_nullable_text(request.form.get('unidad', ''))
+    comp.proceso_base = _clean_nullable_text(request.form.get('proceso_base', ''))
+    comp.notas = _clean_nullable_text(request.form.get('notas', ''))
+    if comp.bom:
+        comp.bom.updated_at = datetime.utcnow()
+    db.session.commit()
+    flash('Componente actualizado.', 'success')
+    return redirect(url_for('maquinaria_boms_page'))
+
+
+@app.route('/maquinaria/boms/<int:bom_id>/componentes/<int:comp_id>/delete', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_boms', 'delete'), ('maquinaria_boms', 'edit'), ('maquinaria_boms', 'update')])
+def maquinaria_boms_componentes_delete(bom_id, comp_id):
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return redirect(url_for('maquinaria_boms_page'))
+
+    comp = MaquinariaBOMComponente.query.filter_by(id=comp_id, bom_id=bom_id).first_or_404()
+    bom = comp.bom
+    db.session.delete(comp)
+    if bom:
+        bom.updated_at = datetime.utcnow()
+    db.session.commit()
+    flash('Componente eliminado.', 'success')
+    return redirect(url_for('maquinaria_boms_page'))
+
+
+@app.route('/maquinaria/procesos-maquina')
+@login_required
+@requires_any_permission([('maquinaria_procesos', 'view'), ('maquinaria_procesos', 'edit'), ('maquinaria_procesos', 'create'), ('maquinaria_procesos', 'update'), ('maquinaria_procesos', 'delete'), ('maquinaria_boms', 'view'), ('maquinaria_boms', 'edit')])
+def maquinaria_procesos_maquina_page():
+    ready, missing = _maquinaria_tables_status()
+    if ready:
+        _ensure_maquinaria_bom_procesos_table()
+    boms = MaquinariaBOM.query.order_by(MaquinariaBOM.clave_maquina.asc()).all() if ready else []
+    bom_id = request.args.get('bom_id', type=int)
+    bom_sel = MaquinariaBOM.query.get(bom_id) if ready and bom_id else None
+    procesos = []
+    if bom_sel:
+        procesos = MaquinariaBOMProceso.query.filter_by(bom_id=bom_sel.id).order_by(
+            MaquinariaBOMProceso.orden.asc(), MaquinariaBOMProceso.id.asc()
+        ).all()
+    return render_template(
+        'maquinaria_procesos_maquina.html',
+        setup_required=not ready,
+        missing_tables=missing,
+        boms=boms,
+        bom_sel=bom_sel,
+        procesos=procesos,
+    )
+
+
+@app.route('/maquinaria/procesos-maquina/<int:bom_id>/create', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_procesos', 'create'), ('maquinaria_procesos', 'edit'), ('maquinaria_boms', 'create'), ('maquinaria_boms', 'edit'), ('maquinaria_boms', 'update')])
+def maquinaria_procesos_maquina_create(bom_id):
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return redirect(url_for('maquinaria_procesos_maquina_page'))
+    _ensure_maquinaria_bom_procesos_table()
+    bom = MaquinariaBOM.query.get_or_404(bom_id)
+    nombre = _clean_nullable_text(request.form.get('nombre', ''))
+    if not nombre:
+        flash('El nombre del proceso es obligatorio.', 'error')
+        return redirect(url_for('maquinaria_procesos_maquina_page', bom_id=bom.id))
+
+    max_orden = db.session.query(func.max(MaquinariaBOMProceso.orden)).filter_by(bom_id=bom.id).scalar() or 0
+    proc = MaquinariaBOMProceso(
+        bom_id=bom.id,
+        orden=int(max_orden) + 1,
+        nombre=nombre,
+        centro_trabajo=_clean_nullable_text(request.form.get('centro_trabajo', '')),
+        operacion=_clean_nullable_text(request.form.get('operacion', '')),
+        t_e=_clean_nullable_text(request.form.get('t_e', '')),
+        t_tct=_clean_nullable_text(request.form.get('t_tct', '')),
+        t_tco=_clean_nullable_text(request.form.get('t_tco', '')),
+        t_to=_clean_nullable_text(request.form.get('t_to', '')),
+        notas=_clean_nullable_text(request.form.get('notas', '')),
+    )
+    db.session.add(proc)
+    bom.updated_at = datetime.utcnow()
+    db.session.commit()
+    flash('Proceso agregado.', 'success')
+    return redirect(url_for('maquinaria_procesos_maquina_page', bom_id=bom.id))
+
+
+@app.route('/maquinaria/procesos-maquina/proceso/<int:proceso_id>/update', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_procesos', 'edit'), ('maquinaria_procesos', 'update'), ('maquinaria_boms', 'edit'), ('maquinaria_boms', 'update')])
+def maquinaria_procesos_maquina_update(proceso_id):
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return redirect(url_for('maquinaria_procesos_maquina_page'))
+    proc = MaquinariaBOMProceso.query.get_or_404(proceso_id)
+    nombre = _clean_nullable_text(request.form.get('nombre', ''))
+    if nombre:
+        proc.nombre = nombre
+    proc.centro_trabajo = _clean_nullable_text(request.form.get('centro_trabajo', ''))
+    proc.operacion = _clean_nullable_text(request.form.get('operacion', ''))
+    proc.t_e = _clean_nullable_text(request.form.get('t_e', ''))
+    proc.t_tct = _clean_nullable_text(request.form.get('t_tct', ''))
+    proc.t_tco = _clean_nullable_text(request.form.get('t_tco', ''))
+    proc.t_to = _clean_nullable_text(request.form.get('t_to', ''))
+    proc.notas = _clean_nullable_text(request.form.get('notas', ''))
+    proc.orden = request.form.get('orden', type=int) or proc.orden
+    proc.updated_at = datetime.utcnow()
+    if proc.bom:
+        proc.bom.updated_at = datetime.utcnow()
+    db.session.commit()
+    flash('Proceso actualizado.', 'success')
+    return redirect(url_for('maquinaria_procesos_maquina_page', bom_id=proc.bom_id))
+
+
+@app.route('/maquinaria/procesos-maquina/proceso/<int:proceso_id>/delete', methods=['POST'])
+@login_required
+@requires_any_permission([('maquinaria_procesos', 'delete'), ('maquinaria_procesos', 'edit'), ('maquinaria_boms', 'delete'), ('maquinaria_boms', 'edit')])
+def maquinaria_procesos_maquina_delete(proceso_id):
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return redirect(url_for('maquinaria_procesos_maquina_page'))
+    proc = MaquinariaBOMProceso.query.get_or_404(proceso_id)
+    bom_id = proc.bom_id
+    db.session.delete(proc)
+    db.session.commit()
+    flash('Proceso eliminado.', 'success')
+    return redirect(url_for('maquinaria_procesos_maquina_page', bom_id=bom_id))
+
+
+@app.route('/api/maquinaria/boms/<int:bom_id>/procesos')
+@login_required
+@requires_any_permission([('maquinaria_ordenes', 'view'), ('maquinaria_procesos', 'view'), ('maquinaria_boms', 'view')])
+def api_maquinaria_bom_procesos(bom_id):
+    ready, _missing = _maquinaria_tables_status()
+    if not ready:
+        return jsonify({'ok': False, 'error': 'Tablas no disponibles'}), 503
+    _ensure_maquinaria_bom_procesos_table()
+    bom = MaquinariaBOM.query.get_or_404(bom_id)
+    procesos = MaquinariaBOMProceso.query.filter_by(bom_id=bom.id).order_by(
+        MaquinariaBOMProceso.orden.asc(), MaquinariaBOMProceso.id.asc()
+    ).all()
+    return jsonify({'ok': True, 'bom': bom.to_dict(), 'procesos': [p.to_dict() for p in procesos]})
 
 
 @app.route('/maquinaria/claves-procesos')

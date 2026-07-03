@@ -94,10 +94,12 @@
                     <div id="unassignedZone" class="dropzone" data-proceso="" style="background:#f8fafc; border:2px dashed #e2e8f0;"></div>
                 </div>
                 <div>
-                    <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+                    <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
                         <input id="newProcName" class="field" placeholder="Nombre del proceso (ej. Corte, Soldadura)" style="flex:1; min-width:220px;">
                         <input id="newProcCentro" class="field" placeholder="Centro de trabajo (opcional)" style="min-width:180px;">
                         <button class="btn btn-primary" onclick="addProceso()">+ Agregar proceso</button>
+                        <button class="btn" onclick="cargarProcesosBom(false)" title="Carga la plantilla del BOM si la OT no tiene procesos">Cargar procesos del BOM</button>
+                        <button class="btn" onclick="cargarProcesosBom(true)" style="background:#64748b;">Reemplazar por plantilla BOM</button>
                     </div>
                     <div id="procGrid" class="proc-grid"></div>
                     <div id="noProc" class="muted" style="padding:18px; text-align:center; display:none;">Aun no hay procesos. Agrega el primero arriba.</div>
@@ -209,8 +211,18 @@
                 method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ bom_id: bomId })
             });
             const d = await r.json();
-            if (d.ok) { toast('BOM asignado'); document.getElementById('bomStatus').textContent = 'BOM: ' + d.bom.clave_maquina; await loadData(); }
+            if (d.ok) { toast('BOM asignado'); document.getElementById('bomStatus').textContent = 'BOM: ' + d.bom.clave_maquina; if (d.procesos_copiados) toast('Procesos del BOM cargados'); await loadData(); }
             else { toast(d.error || 'No se pudo asignar'); }
+        }
+
+        async function cargarProcesosBom(reemplazar) {
+            if (reemplazar && !confirm('Esto borrara los procesos actuales y las piezas quedaran sin asignar. ¿Continuar?')) return;
+            const r = await fetch('/api/maquinaria/ordenes-trabajo/' + ORDEN_ID + '/cargar-procesos-bom', {
+                method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ reemplazar: reemplazar })
+            });
+            const d = await r.json();
+            if (d.ok) { toast('Procesos cargados: ' + (d.procesos_copiados || 0)); await loadData(); }
+            else { toast(d.error || 'No se pudieron cargar'); }
         }
 
         async function addProceso() {

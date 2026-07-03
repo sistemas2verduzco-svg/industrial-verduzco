@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maquinaria - Procesos por maquina</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .page { display:grid; gap:14px; }
+        .panel { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:14px; }
+        .muted { color:#64748b; font-size:13px; }
+        .flash { padding:10px 12px; border-radius:8px; margin-bottom:10px; font-size:13px; }
+        .flash-success { background:#ecfdf5; border:1px solid #86efac; color:#166534; }
+        .flash-error { background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; }
+        .field { padding:8px; border:1px solid #d1d5db; border-radius:6px; width:100%; box-sizing:border-box; font-size:13px; }
+        .btn { border:0; border-radius:6px; padding:8px 12px; font-weight:700; font-size:12px; cursor:pointer; color:#fff; }
+        .btn-blue { background:#1d4ed8; }
+        .btn-teal { background:#0f766e; }
+        .btn-red { background:#b91c1c; }
+        .grid-form { display:grid; gap:8px; align-items:end; }
+        table { width:100%; border-collapse:collapse; font-size:13px; }
+        th, td { padding:8px; border-bottom:1px solid #eef2f7; text-align:left; vertical-align:top; }
+        th { background:#f8fafc; font-size:12px; color:#475569; }
+        .proc-num { background:#0f766e; color:#fff; width:26px; height:26px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-weight:800; font-size:12px; }
+    </style>
+</head>
+<body>
+    {% include '_sidebar.html' %}
+    <div class="container page" style="padding-top:20px; max-width:1100px; padding-left:10px; padding-right:10px;">
+        <h2 style="margin:0 0 4px 0;">Procesos por maquina</h2>
+        <div class="muted" style="margin-bottom:8px;">
+            Define la secuencia de procesos de cada maquina (plantilla). Al asignar el BOM en una orden de trabajo, estos procesos se cargan automaticamente.
+            <a href="/maquinaria/boms">← Volver a BOMs</a>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="flash flash-{{ category if category in ['success','error'] else 'success' }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        {% if setup_required %}
+        <div class="flash flash-error">Faltan tablas del modulo Maquinaria.</div>
+        {% endif %}
+
+        <div class="panel">
+            <form method="get" action="/maquinaria/procesos-maquina" class="grid-form" style="grid-template-columns:1fr auto;">
+                <select class="field" name="bom_id" required onchange="this.form.submit()">
+                    <option value="">— Selecciona maquina / BOM —</option>
+                    {% for b in boms %}
+                    <option value="{{ b.id }}" {% if bom_sel and bom_sel.id == b.id %}selected{% endif %}>
+                        {{ b.clave_maquina }} — {{ b.nombre_maquina }}{% if b.version %} (v{{ b.version }}){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+                <button class="btn btn-blue" type="submit">Abrir</button>
+            </form>
+        </div>
+
+        {% if bom_sel %}
+        <div class="panel">
+            <h3 style="margin:0 0 10px 0;">{{ bom_sel.clave_maquina }} — {{ bom_sel.nombre_maquina }}</h3>
+
+            {% if has_permission('maquinaria_procesos', 'create') or has_permission('maquinaria_boms', 'create') or has_permission('maquinaria_boms', 'edit') or current_user.es_admin %}
+            <form method="post" action="/maquinaria/procesos-maquina/{{ bom_sel.id }}/create" class="grid-form" style="grid-template-columns:2fr 1fr 2fr repeat(4,70px) 1fr auto; margin-bottom:14px;">
+                <input class="field" type="text" name="nombre" placeholder="Nombre del proceso *" required>
+                <input class="field" type="text" name="centro_trabajo" placeholder="Centro trabajo">
+                <input class="field" type="text" name="operacion" placeholder="Operacion / descripcion">
+                <input class="field" type="text" name="t_e" placeholder="T.E" title="Tiempo estandar">
+                <input class="field" type="text" name="t_tct" placeholder="T.TCT">
+                <input class="field" type="text" name="t_tco" placeholder="T.TCO">
+                <input class="field" type="text" name="t_to" placeholder="T.TO">
+                <input class="field" type="text" name="notas" placeholder="Notas">
+                <button class="btn btn-teal" type="submit">+ Proceso</button>
+            </form>
+            {% endif %}
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th><th>Proceso</th><th>Centro</th><th>Operacion</th><th>T.E</th><th>T.TCT</th><th>T.TCO</th><th>T.TO</th><th>Notas</th>
+                        {% if has_permission('maquinaria_procesos', 'edit') or has_permission('maquinaria_boms', 'edit') or current_user.es_admin %}<th></th>{% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in procesos %}
+                    <tr>
+                        <td><span class="proc-num">{{ p.orden }}</span></td>
+                        {% if has_permission('maquinaria_procesos', 'edit') or has_permission('maquinaria_boms', 'edit') or current_user.es_admin %}
+                        <form method="post" action="/maquinaria/procesos-maquina/proceso/{{ p.id }}/update" id="proc-form-{{ p.id }}"></form>
+                        <td><input class="field" form="proc-form-{{ p.id }}" name="nombre" value="{{ p.nombre }}" required></td>
+                        <td><input class="field" form="proc-form-{{ p.id }}" name="centro_trabajo" value="{{ p.centro_trabajo or '' }}"></td>
+                        <td><input class="field" form="proc-form-{{ p.id }}" name="operacion" value="{{ p.operacion or '' }}"></td>
+                        <td><input class="field" form="proc-form-{{ p.id }}" name="t_e" value="{{ p.t_e or '' }}"></td>
+                        <td><input class="field" form="proc-form-{{ p.id }}" name="t_tct" value="{{ p.t_tct or '' }}"></td>
+                        <td><input class="field" form="proc-form-{{ p.id }}" name="t_tco" value="{{ p.t_tco or '' }}"></td>
+                        <td><input class="field" form="proc-form-{{ p.id }}" name="t_to" value="{{ p.t_to or '' }}"></td>
+                        <td><input class="field" form="proc-form-{{ p.id }}" name="notas" value="{{ p.notas or '' }}"></td>
+                        <td style="white-space:nowrap;">
+                            <input class="field" form="proc-form-{{ p.id }}" name="orden" type="number" min="1" value="{{ p.orden }}" style="width:52px; margin-bottom:4px;" title="Orden">
+                            <button class="btn btn-teal" form="proc-form-{{ p.id }}" type="submit">OK</button>
+                            {% if has_permission('maquinaria_procesos', 'delete') or has_permission('maquinaria_boms', 'delete') or current_user.es_admin %}
+                            <button class="btn btn-red" form="del-proc-{{ p.id }}" type="submit" onclick="return confirm('Eliminar proceso?')">X</button>
+                            {% endif %}
+                        </td>
+                        {% else %}
+                        <td>{{ p.nombre }}</td>
+                        <td>{{ p.centro_trabajo or '-' }}</td>
+                        <td>{{ p.operacion or '-' }}</td>
+                        <td>{{ p.t_e or '-' }}</td>
+                        <td>{{ p.t_tct or '-' }}</td>
+                        <td>{{ p.t_tco or '-' }}</td>
+                        <td>{{ p.t_to or '-' }}</td>
+                        <td>{{ p.notas or '-' }}</td>
+                        {% endif %}
+                    </tr>
+                    {% if has_permission('maquinaria_procesos', 'delete') or has_permission('maquinaria_boms', 'delete') or current_user.es_admin %}
+                    <form id="del-proc-{{ p.id }}" method="post" action="/maquinaria/procesos-maquina/proceso/{{ p.id }}/delete"></form>
+                    {% endif %}
+                    {% else %}
+                    <tr><td colspan="10" class="muted">Sin procesos. Agrega el primero arriba.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% elif boms %}
+        <div class="panel muted">Selecciona una maquina para ver o editar sus procesos.</div>
+        {% else %}
+        <div class="panel muted">Primero crea un BOM en <a href="/maquinaria/boms">BOMs</a>.</div>
+        {% endif %}
+    </div>
+</body>
+</html>
