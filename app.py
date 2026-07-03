@@ -13514,13 +13514,68 @@ MAQUINARIA_TABLES = [
 ]
 
 
-def _maquinaria_tables_status():
+def _maquinaria_tables_status_raw():
     try:
         inspector = inspect(db.engine)
         missing = [table for table in MAQUINARIA_TABLES if not inspector.has_table(table)]
         return len(missing) == 0, missing
     except Exception:
-        return False, MAQUINARIA_TABLES
+        return False, list(MAQUINARIA_TABLES)
+
+
+def _run_maquinaria_base_ddl():
+    """Ejecuta DDL idempotente del modulo Maquinaria (mismo script del repo)."""
+    try:
+        from create_maquinaria_ensamble_tables import SQL as maquinaria_ddl
+        with db.engine.begin() as conn:
+            conn.execute(text(maquinaria_ddl))
+        return True
+    except Exception as exc:
+        logger.error(f'No se pudo ejecutar DDL base de Maquinaria: {exc}', exc_info=True)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return False
+
+
+def _ensure_maquinaria_tables():
+    """Crea tablas/columnas faltantes del modulo y devuelve estado actualizado."""
+    ready, missing = _maquinaria_tables_status_raw()
+    if ready:
+        return True, []
+
+    try:
+        base_core = {
+            'maquinaria_pedidos', 'maquinaria_boms', 'maquinaria_ordenes_trabajo',
+            'maquinaria_contpaq_pedidos', 'maquinaria_contpaq_pedidos_detalle',
+        }
+        if missing and any(table in base_core for table in missing):
+            _run_maquinaria_base_ddl()
+        else:
+            # Tablas base ya existen: solo extensiones nuevas (OT snapshot, procesos BOM).
+            _ensure_maquinaria_ordenes_extension_tables()
+            _ensure_maquinaria_bom_procesos_table()
+
+        ready_after, missing_after = _maquinaria_tables_status_raw()
+        if not ready_after:
+            # Segundo intento: DDL completo por si faltan varias tablas a la vez.
+            _run_maquinaria_base_ddl()
+            _ensure_maquinaria_ordenes_extension_tables()
+            _ensure_maquinaria_bom_procesos_table()
+            ready_after, missing_after = _maquinaria_tables_status_raw()
+        return ready_after, missing_after
+    except Exception as exc:
+        logger.error(f'No se pudieron asegurar tablas de Maquinaria: {exc}', exc_info=True)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return _maquinaria_tables_status_raw()
+
+
+def _maquinaria_tables_status():
+    return _ensure_maquinaria_tables()
 
 
 def _ensure_maquinaria_ordenes_extension_tables():
@@ -13697,8 +13752,6 @@ def maquinaria_pedidos_delete(pedido_id):
 @requires_any_permission([('maquinaria_ordenes', 'view'), ('maquinaria_ordenes', 'edit'), ('maquinaria_ordenes', 'create'), ('maquinaria_ordenes', 'update'), ('maquinaria_ordenes', 'delete')])
 def maquinaria_ordenes_page():
     ready, missing = _maquinaria_tables_status()
-    if ready:
-        _ensure_maquinaria_ordenes_extension_tables()
     ordenes = MaquinariaOrdenTrabajo.query.order_by(MaquinariaOrdenTrabajo.id.desc()).limit(200).all() if ready else []
     return render_template(
         'maquinaria_ordenes_trabajo.html',
@@ -14165,8 +14218,6 @@ def maquinaria_ordenes_create():
 @requires_any_permission([('maquinaria_boms', 'view'), ('maquinaria_boms', 'edit'), ('maquinaria_boms', 'create'), ('maquinaria_boms', 'update'), ('maquinaria_boms', 'delete')])
 def maquinaria_boms_page():
     ready, missing = _maquinaria_tables_status()
-    if ready:
-        _ensure_maquinaria_bom_procesos_table()
     boms = MaquinariaBOM.query.order_by(MaquinariaBOM.clave_maquina.asc()).all() if ready else []
     return render_template('maquinaria_boms.html', setup_required=not ready, missing_tables=missing, boms=boms)
 

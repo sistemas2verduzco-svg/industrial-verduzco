@@ -133,6 +133,22 @@ CREATE TABLE IF NOT EXISTS maquinaria_bom_componentes (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS maquinaria_bom_procesos (
+    id SERIAL PRIMARY KEY,
+    bom_id INTEGER NOT NULL REFERENCES maquinaria_boms(id) ON DELETE CASCADE,
+    orden INTEGER NOT NULL DEFAULT 1,
+    nombre VARCHAR(180) NOT NULL,
+    centro_trabajo VARCHAR(120),
+    operacion TEXT,
+    t_e VARCHAR(20),
+    t_tct VARCHAR(20),
+    t_tco VARCHAR(20),
+    t_to VARCHAR(20),
+    notas TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS maquinaria_ordenes_trabajo (
     id SERIAL PRIMARY KEY,
     folio_ot VARCHAR(80) NOT NULL UNIQUE,
@@ -143,6 +159,45 @@ CREATE TABLE IF NOT EXISTS maquinaria_ordenes_trabajo (
     fecha_objetivo TIMESTAMP,
     notas TEXT,
     created_by VARCHAR(100),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE maquinaria_ordenes_trabajo ADD COLUMN IF NOT EXISTS solicitud_id INTEGER;
+ALTER TABLE maquinaria_ordenes_trabajo ADD COLUMN IF NOT EXISTS descripcion TEXT;
+ALTER TABLE maquinaria_ordenes_trabajo ADD COLUMN IF NOT EXISTS bom_id INTEGER;
+ALTER TABLE maquinaria_ordenes_trabajo ADD COLUMN IF NOT EXISTS orden_compra_name VARCHAR(120);
+ALTER TABLE maquinaria_ordenes_trabajo ADD COLUMN IF NOT EXISTS orden_compra_odoo_id BIGINT;
+ALTER TABLE maquinaria_ordenes_trabajo ADD COLUMN IF NOT EXISTS cliente VARCHAR(255);
+
+CREATE TABLE IF NOT EXISTS maquinaria_orden_bom_items (
+    id SERIAL PRIMARY KEY,
+    orden_trabajo_id INTEGER NOT NULL REFERENCES maquinaria_ordenes_trabajo(id) ON DELETE CASCADE,
+    bom_id INTEGER REFERENCES maquinaria_boms(id) ON DELETE SET NULL,
+    codigo_componente VARCHAR(120) NOT NULL,
+    nombre_componente VARCHAR(255) NOT NULL,
+    cantidad DOUBLE PRECISION NOT NULL DEFAULT 1,
+    unidad VARCHAR(30),
+    proceso_base VARCHAR(120),
+    notas TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE maquinaria_orden_bom_items ADD COLUMN IF NOT EXISTS proceso_id INTEGER;
+
+CREATE TABLE IF NOT EXISTS maquinaria_orden_procesos (
+    id SERIAL PRIMARY KEY,
+    orden_trabajo_id INTEGER NOT NULL REFERENCES maquinaria_ordenes_trabajo(id) ON DELETE CASCADE,
+    orden INTEGER NOT NULL DEFAULT 1,
+    nombre VARCHAR(180) NOT NULL,
+    centro_trabajo VARCHAR(120),
+    operacion TEXT,
+    t_e VARCHAR(20),
+    t_tct VARCHAR(20),
+    t_tco VARCHAR(20),
+    t_to VARCHAR(20),
+    estado VARCHAR(30) NOT NULL DEFAULT 'pendiente',
+    notas TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -187,6 +242,9 @@ CREATE INDEX IF NOT EXISTS idx_maq_contpaq_status ON maquinaria_contpaq_pedidos(
 CREATE INDEX IF NOT EXISTS idx_maq_contpaq_det_doc ON maquinaria_contpaq_pedidos_detalle(document_id);
 CREATE INDEX IF NOT EXISTS idx_maq_ot_clave ON maquinaria_ordenes_trabajo(clave_maquina);
 CREATE INDEX IF NOT EXISTS idx_maq_series_clave ON maquinaria_series(clave_maquina);
+CREATE INDEX IF NOT EXISTS idx_maq_bom_procesos_bom ON maquinaria_bom_procesos(bom_id);
+CREATE INDEX IF NOT EXISTS idx_maq_orden_bom_items_ot ON maquinaria_orden_bom_items(orden_trabajo_id);
+CREATE INDEX IF NOT EXISTS idx_maq_orden_procesos_ot ON maquinaria_orden_procesos(orden_trabajo_id);
 '''
 
 
