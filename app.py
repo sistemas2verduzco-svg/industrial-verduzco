@@ -1572,6 +1572,10 @@ def _query_hojas_entregas_pendientes_estaciones():
 
     Incluye hojas historicas del modulo Entregas aunque tengan maquina_id
     residual, siempre que no esten activas/pausadas en cola de una maquina.
+
+    Solo muestra hojas recientes (por defecto ultimos 15 dias segun fecha de
+    captura); el rezago anterior ya no se asigna. Ajustable con la variable
+    ESTACIONES_ENTREGAS_DIAS.
     """
     terminal_states = ('completada', 'cancelada')
 
@@ -1583,6 +1587,15 @@ def _query_hojas_entregas_pendientes_estaciones():
 
     query = HojaRutaEntrega.query.filter(
         func.lower(func.coalesce(HojaRutaEntrega.estado, 'activa')).notin_(terminal_states),
+    )
+
+    try:
+        dias_window = max(1, int(os.getenv('ESTACIONES_ENTREGAS_DIAS', '15') or '15'))
+    except (TypeError, ValueError):
+        dias_window = 15
+    cutoff = datetime.utcnow() - timedelta(days=dias_window)
+    query = query.filter(
+        func.coalesce(HojaRutaEntrega.fecha_creacion, HojaRutaEntrega.fecha_salida) >= cutoff,
     )
 
     active_ids = [row[0] for row in actively_on_machine.all()]

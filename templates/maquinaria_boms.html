@@ -28,6 +28,19 @@
         .search-item:hover, .search-item.active { background: #eff6ff; }
         .search-item strong { color: #0f172a; font-size: 14px; }
         .search-item span { display: block; font-size: 12px; color: #64748b; margin-top: 2px; }
+        .bom-list { margin-top: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; }
+        .bom-list-item { display: block; text-align: left; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; padding: 10px 12px; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+        .bom-list-item:hover { border-color: #93c5fd; box-shadow: 0 2px 8px rgba(29,78,216,.08); }
+        .bom-list-item.active { border-color: #1d4ed8; background: #eff6ff; box-shadow: 0 0 0 2px rgba(29,78,216,.15); }
+        .bom-list-item .bli-title { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+        .bom-list-item .bli-clave { font-weight: 800; color: #0f172a; font-size: 14px; }
+        .bom-list-item .bli-ver { font-size: 11px; color: #64748b; }
+        .bom-list-item .bli-name { color: #334155; font-size: 13px; margin-top: 2px; }
+        .bom-list-item .bli-meta { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+        .bom-list-item .bli-pill { background: #f1f5f9; border-radius: 999px; padding: 2px 8px; font-size: 11px; color: #475569; }
+        .bom-list-item .bli-pill.on { background: #dcfce7; color: #166534; }
+        .bom-list-item .bli-pill.off { background: #fee2e2; color: #b91c1c; }
+        .bom-list-empty { grid-column: 1 / -1; text-align: center; color: #94a3b8; padding: 18px; font-size: 13px; }
         .bom-hero { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; padding-bottom: 12px; border-bottom: 1px solid #eef2f7; margin-bottom: 14px; }
         .bom-hero h3 { margin: 0; font-size: 20px; color: #0f172a; }
         .chip { display: inline-flex; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
@@ -75,17 +88,17 @@
         {% endif %}
 
         <div class="panel">
-            <div class="section-title">1. Buscar BOM</div>
+            <div class="section-title">1. Buscar o elegir BOM</div>
             <div class="search-row">
                 <div>
-                    <input id="bomSearch" class="field" type="search" placeholder="Clave o nombre de maquina (ej. TORNO, B-104...)" autocomplete="off">
-                    <div id="searchMeta" class="search-meta">{{ boms_index|length }} BOM(s) registrados</div>
-                    <div id="searchResults" class="search-results" role="listbox"></div>
+                    <input id="bomSearch" class="field" type="search" placeholder="Filtra por clave o nombre de maquina (ej. TORNO, B-104...)" autocomplete="off">
+                    <div id="searchMeta" class="search-meta">{{ boms_index|length }} BOM(s) registrados — toca uno para abrirlo</div>
                 </div>
                 {% if bom_sel %}
                 <a class="btn btn-ghost" href="/maquinaria/boms">Cerrar BOM</a>
                 {% endif %}
             </div>
+            <div id="bomList" class="bom-list"></div>
         </div>
 
         <details class="create-box panel" style="padding: 12px 16px;">
@@ -197,9 +210,9 @@
         </div>
         {% else %}
         <div class="panel empty-workspace">
-            <strong>Selecciona un BOM para editar</strong>
-            Usa el buscador para localizar la maquina por clave o nombre.<br>
-            Solo se muestra un BOM a la vez para evitar ediciones accidentales.
+            <strong>Selecciona un BOM de la lista de arriba</strong>
+            Toca cualquier tarjeta para abrir y editar ese BOM. Usa el buscador para filtrar por clave o nombre.<br>
+            Solo se abre un BOM a la vez para evitar ediciones accidentales.
         </div>
         {% endif %}
     </div>
@@ -209,21 +222,17 @@
         const bomsIndex = {{ boms_index|tojson }};
         const selectedId = {{ bom_sel.id if bom_sel else 'null' }};
         const searchInput = document.getElementById('bomSearch');
-        const searchResults = document.getElementById('searchResults');
+        const bomList = document.getElementById('bomList');
         const searchMeta = document.getElementById('searchMeta');
-        let activeIndex = -1;
 
         function normalize(value) {
             return String(value || '').trim().toLowerCase();
         }
 
-        function labelFor(bom) {
-            const ver = bom.version ? ` · v${bom.version}` : '';
-            return `${bom.clave_maquina} — ${bom.nombre_maquina}${ver}`;
-        }
-
-        function metaFor(bom) {
-            return `${bom.estado} · ${bom.componentes_count} componente(s) · ${bom.procesos_count} proceso(s)`;
+        function esc(value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
         function openBom(id) {
@@ -231,82 +240,64 @@
             window.location.href = '/maquinaria/boms?bom_id=' + encodeURIComponent(id);
         }
 
-        function renderResults(items) {
-            searchResults.innerHTML = '';
-            if (!items.length) {
-                searchResults.classList.remove('open');
-                searchMeta.textContent = 'Sin coincidencias';
-                return;
-            }
-            items.slice(0, 40).forEach((bom, idx) => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'search-item' + (idx === activeIndex ? ' active' : '');
-                btn.innerHTML = `<strong>${labelFor(bom)}</strong><span>${metaFor(bom)}</span>`;
-                btn.addEventListener('click', () => openBom(bom.id));
-                searchResults.appendChild(btn);
-            });
-            searchResults.classList.add('open');
-            searchMeta.textContent = `${items.length} coincidencia(s) · Enter para abrir la primera`;
-        }
-
         function filterBoms() {
-            const q = normalize(searchInput.value);
-            activeIndex = -1;
-            if (!q) {
-                searchResults.classList.remove('open');
-                searchMeta.textContent = `${bomsIndex.length} BOM(s) registrados`;
-                return [];
-            }
+            const q = normalize(searchInput ? searchInput.value : '');
+            if (!q) return bomsIndex.slice();
             return bomsIndex.filter(bom => {
-                const hay = [
-                    bom.clave_maquina,
-                    bom.nombre_maquina,
-                    bom.version,
-                    bom.estado,
-                ].map(normalize).join(' ');
+                const hay = [bom.clave_maquina, bom.nombre_maquina, bom.version, bom.estado]
+                    .map(normalize).join(' ');
                 return hay.includes(q) || normalize(bom.clave_maquina).startsWith(q);
             });
         }
 
-        if (searchInput) {
-            searchInput.addEventListener('input', () => renderResults(filterBoms()));
-            searchInput.addEventListener('focus', () => {
-                const items = filterBoms();
-                if (items.length) renderResults(items);
+        function renderList(items) {
+            bomList.innerHTML = '';
+            if (!items.length) {
+                bomList.innerHTML = '<div class="bom-list-empty">Sin coincidencias. Ajusta la busqueda o crea un BOM nuevo.</div>';
+                searchMeta.textContent = 'Sin coincidencias';
+                return;
+            }
+            items.forEach(bom => {
+                const active = selectedId && Number(bom.id) === Number(selectedId);
+                const ver = bom.version ? `v${esc(bom.version)}` : 's/version';
+                const estadoOn = normalize(bom.estado) === 'activo';
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'bom-list-item' + (active ? ' active' : '');
+                btn.innerHTML =
+                    `<div class="bli-title"><span class="bli-clave">${esc(bom.clave_maquina)}</span>` +
+                    `<span class="bli-ver">${ver}</span></div>` +
+                    `<div class="bli-name">${esc(bom.nombre_maquina)}</div>` +
+                    `<div class="bli-meta">` +
+                    `<span class="bli-pill ${estadoOn ? 'on' : 'off'}">${esc(bom.estado)}</span>` +
+                    `<span class="bli-pill">${bom.componentes_count} comp.</span>` +
+                    `<span class="bli-pill">${bom.procesos_count} proc.</span>` +
+                    `</div>`;
+                btn.addEventListener('click', () => openBom(bom.id));
+                bomList.appendChild(btn);
             });
+            const total = bomsIndex.length;
+            searchMeta.textContent = items.length === total
+                ? `${total} BOM(s) registrados — toca uno para abrirlo`
+                : `${items.length} de ${total} BOM(s) — toca uno para abrirlo`;
+        }
+
+        function refresh() {
+            renderList(filterBoms());
+        }
+
+        if (searchInput) {
+            searchInput.addEventListener('input', refresh);
             searchInput.addEventListener('keydown', (ev) => {
-                const items = filterBoms();
-                if (!items.length) return;
-                if (ev.key === 'ArrowDown') {
+                if (ev.key === 'Enter') {
                     ev.preventDefault();
-                    activeIndex = Math.min(activeIndex + 1, items.length - 1);
-                    renderResults(items);
-                } else if (ev.key === 'ArrowUp') {
-                    ev.preventDefault();
-                    activeIndex = Math.max(activeIndex - 1, 0);
-                    renderResults(items);
-                } else if (ev.key === 'Enter') {
-                    ev.preventDefault();
-                    const pick = items[Math.max(activeIndex, 0)];
-                    if (pick) openBom(pick.id);
-                } else if (ev.key === 'Escape') {
-                    searchResults.classList.remove('open');
+                    const items = filterBoms();
+                    if (items.length) openBom(items[0].id);
                 }
             });
         }
 
-        document.addEventListener('click', (ev) => {
-            if (!searchResults || !searchInput) return;
-            if (!searchResults.contains(ev.target) && ev.target !== searchInput) {
-                searchResults.classList.remove('open');
-            }
-        });
-
-        if (selectedId && searchInput) {
-            const current = bomsIndex.find(b => Number(b.id) === Number(selectedId));
-            if (current) searchInput.value = current.clave_maquina;
-        }
+        refresh();
     })();
     </script>
 </body>
