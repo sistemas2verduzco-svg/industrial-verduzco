@@ -222,11 +222,11 @@
 <body>
     <div class="conciliacion-wrap">
         <h2>Conciliacion Pedidos</h2>
-        <p class="muted">Vista privada sin menu lateral. Puedes consultar pedidos desde CONTPAQ o desde Odoo segun la fuente seleccionada.</p>
+        <p class="muted">Vista privada sin menu lateral. Muestra los pedidos de CONTPAQ y de Odoo juntos; cada tarjeta indica su fuente.</p>
 
         <div class="sync-bar" id="odooSyncBar">
             <div class="sync-info" id="odooSyncInfo">
-                <div><b>Fuente:</b> Odoo</div>
+                <div><b>Fuente:</b> CONTPAQ + Odoo (combinado)</div>
                 {% if odoo_sync_auto %}
                 <div><b>Sincronizacion automatica:</b> activa (cada {{ odoo_sync_interval }} min)</div>
                 {% else %}
@@ -249,10 +249,6 @@
         </div>
 
         <div class="toolbar" style="grid-template-columns: repeat(4, minmax(180px, 1fr));">
-            <select id="fuente">
-                <option value="contpaq">Fuente: CONTPAQ</option>
-                <option value="odoo">Fuente: Odoo</option>
-            </select>
             <input id="q" type="text" placeholder="Busqueda global (varios terminos)">
             <input id="folio" type="text" placeholder="Folio pedido/remision">
             <input id="cliente" type="text" placeholder="Cliente">
@@ -315,30 +311,11 @@
 
     <script>
         const CAN_EDIT_CONTPAQ = {{ 'true' if has_permission('contpaq', 'edit') else 'false' }};
+        const CONCILIACION_ENDPOINT = '/api/contpaq/conciliacion';
         const CONCILIACION_SOURCE_LABELS = {
             contpaq: 'CONTPAQ',
             odoo: 'Odoo',
         };
-
-        function currentSource() {
-            return document.getElementById('fuente')?.value || 'contpaq';
-        }
-
-        function currentSourceLabel() {
-            return CONCILIACION_SOURCE_LABELS[currentSource()] || 'CONTPAQ';
-        }
-
-        function currentConciliacionEndpoint() {
-            return currentSource() === 'odoo'
-                ? '/api/contpaq/conciliacion'
-                : '/api/contpaq/conciliacion-contpaq-legacy';
-        }
-
-        function syncBarVisibility() {
-            const bar = document.getElementById('odooSyncBar');
-            if (!bar) return;
-            bar.style.display = currentSource() === 'odoo' ? 'flex' : 'none';
-        }
 
         function money(v) {
             const n = Number(v || 0);
@@ -472,9 +449,19 @@
                     `;
                 }
 
+                const fuenteKey = (pedido.fuente || '').toLowerCase();
+                const fuenteLabel = CONCILIACION_SOURCE_LABELS[fuenteKey] || (pedido.fuente || '');
+                const fuenteColor = fuenteKey === 'odoo'
+                    ? 'background:#e7f3ff;border-color:#a9d2ff;color:#0b4b9c;'
+                    : 'background:#eafaf0;border-color:#a9e6c0;color:#1b6b3a;';
+                const fuenteBadge = fuenteLabel
+                    ? `<span style="display:inline-block;padding:2px 10px;border-radius:999px;border:1px solid;font-size:11px;font-weight:700;letter-spacing:.3px;${fuenteColor}">${esc(fuenteLabel)}</span>`
+                    : '';
+
                 cardsHtml += `
                     <div class="pedido-card">
                         <div class="pedido-head">
+                            <div><b>Fuente</b>${fuenteBadge}</div>
                             <div><b>Folio</b>${esc(pedido.doc_folio)}</div>
                             <div><b>Cliente</b>${esc(pedido.cliente)}</div>
                             <div><b>Sucursal</b>${esc(pedido.sucursal)}</div>
@@ -548,7 +535,7 @@
 
         async function cargar(page = currentPage) {
             const status = document.getElementById('status');
-            status.textContent = `Consultando ${currentSourceLabel()}...`;
+            status.textContent = 'Consultando CONTPAQ + Odoo...';
 
             const params = new URLSearchParams();
             const campos = [
@@ -564,7 +551,7 @@
             params.set('limit', (document.getElementById('limit')?.value || '120'));
             params.set('page', String(page));
 
-            const resp = await fetch(`${currentConciliacionEndpoint()}?${params.toString()}`);
+            const resp = await fetch(`${CONCILIACION_ENDPOINT}?${params.toString()}`);
             const data = await resp.json();
             if (!resp.ok) {
                 status.textContent = data.error || 'Error en consulta';
@@ -574,7 +561,7 @@
             updatePager(data);
             syncTopCombos(data.filter_options || {});
             render(data.items || [], data.resumen || null);
-            status.textContent = `Mostrando ${data.total || 0} registro(s) de ${currentSourceLabel()} en pagina ${currentPage}.`;
+            status.textContent = `Mostrando ${data.total || 0} registro(s) (CONTPAQ + Odoo) en pagina ${currentPage}.`;
         }
 
         async function subirIndice() {
@@ -690,16 +677,6 @@
             currentPage = 1;
             cargar(1);
         });
-        document.getElementById('fuente').addEventListener('change', () => {
-            try {
-                window.localStorage.setItem('conciliacionFuente', currentSource());
-            } catch (e) {
-                // noop
-            }
-            syncBarVisibility();
-            currentPage = 1;
-            cargar(1);
-        });
         if (CAN_EDIT_CONTPAQ) {
             document.getElementById('btnSync').addEventListener('click', syncNow);
             document.getElementById('btnSubirIndice').addEventListener('click', subirIndice);
@@ -789,16 +766,6 @@
             cargar(1);
         });
 
-        try {
-            const savedSource = window.localStorage.getItem('conciliacionFuente');
-            if (savedSource === 'contpaq' || savedSource === 'odoo') {
-                document.getElementById('fuente').value = savedSource;
-            }
-        } catch (e) {
-            // noop
-        }
-
-        syncBarVisibility();
         cargar(1);
         refreshOdooSyncStatus();
     </script>

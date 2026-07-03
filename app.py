@@ -12377,6 +12377,7 @@ def _build_conciliacion_odoo_response(
     fecha_hasta_raw='',
     limit=120,
     page=1,
+    collect_all=False,
 ):
     """Arma la respuesta de conciliacion leyendo pedidos sincronizados desde Odoo."""
     _ensure_odoo_tables()
@@ -12463,8 +12464,13 @@ def _build_conciliacion_odoo_response(
     total_records = len(display_pedidos)
     compare_map = {p.id: p for p in compare_pedidos}
     compare_pedido_ids = [p.id for p in compare_pedidos]
-    offset = (page - 1) * limit
-    pedidos = display_pedidos[offset:offset + limit]
+    if collect_all:
+        page = 1
+        offset = 0
+        pedidos = display_pedidos
+    else:
+        offset = (page - 1) * limit
+        pedidos = display_pedidos[offset:offset + limit]
 
     if not pedidos:
         return {
@@ -12619,6 +12625,7 @@ def _build_conciliacion_odoo_response(
             'pedido_total': round(pedido_total, 2),
             'detalles': pedido_rows,
             'remisiones': [],
+            'fuente': 'odoo',
         })
 
     indice_q = ContpaqSucursalIndice.query
@@ -12750,13 +12757,39 @@ def _build_conciliacion_odoo_response(
     }, 200
 
 
+def _merge_conciliacion_resumen(res_a, res_b):
+    """Combina dos resumenes de conciliacion en uno solo."""
+    res_a = res_a or {}
+    res_b = res_b or {}
+    semana_totales = {}
+    for res in (res_a, res_b):
+        for row in (res.get('totales_por_semana') or []):
+            sem = row.get('semana') or 'SIN SEMANA'
+            if sem not in semana_totales:
+                semana_totales[sem] = {'pedidos': 0, 'total': 0.0}
+            semana_totales[sem]['pedidos'] += int(row.get('pedidos') or 0)
+            semana_totales[sem]['total'] += float(row.get('total') or 0)
+    return {
+        'total_pedidos': int(res_a.get('total_pedidos') or 0) + int(res_b.get('total_pedidos') or 0),
+        'total_partidas': int(res_a.get('total_partidas') or 0) + int(res_b.get('total_partidas') or 0),
+        'total_importe': round(float(res_a.get('total_importe') or 0) + float(res_b.get('total_importe') or 0), 2),
+        'total_remisiones': int(res_a.get('total_remisiones') or 0) + int(res_b.get('total_remisiones') or 0),
+        'total_faltantes_desde_indice': int(res_a.get('total_faltantes_desde_indice') or 0) + int(res_b.get('total_faltantes_desde_indice') or 0),
+        'faltantes_inyectados': int(res_a.get('faltantes_inyectados') or 0) + int(res_b.get('faltantes_inyectados') or 0),
+        'totales_por_semana': [
+            {'semana': sem, 'pedidos': vals['pedidos'], 'total': round(vals['total'], 2)}
+            for sem, vals in sorted(semana_totales.items(), key=lambda x: str(x[0]), reverse=True)
+        ],
+    }
+
+
 @app.route('/api/contpaq/conciliacion', methods=['GET'])
 @login_required
 @requires_permission('contpaq', 'view')
 def api_contpaq_conciliacion():
-    """Devuelve pedidos Odoo con detalle para conciliacion (mismas columnas que antes)."""
+    """Conciliacion combinada: muestra pedidos de CONTPAQ y Odoo juntos en una sola lista."""
     try:
-        payload, status = _build_conciliacion_odoo_response(
+        params = dict(
             q=(request.args.get('q') or '').strip(),
             folio=(request.args.get('folio') or '').strip(),
             cliente=(request.args.get('cliente') or '').strip(),
@@ -12764,36 +12797,85 @@ def api_contpaq_conciliacion():
             titulo=(request.args.get('titulo') or '').strip(),
             fecha_desde_raw=(request.args.get('fecha_desde') or '').strip(),
             fecha_hasta_raw=(request.args.get('fecha_hasta') or '').strip(),
-            limit=request.args.get('limit', default=120, type=int),
-            page=request.args.get('page', default=1, type=int),
         )
-        if 'error' in payload:
-            return jsonify(payload), status
-        return jsonify(payload), status
+        limit = request.args.get('limit', default=120, type=int)
+        limit = max(1, min(int(limit or 120), 500))
+        page = request.args.get('page', default=1, type=int)
+        page = max(1, int(page or 1))
+
+        # Traemos TODO de ambas fuentes (sin paginar internamente) y luego combinamos.
+        contpaq_payload, contpaq_status = _build_conciliacion_contpaq_response(collect_all=True, **params)
+        if isinstance(contpaq_payload, dict) and 'error' in contpaq_payload:
+            return jsonify(contpaq_payload), contpaq_status
+
+        odoo_payload, odoo_status = _build_conciliacion_odoo_response(collect_all=True, **params)
+        if isinstance(odoo_payload, dict) and 'error' in odoo_payload:
+            return jsonify(odoo_payload), odoo_status
+
+        items = list(contpaq_payload.get('items') or []) + list(odoo_payload.get('items') or [])
+        items.sort(
+            key=lambda x: (
+                x.get('periodo_semana') or '',
+                x.get('fecha_documento') or '',
+                str(x.get('doc_folio') or ''),
+            ),
+            reverse=True,
+        )
+
+        total_records = len(items)
+        offset = (page - 1) * limit
+        page_items = items[offset:offset + limit]
+
+        resumen = _merge_conciliacion_resumen(
+            contpaq_payload.get('resumen'),
+            odoo_payload.get('resumen'),
+        )
+
+        contpaq_opts = (contpaq_payload.get('filter_options') or {})
+        odoo_opts = (odoo_payload.get('filter_options') or {})
+        semanas = sorted(set((contpaq_opts.get('semanas') or [])) | set((odoo_opts.get('semanas') or [])))
+        sucursales = sorted(set((contpaq_opts.get('sucursales') or [])) | set((odoo_opts.get('sucursales') or [])))
+
+        return jsonify({
+            'items': page_items,
+            'total': len(page_items),
+            'resumen': resumen,
+            'filter_options': {
+                'semanas': semanas,
+                'sucursales': sucursales,
+            },
+            'page': page,
+            'limit': limit,
+            'total_records': total_records,
+            'total_pages': (total_records + limit - 1) // limit if total_records else 0,
+            'has_prev': page > 1,
+            'has_next': offset + limit < total_records,
+            'fuente': 'combinada',
+        }), 200
     except Exception as e:
-        logger.error(f"Error consultando conciliacion Odoo: {e}", exc_info=True)
+        logger.error(f"Error consultando conciliacion combinada: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/contpaq/conciliacion-contpaq-legacy', methods=['GET'])
-@login_required
-@requires_permission('contpaq', 'view')
-def api_contpaq_conciliacion_legacy():
-    """Respaldo: conciliacion leyendo pedidos CONTPAQ (ya no usada en UI principal)."""
+def _build_conciliacion_contpaq_response(
+    *,
+    q='',
+    folio='',
+    cliente='',
+    sucursal='',
+    titulo='',
+    fecha_desde_raw='',
+    fecha_hasta_raw='',
+    limit=120,
+    page=1,
+    collect_all=False,
+):
+    """Arma la respuesta de conciliacion leyendo pedidos CONTPAQ. Devuelve (dict, status)."""
     try:
-        q = (request.args.get('q') or '').strip()
-        folio = (request.args.get('folio') or '').strip()
-        cliente = (request.args.get('cliente') or '').strip()
-        sucursal = (request.args.get('sucursal') or '').strip()
-        titulo = (request.args.get('titulo') or '').strip()
-        fecha_desde_raw = (request.args.get('fecha_desde') or '').strip()
-        fecha_hasta_raw = (request.args.get('fecha_hasta') or '').strip()
         d_fallback_days = max(1, min(int(os.getenv('CONTPAQ_D_FALLBACK_DAYS', '14') or '14'), 31))
 
-        limit = request.args.get('limit', default=120, type=int)
-        limit = max(1, min(limit, 500))
-        page = request.args.get('page', default=1, type=int)
-        page = max(1, page)
+        limit = max(1, min(int(limit or 120), 500))
+        page = max(1, int(page or 1))
 
         pedidos_q = ContpaqPedido.query
 
@@ -12817,13 +12899,13 @@ def api_contpaq_conciliacion_legacy():
         if fecha_desde_raw:
             fecha_desde = _parse_date(fecha_desde_raw)
             if not fecha_desde:
-                return jsonify({'error': 'fecha_desde invalida. Usa YYYY-MM-DD'}), 400
+                return {'error': 'fecha_desde invalida. Usa YYYY-MM-DD'}, 400
             pedidos_q = pedidos_q.filter(ContpaqPedido.fecha_documento >= datetime.combine(fecha_desde, datetime.min.time()))
 
         if fecha_hasta_raw:
             fecha_hasta = _parse_date(fecha_hasta_raw)
             if not fecha_hasta:
-                return jsonify({'error': 'fecha_hasta invalida. Usa YYYY-MM-DD'}), 400
+                return {'error': 'fecha_hasta invalida. Usa YYYY-MM-DD'}, 400
             pedidos_q = pedidos_q.filter(ContpaqPedido.fecha_documento < datetime.combine(fecha_hasta + timedelta(days=1), datetime.min.time()))
 
         # Busqueda global por terminos combinables (AND por termino, OR por columna).
@@ -12874,10 +12956,15 @@ def api_contpaq_conciliacion_legacy():
         total_records = len(display_pedidos)
         compare_map = {p.document_id: p for p in compare_pedidos}
         compare_doc_ids = [p.document_id for p in compare_pedidos]
-        offset = (page - 1) * limit
-        pedidos = display_pedidos[offset:offset + limit]
+        if collect_all:
+            page = 1
+            offset = 0
+            pedidos = display_pedidos
+        else:
+            offset = (page - 1) * limit
+            pedidos = display_pedidos[offset:offset + limit]
         if not pedidos:
-            return jsonify({
+            return {
                 'items': [],
                 'total': 0,
                 'page': page,
@@ -12886,7 +12973,12 @@ def api_contpaq_conciliacion_legacy():
                 'total_pages': (total_records + limit - 1) // limit if total_records else 0,
                 'has_prev': page > 1,
                 'has_next': offset + limit < total_records,
-            })
+                'filter_options': {
+                    'semanas': semana_options,
+                    'sucursales': sucursal_options,
+                },
+                'fuente': 'contpaq',
+            }, 200
 
         def _query_in_chunks(model_class, id_column, id_list, order_by_cols, chunk_size=500):
             """Evita IN(...) gigantes que saturan el temp space de PostgreSQL."""
@@ -13089,6 +13181,7 @@ def api_contpaq_conciliacion_legacy():
                 'pedido_total': round(pedido_total, 2),
                 'detalles': pedido_rows,
                 'remisiones': remisiones_rows,
+                'fuente': 'contpaq',
             })
 
         indice_q = ContpaqSucursalIndice.query
@@ -13308,7 +13401,7 @@ def api_contpaq_conciliacion_legacy():
             ],
         }
 
-        return jsonify({
+        return {
             'items': items,
             'total': len(items),
             'resumen': resumen,
@@ -13322,10 +13415,30 @@ def api_contpaq_conciliacion_legacy():
             'total_pages': (total_records + limit - 1) // limit if total_records else 0,
             'has_prev': page > 1,
             'has_next': offset + limit < total_records,
-        })
+            'fuente': 'contpaq',
+        }, 200
     except Exception as e:
         logger.error(f"Error consultando conciliacion CONTPAQ: {e}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
+        return {'error': str(e)}, 500
+
+
+@app.route('/api/contpaq/conciliacion-contpaq-legacy', methods=['GET'])
+@login_required
+@requires_permission('contpaq', 'view')
+def api_contpaq_conciliacion_legacy():
+    """Respaldo: conciliacion leyendo solo pedidos CONTPAQ."""
+    payload, status = _build_conciliacion_contpaq_response(
+        q=(request.args.get('q') or '').strip(),
+        folio=(request.args.get('folio') or '').strip(),
+        cliente=(request.args.get('cliente') or '').strip(),
+        sucursal=(request.args.get('sucursal') or '').strip(),
+        titulo=(request.args.get('titulo') or '').strip(),
+        fecha_desde_raw=(request.args.get('fecha_desde') or '').strip(),
+        fecha_hasta_raw=(request.args.get('fecha_hasta') or '').strip(),
+        limit=request.args.get('limit', default=120, type=int),
+        page=request.args.get('page', default=1, type=int),
+    )
+    return jsonify(payload), status
 
 
 @app.route('/api/contpaq/sync', methods=['POST'])
