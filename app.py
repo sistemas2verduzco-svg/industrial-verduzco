@@ -7,7 +7,7 @@ from odoo_sync import run_odoo_sync
 import os
 import json
 from dotenv import load_dotenv
-from sqlalchemy import text, func, inspect, extract
+from sqlalchemy import text, func, inspect, extract, or_
 from functools import wraps
 import secrets
 from werkzeug.utils import secure_filename
@@ -1510,6 +1510,86 @@ def _group_mp_qc_alerts_by_maquina_hoja(registros):
         if process_id > 0 and process_id not in bucket['latest_by_process']:
             bucket['latest_by_process'][process_id] = payload
     return grouped
+
+
+def _entregas_qc_alert_payload_from_registro(registro):
+    mediciones = registro.mediciones if isinstance(registro.mediciones, dict) else {}
+    if mediciones.get('module') != 'estaciones_t_entregas_qc':
+        return None
+
+    alert_type, meta = _mp_qc_alert_type_meta(mediciones.get('alert_type') or registro.resultado)
+    estacion_id = 0
+    try:
+        estacion_id = int(mediciones.get('estacion_id') or 0)
+    except Exception:
+        estacion_id = 0
+
+    hoja_ruta_id = 0
+    try:
+        hoja_ruta_id = int(mediciones.get('hoja_ruta_id') or registro.hoja_ruta_id or 0)
+    except Exception:
+        hoja_ruta_id = 0
+
+    reviewed_at = registro.creado_en.isoformat() if registro.creado_en else None
+    return {
+        'id': registro.id,
+        'maquina_id': registro.maquina_id,
+        'hoja_ruta_id': hoja_ruta_id,
+        'estacion_id': estacion_id,
+        'process_id': estacion_id,
+        'process_name': mediciones.get('process_name') or '',
+        'tipo': alert_type,
+        'label': meta['label'],
+        'color': meta['color'],
+        'cantidad_revisada': int(registro.cantidad_inspeccionada or 0),
+        'usuario': registro.usuario or '',
+        'fecha': reviewed_at,
+        'maquina_nombre': mediciones.get('maquina_nombre') or '',
+        'hoja_nombre': mediciones.get('hoja_nombre') or '',
+    }
+
+
+def _group_entregas_qc_alerts_by_maquina_hoja(registros):
+    grouped = {}
+    for registro in registros or []:
+        payload = _entregas_qc_alert_payload_from_registro(registro)
+        if not payload:
+            continue
+
+        key = (int(payload.get('maquina_id') or 0), int(payload.get('hoja_ruta_id') or 0))
+        bucket = grouped.setdefault(key, {'recent': [], 'latest_by_process': {}})
+        if len(bucket['recent']) < 8:
+            bucket['recent'].append(payload)
+
+        estacion_id = int(payload.get('estacion_id') or 0)
+        if estacion_id > 0 and estacion_id not in bucket['latest_by_process']:
+            bucket['latest_by_process'][estacion_id] = payload
+    return grouped
+
+
+def _query_hojas_entregas_pendientes_estaciones():
+    """Hojas entregas disponibles para asignar en Estaciones T.
+
+    Incluye hojas historicas del modulo Entregas aunque tengan maquina_id
+    residual, siempre que no esten activas/pausadas en cola de una maquina.
+    """
+    terminal_states = ('completada', 'cancelada')
+
+    actively_on_machine = db.session.query(HojaRutaEntrega.id).filter(
+        HojaRutaEntrega.maquina_id.isnot(None),
+        HojaRutaEntrega.maquina_id != 0,
+        func.lower(func.coalesce(HojaRutaEntrega.estado, 'activa')).in_(('activa', 'pausada')),
+    )
+
+    query = HojaRutaEntrega.query.filter(
+        func.lower(func.coalesce(HojaRutaEntrega.estado, 'activa')).notin_(terminal_states),
+    )
+
+    active_ids = [row[0] for row in actively_on_machine.all()]
+    if active_ids:
+        query = query.filter(~HojaRutaEntrega.id.in_(active_ids))
+
+    return query.order_by(HojaRutaEntrega.fecha_creacion.asc()).all()
 
 
 def _build_mp_time_estaciones_by_clave_id(clave_id):
@@ -6585,15 +6665,15 @@ def hoja_ruta_nuevo_ver(hoja_id):
 
 @app.route('/hojas_ruta')
 @login_required
-@requires_any_permission([('estaciones', 'view'), ('catalog', 'view')])
+@requires_any_permission([('estaciones', 'view'), ('hojas_entregas', 'view'), ('catalog', 'view')])
 def hojas_ruta_entregas_list():
-    """Estaciones T usando hojas de ruta MP (hojas_ruta_nueva)."""
-    maquinas = Máquina.query.all()
+    """Estaciones T - producción por máquina usando hojas de ruta entregas."""
+    maquinas = Máquina.query.order_by(Máquina.nombre.asc()).all()
 
-    hojas_asignadas = HojaRutaNueva.query.filter(
-        HojaRutaNueva.maquina_id.isnot(None),
-        HojaRutaNueva.estado.in_(['activa', 'pausada'])
-    ).order_by(HojaRutaNueva.fecha_creacion.desc()).all()
+    hojas_asignadas = HojaRutaEntrega.query.filter(
+        HojaRutaEntrega.maquina_id.isnot(None),
+        HojaRutaEntrega.estado.in_(['activa', 'pausada'])
+    ).order_by(HojaRutaEntrega.fecha_actualizacion.desc(), HojaRutaEntrega.fecha_creacion.desc()).all()
 
     hojas_asignadas_por_maquina = {}
     for hoja in hojas_asignadas:
@@ -6608,7 +6688,7 @@ def hojas_ruta_entregas_list():
     qc_registros = QCProduccionRegistro.query.filter(
         QCProduccionRegistro.maquina_id.isnot(None)
     ).order_by(QCProduccionRegistro.creado_en.desc()).limit(500).all()
-    qc_alerts_grouped = _group_mp_qc_alerts_by_maquina_hoja(qc_registros)
+    qc_alerts_grouped = _group_entregas_qc_alerts_by_maquina_hoja(qc_registros)
 
     maquinas_data = []
     for maq in maquinas:
@@ -6617,58 +6697,45 @@ def hojas_ruta_entregas_list():
         hoja_activa_dict = hoja_activa.to_dict() if hoja_activa else None
         tiempo_objetivo_proceso = None
         tiempo_transcurrido_proceso = None
-        elapsed_sec = 0
-        
-        if hoja_activa_dict is not None:
-            hoja_activa_dict['estaciones'] = _build_mp_virtual_estaciones_by_pn(
-                hoja_activa.pn,
-                _mp_parse_completed_process_ids(hoja_activa.materia_prima),
-            )
-            qc_bundle = qc_alerts_grouped.get((int(maq.id), int(hoja_activa.id)), {'recent': [], 'latest_by_process': {}})
-            for est in hoja_activa_dict['estaciones']:
-                est['qc_alert'] = qc_bundle['latest_by_process'].get(int(est.get('id') or 0))
-            hoja_activa_dict['qc_alerts_recent'] = qc_bundle['recent']
-            if not hoja_activa_dict.get('total_tiempo'):
-                hoja_activa_dict['total_tiempo'] = _compute_mp_total_time_preview_by_pn(
-                    hoja_activa.pn,
-                    hoja_activa.cantidad_piezas,
-                    hoja_activa.total_tiempo,
+        estaciones_db = []
+
+        if hoja_activa:
+            estaciones_db = EstacionTrabajo.query.filter_by(
+                hoja_ruta_id=hoja_activa.id
+            ).order_by(EstacionTrabajo.orden).all()
+            if hoja_activa_dict is not None:
+                hoja_activa_dict['estaciones'] = [e.to_dict() for e in estaciones_db]
+                qc_bundle = qc_alerts_grouped.get(
+                    (int(maq.id), int(hoja_activa.id)),
+                    {'recent': [], 'latest_by_process': {}},
                 )
+                for est in hoja_activa_dict['estaciones']:
+                    est['nombre'] = est.get('operacion') or ''
+                    est['qc_alert'] = qc_bundle['latest_by_process'].get(int(est.get('id') or 0))
+                hoja_activa_dict['qc_alerts_recent'] = qc_bundle['recent']
 
         estacion_actual = 'Sin produccion'
         tiempo_real = '00:00:00'
 
-        if hoja_activa:
-            # Calcular tiempo transcurrido con fallback para hojas antiguas sin fecha_salida.
-            start_dt = hoja_activa.fecha_salida or hoja_activa.fecha_actualizacion or hoja_activa.fecha_creacion
-            if start_dt:
-                if hoja_activa.estado == 'pausada' and hoja_activa.fecha_actualizacion:
-                    end_dt = hoja_activa.fecha_actualizacion
+        if hoja_activa and estaciones_db:
+            estacion_en_curso = next(
+                (e for e in estaciones_db if (e.estado or '').lower() == 'en_curso'),
+                None,
+            )
+            if estacion_en_curso:
+                estacion_actual = estacion_en_curso.operacion or estacion_en_curso.nombre or 'En curso'
+                cantidad = max(1, int(hoja_activa.cantidad_piezas or 0))
+                sec_por_pieza = _station_seconds(estacion_en_curso)
+                objetivo_sec = max(0, sec_por_pieza * cantidad)
+                inicio = estacion_en_curso.fecha_inicio or hoja_activa.fecha_salida
+                if hoja_activa.estado == 'pausada' and hoja_activa.fecha_actualizacion and inicio:
+                    transcurrido_sec = _working_seconds_between(inicio, hoja_activa.fecha_actualizacion)
                 else:
-                    end_dt = datetime.utcnow()
-
-                elapsed_sec = max(0, int((end_dt - start_dt).total_seconds()))
-                tiempo_real = _format_seconds_to_hms(elapsed_sec)
-            else:
-                tiempo_real = '00:00:00'
-
-            if isinstance(hoja_activa, HojaRutaNueva):
-                completed_ids = _mp_parse_completed_process_ids(hoja_activa.materia_prima)
-                virtual_ests = _build_mp_virtual_estaciones_by_pn(hoja_activa.pn, completed_ids)
-                est_actual = next((e for e in virtual_ests if (e.get('estado') or '').lower() == 'en_curso'), None)
-                if est_actual:
-                    estacion_actual = est_actual.get('operacion') or est_actual.get('nombre') or 'En curso'
-                projection = _get_mp_current_process_projection(
-                    hoja_activa.pn,
-                    hoja_activa.cantidad_piezas,
-                    completed_ids,
-                    elapsed_total_seconds=elapsed_sec,
-                )
-                if projection:
-                    tiempo_objetivo_proceso = projection['objetivo_hms']
-                    tiempo_transcurrido_proceso = projection['transcurrido_hms']
-                    # Para el reloj countdown en UI de Estaciones T, elapsed base debe ser del proceso actual
-                    tiempo_real = projection['transcurrido_hms']
+                    transcurrido_sec = _working_seconds_between(inicio, datetime.utcnow()) if inicio else 0
+                if objetivo_sec > 0:
+                    tiempo_objetivo_proceso = _format_seconds_to_hms(objetivo_sec)
+                    tiempo_transcurrido_proceso = _format_seconds_to_hms(transcurrido_sec)
+                    tiempo_real = tiempo_transcurrido_proceso
 
         maquinas_data.append({
             'id': maq.id,
@@ -6699,26 +6766,25 @@ def hojas_ruta_entregas_list():
             'plantilla_default': getattr(maq, 'plantilla_default', None),
         })
 
-    hojas_pendientes = HojaRutaNueva.query.filter(
-        HojaRutaNueva.maquina_id.is_(None),
-        HojaRutaNueva.estado.in_(['activa', 'pausada', 'pendiente'])
-    ).order_by(HojaRutaNueva.fecha_creacion.asc()).all()
+    hojas_pendientes = _query_hojas_entregas_pendientes_estaciones()
 
     pendientes_data = []
     for hoja in hojas_pendientes:
+        estaciones = EstacionTrabajo.query.filter_by(
+            hoja_ruta_id=hoja.id
+        ).order_by(EstacionTrabajo.orden).all()
         pendientes_data.append({
             'id': hoja.id,
             'serie': hoja.nombre,
             'clave': hoja.pn,
             'estado': hoja.estado,
             'cantidad_piezas': hoja.cantidad_piezas,
-            'tiempo_total': hoja.total_tiempo or _compute_mp_total_time_preview_by_pn(
-                hoja.pn,
-                hoja.cantidad_piezas,
-                hoja.total_tiempo,
-            ),
+            'tiempo_total': hoja.total_tiempo,
             'fecha_creacion': hoja.fecha_creacion.isoformat() if hoja.fecha_creacion else None,
-            'estaciones': _build_mp_virtual_estaciones_by_pn(hoja.pn, _mp_parse_completed_process_ids(hoja.materia_prima)),
+            'estaciones': [
+                {**e.to_dict(), 'nombre': e.operacion or e.nombre or ''}
+                for e in estaciones
+            ],
         })
 
     facturadas_info = {}
@@ -6728,12 +6794,13 @@ def hojas_ruta_entregas_list():
         maquinas=maquinas_data,
         hojas_pendientes=pendientes_data,
         facturadas_info=facturadas_info,
-        nuevo_modulo=True,
-        hoja_detalle_base='/hojas_ruta_nuevo',
-        api_resolver_codigo='/api/hojas_ruta_nuevo/resolver_codigo',
-        api_maquina_base='/api/maquinas_nuevo',
-        api_hojas_base='/api/hojas_ruta_nuevo',
-        modulo_titulo='Estaciones T - MP por Maquina'
+        nuevo_modulo=False,
+        hoja_detalle_base='/hojas_ruta',
+        api_resolver_codigo='/api/hojas_ruta/resolver_codigo',
+        api_maquina_base='/api/maquinas',
+        api_hojas_base='/api/hojas_ruta',
+        modulo_titulo='Estaciones T - Produccion por Maquina',
+        modulo_subtitulo='Gestion centralizada de activacion, OT y seguimiento de hojas de ruta entregas por equipo.',
     ))
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     resp.headers['Pragma'] = 'no-cache'
@@ -6782,28 +6849,6 @@ def api_mapa_maquinas():
         elif existing.estado != 'activa' and h.estado == 'activa':
             hoja_activa_por_maquina[h.maquina_id] = h
 
-    # Tambien incluir HojaRutaNueva activas (modulo MP) para maquinas no cubiertas
-    hojas_activas_mp = HojaRutaNueva.query.filter(
-        HojaRutaNueva.maquina_id.isnot(None),
-        HojaRutaNueva.estado.in_(['activa', 'pausada'])
-    ).order_by(HojaRutaNueva.fecha_creacion.desc()).all()
-    for h in hojas_activas_mp:
-        existing = hoja_activa_por_maquina.get(h.maquina_id)
-        if existing is None:
-            hoja_activa_por_maquina[h.maquina_id] = h
-        elif isinstance(existing, HojaRutaEntrega):
-            pass  # entregas tiene prioridad visual en el mapa
-        elif existing.estado != 'activa' and h.estado == 'activa':
-            hoja_activa_por_maquina[h.maquina_id] = h
-
-    # Tambien considerar maquinas con HojaRutaNueva activa (modulo MP)
-    maquinas_con_hoja_nueva = set(
-        h.maquina_id for h in HojaRutaNueva.query.filter(
-            HojaRutaNueva.maquina_id.isnot(None),
-            HojaRutaNueva.estado.in_(['activa', 'pausada'])
-        ).all()
-    )
-
     schedule_window = _get_machine_schedule_window()
 
     # Regla operativa: fuera de turno, sin hoja activa asignada => maquina desactivada por default.
@@ -6812,7 +6857,6 @@ def api_mapa_maquinas():
     if not schedule_window['active']:
         for maq in todas_maquinas:
             if (maq.id not in hoja_activa_por_maquina
-                    and maq.id not in maquinas_con_hoja_nueva
                     and bool(getattr(maq, 'activo', False))):
                 maq.activo = False
                 estado_maquina_changed = True
@@ -6878,77 +6922,36 @@ def api_mapa_maquinas():
         objetivo_sec_metric = 0
         transcurrido_sec_metric = 0
         if hoja_activa:
-            is_mp_hoja = isinstance(hoja_activa, HojaRutaNueva)
-            if is_mp_hoja:
-                hoja_modulo = 'mp'
-                hoja_total_tiempo = hoja_activa.total_tiempo or _compute_mp_total_time_preview_by_pn(
-                    hoja_activa.pn,
-                    hoja_activa.cantidad_piezas,
-                    hoja_activa.total_tiempo,
-                )
-                # MP: proceso actual viene de ClaveProceso virtual, no de EstacionTrabajo
-                completed_ids = _mp_parse_completed_process_ids(hoja_activa.materia_prima)
-                virtual_ests = _build_mp_virtual_estaciones_by_pn(hoja_activa.pn, completed_ids)
-                est_mp = next((e for e in virtual_ests if e.get('estado') == 'en_curso'), None)
-                if est_mp:
-                    estacion_actual = SimpleNamespace(
-                        id=est_mp['id'],
-                        nombre=est_mp.get('operacion') or est_mp.get('nombre') or 'Proceso',
-                    )
-                    inicio = hoja_activa.fecha_salida
-                    sec_por_pieza_mp = _mp_process_seconds(ClaveProceso.query.get(est_mp['id']))
-                    if sec_por_pieza_mp > 0:
-                        tiempo_proceso_pieza = _format_seconds_to_hms(sec_por_pieza_mp)
-                    if inicio:
-                        # Considerar paros: si está pausada, contar hasta fecha_actualizacion
-                        if hoja_activa.estado == 'pausada' and hoja_activa.fecha_actualizacion:
-                            end_dt = hoja_activa.fecha_actualizacion
-                        else:
-                            end_dt = now_dt
-                        elapsed_total_sec = max(0, int((end_dt - inicio).total_seconds()))
-                        projection = _get_mp_current_process_projection(
-                            hoja_activa.pn,
-                            hoja_activa.cantidad_piezas,
-                            completed_ids,
-                            elapsed_total_seconds=elapsed_total_sec,
-                        )
-                        if projection:
-                            tiempo_objetivo = projection['objetivo_hms']
-                            tiempo_transcurrido = projection['transcurrido_hms']
-                            tiempo_restante = projection['restante_hms']
-                            proceso_culminado = projection['proceso_culminado']
-                            objetivo_sec_metric = projection['objetivo_sec']
-                            transcurrido_sec_metric = projection['transcurrido_sec']
-                            if projection['objetivo_sec'] > 0:
-                                progreso_pct = min(100, int((projection['transcurrido_sec'] * 100) / projection['objetivo_sec']))
-            else:
-                hoja_total_tiempo = hoja_activa.total_tiempo
-                estacion_actual = EstacionTrabajo.query.filter_by(
-                    hoja_ruta_id=hoja_activa.id,
-                    estado='en_curso'
-                ).order_by(EstacionTrabajo.orden).first()
+            hoja_total_tiempo = hoja_activa.total_tiempo
+            estacion_actual = EstacionTrabajo.query.filter_by(
+                hoja_ruta_id=hoja_activa.id,
+                estado='en_curso'
+            ).order_by(EstacionTrabajo.orden).first()
 
-                if estacion_actual:
-                    cantidad = max(1, int(hoja_activa.cantidad_piezas or 0))
-                    sec_por_pieza = _station_seconds(estacion_actual)
-                    objetivo_sec = max(0, sec_por_pieza * cantidad)
+            if estacion_actual:
+                cantidad = max(1, int(hoja_activa.cantidad_piezas or 0))
+                sec_por_pieza = _station_seconds(estacion_actual)
+                objetivo_sec = max(0, sec_por_pieza * cantidad)
 
-                    inicio = estacion_actual.fecha_inicio or hoja_activa.fecha_salida
+                inicio = estacion_actual.fecha_inicio or hoja_activa.fecha_salida
+                if hoja_activa.estado == 'pausada' and hoja_activa.fecha_actualizacion and inicio:
+                    transcurrido_sec = _working_seconds_between(inicio, hoja_activa.fecha_actualizacion)
+                else:
                     transcurrido_sec = _working_seconds_between(inicio, datetime.utcnow()) if inicio else 0
-                    restante_sec = max(0, objetivo_sec - transcurrido_sec)
+                restante_sec = max(0, objetivo_sec - transcurrido_sec)
 
-                    if sec_por_pieza > 0:
-                        tiempo_proceso_pieza = _format_seconds_to_hms(sec_por_pieza)
-                    if objetivo_sec > 0:
-                        objetivo_sec_metric = objetivo_sec
-                        transcurrido_sec_metric = transcurrido_sec
-                        tiempo_objetivo = _format_seconds_to_hms(objetivo_sec)
-                        tiempo_transcurrido = _format_seconds_to_hms(transcurrido_sec)
-                        tiempo_restante = _format_seconds_to_hms(restante_sec)
-                        proceso_culminado = restante_sec <= 0
-                        progreso_pct = min(100, int((transcurrido_sec * 100) / objetivo_sec))
+                if sec_por_pieza > 0:
+                    tiempo_proceso_pieza = _format_seconds_to_hms(sec_por_pieza)
+                if objetivo_sec > 0:
+                    objetivo_sec_metric = objetivo_sec
+                    transcurrido_sec_metric = transcurrido_sec
+                    tiempo_objetivo = _format_seconds_to_hms(objetivo_sec)
+                    tiempo_transcurrido = _format_seconds_to_hms(transcurrido_sec)
+                    tiempo_restante = _format_seconds_to_hms(restante_sec)
+                    proceso_culminado = restante_sec <= 0
+                    progreso_pct = min(100, int((transcurrido_sec * 100) / objetivo_sec))
 
-            # Eficiencia planta: computar por hoja activa en maquina para incluir Entregas y MP.
+            # Eficiencia planta: computar por hoja activa en maquina.
             start_ref = hoja_activa.fecha_salida
             if start_ref:
                 if hoja_activa.estado == 'pausada' and hoja_activa.fecha_actualizacion:
@@ -6990,7 +6993,7 @@ def api_mapa_maquinas():
             estado_label = 'MOVER'
             origen_modulo = 'mapa_maquinas'
             tipo_alerta = 'proceso_culminado'
-            hoja_modulo = 'mp' if isinstance(hoja_activa, HojaRutaNueva) else 'entregas'
+            hoja_modulo = 'entregas'
             estacion_key = str(estacion_actual.id) if estacion_actual else 'sin_estacion'
             evento_clave = f"mapa:{hoja_modulo}:maq:{maq.id}:hoja:{hoja_activa.id}:est:{estacion_key}:culminado"
             alerta = _crear_alerta_buzon(
@@ -7049,7 +7052,7 @@ def api_mapa_maquinas():
             'progreso_proceso_pct': progreso_pct,
             'estacion_actual_id': estacion_actual.id if estacion_actual else None,
             'hoja_modulo': hoja_modulo,
-            'detalle_url': f"/hojas_ruta_nuevo/{maq.id}" if hoja_modulo == 'mp' else f"/hojas_ruta/{maq.id}",
+            'detalle_url': f"/hojas_ruta/{maq.id}",
             'tiempo_productivo_hora_sec': maquina_productive_hour,
             'tiempo_productivo_dia_sec': maquina_productive_day,
             'tiempo_productivo_semana_sec': maquina_productive_week,
@@ -9363,6 +9366,71 @@ def api_qc_estaciones_mp_alert():
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error guardando QC MP semaforo: {e}", exc_info=True)
+        return jsonify({'error': 'No se pudo guardar la alerta de calidad'}), 500
+
+
+@app.route('/api/qc_estaciones/entregas_alert', methods=['POST'])
+@login_required
+@requires_any_permission([('calidad', 'edit'), ('estaciones', 'operate'), ('catalog', 'edit')])
+def api_qc_estaciones_entregas_alert():
+    payload = request.get_json(silent=True) or request.form
+
+    try:
+        maquina_id = int(payload.get('maquina_id') or 0)
+        hoja_ruta_id = int(payload.get('hoja_ruta_id') or 0)
+        estacion_id = int(payload.get('estacion_id') or payload.get('process_id') or 0)
+        cantidad_revisada = int(payload.get('cantidad_revisada') or 0)
+    except Exception:
+        return jsonify({'error': 'Datos invalidos para registrar alerta QC'}), 422
+
+    alert_type, meta = _mp_qc_alert_type_meta(payload.get('alert_type'))
+    if maquina_id <= 0 or hoja_ruta_id <= 0 or estacion_id <= 0 or cantidad_revisada <= 0:
+        return jsonify({'error': 'maquina_id, hoja_ruta_id, estacion_id y cantidad_revisada son requeridos'}), 400
+
+    hoja = HojaRutaEntrega.query.get_or_404(hoja_ruta_id)
+    if int(hoja.maquina_id or 0) != maquina_id:
+        return jsonify({'error': 'La hoja no esta asignada a esa maquina'}), 409
+
+    estacion = EstacionTrabajo.query.get_or_404(estacion_id)
+    if int(estacion.hoja_ruta_id or 0) != hoja.id:
+        return jsonify({'error': 'La estacion no pertenece a esa hoja'}), 409
+
+    maquina = Máquina.query.get(maquina_id)
+    reviewed_at = datetime.utcnow().isoformat()
+
+    try:
+        registro = QCProduccionRegistro(
+            maquina_id=maquina_id,
+            hoja_ruta_id=hoja.id,
+            clave_pieza=hoja.pn or hoja.nombre or 'SIN_CLAVE',
+            lote=hoja.nombre or None,
+            cantidad_inspeccionada=cantidad_revisada,
+            cantidad_aprobada=cantidad_revisada if alert_type == 'verificado' else 0,
+            cantidad_rechazada=cantidad_revisada if alert_type == 'scrap' else 0,
+            resultado=alert_type,
+            notas=payload.get('notas') or '',
+            mediciones={
+                'module': 'estaciones_t_entregas_qc',
+                'alert_type': alert_type,
+                'alert_label': meta['label'],
+                'alert_color': meta['color'],
+                'hoja_ruta_id': hoja.id,
+                'hoja_nombre': hoja.nombre or '',
+                'estacion_id': estacion.id,
+                'process_id': estacion.id,
+                'process_name': estacion.operacion or estacion.nombre or '',
+                'station_order': estacion.orden,
+                'maquina_nombre': maquina.nombre if maquina else '',
+                'reviewed_at': reviewed_at,
+            },
+            usuario=session.get('user') or 'sistema',
+        )
+        db.session.add(registro)
+        db.session.commit()
+        return jsonify({'success': True, 'registro': _entregas_qc_alert_payload_from_registro(registro)}), 201
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error guardando QC entregas semaforo: {e}", exc_info=True)
         return jsonify({'error': 'No se pudo guardar la alerta de calidad'}), 500
 
 

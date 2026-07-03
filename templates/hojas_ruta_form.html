@@ -87,9 +87,35 @@
             opacity: 0.5;
             cursor: not-allowed;
         }
+        .btn-delete[disabled].btn-cancelled {
+            opacity: 1;
+            background: #991b1b;
+            color: #fff;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+        }
         .btn-secondary {
             background: #edf2f7;
             color: #111827;
+        }
+        .estado-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 800;
+            border: 1px solid transparent;
+            text-transform: uppercase;
+            letter-spacing: 0.2px;
+        }
+        .estado-pill-cancelada {
+            background: #fee2e2;
+            border-color: #fca5a5;
+            color: #991b1b;
+        }
+        .row-cancelada td {
+            background: #fef2f2;
         }
         .hint {
             margin-top: 10px;
@@ -754,7 +780,7 @@
                         <input id="orden_trabajo" name="orden_trabajo" type="text" placeholder="Ej: OT-2026-015">
                     </div>
                     <div style="display:flex; align-items:center; gap:8px;">
-                        <input id="hoja_en_produccion" name="hoja_en_produccion" type="checkbox">
+                        <input id="hoja_en_produccion" name="hoja_en_produccion" type="checkbox" {% if (default_tipo_hoja or 'entrega') == 'entrega' %}checked{% endif %}>
                         <label for="hoja_en_produccion" style="margin:0;">Hoja de ruta en producción</label>
                     </div>
                     {% if not nuevo_modulo %}
@@ -858,7 +884,7 @@
                 </thead>
                 <tbody>
                     {% for h in hojas %}
-                    <tr data-hoja-id="{{ h.id }}">
+                    <tr data-hoja-id="{{ h.id }}" {% if (h.estado or '') == 'cancelada' %}class="row-cancelada"{% endif %}>
                         <td>{{ h.serie or '' }}</td>
                         <td>{{ h.clave or '' }}</td>
                         <td>{{ h.descripcion_clave or h.clave or '' }}</td>
@@ -899,7 +925,13 @@
                                 <span style="color:#6b7280;">Sin resumen QC</span>
                             {% endif %}
                         </td>
-                        <td>{{ h.estado or '' }}</td>
+                        <td>
+                            {% if (h.estado or '') == 'cancelada' %}
+                            <span class="estado-pill estado-pill-cancelada">✖ Cancelada</span>
+                            {% else %}
+                            {{ h.estado or '' }}
+                            {% endif %}
+                        </td>
                         <td>
                             {% if h.liberada_facturacion %}
                                 <span style="display:inline-block; padding:2px 8px; border-radius:999px; background:#dcfce7; border:1px solid #86efac; color:#15803d; font-weight:700; font-size:11px;">LIBERADA / APROBADA</span>
@@ -952,10 +984,10 @@
                             {% if has_permission('hojas_entregas', 'edit') or has_permission('hojas', 'edit') or has_permission('catalog', 'edit') or current_user.es_admin %}
                             <button
                                 type="button"
-                                class="btn-delete"
+                                class="btn-delete {% if (h.estado or '') == 'cancelada' %}btn-cancelled{% endif %}"
                                 {% if (h.estado or '') == 'cancelada' %}disabled title="La hoja ya está cancelada"{% endif %}
                                 onclick="cancelarHojaDesdeFormulario({{ h.id }}, '{{ (h.serie or ('HOJA ' ~ h.id))|e }}', this)">
-                                {% if (h.estado or '') == 'cancelada' %}Cancelada{% else %}Cancelar{% endif %}
+                                {% if (h.estado or '') == 'cancelada' %}✖ Cancelada{% else %}Cancelar{% endif %}
                             </button>
                             {% endif %}
                             <button

@@ -1,4 +1,6 @@
+{% if nuevo_modulo %}
 <a href="/hojas_ruta_nuevo" class="btn btn-info mb-3">Ver HOJAS DE RUTA MP</a>
+{% endif %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -1249,6 +1251,7 @@
     const API_HOJAS_BASE = {{ (api_hojas_base or '/api/hojas_ruta')|tojson }};
     const API_RESOLVER_CODIGO = {{ (api_resolver_codigo or '/api/hojas_ruta/resolver_codigo')|tojson }};
     const HOJA_DETALLE_BASE = {{ (hoja_detalle_base or '/hojas_ruta')|tojson }};
+    const NUEVO_MODULO_MP = {{ (nuevo_modulo or false)|tojson }};
 
     function toggleActivacion(maquinaId, activar) {
         const url = API_MAQUINA_BASE + '/' + maquinaId + (activar ? '/activar' : '/desactivar');
@@ -1524,7 +1527,10 @@
                         </div>
                         {% endfor %}
                     {% else %}
-                        <div style="padding:10px; color:#6b7280; font-size:13px;">No hay hojas pendientes por asignar.</div>
+                        <div style="padding:10px; color:#6b7280; font-size:13px;">
+                            No hay hojas pendientes por asignar.
+                            <br><span style="font-size:12px;">Las hojas del modulo <strong>Hojas Entregas</strong> (serie HR-...) aparecen aqui si no estan en cola activa de una maquina.</span>
+                        </div>
                     {% endif %}
                 </div>
             </aside>
@@ -2277,17 +2283,27 @@
         }
 
         try {
-            const res = await fetch('/api/qc_estaciones/mp_alert', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'same-origin',
-                body: JSON.stringify({
+            const qcUrl = NUEVO_MODULO_MP ? '/api/qc_estaciones/mp_alert' : '/api/qc_estaciones/entregas_alert';
+            const qcBody = NUEVO_MODULO_MP
+                ? {
                     maquina_id: maquinaId,
                     hoja_mp_id: hojaMpId,
                     process_id: processId,
                     cantidad_revisada: cantidadRevisada,
                     alert_type: alertType,
-                })
+                }
+                : {
+                    maquina_id: maquinaId,
+                    hoja_ruta_id: hojaMpId,
+                    estacion_id: processId,
+                    cantidad_revisada: cantidadRevisada,
+                    alert_type: alertType,
+                };
+            const res = await fetch(qcUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify(qcBody)
             });
             const data = await res.json();
             if (!res.ok) {
