@@ -354,6 +354,31 @@
             return out;
         }
 
+        // Clave canonica de sucursal en el cliente (igual que el backend): sin
+        // acentos, mayusculas, sin prefijo SUC. Sirve para deduplicar el dropdown.
+        function canonSucursal(v) {
+            return String(v || '')
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                .toUpperCase()
+                .replace(/^\s*SUC(?:URSAL)?\.?\s+/, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+
+        // Deja una sola sucursal por clave, prefiriendo la variante con minusculas.
+        function dedupeSucursales(list) {
+            const byKey = new Map();
+            for (const s of (list || [])) {
+                const k = canonSucursal(s);
+                if (!k) continue;
+                const existing = byKey.get(k);
+                if (!existing) { byKey.set(k, s); continue; }
+                const better = (/[a-z]/.test(s) && !/[a-z]/.test(existing)) ? s : existing;
+                byKey.set(k, better);
+            }
+            return Array.from(byKey.values());
+        }
+
         function renderAnioOptions(selected) {
             const sel = document.getElementById('anio');
             if (!sel) return;
@@ -382,7 +407,9 @@
 
             // Incluir siempre el valor seleccionado para que nunca desaparezca.
             const semanas = mergeUnique(semanaUniverse, semanaValue ? [semanaValue] : []).sort();
-            const sucursales = mergeUnique(sucursalUniverse, sucursalValue ? [sucursalValue] : []).sort();
+            const sucursales = dedupeSucursales(
+                mergeUnique(sucursalUniverse, sucursalValue ? [sucursalValue] : [])
+            ).sort();
 
             semanaSelect.innerHTML = '<option value="">Semana desde titulo (todas)</option>'
                 + semanas.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
@@ -390,7 +417,14 @@
                 + sucursales.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
 
             semanaSelect.value = semanaValue;
-            sucursalSelect.value = sucursalValue;
+            // Preservar la seleccion de sucursal por clave canonica (por si el
+            // texto exacto cambio tras deduplicar).
+            let selSuc = sucursalValue;
+            if (selSuc && !sucursales.includes(selSuc)) {
+                const k = canonSucursal(selSuc);
+                selSuc = sucursales.find(s => canonSucursal(s) === k) || '';
+            }
+            sucursalSelect.value = selSuc;
 
             if (Array.isArray(filterOptions.anios) && filterOptions.anios.length) {
                 anioUniverse = mergeUnique(anioUniverse, filterOptions.anios.map(Number));

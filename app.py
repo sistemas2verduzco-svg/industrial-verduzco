@@ -12813,23 +12813,22 @@ def _sucursal_canonical_key(raw):
     return s
 
 
-def _sucursal_display_score(raw):
-    """Puntaje para elegir la mejor variante visible de una sucursal (nombre bonito)."""
-    import unicodedata
-    s = str(raw or '')
-    has_lower = any(c.islower() for c in s)
-    has_upper = any(c.isupper() for c in s)
-    has_accent = any(
-        unicodedata.combining(c) for c in unicodedata.normalize('NFKD', s)
-    )
-    score = 0
-    if has_lower and has_upper:
-        score += 3
-    if has_accent:
-        score += 1
-    if not re.match(r'^\s*SUC(?:URSAL)?\.?\s+', s, re.IGNORECASE):
-        score += 1
-    return score
+# Nombres "bonitos" con acento para claves conocidas. Cualquier otra clave se
+# muestra en Title Case. Esto es DETERMINISTA: una misma clave siempre da el
+# mismo nombre, sin importar que variantes lleguen del sync (evita duplicados).
+_SUCURSAL_DISPLAY_OVERRIDES = {
+    'QUERETARO': 'Querétaro',
+    'TULTITLAN': 'Tultitlán',
+}
+
+
+def _sucursal_pretty(key):
+    """Nombre visible determinista a partir de la clave canonica de sucursal."""
+    if not key:
+        return key
+    if key in _SUCURSAL_DISPLAY_OVERRIDES:
+        return _SUCURSAL_DISPLAY_OVERRIDES[key]
+    return key.title()
 
 
 # Cache en memoria del dataset combinado de conciliacion. Como armar todo
@@ -12919,26 +12918,15 @@ def _build_conciliacion_combined_dataset(base_params):
 
     items = list(contpaq_payload.get('items') or []) + list(odoo_payload.get('items') or [])
 
-    # Unificar sucursales: agrupar variantes por clave canonica y usar
-    # el nombre "mas bonito" como display comun.
-    sucursal_display_map = {}
-    sucursal_score_map = {}
-    for it in items:
-        raw = str(it.get('sucursal') or '').strip()
-        if not raw:
-            continue
-        key = _sucursal_canonical_key(raw)
-        if not key:
-            continue
-        sc = _sucursal_display_score(raw)
-        if key not in sucursal_score_map or sc > sucursal_score_map[key]:
-            sucursal_score_map[key] = sc
-            sucursal_display_map[key] = raw
-
+    # Unificar sucursales de forma DETERMINISTA: cada variante se convierte a su
+    # clave canonica y se muestra siempre con el mismo nombre. Asi el sync nunca
+    # vuelve a duplicar sucursales.
+    sucursal_keys = set()
     for it in items:
         key = _sucursal_canonical_key(it.get('sucursal'))
-        if key and key in sucursal_display_map:
-            it['sucursal'] = sucursal_display_map[key]
+        if key:
+            it['sucursal'] = _sucursal_pretty(key)
+            sucursal_keys.add(key)
 
     items.sort(
         key=lambda x: (
@@ -12957,7 +12945,7 @@ def _build_conciliacion_combined_dataset(base_params):
     contpaq_opts = (contpaq_payload.get('filter_options') or {})
     odoo_opts = (odoo_payload.get('filter_options') or {})
     semanas = sorted(set((contpaq_opts.get('semanas') or [])) | set((odoo_opts.get('semanas') or [])))
-    sucursales = sorted(set(sucursal_display_map.values()))
+    sucursales = sorted({_sucursal_pretty(k) for k in sucursal_keys})
 
     return {
         'items': items,
