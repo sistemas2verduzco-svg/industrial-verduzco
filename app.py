@@ -12900,6 +12900,49 @@ def _conciliacion_available_years():
     return result
 
 
+def _compute_conciliacion_resumen_from_items(items):
+    """Calcula el resumen (totales) a partir de los items ya filtrados.
+
+    Asi los totales SIEMPRE respetan los filtros del usuario (sucursal, semana,
+    año) y coinciden con lo que se muestra en las tarjetas y en el paginador.
+    """
+    total_pedidos = len(items)
+    total_partidas = 0
+    total_importe = 0.0
+    total_remisiones = 0
+    total_faltantes = 0
+    semana_totales = {}
+
+    for it in items:
+        pedido_total = _to_float(it.get('pedido_total')) or 0.0
+        detalles = it.get('detalles') or []
+        total_partidas += len(detalles)
+        for d in detalles:
+            if d.get('es_inyectado'):
+                total_faltantes += 1
+        total_remisiones += len(it.get('remisiones') or [])
+        total_importe += pedido_total
+
+        sem = it.get('periodo_semana') or 'SIN SEMANA'
+        if sem not in semana_totales:
+            semana_totales[sem] = {'pedidos': 0, 'total': 0.0}
+        semana_totales[sem]['pedidos'] += 1
+        semana_totales[sem]['total'] += pedido_total
+
+    return {
+        'total_pedidos': total_pedidos,
+        'total_partidas': total_partidas,
+        'total_importe': round(total_importe, 2),
+        'total_remisiones': total_remisiones,
+        'total_faltantes_desde_indice': total_faltantes,
+        'faltantes_inyectados': total_faltantes,
+        'totales_por_semana': [
+            {'semana': sem, 'pedidos': vals['pedidos'], 'total': round(vals['total'], 2)}
+            for sem, vals in sorted(semana_totales.items(), key=lambda x: str(x[0]), reverse=True)
+        ],
+    }
+
+
 def _build_conciliacion_combined_dataset(base_params):
     """Arma el dataset combinado (CONTPAQ + Odoo) ya unificado por sucursal.
 
@@ -13020,10 +13063,14 @@ def api_contpaq_conciliacion():
         offset = (page - 1) * limit
         page_items = items[offset:offset + limit]
 
+        # El resumen se recalcula sobre los items ya filtrados (incluye sucursal),
+        # para que los totales coincidan siempre con lo que se muestra.
+        resumen = _compute_conciliacion_resumen_from_items(items)
+
         return jsonify({
             'items': page_items,
             'total': len(page_items),
-            'resumen': dataset['resumen'],
+            'resumen': resumen,
             'filter_options': {
                 'semanas': dataset['semanas'],
                 'sucursales': dataset['sucursales'],
