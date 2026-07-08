@@ -12796,17 +12796,56 @@ def _merge_conciliacion_resumen(res_a, res_b):
     }
 
 
+def _sucursal_canonical_key(raw):
+    """Clave canonica de sucursal: sin acentos, mayusculas y sin prefijo SUC/SUCURSAL.
+
+    Asi 'TOLUCA', 'Toluca' y 'SUC TOLUCA' quedan bajo la misma clave, igual que
+    'QUERETARO' y 'Queretaro'.
+    """
+    import unicodedata
+    s = str(raw or '').strip()
+    if not s:
+        return ''
+    s = ''.join(c for c in unicodedata.normalize('NFKD', s) if not unicodedata.combining(c))
+    s = s.upper()
+    s = re.sub(r'^\s*SUC(?:URSAL)?\.?\s+', '', s)
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
+
+
+def _sucursal_display_score(raw):
+    """Puntaje para elegir la mejor variante visible de una sucursal (nombre bonito)."""
+    import unicodedata
+    s = str(raw or '')
+    has_lower = any(c.islower() for c in s)
+    has_upper = any(c.isupper() for c in s)
+    has_accent = any(
+        unicodedata.combining(c) for c in unicodedata.normalize('NFKD', s)
+    )
+    score = 0
+    if has_lower and has_upper:
+        score += 3
+    if has_accent:
+        score += 1
+    if not re.match(r'^\s*SUC(?:URSAL)?\.?\s+', s, re.IGNORECASE):
+        score += 1
+    return score
+
+
 @app.route('/api/contpaq/conciliacion', methods=['GET'])
 @login_required
 @requires_permission('contpaq', 'view')
 def api_contpaq_conciliacion():
     """Conciliacion combinada: muestra pedidos de CONTPAQ y Odoo juntos en una sola lista."""
     try:
+        sucursal_param = (request.args.get('sucursal') or '').strip()
+        # La sucursal se filtra por clave canonica en Python (no por SQL) para
+        # que atrape variantes con acentos/mayusculas/prefijo SUC.
         params = dict(
             q=(request.args.get('q') or '').strip(),
             folio=(request.args.get('folio') or '').strip(),
             cliente=(request.args.get('cliente') or '').strip(),
-            sucursal=(request.args.get('sucursal') or '').strip(),
+            sucursal='',
             titulo=(request.args.get('titulo') or '').strip(),
             fecha_desde_raw=(request.args.get('fecha_desde') or '').strip(),
             fecha_hasta_raw=(request.args.get('fecha_hasta') or '').strip(),
@@ -12826,6 +12865,37 @@ def api_contpaq_conciliacion():
             return jsonify(odoo_payload), odoo_status
 
         items = list(contpaq_payload.get('items') or []) + list(odoo_payload.get('items') or [])
+
+        # Unificar sucursales: agrupar variantes por clave canonica y usar
+        # el nombre "mas bonito" como display comun.
+        sucursal_display_map = {}
+        sucursal_score_map = {}
+        for it in items:
+            raw = str(it.get('sucursal') or '').strip()
+            if not raw:
+                continue
+            key = _sucursal_canonical_key(raw)
+            if not key:
+                continue
+            sc = _sucursal_display_score(raw)
+            if key not in sucursal_score_map or sc > sucursal_score_map[key]:
+                sucursal_score_map[key] = sc
+                sucursal_display_map[key] = raw
+
+        for it in items:
+            key = _sucursal_canonical_key(it.get('sucursal'))
+            if key and key in sucursal_display_map:
+                it['sucursal'] = sucursal_display_map[key]
+
+        # Filtrar por sucursal seleccionada (comparando claves canonicas).
+        if sucursal_param:
+            want_key = _sucursal_canonical_key(sucursal_param)
+            if want_key:
+                items = [
+                    it for it in items
+                    if _sucursal_canonical_key(it.get('sucursal')) == want_key
+                ]
+
         items.sort(
             key=lambda x: (
                 x.get('periodo_semana') or '',
@@ -12847,7 +12917,7 @@ def api_contpaq_conciliacion():
         contpaq_opts = (contpaq_payload.get('filter_options') or {})
         odoo_opts = (odoo_payload.get('filter_options') or {})
         semanas = sorted(set((contpaq_opts.get('semanas') or [])) | set((odoo_opts.get('semanas') or [])))
-        sucursales = sorted(set((contpaq_opts.get('sucursales') or [])) | set((odoo_opts.get('sucursales') or [])))
+        sucursales = sorted(set(sucursal_display_map.values()))
 
         return jsonify({
             'items': page_items,
