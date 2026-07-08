@@ -258,8 +258,7 @@
             <select id="titulo">
                 <option value="">Semana desde titulo (todas)</option>
             </select>
-            <input id="fecha_desde" type="date" title="Fecha desde">
-            <input id="fecha_hasta" type="date" title="Fecha hasta">
+            <select id="anio" title="Año"></select>
             <button class="btn btn-primary" id="btnBuscar">Aplicar filtros</button>
             <button class="btn btn-secondary" id="btnLimpiar">Limpiar</button>
         </div>
@@ -343,6 +342,8 @@
         // semana y luego sucursal (o al reves) jamas borra la seleccion previa.
         let semanaUniverse = [];
         let sucursalUniverse = [];
+        let anioUniverse = [];
+        const CURRENT_YEAR = new Date().getFullYear();
 
         function mergeUnique(base, incoming) {
             const out = base.slice();
@@ -353,11 +354,28 @@
             return out;
         }
 
+        function renderAnioOptions(selected) {
+            const sel = document.getElementById('anio');
+            if (!sel) return;
+            const opts = anioUniverse.slice().map(Number).sort((a, b) => b - a);
+            sel.innerHTML = '<option value="">Todos los años</option>'
+                + opts.map(y => `<option value="${y}">${y}</option>`).join('');
+            sel.value = (selected === '' || selected == null) ? '' : String(selected);
+        }
+
+        function initAnioSelect() {
+            anioUniverse = [];
+            for (let y = CURRENT_YEAR; y >= CURRENT_YEAR - 5; y--) anioUniverse.push(y);
+            renderAnioOptions(CURRENT_YEAR);
+        }
+
         function syncTopCombos(filterOptions = {}) {
             const semanaSelect = document.getElementById('titulo');
             const sucursalSelect = document.getElementById('sucursal');
+            const anioSelect = document.getElementById('anio');
             const semanaValue = semanaSelect.value;
             const sucursalValue = sucursalSelect.value;
+            const anioValue = anioSelect ? anioSelect.value : '';
 
             semanaUniverse = mergeUnique(semanaUniverse, filterOptions.semanas);
             sucursalUniverse = mergeUnique(sucursalUniverse, filterOptions.sucursales);
@@ -373,6 +391,11 @@
 
             semanaSelect.value = semanaValue;
             sucursalSelect.value = sucursalValue;
+
+            if (Array.isArray(filterOptions.anios) && filterOptions.anios.length) {
+                anioUniverse = mergeUnique(anioUniverse, filterOptions.anios.map(Number));
+                renderAnioOptions(anioValue);
+            }
         }
 
         function render(items, resumen) {
@@ -584,8 +607,7 @@
 
             const params = new URLSearchParams();
             const campos = [
-                'q', 'folio', 'cliente', 'sucursal', 'titulo',
-                'fecha_desde', 'fecha_hasta'
+                'q', 'folio', 'cliente', 'sucursal', 'titulo', 'anio'
             ];
 
             for (const campo of campos) {
@@ -794,14 +816,14 @@
         });
 
         document.getElementById('btnLimpiar').addEventListener('click', () => {
-            const campos = [
-                'q', 'folio', 'cliente', 'sucursal', 'titulo',
-                'fecha_desde', 'fecha_hasta'
-            ];
+            const campos = ['q', 'folio', 'cliente', 'sucursal', 'titulo'];
             for (const campo of campos) {
                 const el = document.getElementById(campo);
                 if (el) el.value = '';
             }
+            // El año vuelve al actual (no a "todos") para no traer años pasados.
+            const anioSel = document.getElementById('anio');
+            if (anioSel) anioSel.value = String(CURRENT_YEAR);
             currentPage = 1;
             cargar(1);
         });
@@ -824,7 +846,13 @@
             currentPage = 1;
             cargar(1);
         });
+        document.getElementById('anio').addEventListener('change', () => {
+            currentPage = 1;
+            cargar(1);
+        });
 
+        // Arranca con el año actual seleccionado para no sumar años anteriores.
+        initAnioSelect();
         cargar(1);
         refreshOdooSyncStatus();
     </script>

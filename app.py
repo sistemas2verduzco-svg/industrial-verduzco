@@ -12871,6 +12871,36 @@ def _conciliacion_dataset_signature():
         return None
 
 
+_CONCILIACION_YEARS_CACHE = {'ts': 0.0, 'val': []}
+
+
+def _conciliacion_available_years():
+    """Años con pedidos (CONTPAQ + Odoo). Cacheado 5 min porque cambia poco."""
+    if _CONCILIACION_YEARS_CACHE['val'] and (time() - _CONCILIACION_YEARS_CACHE['ts'] < 300):
+        return _CONCILIACION_YEARS_CACHE['val']
+    years = set()
+    try:
+        for (y,) in db.session.query(
+            func.distinct(func.extract('year', ContpaqPedido.fecha_documento))
+        ).all():
+            if y:
+                years.add(int(y))
+    except Exception:
+        pass
+    try:
+        for (y,) in db.session.query(
+            func.distinct(func.extract('year', OdooPedidoVenta.date_order))
+        ).all():
+            if y:
+                years.add(int(y))
+    except Exception:
+        pass
+    result = sorted(years, reverse=True)
+    _CONCILIACION_YEARS_CACHE['ts'] = time()
+    _CONCILIACION_YEARS_CACHE['val'] = result
+    return result
+
+
 def _build_conciliacion_combined_dataset(base_params):
     """Arma el dataset combinado (CONTPAQ + Odoo) ya unificado por sucursal.
 
@@ -12944,6 +12974,19 @@ def api_contpaq_conciliacion():
     """Conciliacion combinada: muestra pedidos de CONTPAQ y Odoo juntos en una sola lista."""
     try:
         sucursal_param = (request.args.get('sucursal') or '').strip()
+        # Filtro por año: acota los pedidos al año elegido para que los totales no
+        # sumen años anteriores. Se traduce a un rango de fechas que ya manejan los
+        # builders. Si no se manda 'anio', respeta fecha_desde/fecha_hasta (compat).
+        anio = (request.args.get('anio') or '').strip()
+        fecha_desde_raw = (request.args.get('fecha_desde') or '').strip()
+        fecha_hasta_raw = (request.args.get('fecha_hasta') or '').strip()
+        if anio:
+            try:
+                y = int(anio)
+                fecha_desde_raw = f"{y:04d}-01-01"
+                fecha_hasta_raw = f"{y:04d}-12-31"
+            except (TypeError, ValueError):
+                pass
         # La sucursal se filtra por clave canonica en Python (no por SQL) para
         # que atrape variantes con acentos/mayusculas/prefijo SUC. No forma parte
         # de la cache: asi cambiar de sucursal es instantaneo sobre el mismo dataset.
@@ -12952,8 +12995,8 @@ def api_contpaq_conciliacion():
             folio=(request.args.get('folio') or '').strip(),
             cliente=(request.args.get('cliente') or '').strip(),
             titulo=(request.args.get('titulo') or '').strip(),
-            fecha_desde_raw=(request.args.get('fecha_desde') or '').strip(),
-            fecha_hasta_raw=(request.args.get('fecha_hasta') or '').strip(),
+            fecha_desde_raw=fecha_desde_raw,
+            fecha_hasta_raw=fecha_hasta_raw,
         )
         limit = request.args.get('limit', default=120, type=int)
         limit = max(1, min(int(limit or 120), 500))
@@ -12996,6 +13039,7 @@ def api_contpaq_conciliacion():
             'filter_options': {
                 'semanas': dataset['semanas'],
                 'sucursales': dataset['sucursales'],
+                'anios': _conciliacion_available_years(),
             },
             'page': page,
             'limit': limit,
