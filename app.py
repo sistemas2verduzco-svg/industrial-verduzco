@@ -12832,6 +12832,111 @@ def _sucursal_display_score(raw):
     return score
 
 
+# Cache en memoria del dataset combinado de conciliacion. Como armar todo
+# (CONTPAQ + Odoo con detalles) es costoso, guardamos el resultado ya combinado
+# y unificado, y solo paginamos/filtramos por sucursal en cada request. La firma
+# por conteos + TTL invalida la cache cuando cambian los datos.
+_CONCILIACION_CACHE = {}
+_CONCILIACION_CACHE_TTL = 120
+_CONCILIACION_CACHE_MAX = 24
+
+
+def _conciliacion_cache_get(key):
+    entry = _CONCILIACION_CACHE.get(key)
+    if not entry:
+        return None
+    if time() - entry['ts'] > _CONCILIACION_CACHE_TTL:
+        _CONCILIACION_CACHE.pop(key, None)
+        return None
+    return entry['data']
+
+
+def _conciliacion_cache_set(key, data):
+    _CONCILIACION_CACHE[key] = {'ts': time(), 'data': data}
+    if len(_CONCILIACION_CACHE) > _CONCILIACION_CACHE_MAX:
+        oldest = min(_CONCILIACION_CACHE.items(), key=lambda kv: kv[1]['ts'])[0]
+        _CONCILIACION_CACHE.pop(oldest, None)
+
+
+def _conciliacion_dataset_signature():
+    """Firma barata: si cambian los conteos, la cache se invalida sola."""
+    try:
+        return (
+            db.session.query(func.count(ContpaqPedido.id)).scalar() or 0,
+            db.session.query(func.count(OdooPedidoVenta.id)).scalar() or 0,
+            db.session.query(func.count(ContpaqSucursalIndice.id)).scalar() or 0,
+            db.session.query(func.count(ContpaqPrecioPublico.id)).scalar() or 0,
+        )
+    except Exception:
+        return None
+
+
+def _build_conciliacion_combined_dataset(base_params):
+    """Arma el dataset combinado (CONTPAQ + Odoo) ya unificado por sucursal.
+
+    Devuelve (dict_dataset, None) en exito o (payload_error, status) en error.
+    El dataset NO esta filtrado por sucursal ni paginado.
+    """
+    builder_params = dict(base_params, sucursal='')
+
+    contpaq_payload, contpaq_status = _build_conciliacion_contpaq_response(collect_all=True, **builder_params)
+    if isinstance(contpaq_payload, dict) and 'error' in contpaq_payload:
+        return contpaq_payload, contpaq_status
+
+    odoo_payload, odoo_status = _build_conciliacion_odoo_response(collect_all=True, **builder_params)
+    if isinstance(odoo_payload, dict) and 'error' in odoo_payload:
+        return odoo_payload, odoo_status
+
+    items = list(contpaq_payload.get('items') or []) + list(odoo_payload.get('items') or [])
+
+    # Unificar sucursales: agrupar variantes por clave canonica y usar
+    # el nombre "mas bonito" como display comun.
+    sucursal_display_map = {}
+    sucursal_score_map = {}
+    for it in items:
+        raw = str(it.get('sucursal') or '').strip()
+        if not raw:
+            continue
+        key = _sucursal_canonical_key(raw)
+        if not key:
+            continue
+        sc = _sucursal_display_score(raw)
+        if key not in sucursal_score_map or sc > sucursal_score_map[key]:
+            sucursal_score_map[key] = sc
+            sucursal_display_map[key] = raw
+
+    for it in items:
+        key = _sucursal_canonical_key(it.get('sucursal'))
+        if key and key in sucursal_display_map:
+            it['sucursal'] = sucursal_display_map[key]
+
+    items.sort(
+        key=lambda x: (
+            x.get('periodo_semana') or '',
+            x.get('fecha_documento') or '',
+            str(x.get('doc_folio') or ''),
+        ),
+        reverse=True,
+    )
+
+    resumen = _merge_conciliacion_resumen(
+        contpaq_payload.get('resumen'),
+        odoo_payload.get('resumen'),
+    )
+
+    contpaq_opts = (contpaq_payload.get('filter_options') or {})
+    odoo_opts = (odoo_payload.get('filter_options') or {})
+    semanas = sorted(set((contpaq_opts.get('semanas') or [])) | set((odoo_opts.get('semanas') or [])))
+    sucursales = sorted(set(sucursal_display_map.values()))
+
+    return {
+        'items': items,
+        'resumen': resumen,
+        'semanas': semanas,
+        'sucursales': sucursales,
+    }, None
+
+
 @app.route('/api/contpaq/conciliacion', methods=['GET'])
 @login_required
 @requires_permission('contpaq', 'view')
@@ -12840,12 +12945,12 @@ def api_contpaq_conciliacion():
     try:
         sucursal_param = (request.args.get('sucursal') or '').strip()
         # La sucursal se filtra por clave canonica en Python (no por SQL) para
-        # que atrape variantes con acentos/mayusculas/prefijo SUC.
-        params = dict(
+        # que atrape variantes con acentos/mayusculas/prefijo SUC. No forma parte
+        # de la cache: asi cambiar de sucursal es instantaneo sobre el mismo dataset.
+        base_params = dict(
             q=(request.args.get('q') or '').strip(),
             folio=(request.args.get('folio') or '').strip(),
             cliente=(request.args.get('cliente') or '').strip(),
-            sucursal='',
             titulo=(request.args.get('titulo') or '').strip(),
             fecha_desde_raw=(request.args.get('fecha_desde') or '').strip(),
             fecha_hasta_raw=(request.args.get('fecha_hasta') or '').strip(),
@@ -12855,37 +12960,21 @@ def api_contpaq_conciliacion():
         page = request.args.get('page', default=1, type=int)
         page = max(1, int(page or 1))
 
-        # Traemos TODO de ambas fuentes (sin paginar internamente) y luego combinamos.
-        contpaq_payload, contpaq_status = _build_conciliacion_contpaq_response(collect_all=True, **params)
-        if isinstance(contpaq_payload, dict) and 'error' in contpaq_payload:
-            return jsonify(contpaq_payload), contpaq_status
+        signature = _conciliacion_dataset_signature()
+        cache_key = None
+        dataset = None
+        if signature is not None:
+            cache_key = (signature, tuple(sorted(base_params.items())))
+            dataset = _conciliacion_cache_get(cache_key)
 
-        odoo_payload, odoo_status = _build_conciliacion_odoo_response(collect_all=True, **params)
-        if isinstance(odoo_payload, dict) and 'error' in odoo_payload:
-            return jsonify(odoo_payload), odoo_status
+        if dataset is None:
+            dataset, err_status = _build_conciliacion_combined_dataset(base_params)
+            if err_status is not None:
+                return jsonify(dataset), err_status
+            if cache_key is not None:
+                _conciliacion_cache_set(cache_key, dataset)
 
-        items = list(contpaq_payload.get('items') or []) + list(odoo_payload.get('items') or [])
-
-        # Unificar sucursales: agrupar variantes por clave canonica y usar
-        # el nombre "mas bonito" como display comun.
-        sucursal_display_map = {}
-        sucursal_score_map = {}
-        for it in items:
-            raw = str(it.get('sucursal') or '').strip()
-            if not raw:
-                continue
-            key = _sucursal_canonical_key(raw)
-            if not key:
-                continue
-            sc = _sucursal_display_score(raw)
-            if key not in sucursal_score_map or sc > sucursal_score_map[key]:
-                sucursal_score_map[key] = sc
-                sucursal_display_map[key] = raw
-
-        for it in items:
-            key = _sucursal_canonical_key(it.get('sucursal'))
-            if key and key in sucursal_display_map:
-                it['sucursal'] = sucursal_display_map[key]
+        items = dataset['items']
 
         # Filtrar por sucursal seleccionada (comparando claves canonicas).
         if sucursal_param:
@@ -12896,36 +12985,17 @@ def api_contpaq_conciliacion():
                     if _sucursal_canonical_key(it.get('sucursal')) == want_key
                 ]
 
-        items.sort(
-            key=lambda x: (
-                x.get('periodo_semana') or '',
-                x.get('fecha_documento') or '',
-                str(x.get('doc_folio') or ''),
-            ),
-            reverse=True,
-        )
-
         total_records = len(items)
         offset = (page - 1) * limit
         page_items = items[offset:offset + limit]
 
-        resumen = _merge_conciliacion_resumen(
-            contpaq_payload.get('resumen'),
-            odoo_payload.get('resumen'),
-        )
-
-        contpaq_opts = (contpaq_payload.get('filter_options') or {})
-        odoo_opts = (odoo_payload.get('filter_options') or {})
-        semanas = sorted(set((contpaq_opts.get('semanas') or [])) | set((odoo_opts.get('semanas') or [])))
-        sucursales = sorted(set(sucursal_display_map.values()))
-
         return jsonify({
             'items': page_items,
             'total': len(page_items),
-            'resumen': resumen,
+            'resumen': dataset['resumen'],
             'filter_options': {
-                'semanas': semanas,
-                'sucursales': sucursales,
+                'semanas': dataset['semanas'],
+                'sucursales': dataset['sucursales'],
             },
             'page': page,
             'limit': limit,

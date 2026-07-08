@@ -339,21 +339,40 @@
                 .replace(/'/g, '&#39;');
         }
 
+        // Universo acumulado de opciones. Los combos nunca se encogen: asi elegir
+        // semana y luego sucursal (o al reves) jamas borra la seleccion previa.
+        let semanaUniverse = [];
+        let sucursalUniverse = [];
+
+        function mergeUnique(base, incoming) {
+            const out = base.slice();
+            const seen = new Set(base);
+            for (const v of (incoming || [])) {
+                if (v && !seen.has(v)) { seen.add(v); out.push(v); }
+            }
+            return out;
+        }
+
         function syncTopCombos(filterOptions = {}) {
             const semanaSelect = document.getElementById('titulo');
             const sucursalSelect = document.getElementById('sucursal');
             const semanaValue = semanaSelect.value;
             const sucursalValue = sucursalSelect.value;
-            const semanas = Array.isArray(filterOptions.semanas) ? filterOptions.semanas : [];
-            const sucursales = Array.isArray(filterOptions.sucursales) ? filterOptions.sucursales : [];
+
+            semanaUniverse = mergeUnique(semanaUniverse, filterOptions.semanas);
+            sucursalUniverse = mergeUnique(sucursalUniverse, filterOptions.sucursales);
+
+            // Incluir siempre el valor seleccionado para que nunca desaparezca.
+            const semanas = mergeUnique(semanaUniverse, semanaValue ? [semanaValue] : []).sort();
+            const sucursales = mergeUnique(sucursalUniverse, sucursalValue ? [sucursalValue] : []).sort();
 
             semanaSelect.innerHTML = '<option value="">Semana desde titulo (todas)</option>'
                 + semanas.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
             sucursalSelect.innerHTML = '<option value="">Sucursal (todas)</option>'
                 + sucursales.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
 
-            semanaSelect.value = semanas.includes(semanaValue) ? semanaValue : '';
-            sucursalSelect.value = sucursales.includes(sucursalValue) ? sucursalValue : '';
+            semanaSelect.value = semanaValue;
+            sucursalSelect.value = sucursalValue;
         }
 
         function render(items, resumen) {
@@ -533,9 +552,35 @@
             document.getElementById('pageInfo').textContent = `Pagina ${currentPage} de ${lastPage} | Pedidos totales: ${totalRecords}`;
         }
 
-        async function cargar(page = currentPage) {
+        let loadSeq = 0;
+        let inflightController = null;
+        const t0Labels = ['Consultando CONTPAQ + Odoo.', 'Consultando CONTPAQ + Odoo..', 'Consultando CONTPAQ + Odoo...'];
+        let loadingTimer = null;
+
+        function startLoadingUI() {
             const status = document.getElementById('status');
-            status.textContent = 'Consultando CONTPAQ + Odoo...';
+            const result = document.getElementById('result');
+            if (result) result.style.opacity = '0.45';
+            let i = 0;
+            status.textContent = t0Labels[0];
+            clearInterval(loadingTimer);
+            loadingTimer = setInterval(() => {
+                i = (i + 1) % t0Labels.length;
+                status.textContent = t0Labels[i];
+            }, 400);
+        }
+
+        function stopLoadingUI() {
+            const result = document.getElementById('result');
+            if (result) result.style.opacity = '1';
+            clearInterval(loadingTimer);
+            loadingTimer = null;
+        }
+
+        async function cargar(page = currentPage) {
+            const mySeq = ++loadSeq;
+            const status = document.getElementById('status');
+            startLoadingUI();
 
             const params = new URLSearchParams();
             const campos = [
@@ -551,17 +596,31 @@
             params.set('limit', (document.getElementById('limit')?.value || '120'));
             params.set('page', String(page));
 
-            const resp = await fetch(`${CONCILIACION_ENDPOINT}?${params.toString()}`);
-            const data = await resp.json();
-            if (!resp.ok) {
-                status.textContent = data.error || 'Error en consulta';
-                return;
-            }
+            // Cancelar cualquier consulta anterior en vuelo para que no pise a esta.
+            if (inflightController) inflightController.abort();
+            inflightController = new AbortController();
 
-            updatePager(data);
-            syncTopCombos(data.filter_options || {});
-            render(data.items || [], data.resumen || null);
-            status.textContent = `Mostrando ${data.total || 0} registro(s) (CONTPAQ + Odoo) en pagina ${currentPage}.`;
+            try {
+                const resp = await fetch(`${CONCILIACION_ENDPOINT}?${params.toString()}`, {
+                    signal: inflightController.signal,
+                });
+                const data = await resp.json();
+                if (mySeq !== loadSeq) return; // llego una respuesta vieja: ignorar
+                if (!resp.ok) {
+                    status.textContent = data.error || 'Error en consulta';
+                    return;
+                }
+
+                updatePager(data);
+                syncTopCombos(data.filter_options || {});
+                render(data.items || [], data.resumen || null);
+                status.textContent = `Mostrando ${data.total || 0} registro(s) (CONTPAQ + Odoo) en pagina ${currentPage}.`;
+            } catch (e) {
+                if (e && e.name === 'AbortError') return; // reemplazada por otra consulta
+                if (mySeq === loadSeq) status.textContent = 'Error en consulta';
+            } finally {
+                if (mySeq === loadSeq) stopLoadingUI();
+            }
         }
 
         async function subirIndice() {
