@@ -506,6 +506,68 @@
             background: #fff;
         }
 
+        .clave-picker-wrap {
+            position: relative;
+        }
+
+        .clave-picker-input {
+            width: 100%;
+            padding: 9px 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        .clave-picker-results {
+            display: none;
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: calc(100% + 4px);
+            z-index: 40;
+            max-height: 260px;
+            overflow: auto;
+            background: #fff;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+        }
+
+        .clave-picker-item {
+            display: block;
+            width: 100%;
+            text-align: left;
+            border: 0;
+            border-bottom: 1px solid #f1f5f9;
+            background: #fff;
+            padding: 9px 10px;
+            cursor: pointer;
+        }
+
+        .clave-picker-item:hover {
+            background: #eff6ff;
+        }
+
+        .clave-picker-item strong {
+            display: block;
+            color: #1d4ed8;
+            font-size: 13px;
+        }
+
+        .clave-picker-item span {
+            display: block;
+            color: #64748b;
+            font-size: 12px;
+            margin-top: 2px;
+        }
+
+        .clave-picker-empty {
+            padding: 10px 12px;
+            color: #64748b;
+            font-size: 13px;
+        }
+
         .hojas-counter {
             font-size: 12px;
             color: #4b5563;
@@ -742,9 +804,11 @@
                     {% endif %}
                     <div>
                         <label>Clave *</label>
-                        <select id="clave_id" name="clave_id" required>
-                            <option value="">Selecciona clave</option>
-                        </select>
+                        <div class="clave-picker-wrap">
+                            <input type="text" id="clave_search" class="clave-picker-input" placeholder="Escribe clave o descripcion..." autocomplete="off">
+                            <input type="hidden" id="clave_id" name="clave_id">
+                            <div id="clave_results" class="clave-picker-results"></div>
+                        </div>
                     </div>
                     <div>
                         <label>Calidad *</label>
@@ -1108,9 +1172,11 @@
             <div class="grid">
                 <div>
                     <label>Clave</label>
-                    <select id="edit_clave_id">
-                        <option value="">Selecciona clave</option>
-                    </select>
+                    <div class="clave-picker-wrap">
+                        <input type="text" id="edit_clave_search" class="clave-picker-input" placeholder="Escribe clave o descripcion..." autocomplete="off">
+                        <input type="hidden" id="edit_clave_id">
+                        <div id="edit_clave_results" class="clave-picker-results"></div>
+                    </div>
                 </div>
                 <div>
                     <label>Calidad</label>
@@ -1274,6 +1340,127 @@
         const IS_ENTREGAS_FORM = API_HOJAS_BASE === '/api/hojas_ruta';
         const ALLOW_TIPO_SWITCH = {{ (allow_tipo_switch or false)|tojson }};
         let clavesData = [];
+        let clavePicker = null;
+        let editClavePicker = null;
+
+        function normClaveSearchText(v) {
+            return String(v || '')
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase()
+                .trim();
+        }
+
+        function getClaveRecordById(id) {
+            return clavesData.find(c => String(c.id) === String(id)) || null;
+        }
+
+        function filterClavesData(q, limit = 30) {
+            const terms = normClaveSearchText(q).split(/\s+/).filter(Boolean);
+            if (!terms.length) return [];
+            return clavesData.filter(c => {
+                const hay = normClaveSearchText(`${c.clave || ''} ${c.nombre || ''} ${c.notas || ''}`);
+                return terms.every(t => hay.includes(t));
+            }).slice(0, limit);
+        }
+
+        function onClaveSelected(clave) {
+            const claveId = clave ? clave.id : '';
+            updateSeriePreview();
+            renderProcesos(claveId);
+            refreshContpaqOtOptions();
+
+            const descripcion = clave
+                ? (cleanText(clave.notas) || cleanText(clave.nombre) || cleanText(clave.clave))
+                : '';
+            const descripcionEl = document.getElementById('descripcion_clave');
+            if (descripcionEl) {
+                descripcionEl.value = descripcion;
+            }
+        }
+
+        function setupClavePicker(cfg) {
+            const searchEl = document.getElementById(cfg.searchId);
+            const hiddenEl = document.getElementById(cfg.hiddenId);
+            const resultsEl = document.getElementById(cfg.resultsId);
+            if (!searchEl || !hiddenEl || !resultsEl) return null;
+
+            function labelFor(c) {
+                return `${c.clave || ''} - ${c.nombre || c.clave || 'Sin nombre'}`;
+            }
+
+            function renderResults() {
+                const q = searchEl.value.trim();
+                const items = filterClavesData(q);
+                resultsEl.innerHTML = '';
+                if (!q) {
+                    resultsEl.style.display = 'none';
+                    return;
+                }
+                if (!items.length) {
+                    resultsEl.innerHTML = '<div class="clave-picker-empty">Sin coincidencias</div>';
+                    resultsEl.style.display = 'block';
+                    return;
+                }
+                items.forEach(c => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'clave-picker-item';
+                    const strong = document.createElement('strong');
+                    strong.textContent = c.clave || '';
+                    const span = document.createElement('span');
+                    span.textContent = c.nombre || '';
+                    btn.appendChild(strong);
+                    btn.appendChild(span);
+                    btn.addEventListener('click', () => {
+                        hiddenEl.value = c.id;
+                        searchEl.value = labelFor(c);
+                        resultsEl.style.display = 'none';
+                        if (cfg.onSelect) cfg.onSelect(c);
+                    });
+                    resultsEl.appendChild(btn);
+                });
+                resultsEl.style.display = 'block';
+            }
+
+            searchEl.addEventListener('input', () => {
+                if (hiddenEl.value) {
+                    const cur = getClaveRecordById(hiddenEl.value);
+                    const expected = cur ? labelFor(cur) : '';
+                    if (searchEl.value.trim() !== expected.trim()) {
+                        hiddenEl.value = '';
+                    }
+                }
+                renderResults();
+            });
+
+            searchEl.addEventListener('focus', () => {
+                if (searchEl.value.trim()) renderResults();
+            });
+
+            return {
+                setValue(claveId) {
+                    const c = getClaveRecordById(claveId);
+                    hiddenEl.value = c ? c.id : '';
+                    searchEl.value = c ? labelFor(c) : '';
+                    resultsEl.style.display = 'none';
+                },
+                clear() {
+                    hiddenEl.value = '';
+                    searchEl.value = '';
+                    resultsEl.style.display = 'none';
+                },
+            };
+        }
+
+        document.addEventListener('click', (ev) => {
+            ['clave_results', 'edit_clave_results'].forEach(id => {
+                const box = document.getElementById(id);
+                const wrap = box ? box.closest('.clave-picker-wrap') : null;
+                if (box && wrap && !wrap.contains(ev.target)) {
+                    box.style.display = 'none';
+                }
+            });
+        });
         const hojasReporteData = {{ hojas|tojson }};
         const companionHojasData = {{ (companion_hojas or [])|tojson }};
         const hojasDataById = new Map(hojasReporteData.map((item) => [String(item.id), item]));
@@ -1490,9 +1677,8 @@
         }
 
         function updateSeriePreview() {
-            const sel = document.getElementById('clave_id');
-            const opt = sel.options[sel.selectedIndex];
-            const claveTxt = opt && opt.dataset.clave ? opt.dataset.clave.replace(/[^a-zA-Z0-9]/g, '').slice(0, 10) : '';
+            const clave = getClaveRecordById(document.getElementById('clave_id').value);
+            const claveTxt = clave && clave.clave ? String(clave.clave).replace(/[^a-zA-Z0-9]/g, '').slice(0, 10) : '';
             if (!claveTxt) {
                 document.getElementById('serie_preview').value = '';
                 return;
@@ -1554,13 +1740,12 @@
             if (getTipoHojaActual() !== 'entrega') return;
             const otSelect = document.getElementById('contpaq_ot_detail_id');
             const otHint = document.getElementById('contpaq_ot_hint');
-            const claveSelect = document.getElementById('clave_id');
             const cantidadInput = document.getElementById('cantidad_piezas');
             const ordenTrabajoInput = document.getElementById('orden_trabajo');
-            if (!otSelect || !claveSelect || !cantidadInput) return;
+            if (!otSelect || !cantidadInput) return;
 
-            const selectedOption = claveSelect.options[claveSelect.selectedIndex];
-            const clave = String(selectedOption && selectedOption.dataset ? (selectedOption.dataset.clave || '') : '').trim().toUpperCase();
+            const claveRec = getClaveRecordById(document.getElementById('clave_id').value);
+            const clave = String(claveRec && claveRec.clave ? claveRec.clave : '').trim().toUpperCase();
             const cantidad = parseInt(cantidadInput.value, 10);
 
             otSelect.innerHTML = '<option value="">Sin sugerencia</option>';
@@ -1733,8 +1918,6 @@
         }
 
         async function loadClaves(retry = 0) {
-            const select = document.getElementById('clave_id');
-            const editSelect = document.getElementById('edit_clave_id');
             try {
                 const res = await fetch('/api/claves_procesos', { credentials: 'same-origin' });
                 let payload = null;
@@ -1751,25 +1934,21 @@
                 }
 
                 clavesData = Array.isArray(payload) ? payload : [];
-                select.innerHTML = '<option value="">Selecciona clave</option>';
-                if (editSelect) {
-                    editSelect.innerHTML = '<option value="">Selecciona clave</option>';
+                if (!clavePicker) {
+                    clavePicker = setupClavePicker({
+                        searchId: 'clave_search',
+                        hiddenId: 'clave_id',
+                        resultsId: 'clave_results',
+                        onSelect: onClaveSelected,
+                    });
                 }
-                clavesData.forEach(c => {
-                    const opt = document.createElement('option');
-                    opt.value = c.id;
-                    opt.dataset.clave = c.clave || '';
-                    opt.textContent = (c.clave || '') + ' - ' + (c.nombre || c.clave || 'Sin nombre');
-                    select.appendChild(opt);
-
-                    if (editSelect) {
-                        const eOpt = document.createElement('option');
-                        eOpt.value = c.id;
-                        eOpt.dataset.clave = c.clave || '';
-                        eOpt.textContent = (c.clave || '') + ' - ' + (c.nombre || c.clave || 'Sin nombre');
-                        editSelect.appendChild(eOpt);
-                    }
-                });
+                if (!editClavePicker) {
+                    editClavePicker = setupClavePicker({
+                        searchId: 'edit_clave_search',
+                        hiddenId: 'edit_clave_id',
+                        resultsId: 'edit_clave_results',
+                    });
+                }
             } catch (err) {
                 console.error(err);
                 const msg = String(err && err.message ? err.message : err || '');
@@ -1789,20 +1968,6 @@
             }
         }
 
-        document.getElementById('clave_id').addEventListener('change', (e) => {
-            updateSeriePreview();
-            renderProcesos(e.target.value);
-            refreshContpaqOtOptions();
-
-            const clave = clavesData.find(c => String(c.id) === String(e.target.value));
-            const descripcion = clave
-                ? (cleanText(clave.notas) || cleanText(clave.nombre) || cleanText(clave.clave))
-                : '';
-            const descripcionEl = document.getElementById('descripcion_clave');
-            if (descripcionEl) {
-                descripcionEl.value = descripcion;
-            }
-        });
 
         const cantidadPiezasEl = document.getElementById('cantidad_piezas');
         if (cantidadPiezasEl) {
@@ -1904,16 +2069,16 @@
         function abrirModalEdicion(btn) {
             document.getElementById('edit_hoja_id').value = btn.dataset.hojaId || '';
             document.getElementById('edit_serie_label').value = btn.dataset.serie || ('HOJA ' + (btn.dataset.hojaId || ''));
-            const editClave = document.getElementById('edit_clave_id');
-            if (editClave) {
-                const claveId = btn.dataset.claveId || '';
-                if (claveId) {
-                    editClave.value = claveId;
-                } else {
-                    const claveTxt = String(btn.dataset.clave || '').trim().toUpperCase();
-                    const match = Array.from(editClave.options).find(o => String(o.dataset.clave || '').trim().toUpperCase() === claveTxt);
-                    editClave.value = match ? match.value : '';
-                }
+            let claveId = btn.dataset.claveId || '';
+            if (!claveId) {
+                const claveTxt = String(btn.dataset.clave || '').trim().toUpperCase();
+                const match = clavesData.find(c => String(c.clave || '').trim().toUpperCase() === claveTxt);
+                claveId = match ? match.id : '';
+            }
+            if (editClavePicker) {
+                editClavePicker.setValue(claveId);
+            } else {
+                document.getElementById('edit_clave_id').value = claveId;
             }
             document.getElementById('edit_calidad').value = btn.dataset.calidad || '';
             document.getElementById('edit_cantidad').value = btn.dataset.cantidad || '';

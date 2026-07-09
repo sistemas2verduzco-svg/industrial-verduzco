@@ -26,10 +26,10 @@
           <strong style="font-size:16px; color:#2d3748;">Claves de Producto</strong>
           <button id="btnNuevaClave" class="btn btn-sm" style="padding:8px 12px; border:none; background:#3182ce; color:#fff; border-radius:6px; cursor:pointer; font-size:13px; font-weight:500; transition:background 0.2s;">Nueva</button>
         </div>
-        <input type="text" id="buscarClave" placeholder="🔍 Buscar clave..." style="width:100%; padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:12px; font-size:14px;">
+        <input type="text" id="buscarClave" placeholder="Buscar por clave o descripcion..." style="width:100%; padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:12px; font-size:14px;">
         <div style="max-height:420px; overflow-y:auto; border-top:1px solid #edf2f7;">
           {% for c in claves %}
-          <a href="{{ url_for('procesos_panel', clave_id=c.id) }}" style="display:block; padding:12px 8px; text-decoration:none; color:#2d3748; border-bottom:1px solid #f7fafc; transition:background 0.2s;" class="clave-item">
+          <a href="{{ url_for('procesos_panel', clave_id=c.id) }}" data-clave="{{ c.clave or '' }}" data-nombre="{{ c.nombre or '' }}" style="display:block; padding:12px 8px; text-decoration:none; color:#2d3748; border-bottom:1px solid #f7fafc; transition:background 0.2s;" class="clave-item">
             <div style="font-weight:600; font-size:14px; color:#2b6cb0;">{{ c.clave }}</div>
             <div style="font-size:12px; color:#718096; margin-top:2px;">{{ c.nombre or 'Sin nombre' }}</div>
           </a>
@@ -291,10 +291,20 @@
   // Filtro rápido en listas
   const buscarClave = document.getElementById('buscarClave');
   if (buscarClave) {
+    function normClaveSearch(v) {
+      return String(v || '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
+    }
     buscarClave.addEventListener('input', () => {
-      const term = buscarClave.value.toLowerCase();
-      document.querySelectorAll('a[href*="clave_id="]').forEach(a => {
-        a.style.display = a.textContent.toLowerCase().includes(term) ? '' : 'none';
+      const terms = normClaveSearch(buscarClave.value).split(/\s+/).filter(Boolean);
+      document.querySelectorAll('.clave-item').forEach(a => {
+        const clave = normClaveSearch(a.dataset.clave || '');
+        const nombre = normClaveSearch(a.dataset.nombre || '');
+        const hay = `${clave} ${nombre}`;
+        const ok = !terms.length || terms.every(t => hay.includes(t));
+        a.style.display = ok ? '' : 'none';
       });
     });
   }
