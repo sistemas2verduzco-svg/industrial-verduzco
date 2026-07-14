@@ -5121,18 +5121,32 @@ def entregas_mover_almacen(item_id):
         flash('La hoja no tiene cantidad total de piezas válida para envío.', 'error')
         return redirect(url_for('entregas_module'))
 
-    if item.cantidad_entregada != item.cantidad_total_piezas:
-        flash(f'No todas las piezas han sido entregadas. Entregado: {item.cantidad_entregada}/{item.cantidad_total_piezas}', 'error')
+    # Se permite enviar a Almacén con parcialidad registrada (ley: debe quedar
+    # documentada). Solo se bloquea si no hay ninguna entrega capturada.
+    if (item.cantidad_entregada or 0) <= 0:
+        flash('Registra al menos una entrega parcial antes de enviar a Almacén.', 'error')
         return redirect(url_for('entregas_module'))
 
+    entregado = int(item.cantidad_entregada or 0)
+    total = int(item.cantidad_total_piezas or 0)
+    es_completa = total > 0 and entregado >= total
+    pct = round((entregado / total) * 100, 1) if total > 0 else 0.0
+
     item.estado = 'almacen'
-    item.estado_parciales = 'todas'
+    item.estado_parciales = 'todas' if es_completa else 'pendientes'
     item.actualizado_por = _logistica_username()
+    if es_completa:
+        notas_envio = f'Entregas parciales completadas: {entregado} de {total} piezas (100%)'
+    else:
+        notas_envio = (
+            f'Enviada a Almacén con parcialidad registrada: {entregado} de {total} piezas '
+            f'({pct}%). Quedan {max(total - entregado, 0)} pendiente(s).'
+        )
     db.session.add(EntregaRegistro(
         hoja_ruta_id=item.hoja_ruta_id,
         flujo_id=item.id,
         accion='enviada_a_almacen',
-        notas=f'Entregas parciales completadas: {item.cantidad_entregada} de {item.cantidad_total_piezas} piezas (100%)',
+        notas=notas_envio,
         usuario=_logistica_username(),
     ))
     db.session.commit()

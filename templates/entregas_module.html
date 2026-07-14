@@ -179,12 +179,12 @@
                             {% if has_permission('entregas', 'edit') or has_permission('catalog', 'edit') %}
                             <div style="margin-top:8px; display:flex; gap:6px;">
                                                                 <button type="button" class="btn-mini btn-add" data-flujo-id="{{ item.id }}" data-total-piezas="{{ total_piezas_item }}" data-entregado="{{ entregado_item }}" onclick="abrirModalEntregaParcialDesdeBtn(this)">➕ Entregar parcial</button>
-                                                                {% if entregado_item >= total_piezas_item %}
-                                                                <form method="post" action="/entregas/mover_almacen/{{ item.id }}" style="display:inline;" data-async-refresh="1">
-                                                                    <button class="btn-mini btn-send" type="submit">→ Enviar a Almacén</button>
+                                                                {% if entregado_item > 0 %}
+                                                                <form method="post" action="/entregas/mover_almacen/{{ item.id }}" style="display:inline;" data-async-refresh="1" onsubmit="return confirm('{% if entregado_item < total_piezas_item %}Se enviará a Almacén con parcialidad registrada: {{ entregado_item }} de {{ total_piezas_item }} piezas. ¿Continuar?{% else %}Enviar a Almacén (100% entregado). ¿Continuar?{% endif %}');">
+                                                                    <button class="btn-mini btn-send" type="submit" title="{% if entregado_item < total_piezas_item %}Envía a Almacén con parcialidad registrada ({{ entregado_item }} de {{ total_piezas_item }}){% else %}Envía a Almacén (100%){% endif %}">→ Enviar a Almacén</button>
                                                                 </form>
                                                                 {% else %}
-                                                                <button type="button" class="btn-mini" style="background:#9ca3af; color:#fff; cursor:not-allowed;" disabled title="Completa todas las entregas antes de enviar">→ Enviar a Almacén</button>
+                                                                <button type="button" class="btn-mini" style="background:#9ca3af; color:#fff; cursor:not-allowed;" disabled title="Registra al menos una entrega parcial antes de enviar a Almacén">→ Enviar a Almacén</button>
                                                                 {% endif %}
                             </div>
                             {% endif %}
