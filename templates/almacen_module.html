@@ -28,6 +28,44 @@
         .step-chip.ok { border-color:#86efac; background:#dcfce7; color:#166534; font-weight:700; }
         .step-chip.warn { border-color:#fdba74; background:#ffedd5; color:#9a3412; font-weight:700; }
         .step-chip.neutral { border-color:#cbd5e1; background:#f8fafc; color:#475569; font-weight:700; }
+        .almacen-search-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+            padding: 10px 12px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+        }
+        .almacen-search-input {
+            flex: 1;
+            min-width: 220px;
+            padding: 9px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        .almacen-search-meta {
+            font-size: 12px;
+            color: #64748b;
+            white-space: nowrap;
+        }
+        .almacen-no-match {
+            display: none;
+            padding: 12px;
+            color: #64748b;
+            font-size: 13px;
+            text-align: center;
+            border: 1px dashed #cbd5e1;
+            border-radius: 8px;
+            background: #f8fafc;
+            margin-bottom: 10px;
+        }
+        .almacen-searchable.is-hidden-by-search {
+            display: none !important;
+        }
 
         @media (max-width: 980px) {
             .row-grid { grid-template-columns:1fr; }
@@ -41,10 +79,16 @@
         <h2 style="margin:0 0 8px 0;">Módulo Almacén</h2>
         <p class="small" style="margin:0 0 12px 0;">Valida recepción de hojas enviadas por Entregas. Requiere check, ID de recepción y una o varias capturas; después regresa a Entregas como lista para facturación.</p>
 
+        <div class="almacen-search-bar">
+            <input id="almacenSearch" class="almacen-search-input" type="search" placeholder="Buscar por serie, ID o clave..." autocomplete="off">
+            <span id="almacenSearchMeta" class="almacen-search-meta"></span>
+        </div>
+
+        <div id="almacenRefreshRoot">
         <div class="panel">
             {% if pendientes_almacen %}
                 {% for item in pendientes_almacen %}
-                <div class="panel" style="margin-bottom:10px; background:#f8fbff;">
+                <div class="panel almacen-searchable" style="margin-bottom:10px; background:#f8fbff;" data-search="{{ item.hoja_ruta.nombre or '' }} {{ item.hoja_ruta.id }} {{ item.hoja_ruta.pn or '' }}">
                     <div><strong>{{ item.hoja_ruta.nombre or ('HOJA #' ~ item.hoja_ruta.id) }}</strong></div>
                     <div class="small">ID hoja: {{ item.hoja_ruta.id }} | Clave: {{ item.hoja_ruta.pn or '-' }} | Piezas: {{ item.hoja_ruta.cantidad_piezas or 0 }}</div>
                     <div class="small">Entregado: <strong style="color:#0f766e;">{{ item.cantidad_entregada or 0 }}</strong> / {{ item.cantidad_total_piezas or item.hoja_ruta.cantidad_piezas or 0 }} | Pendiente: <strong style="color:#b91c1c;">{{ item.cantidad_pendiente if item.cantidad_pendiente is not none else ((item.cantidad_total_piezas or item.hoja_ruta.cantidad_piezas or 0) - (item.cantidad_entregada or 0)) }}</strong></div>
@@ -87,6 +131,7 @@
                     {% endif %}
                 </div>
                 {% endfor %}
+                <div id="almacenPendientesNoMatch" class="almacen-no-match">Sin coincidencias en pendientes de recepción.</div>
             {% else %}
                 <div class="small">No hay hojas pendientes de recepción en Almacén.</div>
             {% endif %}
@@ -99,7 +144,7 @@
             </div>
             {% if historial_almacen %}
                 {% for r in historial_almacen %}
-                <div style="padding:6px 0; border-bottom:1px solid #eef2f7;">
+                <div class="almacen-searchable" style="padding:6px 0; border-bottom:1px solid #eef2f7;" data-search="{{ r.hoja_nombre or '' }} {{ r.hoja_ruta_id or '' }} {{ r.recepcion_id or '' }}">
                     <div><strong>{{ r.hoja_nombre }}</strong></div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:4px; align-items:center;">
                         <span class="step-chip {{ r.estado_variant }}">{{ r.estado_label }}</span>
@@ -130,9 +175,11 @@
                     {% endif %}
                 </div>
                 {% endfor %}
+                <div id="almacenHistorialNoMatch" class="almacen-no-match">Sin coincidencias en historial.</div>
             {% else %}
                 <div class="small">Sin registros de almacén.</div>
             {% endif %}
+        </div>
         </div>
     </div>
 
@@ -140,6 +187,50 @@
         (function() {
             let moduleRefreshInFlight = false;
             let moduleRefreshTimerId = null;
+
+            function normAlmacenSearch(v) {
+                return String(v || '')
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '')
+                    .toLowerCase()
+                    .trim();
+            }
+
+            function filterAlmacenModule() {
+                const q = document.getElementById('almacenSearch')?.value || '';
+                const terms = normAlmacenSearch(q).split(/\s+/).filter(Boolean);
+                let visible = 0;
+                let visiblePendientes = 0;
+                let visibleHistorial = 0;
+
+                document.querySelectorAll('#almacenRefreshRoot .almacen-searchable').forEach(el => {
+                    const hay = normAlmacenSearch(el.dataset.search || el.textContent || '');
+                    const ok = !terms.length || terms.every(t => hay.includes(t));
+                    el.classList.toggle('is-hidden-by-search', !ok);
+                    if (ok) {
+                        visible++;
+                        if (el.classList.contains('panel')) visiblePendientes++;
+                        else visibleHistorial++;
+                    }
+                });
+
+                const pendientesNoMatch = document.getElementById('almacenPendientesNoMatch');
+                const historialNoMatch = document.getElementById('almacenHistorialNoMatch');
+                if (pendientesNoMatch) {
+                    pendientesNoMatch.style.display = (terms.length && visiblePendientes === 0) ? 'block' : 'none';
+                }
+                if (historialNoMatch) {
+                    historialNoMatch.style.display = (terms.length && visibleHistorial === 0) ? 'block' : 'none';
+                }
+
+                const meta = document.getElementById('almacenSearchMeta');
+                if (meta) {
+                    meta.textContent = terms.length ? `${visible} resultado(s)` : '';
+                }
+            }
+
+            const searchInput = document.getElementById('almacenSearch');
+            if (searchInput) searchInput.addEventListener('input', filterAlmacenModule);
 
             function hasPendingFormEdits() {
                 const forms = Array.from(document.querySelectorAll('form[data-async-refresh="1"]'));
@@ -169,10 +260,11 @@
                     if (!res.ok) throw new Error('No se pudo refrescar el módulo');
                     const html = await res.text();
                     const doc = new DOMParser().parseFromString(html, 'text/html');
-                    const nextContainer = doc.querySelector('.container');
-                    const currentContainer = document.querySelector('.container');
-                    if (!nextContainer || !currentContainer) throw new Error('No se pudo actualizar la vista');
-                    currentContainer.innerHTML = nextContainer.innerHTML;
+                    const nextRoot = doc.querySelector('#almacenRefreshRoot');
+                    const currentRoot = document.querySelector('#almacenRefreshRoot');
+                    if (!nextRoot || !currentRoot) throw new Error('No se pudo actualizar la vista');
+                    currentRoot.innerHTML = nextRoot.innerHTML;
+                    filterAlmacenModule();
                 } finally {
                     moduleRefreshInFlight = false;
                 }

@@ -53,6 +53,9 @@
             border-radius: 8px;
             background: #f8fafc;
         }
+        .entrega-searchable.is-hidden-by-search {
+            display: none !important;
+        }
         .step-chip {
             display:inline-flex;
             align-items:center;
@@ -119,34 +122,6 @@
                             <button class="btn-mini btn-del" type="submit">Retirar de Entregas</button>
                         </form>
                         {% endif %}
-
-                        <!-- Modal para Entregas Parciales -->
-                        <div id="modalEntregaParcial" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:1000; justify-content:center; align-items:center;">
-                            <div style="background:#fff; border-radius:10px; padding:20px; width:90%; max-width:400px; box-shadow:0 10px 40px rgba(0,0,0,0.2);">
-                                <h3 style="margin:0 0 16px 0;">Registrar Entrega Parcial</h3>
-            
-                                <div style="margin-bottom:12px;">
-                                    <div class="small">Total de piezas: <strong id="totalPiezas">0</strong></div>
-                                    <div class="small">Ya entregadas: <strong id="yaEntregadas" style="color:#0f766e;">0</strong></div>
-                                    <div class="small">Pendiente: <strong id="pendientes" style="color:#dc2626;">0</strong></div>
-                                </div>
-
-                                <div style="margin-bottom:16px;">
-                                    <label style="display:block; margin-bottom:6px; font-weight:600; font-size:14px;">¿Cuántas piezas entregar en este movimiento?</label>
-                                    <input type="number" id="cantidadEntrega" min="1" max="100" placeholder="Ingresa cantidad" style="width:100%; padding:8px; border:1px solid #e5e7eb; border-radius:6px; font-size:14px;">
-                                </div>
-
-                                <div style="margin-bottom:16px;">
-                                    <label style="display:block; margin-bottom:6px; font-weight:600; font-size:14px;">Notas (opcional)</label>
-                                    <textarea id="notasEntrega" placeholder="Ej: Entregado en almacén PT" style="width:100%; padding:8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px; height:80px;"></textarea>
-                                </div>
-
-                                <div style="display:flex; gap:8px;">
-                                    <button type="button" class="btn-mini" style="flex:1; background:#9ca3af; color:#fff; border:0; padding:10px; border-radius:6px; cursor:pointer;" onclick="cerrarModalEntregaParcial()">Cancelar</button>
-                                    <button type="button" class="btn-mini" style="flex:1; background:#0f766e; color:#fff; border:0; padding:10px; border-radius:6px; cursor:pointer; font-weight:600;" onclick="guardarEntregaParcial()">Registrar entrega</button>
-                                </div>
-                            </div>
-                        </div>
                     </div>
                     {% else %}
                     <div class="small">Aún no hay hojas enviadas a Entregas.</div>
@@ -323,6 +298,30 @@
         </div>
     </div>
 
+    <!-- Modal único fuera del loop / refresh para que el filtro no lo oculte ni bloquee botones -->
+    <div id="modalEntregaParcial" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:1000; justify-content:center; align-items:center;">
+        <div style="background:#fff; border-radius:10px; padding:20px; width:90%; max-width:400px; box-shadow:0 10px 40px rgba(0,0,0,0.2);">
+            <h3 style="margin:0 0 16px 0;">Registrar Entrega Parcial</h3>
+            <div style="margin-bottom:12px;">
+                <div class="small">Total de piezas: <strong id="totalPiezas">0</strong></div>
+                <div class="small">Ya entregadas: <strong id="yaEntregadas" style="color:#0f766e;">0</strong></div>
+                <div class="small">Pendiente: <strong id="pendientes" style="color:#dc2626;">0</strong></div>
+            </div>
+            <div style="margin-bottom:16px;">
+                <label style="display:block; margin-bottom:6px; font-weight:600; font-size:14px;">¿Cuántas piezas entregar en este movimiento?</label>
+                <input type="number" id="cantidadEntrega" min="1" max="100" placeholder="Ingresa cantidad" style="width:100%; padding:8px; border:1px solid #e5e7eb; border-radius:6px; font-size:14px;">
+            </div>
+            <div style="margin-bottom:16px;">
+                <label style="display:block; margin-bottom:6px; font-weight:600; font-size:14px;">Notas (opcional)</label>
+                <textarea id="notasEntrega" placeholder="Ej: Entregado en almacén PT" style="width:100%; padding:8px; border:1px solid #e5e7eb; border-radius:6px; font-size:12px; height:80px;"></textarea>
+            </div>
+            <div style="display:flex; gap:8px;">
+                <button type="button" class="btn-mini" style="flex:1; background:#9ca3af; color:#fff; border:0; padding:10px; border-radius:6px; cursor:pointer;" onclick="cerrarModalEntregaParcial()">Cancelar</button>
+                <button type="button" class="btn-mini" style="flex:1; background:#0f766e; color:#fff; border:0; padding:10px; border-radius:6px; cursor:pointer; font-weight:600;" onclick="guardarEntregaParcial()">Registrar entrega</button>
+            </div>
+        </div>
+    </div>
+
     <script>
                 let flujoIdActual = null;
                 let totalPiezasActual = 0;
@@ -430,8 +429,8 @@
                 }
 
                 // Cerrar modal al hacer click fuera
-                document.getElementById('modalEntregaParcial').addEventListener('click', (e) => {
-                    if (e.target.id === 'modalEntregaParcial') {
+                document.addEventListener('click', (e) => {
+                    if (e.target && e.target.id === 'modalEntregaParcial') {
                         cerrarModalEntregaParcial();
                     }
                 });
@@ -457,7 +456,7 @@
             document.querySelectorAll('#entregasRefreshRoot .entrega-searchable').forEach(el => {
                 const hay = normEntregaSearch(el.dataset.search || el.textContent || '');
                 const ok = !terms.length || terms.every(t => hay.includes(t));
-                el.style.display = ok ? '' : 'none';
+                el.classList.toggle('is-hidden-by-search', !ok);
                 if (ok) {
                     visible++;
                     if (el.classList.contains('hoja-card')) visibleCards++;
