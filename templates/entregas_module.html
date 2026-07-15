@@ -19,6 +19,40 @@
         .btn-add { background:#0b74de; color:#fff; }
         .btn-send { background:#0f766e; color:#fff; }
         .btn-del { background:#dc2626; color:#fff; }
+        .entregas-search-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+            padding: 10px 12px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+        }
+        .entregas-search-input {
+            flex: 1;
+            min-width: 220px;
+            padding: 9px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        .entregas-search-meta {
+            font-size: 12px;
+            color: #64748b;
+            white-space: nowrap;
+        }
+        .entregas-no-match {
+            display: none;
+            padding: 12px;
+            color: #64748b;
+            font-size: 13px;
+            text-align: center;
+            border: 1px dashed #cbd5e1;
+            border-radius: 8px;
+            background: #f8fafc;
+        }
         .step-chip {
             display:inline-flex;
             align-items:center;
@@ -61,15 +95,21 @@
         <h2 style="margin:0 0 8px 0;">Módulo Entregas</h2>
         <p class="small" style="margin:0 0 12px 0;">Arrastra hojas de ruta a la bandeja temporal y luego envíalas a Almacén. Cuando Almacén recepciona, la hoja regresa aquí como "lista para facturación".</p>
 
+        <div class="entregas-search-bar">
+            <input id="entregasSearch" class="entregas-search-input" type="search" placeholder="Buscar por serie, ID o clave..." autocomplete="off">
+            <span id="entregasSearchMeta" class="entregas-search-meta"></span>
+        </div>
+
+        <div id="entregasRefreshRoot">
         <div class="layout">
             <section class="panel">
                 <div class="row">
                     <strong>Hojas Enviadas desde Hojas de Ruta Entregas</strong>
                     <span class="badge">{{ pendientes_entregas|length }} enviadas</span>
                 </div>
-                <div class="cards">
+                <div class="cards" id="entregasCardsList">
                     {% for item in pendientes_entregas %}
-                    <div class="hoja-card">
+                    <div class="hoja-card entrega-searchable" data-search="{{ item.hoja_ruta.nombre or '' }} {{ item.hoja_ruta.id }} {{ item.hoja_ruta.pn or '' }}">
                         <div><strong>{{ item.hoja_ruta.nombre or ('HOJA #' ~ item.hoja_ruta.id) }}</strong></div>
                         <div class="small">ID: {{ item.hoja_ruta.id }} | Clave: {{ item.hoja_ruta.pn or '-' }}</div>
                         <div class="small">Piezas: {{ item.hoja_ruta.cantidad_piezas or 0 }} | En módulo: {{ item.estado or '-' }}</div>
@@ -111,6 +151,7 @@
                     {% else %}
                     <div class="small">Aún no hay hojas enviadas a Entregas.</div>
                     {% endfor %}
+                    <div id="entregasCardsNoMatch" class="entregas-no-match" style="grid-column:1/-1;">Sin coincidencias en hojas enviadas.</div>
                 </div>
             </section>
 
@@ -125,7 +166,7 @@
                         {% set total_piezas_item = item.cantidad_total_piezas or item.hoja_ruta.cantidad_piezas or 0 %}
                         {% set entregado_item = item.cantidad_entregada or 0 %}
                         {% set pendiente_item = item.cantidad_pendiente if item.cantidad_pendiente is not none else (total_piezas_item - entregado_item) %}
-                        <div class="panel" style="margin-bottom:8px; background:#fff;">
+                        <div class="panel entrega-searchable" style="margin-bottom:8px; background:#fff;" data-search="{{ item.hoja_ruta.nombre or '' }} {{ item.hoja_ruta.id }} {{ item.hoja_ruta.pn or '' }}">
                             <div><strong>{{ item.hoja_ruta.nombre or ('HOJA #' ~ item.hoja_ruta.id) }}</strong></div>
                             <div class="small">ID hoja: {{ item.hoja_ruta.id }} | Clave: {{ item.hoja_ruta.pn or '-' }}</div>
 
@@ -190,6 +231,7 @@
                             {% endif %}
                         </div>
                         {% endfor %}
+                        <div id="entregasBandejaNoMatch" class="entregas-no-match">Sin coincidencias en la bandeja.</div>
                     {% else %}
                         <div class="small">Sin hojas en bandeja. Envía hojas desde el módulo de Hojas de Ruta Entregas.</div>
                     {% endif %}
@@ -277,6 +319,7 @@
             {% else %}
                 <div class="small">Sin movimientos en entregas.</div>
             {% endif %}
+        </div>
         </div>
     </div>
 
@@ -396,6 +439,53 @@
         let moduleRefreshInFlight = false;
         let moduleRefreshTimerId = null;
 
+        function normEntregaSearch(v) {
+            return String(v || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase()
+                .trim();
+        }
+
+        function filterEntregasModule() {
+            const q = document.getElementById('entregasSearch')?.value || '';
+            const terms = normEntregaSearch(q).split(/\s+/).filter(Boolean);
+            let visible = 0;
+            let visibleCards = 0;
+            let visibleBandeja = 0;
+
+            document.querySelectorAll('#entregasRefreshRoot .entrega-searchable').forEach(el => {
+                const hay = normEntregaSearch(el.dataset.search || el.textContent || '');
+                const ok = !terms.length || terms.every(t => hay.includes(t));
+                el.style.display = ok ? '' : 'none';
+                if (ok) {
+                    visible++;
+                    if (el.classList.contains('hoja-card')) visibleCards++;
+                    else visibleBandeja++;
+                }
+            });
+
+            const cardsNoMatch = document.getElementById('entregasCardsNoMatch');
+            const bandejaNoMatch = document.getElementById('entregasBandejaNoMatch');
+            if (cardsNoMatch) {
+                cardsNoMatch.style.display = (terms.length && visibleCards === 0) ? 'block' : 'none';
+            }
+            if (bandejaNoMatch) {
+                bandejaNoMatch.style.display = (terms.length && visibleBandeja === 0) ? 'block' : 'none';
+            }
+
+            const meta = document.getElementById('entregasSearchMeta');
+            if (meta) {
+                meta.textContent = terms.length ? `${visible} hoja(s) encontrada(s)` : '';
+            }
+        }
+
+        (function initEntregasSearch() {
+            const input = document.getElementById('entregasSearch');
+            if (!input) return;
+            input.addEventListener('input', filterEntregasModule);
+        })();
+
         async function softRefreshModuleImpl() {
             if (moduleRefreshInFlight) return;
             const modal = document.getElementById('modalEntregaParcial');
@@ -410,10 +500,11 @@
                 if (!res.ok) throw new Error('No se pudo refrescar el módulo');
                 const html = await res.text();
                 const doc = new DOMParser().parseFromString(html, 'text/html');
-                const nextContainer = doc.querySelector('.container');
-                const currentContainer = document.querySelector('.container');
-                if (!nextContainer || !currentContainer) throw new Error('No se pudo actualizar la vista');
-                currentContainer.innerHTML = nextContainer.innerHTML;
+                const nextRoot = doc.querySelector('#entregasRefreshRoot');
+                const currentRoot = document.querySelector('#entregasRefreshRoot');
+                if (!nextRoot || !currentRoot) throw new Error('No se pudo actualizar la vista');
+                currentRoot.innerHTML = nextRoot.innerHTML;
+                filterEntregasModule();
             } finally {
                 moduleRefreshInFlight = false;
             }
