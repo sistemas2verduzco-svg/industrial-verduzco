@@ -1247,6 +1247,47 @@ def _resolve_clave_descripcion_by_pn(pn_value):
     return _clean_nullable_text(getattr(clave, 'clave', None)) or pn
 
 
+def _clave_token_for_serie(clave_txt):
+    """Token alfanumerico de la clave para armar el folio HR/HRN."""
+    return ''.join(ch for ch in (clave_txt or '') if ch.isalnum())[:10] or 'CLAVE'
+
+
+def _rebuild_hoja_serie_con_clave(hoja, clave_txt, prefix=None):
+    """Sincroniza el folio con la clave del producto.
+
+    Conserva prefijo (HR/HRN), fecha y consecutivo del folio actual cuando existen,
+    y solo reemplaza el segmento de clave. Evita desfaces al editar la clave.
+    """
+    if hoja is None:
+        return None
+
+    clave_segura = _clave_token_for_serie(clave_txt)
+    current = (getattr(hoja, 'nombre', None) or '').strip()
+    match = re.match(r'^(HRN?)-(\d{8})-(.+)-(\d+)$', current, re.IGNORECASE)
+    if match:
+        pref = match.group(1).upper()
+        if pref == 'HRN':
+            pref = 'HRN'
+        else:
+            pref = 'HR'
+        hoja.nombre = f"{pref}-{match.group(2)}-{clave_segura}-{match.group(4)}"
+        return hoja.nombre
+
+    pref = (prefix or '').strip().upper()
+    if pref not in ('HR', 'HRN'):
+        pref = 'HRN' if current.upper().startswith('HRN') else 'HR'
+
+    fecha_ref = (
+        getattr(hoja, 'fecha_salida', None)
+        or getattr(hoja, 'fecha_creacion', None)
+        or datetime.utcnow()
+    )
+    fecha = fecha_ref.strftime('%Y%m%d') if hasattr(fecha_ref, 'strftime') else datetime.utcnow().strftime('%Y%m%d')
+    hoja_id = int(getattr(hoja, 'id', 0) or 0)
+    hoja.nombre = f"{pref}-{fecha}-{clave_segura}-{hoja_id:04d}"
+    return hoja.nombre
+
+
 def _mp_process_seconds(cp):
     """Retorna segundos base del proceso MP tomando la primera columna de tiempo disponible."""
     if not cp:
@@ -8024,8 +8065,7 @@ def api_crear_hoja_ruta():
         db.session.flush()
 
         # Serie automatica: HR-YYYYMMDD-CLAVE-####
-        clave_segura = ''.join(ch for ch in (clave.clave or '') if ch.isalnum())[:10] or 'CLAVE'
-        hoja.nombre = f"HR-{fecha_actual.strftime('%Y%m%d')}-{clave_segura}-{hoja.id:04d}"
+        _rebuild_hoja_serie_con_clave(hoja, clave.clave, prefix='HR')
 
         if maquina_id:
             _pause_other_machine_hojas(HojaRutaEntrega, maquina_id, hoja.id, fecha_actual)
@@ -8159,6 +8199,9 @@ def api_actualizar_hoja_ruta(hoja_id):
         hoja.pn = clave_obj.clave
         hoja.producto = _clean_nullable_text(clave_obj.nombre) or clave_obj.clave
         hoja.descripcion = _resolve_clave_descripcion_by_pn(clave_obj.clave)
+        # Mantener folio alineado con la clave (corrige desfaces al editar).
+        if 'nombre' not in data:
+            _rebuild_hoja_serie_con_clave(hoja, clave_obj.clave, prefix='HR')
     if 'nombre' in data:
         hoja.nombre = data['nombre']
     if 'descripcion' in data:
@@ -8813,7 +8856,7 @@ def api_crear_hoja_ruta_nuevo():
         db.session.add(hoja)
         db.session.flush()
 
-        clave_segura = ''.join(ch for ch in (clave.clave or '') if ch.isalnum())[:10] or 'CLAVE'
+        clave_segura = _clave_token_for_serie(clave.clave)
         hoja.nombre = f"HRN-{fecha_actual.strftime('%Y%m%d')}-{clave_segura}-{hoja.id:04d}"
 
         _recompute_mp_time_plan(hoja)
@@ -8845,6 +8888,8 @@ def api_actualizar_hoja_ruta_nuevo(hoja_id):
         hoja.pn = clave_obj.clave
         hoja.producto = _clean_nullable_text(clave_obj.nombre) or clave_obj.clave
         hoja.descripcion = _resolve_clave_descripcion_by_pn(clave_obj.clave)
+        if 'nombre' not in data:
+            _rebuild_hoja_serie_con_clave(hoja, clave_obj.clave, prefix='HRN')
     if 'calidad' in data:
         hoja.calidad = (data.get('calidad') or '').strip() or None
     if 'cantidad_piezas' in data and data.get('cantidad_piezas') is not None:
