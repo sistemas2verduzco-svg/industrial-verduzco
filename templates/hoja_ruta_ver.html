@@ -152,6 +152,27 @@
       min-width: 180px;
     }
 
+    .doc-folio {
+      display: block;
+      margin-bottom: 4px;
+      color: #0b2f63;
+      font-size: 20px;
+      font-weight: 900;
+      letter-spacing: 0.3px;
+      line-height: 1.15;
+      word-break: break-word;
+    }
+
+    .doc-folio strong {
+      display: block;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 2px;
+    }
+
     .qr-box {
       margin-top: 8px;
       display: inline-flex;
@@ -453,6 +474,17 @@
         font-size: 9px;
       }
 
+      .doc-folio {
+        font-size: 18px;
+        margin-bottom: 3px;
+        letter-spacing: 0.2px;
+      }
+
+      .doc-folio strong {
+        font-size: 9px;
+        margin-bottom: 1px;
+      }
+
       .status {
         font-size: 10px;
         padding: 2px 8px;
@@ -562,7 +594,7 @@
             <div class="doc-subtitle">Control operacional para ciclo de produccion y seguimiento de procesos por clave</div>
           </div>
           <div class="doc-badge">
-            <div><strong>Serie:</strong> {{ hoja.nombre or '' }}</div>
+            <div class="doc-folio"><strong>Serie / Folio</strong>{{ hoja.nombre or '' }}</div>
             <div><strong>Fecha:</strong> {{ hoja.fecha_salida[:16] if hoja.fecha_salida else '' }}</div>
             <span class="status st-{{ hoja.estado or 'activa' }}">{{ hoja.estado or 'activa' }}</span>
             <div class="qr-box" id="qrContainer" data-payload="{{ hoja.qr_payload|e }}" data-deeplink="{{ hoja.qr_deeplink|e }}">
