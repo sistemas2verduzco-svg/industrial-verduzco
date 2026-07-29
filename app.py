@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash, abort
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqNotaVenta, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaBOMProceso, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, OdooSyncRun, OdooPedidoVenta, OdooPedidoVentaLinea, OdooOrdenCompra, OdooOrdenCompraLinea, MaquinariaSolicitud, MaquinariaSolicitudItem, AlertaBuzonGeneral, Tecnico, LogVerificacion
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqNotaVenta, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaBOMProceso, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, OdooSyncRun, OdooPedidoVenta, OdooPedidoVentaLinea, OdooOrdenCompra, OdooOrdenCompraLinea, MaquinariaSolicitud, MaquinariaSolicitudItem, AlertaBuzonGeneral, Tecnico, LogVerificacion, EmpaquePedido, EmpaquePedidoItem, EmpaqueCaja, EmpaqueMovimiento, EmpaqueLineaProgreso, EmpaqueSeguimientoLog, AlmacenCajaSurtidoSesion, AlmacenCajaSurtidoCaja, AlmacenCajaSurtidoLecturaBascula, AlmacenCajaSurtidoItem
 from auth import AuthManager
 from email_manager import EmailManager
 from odoo_client import OdooClient, OdooError
@@ -1837,6 +1837,372 @@ def _ensure_almacen_cajas_surtido_tables():
         return False
 
 
+_EMPAQUE_TABLES_READY = False
+_EMPAQUE_SEGUIMIENTO_FAILS = {}  # ip -> (count, first_ts)
+
+
+def _ensure_empaque_tables():
+    global _EMPAQUE_TABLES_READY
+    if _EMPAQUE_TABLES_READY:
+        return True
+    try:
+        EmpaquePedido.__table__.create(bind=db.engine, checkfirst=True)
+        EmpaquePedidoItem.__table__.create(bind=db.engine, checkfirst=True)
+        EmpaqueCaja.__table__.create(bind=db.engine, checkfirst=True)
+        EmpaqueMovimiento.__table__.create(bind=db.engine, checkfirst=True)
+        EmpaqueLineaProgreso.__table__.create(bind=db.engine, checkfirst=True)
+        EmpaqueSeguimientoLog.__table__.create(bind=db.engine, checkfirst=True)
+        _EMPAQUE_TABLES_READY = True
+        return True
+    except Exception as exc:
+        logger.warning(f'No se pudo asegurar tablas Empaque: {exc}')
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return False
+
+
+def _normalize_empaque_clave(value):
+    return str(value or '').strip()
+
+
+def _upsert_empaque_data(payload):
+    """Reemplaza espejo por pedido (snapshot) desde agente Empaque360."""
+    pedidos = payload.get('pedidos') or []
+    stats = {
+        'pedidos_upserted': 0,
+        'items_upserted': 0,
+        'cajas_upserted': 0,
+        'movimientos_upserted': 0,
+        'progreso_upserted': 0,
+    }
+
+    for row in pedidos:
+        if not isinstance(row, dict):
+            continue
+        order_number = str(row.get('ExternalOrderNumber') or row.get('external_order_number') or '').strip()
+        customer_code = _normalize_empaque_clave(row.get('CustomerCode') or row.get('customer_code'))
+        if not order_number or not customer_code:
+            continue
+
+        pedido = EmpaquePedido.query.filter_by(external_order_number=order_number).first()
+        if not pedido:
+            pedido = EmpaquePedido(external_order_number=order_number)
+            db.session.add(pedido)
+
+        pedido.customer_code = customer_code[:80]
+        pedido.customer_name = str(row.get('CustomerName') or row.get('customer_name') or '').strip()[:255] or None
+        pedido.order_date_utc = _parse_datetime(row.get('OrderDateUtc') or row.get('order_date_utc'))
+        source_id = row.get('SalesOrderId') or row.get('source_sales_order_id')
+        try:
+            pedido.source_sales_order_id = int(source_id) if source_id is not None else None
+        except Exception:
+            pedido.source_sales_order_id = None
+        pedido.last_activity_utc = _parse_datetime(row.get('LastActivityUtc') or row.get('last_activity_utc'))
+        pedido.synced_at = datetime.utcnow()
+        db.session.flush()
+
+        EmpaquePedidoItem.query.filter_by(pedido_id=pedido.id).delete(synchronize_session=False)
+        EmpaqueCaja.query.filter_by(pedido_id=pedido.id).delete(synchronize_session=False)
+        EmpaqueMovimiento.query.filter_by(pedido_id=pedido.id).delete(synchronize_session=False)
+        EmpaqueLineaProgreso.query.filter_by(pedido_id=pedido.id).delete(synchronize_session=False)
+
+        for item in (row.get('items') or []):
+            if not isinstance(item, dict):
+                continue
+            product_code = str(item.get('ProductCode') or item.get('product_code') or '').strip()
+            if not product_code:
+                continue
+            db.session.add(EmpaquePedidoItem(
+                pedido_id=pedido.id,
+                external_order_number=order_number,
+                source_line_number=int(item.get('SourceLineNumber') or item.get('source_line_number') or 0),
+                product_code=product_code[:80],
+                product_name=str(item.get('ProductName') or item.get('product_name') or '').strip()[:255] or None,
+                quantity_ordered=_to_float(item.get('QuantityOrdered') or item.get('quantity_ordered')) or 0.0,
+                unit_weight_kg=_to_float(item.get('UnitWeightFromContpaqiKg') or item.get('unit_weight_kg')) or 0.0,
+            ))
+            stats['items_upserted'] += 1
+
+        for caja in (row.get('cajas') or row.get('boxes') or []):
+            if not isinstance(caja, dict):
+                continue
+            box_code = str(caja.get('BoxCode') or caja.get('box_code') or '').strip()
+            if not box_code:
+                continue
+            source_box_id = caja.get('PackingBoxId') or caja.get('source_packing_box_id')
+            try:
+                source_box_id = int(source_box_id) if source_box_id is not None else None
+            except Exception:
+                source_box_id = None
+            db.session.add(EmpaqueCaja(
+                pedido_id=pedido.id,
+                external_order_number=order_number,
+                box_code=box_code[:50],
+                source_packing_box_id=source_box_id,
+                status=int(caja.get('Status') or caja.get('status') or 1),
+                max_weight_kg=_to_float(caja.get('MaxWeightKg') or caja.get('max_weight_kg')) or 0.0,
+                current_real_weight_kg=_to_float(
+                    caja.get('CurrentRealWeightKg') or caja.get('current_real_weight_kg')
+                ) or 0.0,
+                opened_at_utc=_parse_datetime(caja.get('OpenedAtUtc') or caja.get('opened_at_utc')),
+                closed_at_utc=_parse_datetime(caja.get('ClosedAtUtc') or caja.get('closed_at_utc')),
+            ))
+            stats['cajas_upserted'] += 1
+
+        for mov in (row.get('movimientos') or row.get('movements') or []):
+            if not isinstance(mov, dict):
+                continue
+            source_mov_id = mov.get('BoxMovementId') or mov.get('source_box_movement_id')
+            try:
+                source_mov_id = int(source_mov_id or 0)
+            except Exception:
+                source_mov_id = 0
+            box_code = str(mov.get('BoxCode') or mov.get('box_code') or '').strip()
+            product_code = str(mov.get('ProductCode') or mov.get('product_code') or '').strip()
+            if source_mov_id <= 0 or not box_code or not product_code:
+                continue
+            db.session.add(EmpaqueMovimiento(
+                pedido_id=pedido.id,
+                external_order_number=order_number,
+                source_box_movement_id=source_mov_id,
+                box_code=box_code[:50],
+                product_code=product_code[:80],
+                product_name=str(mov.get('ProductName') or mov.get('product_name') or '').strip()[:255] or None,
+                quantity_captured=_to_float(mov.get('QuantityCaptured') or mov.get('quantity_captured')) or 0.0,
+                unit_weight_kg=_to_float(mov.get('UnitWeightFromContpaqiKg') or mov.get('unit_weight_kg')) or 0.0,
+                real_weight_kg=_to_float(mov.get('RealMovementWeightKg') or mov.get('real_weight_kg')) or 0.0,
+                observed_weight_per_piece_kg=_to_float(
+                    mov.get('ObservedWeightPerPieceKg') or mov.get('observed_weight_per_piece_kg')
+                ) or 0.0,
+                operator_name=str(mov.get('OperatorName') or mov.get('operator_name') or '').strip()[:120] or None,
+                captured_at_utc=_parse_datetime(mov.get('CapturedAtUtc') or mov.get('captured_at_utc')),
+            ))
+            stats['movimientos_upserted'] += 1
+
+        for prog in (row.get('progreso') or row.get('progress') or []):
+            if not isinstance(prog, dict):
+                continue
+            product_code = str(prog.get('ProductCode') or prog.get('product_code') or '').strip()
+            if not product_code:
+                continue
+            db.session.add(EmpaqueLineaProgreso(
+                pedido_id=pedido.id,
+                external_order_number=order_number,
+                product_code=product_code[:80],
+                source_line_number=int(prog.get('SourceLineNumber') or prog.get('source_line_number') or 0),
+                quantity_ordered=_to_float(prog.get('QuantityOrdered') or prog.get('quantity_ordered')) or 0.0,
+                quantity_packed=_to_float(prog.get('QuantityPacked') or prog.get('quantity_packed')) or 0.0,
+                updated_at_utc=_parse_datetime(prog.get('UpdatedAtUtc') or prog.get('updated_at_utc')),
+            ))
+            stats['progreso_upserted'] += 1
+
+        db.session.flush()
+
+        # Derivar cajas SUELTO / faltantes desde movimientos si no vinieron en PackingBoxes
+        existing_box_codes = {
+            c.box_code for c in EmpaqueCaja.query.filter_by(pedido_id=pedido.id).all()
+        }
+        movs = EmpaqueMovimiento.query.filter_by(pedido_id=pedido.id).all()
+        weights_by_box = {}
+        for m in movs:
+            weights_by_box.setdefault(m.box_code, 0.0)
+            weights_by_box[m.box_code] += float(m.real_weight_kg or 0.0)
+            if not pedido.last_activity_utc or (m.captured_at_utc and m.captured_at_utc > pedido.last_activity_utc):
+                pedido.last_activity_utc = m.captured_at_utc
+        for box_code, total_w in weights_by_box.items():
+            if box_code in existing_box_codes:
+                continue
+            db.session.add(EmpaqueCaja(
+                pedido_id=pedido.id,
+                external_order_number=order_number,
+                box_code=box_code[:50],
+                source_packing_box_id=None,
+                status=2,
+                max_weight_kg=0.0,
+                current_real_weight_kg=total_w,
+                opened_at_utc=None,
+                closed_at_utc=pedido.last_activity_utc,
+            ))
+            stats['cajas_upserted'] += 1
+
+        stats['pedidos_upserted'] += 1
+
+    return stats
+
+
+def _build_empaque_cliente_view(customer_code):
+    pedidos = (
+        EmpaquePedido.query
+        .filter(func.lower(EmpaquePedido.customer_code) == customer_code.lower())
+        .order_by(
+            EmpaquePedido.last_activity_utc.desc().nullslast(),
+            EmpaquePedido.order_date_utc.desc().nullslast(),
+            EmpaquePedido.id.desc(),
+        )
+        .all()
+    )
+    if not pedidos:
+        return None
+
+    pedido_ids = [p.id for p in pedidos]
+    items = EmpaquePedidoItem.query.filter(EmpaquePedidoItem.pedido_id.in_(pedido_ids)).all()
+    cajas = EmpaqueCaja.query.filter(EmpaqueCaja.pedido_id.in_(pedido_ids)).all()
+    movs = (
+        EmpaqueMovimiento.query
+        .filter(EmpaqueMovimiento.pedido_id.in_(pedido_ids))
+        .order_by(EmpaqueMovimiento.captured_at_utc.asc().nullslast(), EmpaqueMovimiento.id.asc())
+        .all()
+    )
+    progreso = EmpaqueLineaProgreso.query.filter(EmpaqueLineaProgreso.pedido_id.in_(pedido_ids)).all()
+
+    items_by = {}
+    for it in items:
+        items_by.setdefault(it.pedido_id, []).append(it)
+    cajas_by = {}
+    for c in cajas:
+        cajas_by.setdefault(c.pedido_id, []).append(c)
+    movs_by = {}
+    for m in movs:
+        movs_by.setdefault(m.pedido_id, []).append(m)
+    prog_by = {}
+    for p in progreso:
+        prog_by.setdefault(p.pedido_id, []).append(p)
+
+    view_pedidos = []
+    for pedido in pedidos:
+        p_movs = movs_by.get(pedido.id, [])
+        p_cajas = sorted(
+            cajas_by.get(pedido.id, []),
+            key=lambda c: (0 if (c.box_code or '').upper() == 'SUELTO' else 1, c.box_code or '', c.id),
+        )
+        movs_por_caja = {}
+        for m in p_movs:
+            movs_por_caja.setdefault(m.box_code, []).append(m)
+
+        cajas_view = []
+        for caja in p_cajas:
+            lineas = movs_por_caja.get(caja.box_code, [])
+            peso_real = float(caja.current_real_weight_kg or 0.0)
+            if peso_real <= 0:
+                peso_real = sum(float(m.real_weight_kg or 0.0) for m in lineas)
+            piezas = sum(float(m.quantity_captured or 0.0) for m in lineas)
+            cajas_view.append({
+                'box_code': caja.box_code,
+                'status': int(caja.status or 1),
+                'status_label': 'Cerrada' if int(caja.status or 0) == 2 else 'En armado',
+                'es_suelto': (caja.box_code or '').upper() == 'SUELTO',
+                'peso_real_kg': round(peso_real, 3),
+                'piezas': piezas,
+                'closed_at_utc': caja.closed_at_utc,
+                'lineas': [{
+                    'product_code': m.product_code,
+                    'product_name': m.product_name or m.product_code,
+                    'quantity': float(m.quantity_captured or 0.0),
+                    'peso_real_kg': round(float(m.real_weight_kg or 0.0), 3),
+                    'captured_at_utc': m.captured_at_utc,
+                } for m in lineas],
+            })
+
+        # Movimientos en cajas no listadas
+        listed = {c['box_code'] for c in cajas_view}
+        for box_code, lineas in movs_por_caja.items():
+            if box_code in listed:
+                continue
+            cajas_view.append({
+                'box_code': box_code,
+                'status': 2,
+                'status_label': 'Cerrada',
+                'es_suelto': (box_code or '').upper() == 'SUELTO',
+                'peso_real_kg': round(sum(float(m.real_weight_kg or 0.0) for m in lineas), 3),
+                'piezas': sum(float(m.quantity_captured or 0.0) for m in lineas),
+                'closed_at_utc': max((m.captured_at_utc for m in lineas if m.captured_at_utc), default=None),
+                'lineas': [{
+                    'product_code': m.product_code,
+                    'product_name': m.product_name or m.product_code,
+                    'quantity': float(m.quantity_captured or 0.0),
+                    'peso_real_kg': round(float(m.real_weight_kg or 0.0), 3),
+                    'captured_at_utc': m.captured_at_utc,
+                } for m in lineas],
+            })
+
+        p_items = sorted(items_by.get(pedido.id, []), key=lambda x: (x.source_line_number, x.id))
+        p_prog = { (pr.product_code, pr.source_line_number): pr for pr in prog_by.get(pedido.id, []) }
+        partidas = []
+        for it in p_items:
+            pr = p_prog.get((it.product_code, it.source_line_number))
+            ordered = float(it.quantity_ordered or 0.0)
+            packed = float(pr.quantity_packed or 0.0) if pr else 0.0
+            partidas.append({
+                'product_code': it.product_code,
+                'product_name': it.product_name or it.product_code,
+                'quantity_ordered': ordered,
+                'quantity_packed': packed,
+                'quantity_pending': max(0.0, ordered - packed),
+            })
+
+        total_peso = sum(c['peso_real_kg'] for c in cajas_view)
+        total_cajas = sum(1 for c in cajas_view if not c['es_suelto'])
+        view_pedidos.append({
+            'external_order_number': pedido.external_order_number,
+            'order_date_utc': pedido.order_date_utc,
+            'last_activity_utc': pedido.last_activity_utc,
+            'customer_name': pedido.customer_name,
+            'partidas': partidas,
+            'cajas': cajas_view,
+            'total_peso_kg': round(total_peso, 3),
+            'total_cajas': total_cajas,
+            'tiene_suelto': any(c['es_suelto'] for c in cajas_view),
+        })
+
+    return {
+        'customer_code': customer_code,
+        'customer_name': pedidos[0].customer_name or customer_code,
+        'pedidos': view_pedidos,
+        'total_pedidos': len(view_pedidos),
+    }
+
+
+def _empaque_seguimiento_rate_limited(ip):
+    now = time()
+    count, first = _EMPAQUE_SEGUIMIENTO_FAILS.get(ip, (0, now))
+    if now - first > 900:
+        _EMPAQUE_SEGUIMIENTO_FAILS.pop(ip, None)
+        return False
+    return count >= 12
+
+
+def _empaque_seguimiento_register_fail(ip):
+    now = time()
+    count, first = _EMPAQUE_SEGUIMIENTO_FAILS.get(ip, (0, now))
+    if now - first > 900:
+        count, first = 0, now
+    _EMPAQUE_SEGUIMIENTO_FAILS[ip] = (count + 1, first)
+
+
+def _empaque_seguimiento_clear_fail(ip):
+    _EMPAQUE_SEGUIMIENTO_FAILS.pop(ip, None)
+
+
+def _write_empaque_seguimiento_log(customer_code, resultado):
+    try:
+        if not _ensure_empaque_tables():
+            return
+        db.session.add(EmpaqueSeguimientoLog(
+            customer_code=(customer_code or '')[:80] or None,
+            ip_cliente=(request.headers.get('X-Forwarded-For') or request.remote_addr or '')[:64],
+            user_agent=(request.headers.get('User-Agent') or '')[:1000],
+            resultado=(resultado or 'invalido')[:40],
+        ))
+        db.session.commit()
+    except Exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+
+
 def _serialize_almacen_caja_surtido_sesion(sesion):
     cajas = (
         AlmacenCajaSurtidoCaja.query
@@ -3285,6 +3651,56 @@ def _contpaq_norm_text(value):
     return re.sub(r'\s+', ' ', raw)
 
 
+_CONTPAQ_MONTH_NAMES = (
+    'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO',
+    'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE',
+)
+_CONTPAQ_MONTH_RE = '|'.join(_CONTPAQ_MONTH_NAMES)
+
+
+def _contpaq_period_fingerprint(value):
+    """
+    Normaliza periodos/titulos de semana para comparar variantes:
+      PEDIDO DEL 01 AL 07 JULIO
+      PEDIDO DEL 01 AL 07 DE JULIO
+      1 AL 7 DE JULIO
+    -> misma huella: "1 AL 7 DE JULIO"
+    """
+    text = _contpaq_norm_text(value)
+    if not text:
+        return ''
+
+    text = re.sub(r'^(PEDIDO\s+DEL|PEDIDO\s+DE|PEDIDO)\s+', '', text)
+    # "07 JULIO" / "07  JULIO" -> "07 DE JULIO"
+    text = re.sub(
+        rf'\b(\d{{1,2}})\s+(?!DE\b)({_CONTPAQ_MONTH_RE})\b',
+        r'\1 DE \2',
+        text,
+    )
+
+    match = re.search(
+        rf'(\d{{1,2}})\s+AL\s+(\d{{1,2}})\s+DE\s+({_CONTPAQ_MONTH_RE})',
+        text,
+    )
+    if match:
+        return f"{int(match.group(1))} AL {int(match.group(2))} DE {match.group(3)}"
+    return text
+
+
+def _contpaq_period_matches(filter_value, *candidates):
+    """True si el filtro de periodo/titulo coincide con alguno de los candidatos."""
+    filt = _contpaq_period_fingerprint(filter_value)
+    if not filt:
+        return True
+    for candidate in candidates:
+        cand = _contpaq_period_fingerprint(candidate)
+        if not cand:
+            continue
+        if filt == cand or filt in cand or cand in filt:
+            return True
+    return False
+
+
 def _contpaq_clip(value, max_len):
     text = str(value or '').strip()
     if max_len and len(text) > max_len:
@@ -3326,21 +3742,25 @@ def _contpaq_week_label_from_date(value):
 
 
 def _contpaq_week_match_key(semana_value=None, fecha_value=None):
-    semana_norm = _contpaq_norm_text(semana_value)
-    if ' AL ' in semana_norm and ' DE ' in semana_norm:
-        return semana_norm
+    semana_fp = _contpaq_period_fingerprint(semana_value)
+    if semana_fp and ' AL ' in semana_fp and ' DE ' in semana_fp:
+        return semana_fp
 
     label_from_date = _contpaq_week_label_from_date(fecha_value)
     if label_from_date:
-        return _contpaq_norm_text(label_from_date)
+        return _contpaq_period_fingerprint(label_from_date) or _contpaq_norm_text(label_from_date)
 
-    return semana_norm
+    return semana_fp or _contpaq_norm_text(semana_value)
 
 
 def _contpaq_title_week_key(title_value=None, semana_value=None, fecha_value=None):
-    title_norm = _contpaq_norm_text(title_value)
-    if ' AL ' in title_norm and ' DE ' in title_norm:
-        return title_norm
+    title_fp = _contpaq_period_fingerprint(title_value)
+    if title_fp and ' AL ' in title_fp and ' DE ' in title_fp:
+        # Preferir etiqueta completa amigable si el titulo trae "PEDIDO..."
+        title_norm = _contpaq_norm_text(title_value)
+        if title_norm.startswith('PEDIDO'):
+            return f"PEDIDO DEL {title_fp}"
+        return title_fp
     return _contpaq_week_match_key(semana_value, fecha_value)
 
 
@@ -5845,6 +6265,59 @@ def verificar_tecnico_publico(token):
 
     _write_verification_log(None, token_txt, 'token_invalido')
     return render_template('verificar_tecnico_publico.html', **template_data), 404
+
+
+@app.route('/seguimiento', methods=['GET', 'POST'])
+def seguimiento_empaque_cliente():
+    """Portal público: el cliente entra con su clave y ve pedidos / cajas / pesos."""
+    _ensure_empaque_tables()
+    error = None
+    view = None
+    clave = ''
+    ip = (request.headers.get('X-Forwarded-For') or request.remote_addr or '').split(',')[0].strip()
+
+    if request.method == 'POST':
+        if _empaque_seguimiento_rate_limited(ip):
+            error = 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.'
+            _write_empaque_seguimiento_log('', 'rate_limited')
+        else:
+            clave = _normalize_empaque_clave(request.form.get('clave') or request.form.get('customer_code'))
+            if not clave:
+                error = 'Ingresa tu clave de cliente.'
+            else:
+                view = _build_empaque_cliente_view(clave)
+                if not view:
+                    _empaque_seguimiento_register_fail(ip)
+                    _write_empaque_seguimiento_log(clave, 'invalido')
+                    error = 'Clave incorrecta o sin pedidos sincronizados.'
+                    clave = ''
+                else:
+                    _empaque_seguimiento_clear_fail(ip)
+                    _write_empaque_seguimiento_log(clave, 'ok')
+                    session['empaque_seguimiento_clave'] = clave
+
+    if view is None and request.method == 'GET':
+        saved = _normalize_empaque_clave(session.get('empaque_seguimiento_clave'))
+        if saved:
+            view = _build_empaque_cliente_view(saved)
+            if view:
+                clave = saved
+            else:
+                session.pop('empaque_seguimiento_clave', None)
+
+    return render_template(
+        'seguimiento_empaque.html',
+        error=error,
+        view=view,
+        clave=clave,
+        logo_url='/static/logo.png',
+    )
+
+
+@app.route('/seguimiento/salir', methods=['POST', 'GET'])
+def seguimiento_empaque_salir():
+    session.pop('empaque_seguimiento_clave', None)
+    return redirect(url_for('seguimiento_empaque_cliente'))
 
 
 @app.route('/verificar/<token>/reportar-problema', methods=['POST'])
@@ -12512,12 +12985,14 @@ def _build_conciliacion_odoo_response(
     compare_pedidos = ordered_q.all()
 
     if titulo:
-        titulo_norm = _contpaq_norm_text(titulo)
         compare_pedidos = [
             p for p in compare_pedidos
-            if titulo_norm in _contpaq_norm_text(p.titulo)
-            or titulo_norm in _contpaq_norm_text(_conciliacion_odoo_periodo_semana(p))
-            or titulo_norm in _contpaq_title_week_key(p.titulo, None, p.date_order)
+            if _contpaq_period_matches(
+                titulo,
+                p.titulo,
+                _conciliacion_odoo_periodo_semana(p),
+                _contpaq_title_week_key(p.titulo, None, p.date_order),
+            )
         ]
 
     display_pedidos = list(compare_pedidos)
@@ -13219,12 +13694,14 @@ def _build_conciliacion_contpaq_response(
         compare_pedidos = ordered_q.all()
 
         if titulo:
-            titulo_norm = _contpaq_norm_text(titulo)
             compare_pedidos = [
                 p for p in compare_pedidos
-                if titulo_norm in _contpaq_norm_text(p.titulo)
-                or titulo_norm in _contpaq_norm_text(p.periodo_semana)
-                or titulo_norm in _contpaq_title_week_key(p.titulo, p.periodo_semana, p.fecha_documento)
+                if _contpaq_period_matches(
+                    titulo,
+                    p.titulo,
+                    p.periodo_semana,
+                    _contpaq_title_week_key(p.titulo, p.periodo_semana, p.fecha_documento),
+                )
             ]
 
         # Serie D solo para comparar y como fuente de faltantes; NO se muestra como fila propia.
@@ -13808,6 +14285,29 @@ def api_contpaq_sync_push():
             except Exception:
                 db.session.rollback()
         return jsonify({'ok': False, 'error': str(exc), 'run_id': run_id}), 500
+
+
+@app.route('/api/empaque/sync/push', methods=['POST'])
+def api_empaque_sync_push():
+    """Recibe snapshot de Empaque360 (planta MySQL) y actualiza espejo en nube."""
+    ok, err = _require_sync_key()
+    if not ok:
+        return err
+
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify({'error': 'Payload invalido'}), 400
+
+    try:
+        if not _ensure_empaque_tables():
+            return jsonify({'ok': False, 'error': 'No se pudieron crear tablas Empaque'}), 500
+        stats = _upsert_empaque_data(payload)
+        db.session.commit()
+        return jsonify({'ok': True, 'stats': stats}), 200
+    except Exception as exc:
+        db.session.rollback()
+        logger.error('[EMPAQUE] Error push agente: %s', exc, exc_info=True)
+        return jsonify({'ok': False, 'error': str(exc)}), 500
 
 
 @app.route('/api/contpaq/supplier_ot/sync/push', methods=['POST'])

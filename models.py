@@ -2453,3 +2453,185 @@ class LogVerificacion(db.Model):
             'token_consultado': self.token_consultado,
             'resultado': self.resultado,
         }
+
+
+class EmpaquePedido(db.Model):
+    """Pedido de Empaque360 sincronizado desde MySQL planta → nube."""
+    __tablename__ = 'empaque_pedidos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    external_order_number = db.Column(db.String(80), nullable=False, unique=True, index=True)
+    order_date_utc = db.Column(db.DateTime, nullable=True, index=True)
+    customer_code = db.Column(db.String(80), nullable=False, index=True)
+    customer_name = db.Column(db.String(255), nullable=True, index=True)
+    source_sales_order_id = db.Column(db.BigInteger, nullable=True, index=True)
+    last_activity_utc = db.Column(db.DateTime, nullable=True, index=True)
+    synced_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    items = db.relationship('EmpaquePedidoItem', backref='pedido', lazy=True, cascade='all, delete-orphan')
+    cajas = db.relationship('EmpaqueCaja', backref='pedido', lazy=True, cascade='all, delete-orphan')
+    movimientos = db.relationship('EmpaqueMovimiento', backref='pedido', lazy=True, cascade='all, delete-orphan')
+    progreso = db.relationship('EmpaqueLineaProgreso', backref='pedido', lazy=True, cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'external_order_number': self.external_order_number,
+            'order_date_utc': self.order_date_utc.isoformat() if self.order_date_utc else None,
+            'customer_code': self.customer_code,
+            'customer_name': self.customer_name,
+            'source_sales_order_id': self.source_sales_order_id,
+            'last_activity_utc': self.last_activity_utc.isoformat() if self.last_activity_utc else None,
+            'synced_at': self.synced_at.isoformat() if self.synced_at else None,
+        }
+
+
+class EmpaquePedidoItem(db.Model):
+    __tablename__ = 'empaque_pedido_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    pedido_id = db.Column(db.Integer, db.ForeignKey('empaque_pedidos.id'), nullable=False, index=True)
+    external_order_number = db.Column(db.String(80), nullable=False, index=True)
+    source_line_number = db.Column(db.Integer, nullable=False, default=0)
+    product_code = db.Column(db.String(80), nullable=False, index=True)
+    product_name = db.Column(db.String(255), nullable=True)
+    quantity_ordered = db.Column(db.Float, nullable=False, default=0.0)
+    unit_weight_kg = db.Column(db.Float, nullable=False, default=0.0)
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            'external_order_number', 'source_line_number', 'product_code',
+            name='uq_empaque_pedido_item_line'
+        ),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'pedido_id': self.pedido_id,
+            'external_order_number': self.external_order_number,
+            'source_line_number': self.source_line_number,
+            'product_code': self.product_code,
+            'product_name': self.product_name,
+            'quantity_ordered': self.quantity_ordered,
+            'unit_weight_kg': self.unit_weight_kg,
+        }
+
+
+class EmpaqueCaja(db.Model):
+    __tablename__ = 'empaque_cajas'
+
+    id = db.Column(db.Integer, primary_key=True)
+    pedido_id = db.Column(db.Integer, db.ForeignKey('empaque_pedidos.id'), nullable=False, index=True)
+    external_order_number = db.Column(db.String(80), nullable=False, index=True)
+    box_code = db.Column(db.String(50), nullable=False, index=True)
+    source_packing_box_id = db.Column(db.BigInteger, nullable=True, index=True)
+    status = db.Column(db.Integer, nullable=False, default=1, index=True)  # 1 abierta, 2 cerrada
+    max_weight_kg = db.Column(db.Float, nullable=False, default=0.0)
+    current_real_weight_kg = db.Column(db.Float, nullable=False, default=0.0)
+    opened_at_utc = db.Column(db.DateTime, nullable=True)
+    closed_at_utc = db.Column(db.DateTime, nullable=True)
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            'external_order_number', 'box_code',
+            name='uq_empaque_caja_order_box'
+        ),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'pedido_id': self.pedido_id,
+            'external_order_number': self.external_order_number,
+            'box_code': self.box_code,
+            'source_packing_box_id': self.source_packing_box_id,
+            'status': self.status,
+            'status_label': 'cerrada' if int(self.status or 0) == 2 else 'abierta',
+            'max_weight_kg': round(float(self.max_weight_kg or 0.0), 4),
+            'current_real_weight_kg': round(float(self.current_real_weight_kg or 0.0), 4),
+            'opened_at_utc': self.opened_at_utc.isoformat() if self.opened_at_utc else None,
+            'closed_at_utc': self.closed_at_utc.isoformat() if self.closed_at_utc else None,
+        }
+
+
+class EmpaqueMovimiento(db.Model):
+    __tablename__ = 'empaque_movimientos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    pedido_id = db.Column(db.Integer, db.ForeignKey('empaque_pedidos.id'), nullable=False, index=True)
+    external_order_number = db.Column(db.String(80), nullable=False, index=True)
+    source_box_movement_id = db.Column(db.BigInteger, nullable=False, unique=True, index=True)
+    box_code = db.Column(db.String(50), nullable=False, index=True)
+    product_code = db.Column(db.String(80), nullable=False, index=True)
+    product_name = db.Column(db.String(255), nullable=True)
+    quantity_captured = db.Column(db.Float, nullable=False, default=0.0)
+    unit_weight_kg = db.Column(db.Float, nullable=False, default=0.0)
+    real_weight_kg = db.Column(db.Float, nullable=False, default=0.0)
+    observed_weight_per_piece_kg = db.Column(db.Float, nullable=False, default=0.0)
+    operator_name = db.Column(db.String(120), nullable=True)
+    captured_at_utc = db.Column(db.DateTime, nullable=True, index=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'pedido_id': self.pedido_id,
+            'external_order_number': self.external_order_number,
+            'source_box_movement_id': self.source_box_movement_id,
+            'box_code': self.box_code,
+            'product_code': self.product_code,
+            'product_name': self.product_name,
+            'quantity_captured': self.quantity_captured,
+            'unit_weight_kg': round(float(self.unit_weight_kg or 0.0), 4),
+            'real_weight_kg': round(float(self.real_weight_kg or 0.0), 4),
+            'observed_weight_per_piece_kg': round(float(self.observed_weight_per_piece_kg or 0.0), 6),
+            'operator_name': self.operator_name,
+            'captured_at_utc': self.captured_at_utc.isoformat() if self.captured_at_utc else None,
+        }
+
+
+class EmpaqueLineaProgreso(db.Model):
+    __tablename__ = 'empaque_lineas_progreso'
+
+    id = db.Column(db.Integer, primary_key=True)
+    pedido_id = db.Column(db.Integer, db.ForeignKey('empaque_pedidos.id'), nullable=False, index=True)
+    external_order_number = db.Column(db.String(80), nullable=False, index=True)
+    product_code = db.Column(db.String(80), nullable=False, index=True)
+    source_line_number = db.Column(db.Integer, nullable=False, default=0)
+    quantity_ordered = db.Column(db.Float, nullable=False, default=0.0)
+    quantity_packed = db.Column(db.Float, nullable=False, default=0.0)
+    updated_at_utc = db.Column(db.DateTime, nullable=True)
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            'external_order_number', 'product_code', 'source_line_number',
+            name='uq_empaque_progreso_line'
+        ),
+    )
+
+    def to_dict(self):
+        ordered = float(self.quantity_ordered or 0.0)
+        packed = float(self.quantity_packed or 0.0)
+        return {
+            'id': self.id,
+            'pedido_id': self.pedido_id,
+            'external_order_number': self.external_order_number,
+            'product_code': self.product_code,
+            'source_line_number': self.source_line_number,
+            'quantity_ordered': ordered,
+            'quantity_packed': packed,
+            'quantity_pending': max(0.0, ordered - packed),
+            'updated_at_utc': self.updated_at_utc.isoformat() if self.updated_at_utc else None,
+        }
+
+
+class EmpaqueSeguimientoLog(db.Model):
+    """Auditoría de accesos al portal público de seguimiento Empaque."""
+    __tablename__ = 'empaque_seguimiento_logs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    customer_code = db.Column(db.String(80), nullable=True, index=True)
+    fecha_hora = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    ip_cliente = db.Column(db.String(64), nullable=True, index=True)
+    user_agent = db.Column(db.Text, nullable=True)
+    resultado = db.Column(db.String(40), nullable=False, default='invalido', index=True)
