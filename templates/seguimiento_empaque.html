@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Seguimiento de pedidos — Industrias Verduzco</title>
+    <title>Portal cliente — Industrias Verduzco</title>
     <style>
         :root {
             --green: #0f5f34;
@@ -27,7 +27,7 @@
             color: var(--ink);
             padding: 24px 14px 48px;
         }
-        .wrap { width: min(960px, 100%); margin: 0 auto; }
+        .wrap { width: min(1180px, 100%); margin: 0 auto; }
         .hero {
             background: linear-gradient(135deg, #0d5230, #147a45 60%, #1a8f52);
             color: #fff;
@@ -37,7 +37,6 @@
             align-items: center;
             justify-content: space-between;
             gap: 16px;
-            box-shadow: 0 10px 28px rgba(15, 95, 52, .22);
         }
         .hero-brand { display: flex; align-items: center; gap: 14px; }
         .hero img { height: 48px; width: auto; filter: brightness(0) invert(1); }
@@ -101,34 +100,56 @@
         }
         .client-name { font-size: 1.25rem; font-weight: 800; }
         .client-meta { color: var(--muted); font-size: .88rem; margin-top: 4px; }
-        .pedido {
+        .menu {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 4px 0 16px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
+        }
+        .menu a {
+            text-decoration: none;
+            color: var(--green);
+            font-weight: 800;
+            font-size: .88rem;
+            padding: 8px 12px;
+            border-radius: 8px;
+        }
+        .menu a.active { background: var(--green); color: #fff; }
+        .layout {
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            gap: 16px;
+            align-items: start;
+        }
+        .tree {
             border: 1px solid var(--border);
             border-radius: 12px;
-            margin-top: 14px;
-            overflow: hidden;
-            background: #fff;
+            background: #f7faf8;
+            padding: 10px 8px 12px;
         }
-        .pedido-h {
-            background: var(--green-soft);
-            padding: 12px 14px;
-            display: flex;
-            justify-content: space-between;
-            gap: 10px;
-            flex-wrap: wrap;
-            align-items: center;
+        .tree-title {
+            font-size: .72rem;
+            font-weight: 800;
+            letter-spacing: .07em;
+            text-transform: uppercase;
+            color: var(--muted);
+            padding: 4px 8px 8px;
         }
-        .pedido-h strong { font-size: 1.02rem; }
-        .chips { display: flex; gap: 8px; flex-wrap: wrap; }
-        .chip {
-            background: #fff;
-            border: 1px solid var(--border);
-            border-radius: 999px;
-            padding: 4px 10px;
-            font-size: .78rem;
-            font-weight: 700;
-            color: var(--green);
+        .tree a {
+            display: block;
+            text-decoration: none;
+            color: var(--ink);
+            padding: 7px 8px;
+            border-radius: 8px;
+            font-size: .9rem;
         }
-        .pedido-b { padding: 12px 14px 16px; }
+        .tree a:hover { background: #fff; }
+        .tree a.active { background: var(--green); color: #fff; font-weight: 700; }
+        .tree .pedido-link { font-weight: 700; }
+        .tree .caja-link { padding-left: 22px; font-size: .84rem; color: var(--muted); }
+        .tree a.caja-link.active { color: #fff; }
         .section-label {
             font-size: .72rem;
             font-weight: 800;
@@ -155,7 +176,7 @@
             border-radius: 10px;
             overflow: hidden;
         }
-        .caja-h {
+        .caja a.caja-h {
             display: flex;
             justify-content: space-between;
             gap: 8px;
@@ -163,18 +184,42 @@
             padding: 10px 12px;
             background: #f7faf8;
             font-weight: 700;
+            text-decoration: none;
+            color: inherit;
         }
         .caja-h.suelto { background: var(--warn-bg); color: var(--warn); }
         .caja-b { padding: 0 10px 8px; }
-        .empty {
-            color: var(--muted);
-            font-size: .92rem;
-            padding: 8px 0;
-        }
+        .empty { color: var(--muted); font-size: .92rem; padding: 8px 0; }
         .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
-        @media (max-width: 640px) {
+        .pedido-card {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+            text-decoration: none;
+            color: inherit;
+            background: var(--green-soft);
+        }
+        .pedido-card:hover { outline: 2px solid #9fd0b3; }
+        .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+        .chip {
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: .78rem;
+            font-weight: 700;
+            color: var(--green);
+        }
+        .crumb { color: var(--muted); font-size: .84rem; margin-bottom: 10px; }
+        .crumb a { color: var(--green); font-weight: 700; text-decoration: none; }
+        @media (max-width: 800px) {
+            .layout { grid-template-columns: 1fr; }
             .hero { flex-direction: column; align-items: flex-start; }
-            th:nth-child(3), td:nth-child(3) { display: none; }
         }
     </style>
 </head>
@@ -186,8 +231,8 @@
             <img src="{{ logo_url }}" alt="Industrias Verduzco">
             {% endif %}
             <div>
-                <h1>Seguimiento de pedidos</h1>
-                <p>Consulta qué se está empacando y el peso de cada caja</p>
+                <h1>Portal de clientes</h1>
+                <p>Pedidos, cajas, pesos y tu lista de precios</p>
             </div>
         </div>
     </div>
@@ -195,12 +240,12 @@
     {% if not view %}
     <div class="panel">
         <div class="login-title">Acceso con tu clave</div>
-        <div class="login-sub">Ingresa la clave única que te proporcionó Industrias Verduzco (ejemplo EV-AB12CD34). La URL es general; solo verás tus pedidos.</div>
+        <div class="login-sub">Ingresa la clave única que te proporcionó Industrias Verduzco (ejemplo EV-AB12CD34). La URL es general; solo verás tu información.</div>
         <form method="post" action="{{ url_for('seguimiento_empaque_cliente') }}">
             <label for="clave">Clave de acceso</label>
             <div class="row">
                 <input id="clave" name="clave" type="text" autocomplete="off" placeholder="EV-XXXXXXXX" value="" required>
-                <button type="submit">Ver mis pedidos</button>
+                <button type="submit">Entrar</button>
             </div>
         </form>
         {% if error %}
@@ -219,28 +264,89 @@
             </form>
         </div>
 
-        {% if not view.pedidos %}
-        <div class="empty">Aún no hay pedidos sincronizados para esta clave.</div>
-        {% endif %}
+        <nav class="menu">
+            <a href="{{ url_for('seguimiento_empaque_cliente', sec='pedidos') }}" class="{{ 'active' if section == 'pedidos' else '' }}">Pedidos</a>
+            <a href="{{ url_for('seguimiento_empaque_cliente', sec='precios') }}" class="{{ 'active' if section == 'precios' else '' }}">Precios</a>
+            <a href="{{ url_for('seguimiento_empaque_cliente', sec='cuenta') }}" class="{{ 'active' if section == 'cuenta' else '' }}">Estado de cuenta</a>
+        </nav>
 
-        {% for pedido in view.pedidos %}
-        <article class="pedido">
-            <div class="pedido-h">
-                <div>
-                    <strong>Pedido {{ pedido.external_order_number }}</strong>
-                    {% if pedido.order_date_utc %}
-                    <div class="client-meta">Fecha {{ pedido.order_date_utc.strftime('%d/%m/%Y') }}</div>
+        {% if section == 'pedidos' %}
+        <div class="layout">
+            <aside class="tree">
+                <div class="tree-title">Todos los pedidos</div>
+                <a class="{{ 'active' if not selected_pedido else '' }}" href="{{ url_for('seguimiento_empaque_cliente', sec='pedidos') }}">Ver todos</a>
+                {% for pedido in view.pedidos %}
+                <a class="pedido-link {{ 'active' if selected_pedido == pedido.external_order_number and not selected_caja else '' }}"
+                   href="{{ url_for('seguimiento_empaque_cliente', sec='pedidos', pedido=pedido.external_order_number) }}">{{ pedido.external_order_number }}</a>
+                {% if selected_pedido == pedido.external_order_number %}
+                    {% for caja in pedido.cajas %}
+                    <a class="caja-link {{ 'active' if selected_caja == caja.box_code else '' }}"
+                       href="{{ url_for('seguimiento_empaque_cliente', sec='pedidos', pedido=pedido.external_order_number, caja=caja.box_code) }}">{{ caja.box_code }}</a>
+                    {% else %}
+                    <div class="empty" style="padding-left:22px;">Sin cajas aún</div>
+                    {% endfor %}
+                {% endif %}
+                {% else %}
+                <div class="empty">Aún no hay pedidos sincronizados.</div>
+                {% endfor %}
+            </aside>
+
+            <div>
+                {% if selected_caja_view and selected_pedido_view %}
+                <div class="crumb">
+                    <a href="{{ url_for('seguimiento_empaque_cliente', sec='pedidos') }}">Pedidos</a>
+                    · <a href="{{ url_for('seguimiento_empaque_cliente', sec='pedidos', pedido=selected_pedido_view.external_order_number) }}">{{ selected_pedido_view.external_order_number }}</a>
+                    · {{ selected_caja_view.box_code }}
+                </div>
+                <div class="caja">
+                    <div class="caja-h {% if selected_caja_view.es_suelto %}suelto{% endif %}">
+                        <span>{{ 'SUELTO' if selected_caja_view.es_suelto else selected_caja_view.box_code }} · {{ selected_caja_view.status_label }}</span>
+                        <span class="num">{{ '%.0f'|format(selected_caja_view.piezas) if selected_caja_view.piezas == (selected_caja_view.piezas|round(0)) else '%.2f'|format(selected_caja_view.piezas) }} pzas · {{ '%.3f'|format(selected_caja_view.peso_real_kg) }} kg</span>
+                    </div>
+                    <div class="caja-b">
+                        <div class="section-label">Productos en esta caja</div>
+                        {% if selected_caja_view.lineas %}
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Cantidad</th>
+                                    <th>Peso real</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for l in selected_caja_view.lineas %}
+                                <tr>
+                                    <td>
+                                        <div>{{ l.product_name }}</div>
+                                        <div class="client-meta">{{ l.product_code }}</div>
+                                    </td>
+                                    <td class="num">{{ '%.0f'|format(l.quantity) if l.quantity == (l.quantity|round(0)) else '%.2f'|format(l.quantity) }}</td>
+                                    <td class="num">{{ '%.3f'|format(l.peso_real_kg) }} kg</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% else %}
+                        <div class="empty">Sin productos en esta caja todavía.</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% elif selected_pedido_view %}
+                <div class="crumb">
+                    <a href="{{ url_for('seguimiento_empaque_cliente', sec='pedidos') }}">Pedidos</a>
+                    · {{ selected_pedido_view.external_order_number }}
+                </div>
+                <div class="chips" style="margin-bottom:12px;">
+                    <span class="chip">{{ selected_pedido_view.total_cajas }} caja{{ 's' if selected_pedido_view.total_cajas != 1 else '' }}</span>
+                    <span class="chip">{{ '%.3f'|format(selected_pedido_view.total_peso_kg) }} kg</span>
+                    {% if selected_pedido_view.order_date_utc %}
+                    <span class="chip">{{ selected_pedido_view.order_date_utc.strftime('%d/%m/%Y') }}</span>
                     {% endif %}
                 </div>
-                <div class="chips">
-                    <span class="chip">{{ pedido.total_cajas }} caja{{ 's' if pedido.total_cajas != 1 else '' }}</span>
-                    <span class="chip">{{ '%.3f'|format(pedido.total_peso_kg) }} kg</span>
-                    {% if pedido.tiene_suelto %}<span class="chip">Incluye suelto</span>{% endif %}
-                </div>
-            </div>
-            <div class="pedido-b">
                 <div class="section-label">Partidas del pedido</div>
-                {% if pedido.partidas %}
+                {% if selected_pedido_view.partidas %}
                 <table>
                     <thead>
                         <tr>
@@ -251,7 +357,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for p in pedido.partidas %}
+                        {% for p in selected_pedido_view.partidas %}
                         <tr>
                             <td>
                                 <div>{{ p.product_name }}</div>
@@ -268,49 +374,82 @@
                 <div class="empty">Sin partidas.</div>
                 {% endif %}
 
-                <div class="section-label">Cajas / contenido / peso</div>
-                {% if pedido.cajas %}
-                    {% for caja in pedido.cajas %}
+                <div class="section-label">Desglose por caja — clic para ver qué lleva</div>
+                {% if selected_pedido_view.cajas %}
+                    {% for caja in selected_pedido_view.cajas %}
                     <div class="caja">
-                        <div class="caja-h {% if caja.es_suelto %}suelto{% endif %}">
+                        <a class="caja-h {% if caja.es_suelto %}suelto{% endif %}"
+                           href="{{ url_for('seguimiento_empaque_cliente', sec='pedidos', pedido=selected_pedido_view.external_order_number, caja=caja.box_code) }}">
                             <span>{{ 'SUELTO' if caja.es_suelto else caja.box_code }} · {{ caja.status_label }}</span>
                             <span class="num">{{ '%.0f'|format(caja.piezas) if caja.piezas == (caja.piezas|round(0)) else '%.2f'|format(caja.piezas) }} pzas · {{ '%.3f'|format(caja.peso_real_kg) }} kg</span>
-                        </div>
-                        <div class="caja-b">
-                            {% if caja.lineas %}
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Producto</th>
-                                        <th>Cantidad</th>
-                                        <th>Peso real</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for l in caja.lineas %}
-                                    <tr>
-                                        <td>
-                                            <div>{{ l.product_name }}</div>
-                                            <div class="client-meta">{{ l.product_code }}</div>
-                                        </td>
-                                        <td class="num">{{ '%.0f'|format(l.quantity) if l.quantity == (l.quantity|round(0)) else '%.2f'|format(l.quantity) }}</td>
-                                        <td class="num">{{ '%.3f'|format(l.peso_real_kg) }} kg</td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                            {% else %}
-                            <div class="empty">Sin productos en esta caja todavía.</div>
-                            {% endif %}
-                        </div>
+                        </a>
                     </div>
                     {% endfor %}
                 {% else %}
                 <div class="empty">Aún no se han registrado cajas ni pesos para este pedido.</div>
                 {% endif %}
+
+                {% else %}
+                <div class="section-label">Todos los pedidos</div>
+                {% if view.pedidos %}
+                    {% for pedido in view.pedidos %}
+                    <a class="pedido-card" href="{{ url_for('seguimiento_empaque_cliente', sec='pedidos', pedido=pedido.external_order_number) }}">
+                        <div>
+                            <strong>{{ pedido.external_order_number }}</strong>
+                            {% if pedido.order_date_utc %}
+                            <div class="client-meta">{{ pedido.order_date_utc.strftime('%d/%m/%Y') }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="chips">
+                            <span class="chip">{{ pedido.total_cajas }} caja{{ 's' if pedido.total_cajas != 1 else '' }}</span>
+                            <span class="chip">{{ '%.3f'|format(pedido.total_peso_kg) }} kg</span>
+                        </div>
+                    </a>
+                    {% endfor %}
+                {% else %}
+                <div class="empty">Aún no hay pedidos sincronizados para esta clave.</div>
+                {% endif %}
+                {% endif %}
             </div>
-        </article>
-        {% endfor %}
+        </div>
+
+        {% elif section == 'precios' %}
+            {% if precios and precios.ok %}
+            <div class="client-meta" style="margin-bottom:10px;">
+                Lista: <b>{{ precios.lista_nombre }}</b>
+                · Solo productos para venta con las 6 reglas de precio
+                · {{ precios.productos|length }} producto{{ 's' if precios.productos|length != 1 else '' }}
+            </div>
+            {% if precios.productos %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Clave</th>
+                        <th>Producto</th>
+                        <th>Tu precio</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in precios.productos %}
+                    <tr>
+                        <td class="num">{{ p.code }}</td>
+                        <td>{{ p.name }}</td>
+                        <td class="num">${{ '%.2f'|format(p.precio) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">No hay productos para venta que tengan las 6 reglas de precio en tu lista.</div>
+            {% endif %}
+            {% else %}
+            <div class="error">{{ (precios and precios.error) or 'No se pudo cargar la lista de precios.' }}</div>
+            {% endif %}
+
+        {% elif section == 'cuenta' %}
+            <div class="section-label">Estado de cuenta</div>
+            <div class="empty">Pendiente. Aún no se define qué fuente usaremos aquí.</div>
+        {% endif %}
     </div>
     {% endif %}
 </div>

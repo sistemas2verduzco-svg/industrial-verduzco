@@ -1840,6 +1840,16 @@ def _ensure_almacen_cajas_surtido_tables():
 _EMPAQUE_TABLES_READY = False
 _EMPAQUE_SEGUIMIENTO_FAILS = {}  # ip -> (count, first_ts)
 _EMPAQUE_ACCESS_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+_EMPAQUE_PRECIOS_CACHE = {}  # customer_code -> (ts, payload)
+_EMPAQUE_PRECIOS_TTL_SEC = 600
+_ODOO_LISTAS_PRECIO = (
+    ('Predeterminado', ('Predeterminado',)),
+    ('PRECIO MAYOREO', ('PRECIO MAYOREO',)),
+    ('PRECIO MECÁNICOS', ('PRECIO MECÁNICOS', 'PRECIO MECANICOS')),
+    ('PRECIO DISTRIBUIDOR A', ('PRECIO DISTRIBUIDOR A',)),
+    ('PRECIO DISTRIBUIDOR B', ('PRECIO DISTRIBUIDOR B',)),
+    ('PRECIO SUCURSAL', ('PRECIO SUCURSAL',)),
+)
 
 
 def _ensure_empaque_tables():
@@ -2294,9 +2304,209 @@ def _build_empaque_cliente_view(customer_code, *, access_code=None, customer_nam
     return {
         'access_code': access_code,
         'customer_name': customer_name or (pedidos[0].customer_name if pedidos else None) or code,
+        'customer_code': code,
         'pedidos': view_pedidos,
         'total_pedidos': len(view_pedidos),
     }
+
+
+def _odoo_search_read_all(client, model, domain, fields, *, batch=400):
+    rows = []
+    offset = 0
+    while True:
+        chunk = client.search_read(model, domain, fields, limit=batch, offset=offset)
+        if not chunk:
+            break
+        rows.extend(chunk)
+        if len(chunk) < batch:
+            break
+        offset += batch
+        if offset > 20000:
+            break
+    return rows
+
+
+def _m2o_id_empaque(value):
+    if isinstance(value, (list, tuple)) and value:
+        try:
+            return int(value[0])
+        except (TypeError, ValueError):
+            return None
+    if isinstance(value, int):
+        return value
+    return None
+
+
+def _m2o_name_empaque(value):
+    if isinstance(value, (list, tuple)) and len(value) >= 2:
+        return str(value[1] or '').strip()
+    return ''
+
+
+def _fetch_odoo_precios_cliente(customer_code, customer_name=None):
+    """Lista del cliente: solo productos sale_ok con las 6 reglas de precio."""
+    code = _normalize_empaque_clave(customer_code) or ''
+    cache_key = code.lower()
+    now = time()
+    cached = _EMPAQUE_PRECIOS_CACHE.get(cache_key)
+    if cached and (now - cached[0]) < _EMPAQUE_PRECIOS_TTL_SEC:
+        return cached[1]
+
+    empty = {
+        'ok': False,
+        'error': '',
+        'lista_nombre': '',
+        'productos': [],
+    }
+    if not OdooClient.is_configured():
+        empty['error'] = 'La conexión a Odoo aún no está configurada en el servidor.'
+        return empty
+
+    try:
+        client = OdooClient.from_env()
+        partner = None
+        if code.isdigit():
+            rows = client.search_read(
+                'res.partner',
+                [['id', '=', int(code)]],
+                ['id', 'name', 'property_product_pricelist'],
+                limit=1,
+            )
+            partner = rows[0] if rows else None
+        if not partner and customer_name:
+            rows = client.search_read(
+                'res.partner',
+                [['name', '=', customer_name.strip()]],
+                ['id', 'name', 'property_product_pricelist'],
+                limit=1,
+            )
+            partner = rows[0] if rows else None
+        if not partner:
+            empty['error'] = 'No se encontró el cliente en Odoo para cargar su lista de precios.'
+            _EMPAQUE_PRECIOS_CACHE[cache_key] = (now, empty)
+            return empty
+
+        lista_id = _m2o_id_empaque(partner.get('property_product_pricelist'))
+        lista_nombre = _m2o_name_empaque(partner.get('property_product_pricelist')) or 'Lista del cliente'
+        if not lista_id:
+            empty['error'] = 'Este cliente no tiene lista de precios asignada en Odoo.'
+            _EMPAQUE_PRECIOS_CACHE[cache_key] = (now, empty)
+            return empty
+
+        pl_ids = []
+        pl_id_by_canon = {}
+        for canon, names in _ODOO_LISTAS_PRECIO:
+            found = None
+            for name in names:
+                rows = client.search_read(
+                    'product.pricelist',
+                    [['name', '=', name]],
+                    ['id', 'name'],
+                    limit=1,
+                )
+                if rows:
+                    found = rows[0]
+                    break
+            if not found:
+                empty['error'] = f'No está la lista de precios “{canon}” en Odoo. Faltan las 6 reglas.'
+                _EMPAQUE_PRECIOS_CACHE[cache_key] = (now, empty)
+                return empty
+            pl_ids.append(int(found['id']))
+            pl_id_by_canon[canon] = int(found['id'])
+
+        items = _odoo_search_read_all(
+            client,
+            'product.pricelist.item',
+            [
+                ['pricelist_id', 'in', pl_ids],
+                ['applied_on', '=', '1_product'],
+                ['product_tmpl_id', '!=', False],
+            ],
+            ['product_tmpl_id', 'pricelist_id', 'fixed_price'],
+        )
+        by_tmpl = {}
+        for item in items:
+            tmpl_id = _m2o_id_empaque(item.get('product_tmpl_id'))
+            pl_id = _m2o_id_empaque(item.get('pricelist_id'))
+            if not tmpl_id or not pl_id:
+                continue
+            try:
+                price = float(item.get('fixed_price') or 0)
+            except (TypeError, ValueError):
+                price = 0.0
+            by_tmpl.setdefault(tmpl_id, {})[pl_id] = price
+
+        complete_ids = [
+            tmpl_id
+            for tmpl_id, prices in by_tmpl.items()
+            if all(pl_id in prices for pl_id in pl_ids)
+        ]
+        extra_prices = {}
+        if lista_id not in pl_ids and complete_ids:
+            extra_items = _odoo_search_read_all(
+                client,
+                'product.pricelist.item',
+                [
+                    ['pricelist_id', '=', lista_id],
+                    ['applied_on', '=', '1_product'],
+                    ['product_tmpl_id', 'in', complete_ids],
+                ],
+                ['product_tmpl_id', 'fixed_price'],
+            )
+            for item in extra_items:
+                tmpl_id = _m2o_id_empaque(item.get('product_tmpl_id'))
+                if not tmpl_id:
+                    continue
+                try:
+                    extra_prices[tmpl_id] = float(item.get('fixed_price') or 0)
+                except (TypeError, ValueError):
+                    continue
+
+        productos = []
+        for i in range(0, len(complete_ids), 200):
+            chunk_ids = complete_ids[i:i + 200]
+            templates = client.search_read(
+                'product.template',
+                [['id', 'in', chunk_ids], ['sale_ok', '=', True]],
+                ['id', 'default_code', 'name', 'sale_ok'],
+            )
+            for tmpl in templates:
+                tmpl_id = int(tmpl['id'])
+                prices = by_tmpl.get(tmpl_id) or {}
+                client_price = extra_prices.get(tmpl_id, prices.get(lista_id))
+                if client_price is None:
+                    continue
+                try:
+                    client_price = float(client_price)
+                except (TypeError, ValueError):
+                    continue
+                if client_price <= 0:
+                    continue
+                code_txt = str(tmpl.get('default_code') or '').strip()
+                name_txt = str(tmpl.get('name') or '').strip() or code_txt
+                productos.append({
+                    'code': code_txt,
+                    'name': name_txt,
+                    'precio': round(client_price, 2),
+                })
+
+        productos.sort(key=lambda r: ((r['code'] or r['name']).upper(), r['name'].upper()))
+        payload = {
+            'ok': True,
+            'error': '',
+            'lista_nombre': lista_nombre,
+            'productos': productos,
+        }
+        _EMPAQUE_PRECIOS_CACHE[cache_key] = (now, payload)
+        return payload
+    except OdooError as exc:
+        empty['error'] = f'No se pudo leer Odoo: {exc}'
+        logger.warning('[EMPAQUE] Precios Odoo: %s', exc)
+        return empty
+    except Exception as exc:
+        empty['error'] = 'No se pudo armar la lista de precios.'
+        logger.exception('[EMPAQUE] Precios Odoo inesperado: %s', exc)
+        return empty
 
 
 def _empaque_seguimiento_rate_limited(ip):
@@ -6592,6 +6802,30 @@ def seguimiento_empaque_cliente():
                     session.pop('empaque_seguimiento_access_code', None)
                     session.pop('empaque_seguimiento_clave', None)
 
+    section = (request.args.get('sec') or 'pedidos').strip().lower()
+    if section not in ('pedidos', 'precios', 'cuenta'):
+        section = 'pedidos'
+    selected_pedido = (request.args.get('pedido') or '').strip()
+    selected_caja = (request.args.get('caja') or '').strip()
+    selected_pedido_view = None
+    selected_caja_view = None
+    if view and selected_pedido:
+        for pedido in view.get('pedidos') or []:
+            if (pedido.get('external_order_number') or '') == selected_pedido:
+                selected_pedido_view = pedido
+                if selected_caja:
+                    for caja in pedido.get('cajas') or []:
+                        if (caja.get('box_code') or '') == selected_caja:
+                            selected_caja_view = caja
+                            break
+                break
+    precios = None
+    if view and section == 'precios':
+        precios = _fetch_odoo_precios_cliente(
+            view.get('customer_code'),
+            view.get('customer_name'),
+        )
+
     return render_template(
         'seguimiento_empaque.html',
         error=error,
@@ -6599,6 +6833,12 @@ def seguimiento_empaque_cliente():
         clave=clave,
         logo_url='/static/logo.png',
         portal_url='/seguimiento',
+        section=section,
+        selected_pedido=selected_pedido,
+        selected_caja=selected_caja,
+        selected_pedido_view=selected_pedido_view,
+        selected_caja_view=selected_caja_view,
+        precios=precios,
     )
 
 
