@@ -1842,6 +1842,7 @@ _EMPAQUE_SEGUIMIENTO_FAILS = {}  # ip -> (count, first_ts)
 _EMPAQUE_ACCESS_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 _EMPAQUE_PRECIOS_CACHE = {}  # customer_code -> (ts, payload)
 _EMPAQUE_PRECIOS_TTL_SEC = 600
+_EMPAQUE_PRECIO_MINIMO_REAL = 1.01  # ignora 0 y $1 de relleno; no es regla de venta
 _ODOO_LISTAS_PRECIO = (
     ('Predeterminado', ('Predeterminado',)),
     ('PRECIO MAYOREO', ('PRECIO MAYOREO',)),
@@ -2344,9 +2345,9 @@ def _m2o_name_empaque(value):
 
 
 def _fetch_odoo_precios_cliente(customer_code, customer_name=None):
-    """Lista del cliente: solo productos sale_ok con las 6 reglas de precio."""
+    """Precios del cliente: activos con las 6 reglas internas; al cliente solo se muestra su precio."""
     code = _normalize_empaque_clave(customer_code) or ''
-    cache_key = code.lower()
+    cache_key = f'{code.lower()}::v2'
     now = time()
     cached = _EMPAQUE_PRECIOS_CACHE.get(cache_key)
     if cached and (now - cached[0]) < _EMPAQUE_PRECIOS_TTL_SEC:
@@ -2359,7 +2360,7 @@ def _fetch_odoo_precios_cliente(customer_code, customer_name=None):
         'productos': [],
     }
     if not OdooClient.is_configured():
-        empty['error'] = 'La conexión a Odoo aún no está configurada en el servidor.'
+        empty['error'] = 'Los precios no están disponibles por el momento.'
         return empty
 
     try:
@@ -2382,14 +2383,14 @@ def _fetch_odoo_precios_cliente(customer_code, customer_name=None):
             )
             partner = rows[0] if rows else None
         if not partner:
-            empty['error'] = 'No se encontró el cliente en Odoo para cargar su lista de precios.'
+            empty['error'] = 'Los precios no están disponibles por el momento.'
             _EMPAQUE_PRECIOS_CACHE[cache_key] = (now, empty)
             return empty
 
         lista_id = _m2o_id_empaque(partner.get('property_product_pricelist'))
-        lista_nombre = _m2o_name_empaque(partner.get('property_product_pricelist')) or 'Lista del cliente'
+        lista_nombre = _m2o_name_empaque(partner.get('property_product_pricelist')) or ''
         if not lista_id:
-            empty['error'] = 'Este cliente no tiene lista de precios asignada en Odoo.'
+            empty['error'] = 'Los precios no están disponibles por el momento.'
             _EMPAQUE_PRECIOS_CACHE[cache_key] = (now, empty)
             return empty
 
@@ -2408,7 +2409,8 @@ def _fetch_odoo_precios_cliente(customer_code, customer_name=None):
                     found = rows[0]
                     break
             if not found:
-                empty['error'] = f'No está la lista de precios “{canon}” en Odoo. Faltan las 6 reglas.'
+                logger.warning('[EMPAQUE] Falta lista interna de precios: %s', canon)
+                empty['error'] = 'Los precios no están disponibles por el momento.'
                 _EMPAQUE_PRECIOS_CACHE[cache_key] = (now, empty)
                 return empty
             pl_ids.append(int(found['id']))
@@ -2439,7 +2441,10 @@ def _fetch_odoo_precios_cliente(customer_code, customer_name=None):
         complete_ids = [
             tmpl_id
             for tmpl_id, prices in by_tmpl.items()
-            if all(pl_id in prices for pl_id in pl_ids)
+            if all(
+                pl_id in prices and float(prices.get(pl_id) or 0) >= _EMPAQUE_PRECIO_MINIMO_REAL
+                for pl_id in pl_ids
+            )
         ]
         extra_prices = {}
         if lista_id not in pl_ids and complete_ids:
@@ -2467,8 +2472,8 @@ def _fetch_odoo_precios_cliente(customer_code, customer_name=None):
             chunk_ids = complete_ids[i:i + 200]
             templates = client.search_read(
                 'product.template',
-                [['id', 'in', chunk_ids], ['sale_ok', '=', True]],
-                ['id', 'default_code', 'name', 'sale_ok'],
+                [['id', 'in', chunk_ids], ['sale_ok', '=', True], ['active', '=', True]],
+                ['id', 'default_code', 'name', 'sale_ok', 'active'],
             )
             for tmpl in templates:
                 tmpl_id = int(tmpl['id'])
@@ -2480,7 +2485,7 @@ def _fetch_odoo_precios_cliente(customer_code, customer_name=None):
                     client_price = float(client_price)
                 except (TypeError, ValueError):
                     continue
-                if client_price <= 0:
+                if client_price < _EMPAQUE_PRECIO_MINIMO_REAL:
                     continue
                 code_txt = str(tmpl.get('default_code') or '').strip()
                 name_txt = str(tmpl.get('name') or '').strip() or code_txt
@@ -2500,11 +2505,11 @@ def _fetch_odoo_precios_cliente(customer_code, customer_name=None):
         _EMPAQUE_PRECIOS_CACHE[cache_key] = (now, payload)
         return payload
     except OdooError as exc:
-        empty['error'] = f'No se pudo leer Odoo: {exc}'
+        empty['error'] = 'Los precios no están disponibles por el momento.'
         logger.warning('[EMPAQUE] Precios Odoo: %s', exc)
         return empty
     except Exception as exc:
-        empty['error'] = 'No se pudo armar la lista de precios.'
+        empty['error'] = 'Los precios no están disponibles por el momento.'
         logger.exception('[EMPAQUE] Precios Odoo inesperado: %s', exc)
         return empty
 

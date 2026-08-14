@@ -415,18 +415,13 @@
 
         {% elif section == 'precios' %}
             {% if precios and precios.ok %}
-            <div class="client-meta" style="margin-bottom:10px;">
-                Lista: <b>{{ precios.lista_nombre }}</b>
-                · Solo productos para venta con las 6 reglas de precio
-                · {{ precios.productos|length }} producto{{ 's' if precios.productos|length != 1 else '' }}
-            </div>
             {% if precios.productos %}
             <table>
                 <thead>
                     <tr>
                         <th>Clave</th>
                         <th>Producto</th>
-                        <th>Tu precio</th>
+                        <th>Precio</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -440,10 +435,10 @@
                 </tbody>
             </table>
             {% else %}
-            <div class="empty">No hay productos para venta que tengan las 6 reglas de precio en tu lista.</div>
+            <div class="empty">No hay productos disponibles.</div>
             {% endif %}
             {% else %}
-            <div class="error">{{ (precios and precios.error) or 'No se pudo cargar la lista de precios.' }}</div>
+            <div class="empty">{{ (precios and precios.error) or 'Los precios no están disponibles por el momento.' }}</div>
             {% endif %}
 
         {% elif section == 'cuenta' %}
