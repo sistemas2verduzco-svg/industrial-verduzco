@@ -105,6 +105,12 @@
         <a href="/contpaq/maximos-minimos" class="sb-link" data-base="/contpaq/maximos-minimos"><span>📊</span> <span>Maximos y Minimos</span></a>
         {% endif %}
 
+        {% if has_permission('empaque', 'view') or current_user and current_user.es_admin %}
+        <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">EMPAQUE / CLIENTES</div>
+        <a href="/empaque/clientes" class="sb-link" data-base="/empaque/clientes"><span>🔐</span> <span>Claves clientes</span></a>
+        <a href="/seguimiento" class="sb-link" data-base="/seguimiento" target="_blank" rel="noopener"><span>🔗</span> <span>Portal seguimiento</span></a>
+        {% endif %}
+
         {% if has_permission('tickets', 'view') or current_user and current_user.es_admin %}
         <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">SOPORTE</div>
         <a href="/soporte" class="sb-link" data-base="/soporte"><span>🔧</span> <span>Tickets</span></a>

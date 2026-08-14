@@ -1,6 +1,20 @@
 -- Empaque360 → MES: espejo de pedidos / cajas / pesos para portal de clientes
 -- Ejecutar en PostgreSQL (catalogo_db) si create_all / ensure no corre solo.
 
+CREATE TABLE IF NOT EXISTS empaque_clientes (
+    id SERIAL PRIMARY KEY,
+    customer_code VARCHAR(80) NOT NULL UNIQUE,
+    customer_name VARCHAR(255) NULL,
+    access_code VARCHAR(32) NOT NULL UNIQUE,
+    activo BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    last_access_at TIMESTAMP NULL
+);
+CREATE INDEX IF NOT EXISTS ix_empaque_clientes_customer_code ON empaque_clientes (customer_code);
+CREATE INDEX IF NOT EXISTS ix_empaque_clientes_access_code ON empaque_clientes (access_code);
+CREATE INDEX IF NOT EXISTS ix_empaque_clientes_activo ON empaque_clientes (activo);
+
 CREATE TABLE IF NOT EXISTS empaque_pedidos (
     id SERIAL PRIMARY KEY,
     external_order_number VARCHAR(80) NOT NULL UNIQUE,
@@ -82,11 +96,15 @@ CREATE INDEX IF NOT EXISTS ix_empaque_lineas_progreso_order ON empaque_lineas_pr
 CREATE TABLE IF NOT EXISTS empaque_seguimiento_logs (
     id SERIAL PRIMARY KEY,
     customer_code VARCHAR(80) NULL,
+    access_code VARCHAR(32) NULL,
     fecha_hora TIMESTAMP NOT NULL DEFAULT NOW(),
     ip_cliente VARCHAR(64) NULL,
     user_agent TEXT NULL,
     resultado VARCHAR(40) NOT NULL DEFAULT 'invalido'
 );
 CREATE INDEX IF NOT EXISTS ix_empaque_seguimiento_logs_customer ON empaque_seguimiento_logs (customer_code);
+CREATE INDEX IF NOT EXISTS ix_empaque_seguimiento_logs_access ON empaque_seguimiento_logs (access_code);
 CREATE INDEX IF NOT EXISTS ix_empaque_seguimiento_logs_fecha ON empaque_seguimiento_logs (fecha_hora);
 CREATE INDEX IF NOT EXISTS ix_empaque_seguimiento_logs_resultado ON empaque_seguimiento_logs (resultado);
+
+ALTER TABLE empaque_seguimiento_logs ADD COLUMN IF NOT EXISTS access_code VARCHAR(32);

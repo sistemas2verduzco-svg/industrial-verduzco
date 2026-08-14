@@ -2455,6 +2455,32 @@ class LogVerificacion(db.Model):
         }
 
 
+class EmpaqueCliente(db.Model):
+    """Cliente Empaque con clave única de acceso al portal público."""
+    __tablename__ = 'empaque_clientes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    customer_code = db.Column(db.String(80), nullable=False, unique=True, index=True)
+    customer_name = db.Column(db.String(255), nullable=True, index=True)
+    access_code = db.Column(db.String(32), nullable=False, unique=True, index=True)
+    activo = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_access_at = db.Column(db.DateTime, nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'customer_code': self.customer_code,
+            'customer_name': self.customer_name,
+            'access_code': self.access_code,
+            'activo': bool(self.activo),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'last_access_at': self.last_access_at.isoformat() if self.last_access_at else None,
+        }
+
+
 class EmpaquePedido(db.Model):
     """Pedido de Empaque360 sincronizado desde MySQL planta → nube."""
     __tablename__ = 'empaque_pedidos'
@@ -2631,6 +2657,7 @@ class EmpaqueSeguimientoLog(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     customer_code = db.Column(db.String(80), nullable=True, index=True)
+    access_code = db.Column(db.String(32), nullable=True, index=True)
     fecha_hora = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
     ip_cliente = db.Column(db.String(64), nullable=True, index=True)
     user_agent = db.Column(db.Text, nullable=True)

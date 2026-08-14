@@ -195,11 +195,11 @@
     {% if not view %}
     <div class="panel">
         <div class="login-title">Acceso con tu clave</div>
-        <div class="login-sub">Ingresa la clave de cliente que te proporcionó Industrias Verduzco. No necesitas contraseña.</div>
+        <div class="login-sub">Ingresa la clave única que te proporcionó Industrias Verduzco (ejemplo EV-AB12CD34). La URL es general; solo verás tus pedidos.</div>
         <form method="post" action="{{ url_for('seguimiento_empaque_cliente') }}">
-            <label for="clave">Clave de cliente</label>
+            <label for="clave">Clave de acceso</label>
             <div class="row">
-                <input id="clave" name="clave" type="text" autocomplete="username" placeholder="Ej. 12345" value="{{ clave or '' }}" required>
+                <input id="clave" name="clave" type="text" autocomplete="off" placeholder="EV-XXXXXXXX" value="" required>
                 <button type="submit">Ver mis pedidos</button>
             </div>
         </form>
@@ -212,7 +212,7 @@
         <div class="head-bar">
             <div>
                 <div class="client-name">{{ view.customer_name }}</div>
-                <div class="client-meta">Clave {{ view.customer_code }} · {{ view.total_pedidos }} pedido{{ 's' if view.total_pedidos != 1 else '' }}</div>
+                <div class="client-meta">{{ view.total_pedidos }} pedido{{ 's' if view.total_pedidos != 1 else '' }} · acceso individual</div>
             </div>
             <form method="post" action="{{ url_for('seguimiento_empaque_salir') }}">
                 <button class="secondary" type="submit">Salir</button>

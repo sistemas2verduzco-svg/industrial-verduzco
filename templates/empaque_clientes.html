@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claves clientes Empaque — Control Calidad 360</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .wrap { max-width: 1200px; margin: 0 auto; padding: 20px 16px 40px; }
+        .head { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:flex-start; margin-bottom:18px; }
+        .head h2 { margin:0; }
+        .muted { color:#64748b; font-size:.92rem; }
+        .card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-bottom:16px; }
+        .portal-box { background:#e8f5ee; border:1px solid #b7ddc4; border-radius:10px; padding:12px 14px; }
+        .portal-box code { font-size:1rem; font-weight:700; color:#0f5f34; }
+        .toolbar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+        input[type=text] { height:40px; border:1px solid #cbd5e1; border-radius:8px; padding:0 12px; min-width:220px; }
+        button, .btn {
+            height:40px; border:0; border-radius:8px; padding:0 14px; font-weight:700; cursor:pointer;
+            background:#0f5f34; color:#fff; text-decoration:none; display:inline-flex; align-items:center;
+        }
+        .btn-secondary { background:#fff; color:#0f5f34; border:1px solid #0f5f34; }
+        .btn-warn { background:#b45309; }
+        .btn-danger { background:#b91c1c; }
+        .btn-sm { height:32px; font-size:.82rem; padding:0 10px; }
+        table { width:100%; border-collapse:collapse; font-size:.9rem; }
+        th, td { text-align:left; padding:10px 8px; border-bottom:1px solid #eef2f7; vertical-align:top; }
+        th { color:#64748b; font-size:.75rem; text-transform:uppercase; letter-spacing:.04em; }
+        .code { font-family: ui-monospace, Consolas, monospace; font-weight:800; color:#0f5f34; letter-spacing:.04em; }
+        .badge { display:inline-block; padding:3px 8px; border-radius:999px; font-size:.75rem; font-weight:700; }
+        .on { background:#dcfce7; color:#166534; }
+        .off { background:#fee2e2; color:#991b1b; }
+        .msg { margin-top:10px; padding:10px 12px; border-radius:8px; display:none; }
+        .msg.ok { display:block; background:#e8f5ee; color:#166534; border:1px solid #b7ddc4; }
+        .msg.err { display:block; background:#fdeaea; color:#991b1b; border:1px solid #f2c0c0; }
+        @media (max-width: 800px) {
+            .hide-sm { display:none; }
+        }
+    </style>
+</head>
+<body>
+{% include '_sidebar.html' %}
+<div class="container wrap">
+    <div class="head">
+        <div>
+            <h2>Claves de clientes Empaque</h2>
+            <div class="muted">Las claves se generan solas cuando llega un pedido de Empaque. Aquí solo copias el link para el cliente.</div>
+        </div>
+    </div>
+
+    <div class="card portal-box">
+        <div><b>URL general del portal</b></div>
+        <div style="margin-top:6px;"><code id="portalUrl">{{ portal_url }}</code></div>
+        <div class="muted" style="margin-top:6px;">
+            Link de acceso por cliente (automático):
+            <code>{{ portal_url }}?clave=EV-XXXXXXXX</code>
+        </div>
+        <div class="toolbar">
+            <button type="button" class="btn-secondary" onclick="copyText('{{ portal_url }}')">Copiar URL general</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <form method="get" class="toolbar" action="{{ url_for('empaque_clientes_page') }}">
+            <input type="text" name="q" value="{{ q or '' }}" placeholder="Buscar nombre, código o clave…">
+            <button type="submit">Buscar</button>
+        </form>
+        <div class="muted" style="margin-top:10px;">Sin botón manual: al sincronizar Empaque → nube, cada cliente nuevo recibe su clave EV-… al instante.</div>
+        <div id="flash" class="msg"></div>
+    </div>
+
+    <div class="card" style="overflow-x:auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Cliente</th>
+                    <th class="hide-sm">Código fuente</th>
+                    <th>Clave de acceso</th>
+                    <th>Pedidos</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for c in clientes %}
+                <tr data-id="{{ c.id }}">
+                    <td>
+                        <div><b>{{ c.customer_name or '(sin nombre)' }}</b></div>
+                        {% if c.last_access_at %}
+                        <div class="muted">Último acceso: {{ c.last_access_at[:16].replace('T',' ') }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="hide-sm"><code>{{ c.customer_code }}</code></td>
+                    <td>
+                        <span class="code" id="code-{{ c.id }}">{{ c.access_code }}</span>
+                        <button type="button" class="btn-sm btn-secondary" style="margin-left:8px;" onclick="copyText('{{ c.access_code }}')">Copiar clave</button>
+                    </td>
+                    <td>{{ c.pedidos_count }}</td>
+                    <td>
+                        {% if c.activo %}
+                        <span class="badge on">Activo</span>
+                        {% else %}
+                        <span class="badge off">Inactivo</span>
+                        {% endif %}
+                    </td>
+                    <td style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button type="button" class="btn-sm btn-secondary" onclick="copyLink('{{ c.access_code }}')">Copiar link</button>
+                        {% if has_permission('empaque', 'edit') or (current_user and current_user.es_admin) %}
+                        <button type="button" class="btn-sm btn-warn" onclick="regenerar({{ c.id }})">Nueva clave</button>
+                        <button type="button" class="btn-sm {% if c.activo %}btn-danger{% else %}btn-secondary{% endif %}" onclick="toggleActivo({{ c.id }})">
+                            {% if c.activo %}Desactivar{% else %}Activar{% endif %}
+                        </button>
+                        {% else %}
+                        <span class="muted">Solo lectura</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% else %}
+                <tr><td colspan="6" class="muted">No hay clientes aún. Se crean automáticamente al sincronizar Empaque → nube.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function flash(msg, ok=true) {
+    const el = document.getElementById('flash');
+    el.className = 'msg ' + (ok ? 'ok' : 'err');
+    el.textContent = msg;
+}
+const PORTAL_URL = {{ portal_url|tojson }};
+
+async function copyText(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        flash('Copiado: ' + text);
+    } catch (e) {
+        flash('No se pudo copiar', false);
+    }
+}
+function accessLink(code) {
+    return PORTAL_URL + '?clave=' + encodeURIComponent(code);
+}
+async function copyLink(code) {
+    await copyText(accessLink(code));
+}
+async function regenerar(id) {
+    if (!confirm('¿Regenerar clave? La anterior dejará de funcionar.')) return;
+    const res = await fetch('/api/empaque/clientes/' + id + '/regenerar', { method: 'POST' });
+    const data = await res.json();
+    if (!data.ok) { flash(data.error || 'Error', false); return; }
+    document.getElementById('code-' + id).textContent = data.cliente.access_code;
+    flash('Nueva clave: ' + data.cliente.access_code);
+}
+async function toggleActivo(id) {
+    const res = await fetch('/api/empaque/clientes/' + id + '/toggle', { method: 'POST' });
+    const data = await res.json();
+    if (!data.ok) { flash(data.error || 'Error', false); return; }
+    location.reload();
+}
+</script>
+</body>
+</html>

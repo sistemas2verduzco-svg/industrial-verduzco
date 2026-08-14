@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash, abort
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqNotaVenta, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaBOMProceso, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, OdooSyncRun, OdooPedidoVenta, OdooPedidoVentaLinea, OdooOrdenCompra, OdooOrdenCompraLinea, MaquinariaSolicitud, MaquinariaSolicitudItem, AlertaBuzonGeneral, Tecnico, LogVerificacion, EmpaquePedido, EmpaquePedidoItem, EmpaqueCaja, EmpaqueMovimiento, EmpaqueLineaProgreso, EmpaqueSeguimientoLog, AlmacenCajaSurtidoSesion, AlmacenCajaSurtidoCaja, AlmacenCajaSurtidoLecturaBascula, AlmacenCajaSurtidoItem
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqNotaVenta, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaBOMProceso, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, OdooSyncRun, OdooPedidoVenta, OdooPedidoVentaLinea, OdooOrdenCompra, OdooOrdenCompraLinea, MaquinariaSolicitud, MaquinariaSolicitudItem, AlertaBuzonGeneral, Tecnico, LogVerificacion, EmpaqueCliente, EmpaquePedido, EmpaquePedidoItem, EmpaqueCaja, EmpaqueMovimiento, EmpaqueLineaProgreso, EmpaqueSeguimientoLog, AlmacenCajaSurtidoSesion, AlmacenCajaSurtidoCaja, AlmacenCajaSurtidoLecturaBascula, AlmacenCajaSurtidoItem
 from auth import AuthManager
 from email_manager import EmailManager
 from odoo_client import OdooClient, OdooError
@@ -1839,6 +1839,7 @@ def _ensure_almacen_cajas_surtido_tables():
 
 _EMPAQUE_TABLES_READY = False
 _EMPAQUE_SEGUIMIENTO_FAILS = {}  # ip -> (count, first_ts)
+_EMPAQUE_ACCESS_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
 
 def _ensure_empaque_tables():
@@ -1846,12 +1847,28 @@ def _ensure_empaque_tables():
     if _EMPAQUE_TABLES_READY:
         return True
     try:
+        EmpaqueCliente.__table__.create(bind=db.engine, checkfirst=True)
         EmpaquePedido.__table__.create(bind=db.engine, checkfirst=True)
         EmpaquePedidoItem.__table__.create(bind=db.engine, checkfirst=True)
         EmpaqueCaja.__table__.create(bind=db.engine, checkfirst=True)
         EmpaqueMovimiento.__table__.create(bind=db.engine, checkfirst=True)
         EmpaqueLineaProgreso.__table__.create(bind=db.engine, checkfirst=True)
         EmpaqueSeguimientoLog.__table__.create(bind=db.engine, checkfirst=True)
+        # Columna access_code en logs si la tabla ya existía sin ella
+        try:
+            insp = inspect(db.engine)
+            cols = {c['name'] for c in insp.get_columns('empaque_seguimiento_logs')}
+            if 'access_code' not in cols:
+                db.session.execute(text(
+                    'ALTER TABLE empaque_seguimiento_logs '
+                    'ADD COLUMN IF NOT EXISTS access_code VARCHAR(32)'
+                ))
+                db.session.commit()
+        except Exception:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
         _EMPAQUE_TABLES_READY = True
         return True
     except Exception as exc:
@@ -1867,6 +1884,99 @@ def _normalize_empaque_clave(value):
     return str(value or '').strip()
 
 
+def _normalize_empaque_access_code(value):
+    raw = str(value or '').strip().upper().replace(' ', '')
+    if raw.startswith('EV-'):
+        raw = raw[3:]
+    raw = re.sub(r'[^A-Z0-9]', '', raw)
+    return raw
+
+
+def _generate_empaque_access_code(length=8):
+    """Genera clave única de acceso (sin caracteres confusos I/O/0/1)."""
+    for _ in range(40):
+        body = ''.join(secrets.choice(_EMPAQUE_ACCESS_ALPHABET) for _ in range(length))
+        code = f'EV-{body}'
+        exists = EmpaqueCliente.query.filter(
+            func.upper(EmpaqueCliente.access_code) == code
+        ).first()
+        if not exists:
+            return code
+    # Fallback ultra-único
+    return f'EV-{secrets.token_hex(5).upper()}'
+
+
+def _ensure_empaque_cliente(customer_code, customer_name=None):
+    """
+    Crea cliente Empaque con clave única si no existe.
+    Si ya existe, actualiza nombre y conserva su access_code.
+    """
+    code = _normalize_empaque_clave(customer_code)
+    if not code:
+        return None, False
+
+    cliente = EmpaqueCliente.query.filter(
+        func.lower(EmpaqueCliente.customer_code) == code.lower()
+    ).first()
+    created = False
+    if not cliente:
+        cliente = EmpaqueCliente(
+            customer_code=code[:80],
+            customer_name=(str(customer_name or '').strip()[:255] or None),
+            access_code=_generate_empaque_access_code(),
+            activo=True,
+        )
+        db.session.add(cliente)
+        created = True
+    else:
+        name = str(customer_name or '').strip()[:255]
+        if name:
+            cliente.customer_name = name
+        if not cliente.access_code:
+            cliente.access_code = _generate_empaque_access_code()
+        cliente.updated_at = datetime.utcnow()
+    return cliente, created
+
+
+def _reconcile_empaque_clientes_from_pedidos():
+    """
+    Automático: por cada customer_code en pedidos espejo, asegura ficha + clave.
+    No depende de un botón humano.
+    """
+    pairs = (
+        db.session.query(EmpaquePedido.customer_code, EmpaquePedido.customer_name)
+        .filter(EmpaquePedido.customer_code.isnot(None))
+        .distinct()
+        .all()
+    )
+    created = 0
+    touched = 0
+    for code, name in pairs:
+        cliente, was_created = _ensure_empaque_cliente(code, name)
+        if not cliente:
+            continue
+        if was_created:
+            created += 1
+        else:
+            touched += 1
+    return {'created': created, 'touched': touched, 'total_sources': len(pairs)}
+
+
+def _find_empaque_cliente_by_access_code(access_code_raw):
+    """Resuelve cliente solo por clave de acceso (nunca por customer_code externo)."""
+    body = _normalize_empaque_access_code(access_code_raw)
+    if not body:
+        return None
+    candidates = [body, f'EV-{body}']
+    for cand in candidates:
+        cliente = EmpaqueCliente.query.filter(
+            func.upper(EmpaqueCliente.access_code) == cand.upper()
+        ).first()
+        if cliente:
+            return cliente
+    return None
+
+
 def _upsert_empaque_data(payload):
     """Reemplaza espejo por pedido (snapshot) desde agente Empaque360."""
     pedidos = payload.get('pedidos') or []
@@ -1876,6 +1986,7 @@ def _upsert_empaque_data(payload):
         'cajas_upserted': 0,
         'movimientos_upserted': 0,
         'progreso_upserted': 0,
+        'clientes_creados': 0,
     }
 
     for row in pedidos:
@@ -1886,13 +1997,18 @@ def _upsert_empaque_data(payload):
         if not order_number or not customer_code:
             continue
 
+        customer_name = str(row.get('CustomerName') or row.get('customer_name') or '').strip()[:255] or None
+        _cliente, created = _ensure_empaque_cliente(customer_code, customer_name)
+        if created:
+            stats['clientes_creados'] += 1
+
         pedido = EmpaquePedido.query.filter_by(external_order_number=order_number).first()
         if not pedido:
             pedido = EmpaquePedido(external_order_number=order_number)
             db.session.add(pedido)
 
         pedido.customer_code = customer_code[:80]
-        pedido.customer_name = str(row.get('CustomerName') or row.get('customer_name') or '').strip()[:255] or None
+        pedido.customer_name = customer_name
         pedido.order_date_utc = _parse_datetime(row.get('OrderDateUtc') or row.get('order_date_utc'))
         source_id = row.get('SalesOrderId') or row.get('source_sales_order_id')
         try:
@@ -1951,6 +2067,9 @@ def _upsert_empaque_data(payload):
             ))
             stats['cajas_upserted'] += 1
 
+        # Deduplicate by source id; clear global unique collisions before insert
+        seen_mov_ids = set()
+        mov_rows = []
         for mov in (row.get('movimientos') or row.get('movements') or []):
             if not isinstance(mov, dict):
                 continue
@@ -1963,6 +2082,15 @@ def _upsert_empaque_data(payload):
             product_code = str(mov.get('ProductCode') or mov.get('product_code') or '').strip()
             if source_mov_id <= 0 or not box_code or not product_code:
                 continue
+            if source_mov_id in seen_mov_ids:
+                continue
+            seen_mov_ids.add(source_mov_id)
+            mov_rows.append((source_mov_id, mov, box_code, product_code))
+        if seen_mov_ids:
+            EmpaqueMovimiento.query.filter(
+                EmpaqueMovimiento.source_box_movement_id.in_(list(seen_mov_ids))
+            ).delete(synchronize_session=False)
+        for source_mov_id, mov, box_code, product_code in mov_rows:
             db.session.add(EmpaqueMovimiento(
                 pedido_id=pedido.id,
                 external_order_number=order_number,
@@ -2032,10 +2160,15 @@ def _upsert_empaque_data(payload):
     return stats
 
 
-def _build_empaque_cliente_view(customer_code):
+def _build_empaque_cliente_view(customer_code, *, access_code=None, customer_name=None):
+    """Arma la vista del portal SOLO para el customer_code resuelto por clave de acceso."""
+    code = _normalize_empaque_clave(customer_code)
+    if not code:
+        return None
+
     pedidos = (
         EmpaquePedido.query
-        .filter(func.lower(EmpaquePedido.customer_code) == customer_code.lower())
+        .filter(func.lower(EmpaquePedido.customer_code) == code.lower())
         .order_by(
             EmpaquePedido.last_activity_utc.desc().nullslast(),
             EmpaquePedido.order_date_utc.desc().nullslast(),
@@ -2043,19 +2176,21 @@ def _build_empaque_cliente_view(customer_code):
         )
         .all()
     )
-    if not pedidos:
-        return None
-
+    # Cliente válido puede no tener pedidos aún: devolver vista vacía (no None).
+    # None se reserva para clave inválida.
     pedido_ids = [p.id for p in pedidos]
-    items = EmpaquePedidoItem.query.filter(EmpaquePedidoItem.pedido_id.in_(pedido_ids)).all()
-    cajas = EmpaqueCaja.query.filter(EmpaqueCaja.pedido_id.in_(pedido_ids)).all()
-    movs = (
-        EmpaqueMovimiento.query
-        .filter(EmpaqueMovimiento.pedido_id.in_(pedido_ids))
-        .order_by(EmpaqueMovimiento.captured_at_utc.asc().nullslast(), EmpaqueMovimiento.id.asc())
-        .all()
-    )
-    progreso = EmpaqueLineaProgreso.query.filter(EmpaqueLineaProgreso.pedido_id.in_(pedido_ids)).all()
+    if pedido_ids:
+        items = EmpaquePedidoItem.query.filter(EmpaquePedidoItem.pedido_id.in_(pedido_ids)).all()
+        cajas = EmpaqueCaja.query.filter(EmpaqueCaja.pedido_id.in_(pedido_ids)).all()
+        movs = (
+            EmpaqueMovimiento.query
+            .filter(EmpaqueMovimiento.pedido_id.in_(pedido_ids))
+            .order_by(EmpaqueMovimiento.captured_at_utc.asc().nullslast(), EmpaqueMovimiento.id.asc())
+            .all()
+        )
+        progreso = EmpaqueLineaProgreso.query.filter(EmpaqueLineaProgreso.pedido_id.in_(pedido_ids)).all()
+    else:
+        items, cajas, movs, progreso = [], [], [], []
 
     items_by = {}
     for it in items:
@@ -2157,8 +2292,8 @@ def _build_empaque_cliente_view(customer_code):
         })
 
     return {
-        'customer_code': customer_code,
-        'customer_name': pedidos[0].customer_name or customer_code,
+        'access_code': access_code,
+        'customer_name': customer_name or (pedidos[0].customer_name if pedidos else None) or code,
         'pedidos': view_pedidos,
         'total_pedidos': len(view_pedidos),
     }
@@ -2185,12 +2320,13 @@ def _empaque_seguimiento_clear_fail(ip):
     _EMPAQUE_SEGUIMIENTO_FAILS.pop(ip, None)
 
 
-def _write_empaque_seguimiento_log(customer_code, resultado):
+def _write_empaque_seguimiento_log(customer_code, resultado, access_code=None):
     try:
         if not _ensure_empaque_tables():
             return
         db.session.add(EmpaqueSeguimientoLog(
             customer_code=(customer_code or '')[:80] or None,
+            access_code=(access_code or '')[:32] or None,
             ip_cliente=(request.headers.get('X-Forwarded-For') or request.remote_addr or '')[:64],
             user_agent=(request.headers.get('User-Agent') or '')[:1000],
             resultado=(resultado or 'invalido')[:40],
@@ -3656,49 +3792,140 @@ _CONTPAQ_MONTH_NAMES = (
     'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE',
 )
 _CONTPAQ_MONTH_RE = '|'.join(_CONTPAQ_MONTH_NAMES)
+_CONTPAQ_PERIOD_NOISE_RE = re.compile(
+    r'\b(PEDIDO|DEL|DE|LA|EL|LOS|LAS|SEMANA|PERIODO|PERÍODO|AL)\b',
+    re.IGNORECASE,
+)
+
+
+def _contpaq_strip_accents(value):
+    text = str(value or '')
+    try:
+        import unicodedata
+        return ''.join(
+            ch for ch in unicodedata.normalize('NFKD', text)
+            if not unicodedata.combining(ch)
+        )
+    except Exception:
+        return text
+
+
+def _contpaq_period_parts(value):
+    """
+    Extrae (dia_inicio, dia_fin, mes) de titulos/periodos con variantes de texto.
+    Acepta: 'PEDIDO DEL 01 AL 07 JULIO', '01 AL 07 DE JULIO', '1-7 JULIO', etc.
+    """
+    text = _contpaq_norm_text(_contpaq_strip_accents(value))
+    if not text:
+        return None
+
+    text = text.replace('/', ' ').replace('-', ' ').replace('_', ' ')
+    text = re.sub(r'\s+', ' ', text)
+
+    # Forma principal: N AL M [DE] MES
+    match = re.search(
+        rf'(\d{{1,2}})\s+AL\s+(\d{{1,2}})\s+(?:DE\s+)?({_CONTPAQ_MONTH_RE})\b',
+        text,
+    )
+    if match:
+        return int(match.group(1)), int(match.group(2)), match.group(3)
+
+    # Compacta: quita ruido (PEDIDO/DE/DEL/...) y busca N M MES
+    compact = _CONTPAQ_PERIOD_NOISE_RE.sub(' ', text)
+    compact = re.sub(r'[^0-9A-Z]+', ' ', compact)
+    compact = re.sub(r'\s+', ' ', compact).strip()
+    match = re.search(
+        rf'(\d{{1,2}})\s+(\d{{1,2}})\s+({_CONTPAQ_MONTH_RE})\b',
+        compact,
+    )
+    if match:
+        return int(match.group(1)), int(match.group(2)), match.group(3)
+
+    return None
 
 
 def _contpaq_period_fingerprint(value):
     """
-    Normaliza periodos/titulos de semana para comparar variantes:
+    Huella estable del periodo. Variantes con/sin DE, espacios o tipografia
+    distinta caen en la misma clave, p.ej.:
       PEDIDO DEL 01 AL 07 JULIO
       PEDIDO DEL 01 AL 07 DE JULIO
       1 AL 7 DE JULIO
-    -> misma huella: "1 AL 7 DE JULIO"
+    -> "1 AL 7 DE JULIO"
     """
-    text = _contpaq_norm_text(value)
+    parts = _contpaq_period_parts(value)
+    if parts:
+        start_day, end_day, month = parts
+        return f"{start_day} AL {end_day} DE {month}"
+
+    text = _contpaq_norm_text(_contpaq_strip_accents(value))
     if not text:
         return ''
-
     text = re.sub(r'^(PEDIDO\s+DEL|PEDIDO\s+DE|PEDIDO)\s+', '', text)
-    # "07 JULIO" / "07  JULIO" -> "07 DE JULIO"
-    text = re.sub(
-        rf'\b(\d{{1,2}})\s+(?!DE\b)({_CONTPAQ_MONTH_RE})\b',
-        r'\1 DE \2',
-        text,
-    )
+    text = _CONTPAQ_PERIOD_NOISE_RE.sub(' ', text)
+    text = re.sub(r'[^0-9A-Z]+', ' ', text)
+    return re.sub(r'\s+', ' ', text).strip()
 
-    match = re.search(
-        rf'(\d{{1,2}})\s+AL\s+(\d{{1,2}})\s+DE\s+({_CONTPAQ_MONTH_RE})',
-        text,
-    )
-    if match:
-        return f"{int(match.group(1))} AL {int(match.group(2))} DE {match.group(3)}"
-    return text
+
+def _contpaq_period_compact(value):
+    """Solo letras/numeros, para comparar aunque falten o sobren caracteres."""
+    text = _contpaq_norm_text(_contpaq_strip_accents(value))
+    text = _CONTPAQ_PERIOD_NOISE_RE.sub('', text)
+    return re.sub(r'[^0-9A-Z]+', '', text)
 
 
 def _contpaq_period_matches(filter_value, *candidates):
-    """True si el filtro de periodo/titulo coincide con alguno de los candidatos."""
-    filt = _contpaq_period_fingerprint(filter_value)
-    if not filt:
+    """
+    True si el filtro de periodo/titulo coincide con algun candidato,
+    tolerando caracteres faltantes (DE, espacios, tipografia, etc.).
+    La sucursal NO se toca aqui: se filtra aparte y sigue siendo estricta.
+    """
+    filt_parts = _contpaq_period_parts(filter_value)
+    filt_fp = _contpaq_period_fingerprint(filter_value)
+    filt_compact = _contpaq_period_compact(filter_value)
+    if not filt_parts and not filt_fp and not filt_compact:
         return True
+
     for candidate in candidates:
-        cand = _contpaq_period_fingerprint(candidate)
-        if not cand:
-            continue
-        if filt == cand or filt in cand or cand in filt:
+        cand_parts = _contpaq_period_parts(candidate)
+        if filt_parts and cand_parts and filt_parts == cand_parts:
             return True
+
+        cand_fp = _contpaq_period_fingerprint(candidate)
+        if filt_fp and cand_fp and (filt_fp == cand_fp or filt_fp in cand_fp or cand_fp in filt_fp):
+            return True
+
+        cand_compact = _contpaq_period_compact(candidate)
+        if filt_compact and cand_compact:
+            # Contencion tolerante: ignora DE/espacios/signos.
+            if filt_compact in cand_compact or cand_compact in filt_compact:
+                return True
+            # Si solo difieren por 1-2 caracteres en cadenas ya largas, aceptar.
+            if len(filt_compact) >= 8 and len(cand_compact) >= 8:
+                a, b = (filt_compact, cand_compact) if len(filt_compact) <= len(cand_compact) else (cand_compact, filt_compact)
+                if a in b:
+                    return True
     return False
+
+
+def _contpaq_unique_semana_options(labels):
+    """Una sola opcion de semana por huella (evita 'JULIO' vs 'DE JULIO' duplicados)."""
+    best = {}
+    for label in labels:
+        text = str(label or '').strip()
+        if not text:
+            continue
+        fp = _contpaq_period_fingerprint(text) or _contpaq_norm_text(text)
+        prev = best.get(fp)
+        if not prev:
+            best[fp] = text
+            continue
+        # Preferir la forma con "DE" y/o prefijo PEDIDO.
+        score = (1 if ' DE ' in _contpaq_norm_text(text) else 0) + (1 if _contpaq_norm_text(text).startswith('PEDIDO') else 0)
+        prev_score = (1 if ' DE ' in _contpaq_norm_text(prev) else 0) + (1 if _contpaq_norm_text(prev).startswith('PEDIDO') else 0)
+        if score > prev_score or (score == prev_score and len(text) > len(prev)):
+            best[fp] = text
+    return sorted(best.values())
 
 
 def _contpaq_clip(value, max_len):
@@ -4389,6 +4616,8 @@ DEFAULT_PERMISSION_CATALOG = [
     ('facturacion', 'edit', 'Operar módulo de facturación'),
     ('contpaq', 'view', 'Ver módulo de conciliación CONTPAQ'),
     ('contpaq', 'edit', 'Operar conciliación CONTPAQ'),
+    ('empaque', 'view', 'Ver clientes Empaque y claves de acceso'),
+    ('empaque', 'edit', 'Generar/regenerar claves Empaque'),
     ('procesos', 'view', 'Ver procesos y claves'),
     ('proveedores', 'view', 'Ver proveedores'),
     ('proveedores', 'edit', 'Editar proveedores'),
@@ -4414,6 +4643,7 @@ SIMPLE_PERMISSION_MODULES = [
     ('almacen', 'Almacen'),
     ('facturacion', 'Facturacion'),
     ('contpaq', 'CONTPAQ Conciliacion'),
+    ('empaque', 'Empaque - Clientes y seguimiento'),
     ('procesos', 'Procesos y claves'),
     ('proveedores', 'Proveedores'),
     ('tickets', 'Tickets'),
@@ -6269,41 +6499,98 @@ def verificar_tecnico_publico(token):
 
 @app.route('/seguimiento', methods=['GET', 'POST'])
 def seguimiento_empaque_cliente():
-    """Portal público: el cliente entra con su clave y ve pedidos / cajas / pesos."""
+    """Portal público general: el cliente entra solo con su clave única."""
     _ensure_empaque_tables()
     error = None
     view = None
     clave = ''
     ip = (request.headers.get('X-Forwarded-For') or request.remote_addr or '').split(',')[0].strip()
 
+    def _open_for_cliente(cliente, *, touch_access=False):
+        nonlocal view, clave
+        if not cliente or not cliente.activo:
+            return False
+        view = _build_empaque_cliente_view(
+            cliente.customer_code,
+            access_code=cliente.access_code,
+            customer_name=cliente.customer_name,
+        )
+        if view is None:
+            return False
+        clave = cliente.access_code
+        if touch_access:
+            cliente.last_access_at = datetime.utcnow()
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+        session['empaque_seguimiento_access_code'] = cliente.access_code
+        return True
+
     if request.method == 'POST':
         if _empaque_seguimiento_rate_limited(ip):
             error = 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.'
             _write_empaque_seguimiento_log('', 'rate_limited')
         else:
-            clave = _normalize_empaque_clave(request.form.get('clave') or request.form.get('customer_code'))
-            if not clave:
-                error = 'Ingresa tu clave de cliente.'
+            clave_in = _normalize_empaque_clave(
+                request.form.get('clave') or request.form.get('access_code')
+            )
+            if not clave_in:
+                error = 'Ingresa tu clave de acceso.'
             else:
-                view = _build_empaque_cliente_view(clave)
-                if not view:
+                cliente = _find_empaque_cliente_by_access_code(clave_in)
+                if not cliente or not cliente.activo or not _open_for_cliente(cliente, touch_access=True):
                     _empaque_seguimiento_register_fail(ip)
-                    _write_empaque_seguimiento_log(clave, 'invalido')
-                    error = 'Clave incorrecta o sin pedidos sincronizados.'
+                    _write_empaque_seguimiento_log(
+                        '',
+                        'invalido' if not cliente else ('inactivo' if cliente and not cliente.activo else 'invalido'),
+                        access_code=_normalize_empaque_access_code(clave_in)[:32],
+                    )
+                    error = 'Clave incorrecta o acceso desactivado.'
                     clave = ''
+                    view = None
                 else:
                     _empaque_seguimiento_clear_fail(ip)
-                    _write_empaque_seguimiento_log(clave, 'ok')
-                    session['empaque_seguimiento_clave'] = clave
+                    _write_empaque_seguimiento_log(
+                        cliente.customer_code, 'ok', access_code=cliente.access_code
+                    )
 
     if view is None and request.method == 'GET':
-        saved = _normalize_empaque_clave(session.get('empaque_seguimiento_clave'))
-        if saved:
-            view = _build_empaque_cliente_view(saved)
-            if view:
-                clave = saved
+        # Link de acceso: /seguimiento?clave=EV-XXXXXXXX
+        clave_qs = _normalize_empaque_clave(
+            request.args.get('clave') or request.args.get('c') or request.args.get('access_code')
+        )
+        if clave_qs:
+            if _empaque_seguimiento_rate_limited(ip):
+                error = 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.'
+                _write_empaque_seguimiento_log('', 'rate_limited')
             else:
-                session.pop('empaque_seguimiento_clave', None)
+                cliente = _find_empaque_cliente_by_access_code(clave_qs)
+                if not cliente or not cliente.activo or not _open_for_cliente(cliente, touch_access=True):
+                    _empaque_seguimiento_register_fail(ip)
+                    _write_empaque_seguimiento_log(
+                        '',
+                        'invalido' if not cliente else ('inactivo' if not cliente.activo else 'invalido'),
+                        access_code=_normalize_empaque_access_code(clave_qs)[:32],
+                    )
+                    error = 'Clave incorrecta o acceso desactivado.'
+                    clave = ''
+                    view = None
+                else:
+                    _empaque_seguimiento_clear_fail(ip)
+                    _write_empaque_seguimiento_log(
+                        cliente.customer_code, 'ok', access_code=cliente.access_code
+                    )
+                    # Evitar dejar la clave en el historial del navegador
+                    return redirect(url_for('seguimiento_empaque_cliente'))
+
+        if view is None:
+            saved = _normalize_empaque_clave(session.get('empaque_seguimiento_access_code'))
+            if saved:
+                cliente = _find_empaque_cliente_by_access_code(saved)
+                if not cliente or not cliente.activo or not _open_for_cliente(cliente, touch_access=False):
+                    session.pop('empaque_seguimiento_access_code', None)
+                    session.pop('empaque_seguimiento_clave', None)
 
     return render_template(
         'seguimiento_empaque.html',
@@ -6311,11 +6598,13 @@ def seguimiento_empaque_cliente():
         view=view,
         clave=clave,
         logo_url='/static/logo.png',
+        portal_url='/seguimiento',
     )
 
 
 @app.route('/seguimiento/salir', methods=['POST', 'GET'])
 def seguimiento_empaque_salir():
+    session.pop('empaque_seguimiento_access_code', None)
     session.pop('empaque_seguimiento_clave', None)
     return redirect(url_for('seguimiento_empaque_cliente'))
 
@@ -12997,11 +13286,10 @@ def _build_conciliacion_odoo_response(
 
     display_pedidos = list(compare_pedidos)
 
-    semana_options = sorted({
+    semana_options = _contpaq_unique_semana_options([
         _contpaq_title_week_key(p.titulo, _conciliacion_odoo_periodo_semana(p), p.date_order)
         for p in display_pedidos
-        if _contpaq_title_week_key(p.titulo, _conciliacion_odoo_periodo_semana(p), p.date_order)
-    })
+    ])
     sucursal_options = sorted({
         str(p.sucursal or '').strip()
         for p in display_pedidos
@@ -13710,11 +13998,10 @@ def _build_conciliacion_contpaq_response(
             if not str(p.doc_folio or '').strip().upper().startswith('D')
         ]
 
-        semana_options = sorted({
+        semana_options = _contpaq_unique_semana_options([
             _contpaq_title_week_key(p.titulo, p.periodo_semana, p.fecha_documento)
             for p in display_pedidos
-            if _contpaq_title_week_key(p.titulo, p.periodo_semana, p.fecha_documento)
-        })
+        ])
         sucursal_options = sorted({
             str(p.sucursal or '').strip()
             for p in display_pedidos
@@ -14302,12 +14589,123 @@ def api_empaque_sync_push():
         if not _ensure_empaque_tables():
             return jsonify({'ok': False, 'error': 'No se pudieron crear tablas Empaque'}), 500
         stats = _upsert_empaque_data(payload)
+        # Cierra huecos: pedidos viejos sin ficha también reciben clave sola
+        recon = _reconcile_empaque_clientes_from_pedidos()
+        stats['clientes_reconcile'] = recon
         db.session.commit()
         return jsonify({'ok': True, 'stats': stats}), 200
     except Exception as exc:
         db.session.rollback()
         logger.error('[EMPAQUE] Error push agente: %s', exc, exc_info=True)
         return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
+@app.route('/empaque/clientes', methods=['GET'])
+@login_required
+@requires_any_permission([('empaque', 'view'), ('empaque', 'edit')])
+def empaque_clientes_page():
+    """Módulo interno: claves únicas de acceso al portal /seguimiento."""
+    _ensure_empaque_tables()
+    # Auto: si hay pedidos sin ficha, genera clave sin botón
+    try:
+        recon = _reconcile_empaque_clientes_from_pedidos()
+        if recon.get('created'):
+            db.session.commit()
+        else:
+            db.session.rollback()
+    except Exception:
+        db.session.rollback()
+    q = (request.args.get('q') or '').strip()
+    clientes_q = EmpaqueCliente.query
+    if q:
+        like = f'%{q}%'
+        clientes_q = clientes_q.filter(db.or_(
+            EmpaqueCliente.customer_name.ilike(like),
+            EmpaqueCliente.customer_code.ilike(like),
+            EmpaqueCliente.access_code.ilike(like),
+        ))
+    clientes = clientes_q.order_by(
+        EmpaqueCliente.customer_name.asc().nullslast(),
+        EmpaqueCliente.id.asc(),
+    ).all()
+
+    # Conteos de pedidos por customer_code
+    counts = dict(
+        db.session.query(
+            EmpaquePedido.customer_code,
+            func.count(EmpaquePedido.id),
+        ).group_by(EmpaquePedido.customer_code).all()
+    )
+    rows = []
+    for c in clientes:
+        rows.append({
+            **c.to_dict(),
+            'pedidos_count': int(counts.get(c.customer_code) or 0),
+        })
+
+    portal_url = request.url_root.rstrip('/') + '/seguimiento'
+    return render_template(
+        'empaque_clientes.html',
+        clientes=rows,
+        q=q,
+        portal_url=portal_url,
+    )
+
+
+@app.route('/api/empaque/clientes/sync-from-pedidos', methods=['POST'])
+@login_required
+@requires_permission('empaque', 'edit')
+def api_empaque_clientes_sync_from_pedidos():
+    """Compat: las claves ya se generan solas al sync / al abrir el módulo."""
+    _ensure_empaque_tables()
+    recon = _reconcile_empaque_clientes_from_pedidos()
+    db.session.commit()
+    return jsonify({'ok': True, **recon})
+
+
+@app.route('/api/empaque/clientes/<int:cliente_id>/regenerar', methods=['POST'])
+@login_required
+@requires_permission('empaque', 'edit')
+def api_empaque_cliente_regenerar(cliente_id):
+    _ensure_empaque_tables()
+    cliente = EmpaqueCliente.query.get_or_404(cliente_id)
+    cliente.access_code = _generate_empaque_access_code()
+    cliente.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({'ok': True, 'cliente': cliente.to_dict()})
+
+
+@app.route('/api/empaque/clientes/<int:cliente_id>/toggle', methods=['POST'])
+@login_required
+@requires_permission('empaque', 'edit')
+def api_empaque_cliente_toggle(cliente_id):
+    _ensure_empaque_tables()
+    cliente = EmpaqueCliente.query.get_or_404(cliente_id)
+    cliente.activo = not bool(cliente.activo)
+    cliente.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({'ok': True, 'cliente': cliente.to_dict()})
+
+
+@app.route('/api/empaque/clientes', methods=['POST'])
+@login_required
+@requires_permission('empaque', 'edit')
+def api_empaque_cliente_crear():
+    """Alta manual de cliente + generación de clave."""
+    _ensure_empaque_tables()
+    data = request.get_json(silent=True) or {}
+    customer_code = _normalize_empaque_clave(data.get('customer_code'))
+    customer_name = str(data.get('customer_name') or '').strip()[:255] or None
+    if not customer_code:
+        return jsonify({'ok': False, 'error': 'customer_code requerido'}), 400
+    existing = EmpaqueCliente.query.filter(
+        func.lower(EmpaqueCliente.customer_code) == customer_code.lower()
+    ).first()
+    if existing:
+        return jsonify({'ok': False, 'error': 'Ya existe un cliente con ese código fuente', 'cliente': existing.to_dict()}), 409
+    cliente, _ = _ensure_empaque_cliente(customer_code, customer_name)
+    db.session.commit()
+    return jsonify({'ok': True, 'cliente': cliente.to_dict()}), 201
 
 
 @app.route('/api/contpaq/supplier_ot/sync/push', methods=['POST'])
