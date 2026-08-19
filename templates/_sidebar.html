@@ -36,6 +36,9 @@
         {% if has_permission('procesos', 'view') or current_user and current_user.es_admin %}
         <a href="/procesos" class="sb-link" data-base="/procesos"><span>🧩</span> <span>Procesos y Claves</span></a>
         {% endif %}
+        {% if has_permission('hojas_entregas', 'view') or has_permission('hojas', 'view') or has_permission('catalog', 'view') or current_user and current_user.es_admin %}
+        <a href="/catalogo_materias_primas" class="sb-link" data-base="/catalogo_materias_primas"><span>🧱</span> <span>Materias primas</span></a>
+        {% endif %}
         {% if has_permission('calidad', 'view') or current_user and current_user.es_admin %}
         <a href="/control_calidad" class="sb-link" data-base="/control_calidad"><span>🔍</span> <span>Calidad</span></a>
         {% endif %}

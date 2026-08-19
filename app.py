@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash, abort
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaEntregaMateriaPrima, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqNotaVenta, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaBOMProceso, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, OdooSyncRun, OdooPedidoVenta, OdooPedidoVentaLinea, OdooOrdenCompra, OdooOrdenCompraLinea, MaquinariaSolicitud, MaquinariaSolicitudItem, AlertaBuzonGeneral, Tecnico, LogVerificacion, EmpaqueCliente, EmpaquePedido, EmpaquePedidoItem, EmpaqueCaja, EmpaqueMovimiento, EmpaqueLineaProgreso, EmpaqueSeguimientoLog, AlmacenCajaSurtidoSesion, AlmacenCajaSurtidoCaja, AlmacenCajaSurtidoLecturaBascula, AlmacenCajaSurtidoItem
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, CatalogoMateriaPrima, HojaRutaEntregaMateriaPrima, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqNotaVenta, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaBOMProceso, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, OdooSyncRun, OdooPedidoVenta, OdooPedidoVentaLinea, OdooOrdenCompra, OdooOrdenCompraLinea, MaquinariaSolicitud, MaquinariaSolicitudItem, AlertaBuzonGeneral, Tecnico, LogVerificacion, EmpaqueCliente, EmpaquePedido, EmpaquePedidoItem, EmpaqueCaja, EmpaqueMovimiento, EmpaqueLineaProgreso, EmpaqueSeguimientoLog, AlmacenCajaSurtidoSesion, AlmacenCajaSurtidoCaja, AlmacenCajaSurtidoLecturaBascula, AlmacenCajaSurtidoItem
 from auth import AuthManager
 from email_manager import EmailManager
 from odoo_client import OdooClient, OdooError
@@ -1754,6 +1754,26 @@ def _ensure_hoja_cargas_historial_table():
 
 
 _HOJA_MP_TABLE_READY = False
+_CATALOGO_MP_TABLE_READY = False
+
+
+def _ensure_catalogo_materias_primas_table():
+    global _CATALOGO_MP_TABLE_READY
+
+    if _CATALOGO_MP_TABLE_READY:
+        return True
+
+    try:
+        CatalogoMateriaPrima.__table__.create(bind=db.engine, checkfirst=True)
+        _CATALOGO_MP_TABLE_READY = True
+        return True
+    except Exception as exc:
+        logger.warning(f"No se pudo asegurar el catalogo de materias primas: {exc}")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return False
 
 
 def _ensure_hoja_entrega_materias_primas_table():
@@ -1763,7 +1783,14 @@ def _ensure_hoja_entrega_materias_primas_table():
         return True
 
     try:
+        if not _ensure_catalogo_materias_primas_table():
+            return False
         HojaRutaEntregaMateriaPrima.__table__.create(bind=db.engine, checkfirst=True)
+        with db.engine.begin() as conn:
+            conn.execute(text(
+                "ALTER TABLE hojas_ruta_entrega_materias_primas "
+                "ADD COLUMN IF NOT EXISTS catalogo_mp_id INTEGER"
+            ))
         _HOJA_MP_TABLE_READY = True
         return True
     except Exception as exc:
@@ -1775,8 +1802,33 @@ def _ensure_hoja_entrega_materias_primas_table():
         return False
 
 
+def _find_or_create_catalogo_materia_prima(clave_txt, nombre_txt=None):
+    clave_txt = (clave_txt or '').strip()
+    if not clave_txt:
+        return None
+    if not _ensure_catalogo_materias_primas_table():
+        return None
+
+    existing = CatalogoMateriaPrima.query.filter(
+        func.upper(func.trim(CatalogoMateriaPrima.clave)) == clave_txt.upper()
+    ).first()
+    if existing:
+        if nombre_txt and not _clean_nullable_text(existing.nombre):
+            existing.nombre = _clean_nullable_text(nombre_txt)
+        return existing
+
+    obj = CatalogoMateriaPrima(
+        clave=clave_txt,
+        nombre=_clean_nullable_text(nombre_txt) or clave_txt,
+        activo=True,
+    )
+    db.session.add(obj)
+    db.session.flush()
+    return obj
+
+
 def _parse_materias_primas_payload(raw_items):
-    """Normaliza lista de materias primas desde el formulario (una o varias claves)."""
+    """Normaliza materias primas del catalogo nuevo (no claves de producto)."""
     if raw_items is None:
         return []
     if isinstance(raw_items, str):
@@ -1784,28 +1836,40 @@ def _parse_materias_primas_payload(raw_items):
     if not isinstance(raw_items, (list, tuple)):
         return []
 
+    if not _ensure_catalogo_materias_primas_table():
+        return []
+
     seen = set()
     result = []
     for item in raw_items:
-        clave_id = None
+        mp_obj = None
         if isinstance(item, dict):
-            clave_id = item.get('clave_id') or item.get('id') or item.get('clave_producto_id')
+            mp_id = item.get('materia_prima_id') or item.get('id') or item.get('catalogo_mp_id')
+            clave_txt = (item.get('clave') or '').strip()
+            nombre_txt = (item.get('nombre') or '').strip() or None
+            try:
+                mp_id = int(mp_id) if mp_id not in (None, '', 0, '0') else 0
+            except Exception:
+                mp_id = 0
+            if mp_id > 0:
+                mp_obj = CatalogoMateriaPrima.query.get(mp_id)
+            if mp_obj is None and clave_txt:
+                mp_obj = _find_or_create_catalogo_materia_prima(clave_txt, nombre_txt)
         else:
-            clave_id = item
-        try:
-            clave_id = int(clave_id)
-        except Exception:
+            try:
+                mp_id = int(item)
+            except Exception:
+                continue
+            if mp_id > 0:
+                mp_obj = CatalogoMateriaPrima.query.get(mp_id)
+
+        if not mp_obj or mp_obj.id in seen:
             continue
-        if clave_id <= 0 or clave_id in seen:
-            continue
-        clave_obj = ClaveProducto.query.get(clave_id)
-        if not clave_obj:
-            continue
-        seen.add(clave_id)
+        seen.add(mp_obj.id)
         result.append({
-            'clave_producto_id': clave_obj.id,
-            'clave': (clave_obj.clave or '').strip(),
-            'nombre': _clean_nullable_text(clave_obj.nombre) or clave_obj.clave,
+            'catalogo_mp_id': mp_obj.id,
+            'clave': (mp_obj.clave or '').strip(),
+            'nombre': _clean_nullable_text(mp_obj.nombre) or mp_obj.clave,
         })
     return result
 
@@ -1820,7 +1884,8 @@ def _replace_hoja_entrega_materias_primas(hoja_id, raw_items):
     for idx, item in enumerate(parsed, start=1):
         db.session.add(HojaRutaEntregaMateriaPrima(
             hoja_ruta_id=hoja_id,
-            clave_producto_id=item['clave_producto_id'],
+            catalogo_mp_id=item['catalogo_mp_id'],
+            clave_producto_id=None,
             clave=item['clave'],
             nombre=item['nombre'],
             orden=idx,
@@ -9424,6 +9489,124 @@ def api_claves_procesos():
     except Exception as e:
         logger.error(f"Error obteniendo claves/procesos: {e}")
         return jsonify({'error': str(e)}), 500
+
+
+def _can_manage_catalogo_mp(user):
+    if not user:
+        return False
+    if getattr(user, 'es_admin', False):
+        return True
+    return any(
+        user.has_permission(mod, act)
+        for mod, act in (
+            ('hojas_entregas', 'create'),
+            ('hojas_entregas', 'edit'),
+            ('catalog', 'edit'),
+            ('procesos', 'create'),
+            ('procesos', 'edit'),
+        )
+    )
+
+
+@app.route('/catalogo_materias_primas')
+@login_required
+@requires_any_permission([('hojas_entregas', 'view'), ('hojas', 'view'), ('catalog', 'view'), ('procesos', 'view')])
+def catalogo_materias_primas_panel():
+    """Catálogo de materias primas, independiente de claves de producto."""
+    _ensure_catalogo_materias_primas_table()
+    items = CatalogoMateriaPrima.query.order_by(CatalogoMateriaPrima.clave.asc()).all()
+    edit_id = request.args.get('id', type=int)
+    edit_item = CatalogoMateriaPrima.query.get(edit_id) if edit_id else None
+    return render_template(
+        'catalogo_materias_primas.html',
+        items=items,
+        edit_item=edit_item,
+        can_edit=_can_manage_catalogo_mp(get_current_user()),
+    )
+
+
+@app.route('/catalogo_materias_primas/save', methods=['POST'])
+@login_required
+@requires_any_permission([('hojas_entregas', 'create'), ('hojas_entregas', 'edit'), ('catalog', 'edit'), ('procesos', 'create'), ('procesos', 'edit')])
+def catalogo_materias_primas_save():
+    if not _ensure_catalogo_materias_primas_table():
+        flash('No se pudo preparar el catalogo de materias primas.', 'error')
+        return redirect(url_for('catalogo_materias_primas_panel'))
+
+    item_id = request.form.get('id', type=int)
+    clave = _clean_nullable_text(request.form.get('clave', ''))
+    nombre = _clean_nullable_text(request.form.get('nombre', ''))
+    notas = _clean_nullable_text(request.form.get('notas', ''))
+    activo = request.form.get('activo') == 'on'
+
+    if not clave:
+        flash('La clave de materia prima es obligatoria.', 'error')
+        return redirect(url_for('catalogo_materias_primas_panel'))
+
+    try:
+        duplicado = CatalogoMateriaPrima.query.filter(
+            func.upper(func.trim(CatalogoMateriaPrima.clave)) == clave.upper()
+        )
+        if item_id:
+            duplicado = duplicado.filter(CatalogoMateriaPrima.id != item_id)
+        if duplicado.first():
+            flash('Ya existe una materia prima con esa clave.', 'error')
+            return redirect(url_for('catalogo_materias_primas_panel', id=item_id or None))
+
+        if item_id:
+            obj = CatalogoMateriaPrima.query.get_or_404(item_id)
+            obj.clave = clave
+            obj.nombre = nombre or clave
+            obj.notas = notas
+            obj.activo = activo
+        else:
+            obj = CatalogoMateriaPrima(clave=clave, nombre=nombre or clave, notas=notas, activo=activo)
+            db.session.add(obj)
+        db.session.commit()
+        flash('Materia prima guardada.', 'ok')
+        return redirect(url_for('catalogo_materias_primas_panel'))
+    except Exception as exc:
+        db.session.rollback()
+        logger.error(f"Error guardando materia prima de catalogo: {exc}", exc_info=True)
+        flash('No se pudo guardar la materia prima.', 'error')
+        return redirect(url_for('catalogo_materias_primas_panel'))
+
+
+@app.route('/api/catalogo_materias_primas', methods=['GET'])
+@login_required
+@requires_any_permission([('hojas_entregas', 'view'), ('hojas', 'view'), ('catalog', 'view')])
+def api_listar_catalogo_materias_primas():
+    if not _ensure_catalogo_materias_primas_table():
+        return jsonify({'error': 'Catalogo no disponible'}), 500
+    q = CatalogoMateriaPrima.query
+    if str(request.args.get('todas') or '').strip() not in ('1', 'true', 'yes'):
+        q = q.filter_by(activo=True)
+    items = q.order_by(CatalogoMateriaPrima.clave.asc()).all()
+    return jsonify([item.to_dict() for item in items]), 200
+
+
+@app.route('/api/catalogo_materias_primas', methods=['POST'])
+@login_required
+@requires_any_permission([('hojas_entregas', 'create'), ('hojas_entregas', 'edit'), ('catalog', 'edit'), ('procesos', 'create')])
+def api_crear_catalogo_materia_prima():
+    if not _ensure_catalogo_materias_primas_table():
+        return jsonify({'error': 'Catalogo no disponible'}), 500
+    data = request.get_json() or {}
+    clave = _clean_nullable_text(data.get('clave'))
+    nombre = _clean_nullable_text(data.get('nombre'))
+    notas = _clean_nullable_text(data.get('notas'))
+    if not clave:
+        return jsonify({'error': 'clave requerida'}), 400
+    try:
+        obj = _find_or_create_catalogo_materia_prima(clave, nombre)
+        if notas and obj and not obj.notas:
+            obj.notas = notas
+        db.session.commit()
+        return jsonify(obj.to_dict()), 201
+    except Exception as exc:
+        db.session.rollback()
+        logger.error(f"Error creando materia prima: {exc}", exc_info=True)
+        return jsonify({'error': 'No se pudo registrar la materia prima'}), 500
 
 
 @app.route('/api/estaciones', methods=['POST'])

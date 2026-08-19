@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catálogo de materias primas</title>
+    <style>
+        .mp-admin { padding: 24px; max-width: 1100px; margin-left: 280px; box-sizing: border-box; }
+        .mp-admin h2 { margin: 0 0 8px; }
+        .mp-note { color: #64748b; font-size: 13px; margin: 0 0 18px; }
+        .mp-grid { display: grid; grid-template-columns: 340px 1fr; gap: 18px; align-items: start; }
+        .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; }
+        label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 4px; }
+        input, textarea { width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; }
+        .row { margin-bottom: 10px; }
+        .btn { padding: 9px 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; }
+        .btn-primary { background: #0f766e; color: #fff; }
+        .btn-secondary { background: #e2e8f0; color: #1e293b; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { text-align: left; padding: 8px; border-bottom: 1px solid #e2e8f0; }
+        .ok { background: #dcfce7; color: #166534; padding: 8px 10px; border-radius: 8px; margin-bottom: 12px; }
+        .error { background: #fee2e2; color: #991b1b; padding: 8px 10px; border-radius: 8px; margin-bottom: 12px; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+        .on { background: #dcfce7; color: #166534; }
+        .off { background: #fee2e2; color: #991b1b; }
+        @media (max-width: 900px) {
+            .mp-admin { margin-left: 0; }
+            .mp-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+{% include '_sidebar.html' %}
+<div class="mp-admin">
+    <h2>Catálogo de materias primas</h2>
+    <p class="mp-note">Esto NO es el catálogo de claves de producto. Aquí se registran las materias primas con las que se fabrica el material en Hojas de ruta Entregas.</p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="{{ 'ok' if category == 'ok' else 'error' }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="mp-grid">
+        <div class="card">
+            <strong>{{ 'Editar materia prima' if edit_item else 'Nueva materia prima' }}</strong>
+            {% if can_edit %}
+            <form action="{{ url_for('catalogo_materias_primas_save') }}" method="post" style="margin-top:12px;">
+                <input type="hidden" name="id" value="{{ edit_item.id if edit_item else '' }}">
+                <div class="row">
+                    <label>Clave *</label>
+                    <input name="clave" required value="{{ edit_item.clave if edit_item else '' }}" placeholder="Ej: ACERO-1020">
+                </div>
+                <div class="row">
+                    <label>Nombre / descripción</label>
+                    <input name="nombre" value="{{ edit_item.nombre if edit_item else '' }}" placeholder="Ej: Acero 1020 barra 1in">
+                </div>
+                <div class="row">
+                    <label>Notas</label>
+                    <textarea name="notas" rows="3">{{ edit_item.notas if edit_item else '' }}</textarea>
+                </div>
+                <div class="row" style="display:flex; align-items:center; gap:8px;">
+                    <input id="activo" name="activo" type="checkbox" {% if not edit_item or edit_item.activo %}checked{% endif %} style="width:auto;">
+                    <label for="activo" style="margin:0;">Activa</label>
+                </div>
+                <button class="btn btn-primary" type="submit">Guardar</button>
+                {% if edit_item %}
+                <a class="btn btn-secondary" href="{{ url_for('catalogo_materias_primas_panel') }}" style="text-decoration:none; display:inline-block; margin-left:6px;">Cancelar</a>
+                {% endif %}
+            </form>
+            {% else %}
+            <p class="mp-note">Solo consulta. Pide permiso de edición para dar de alta materias primas.</p>
+            {% endif %}
+        </div>
+
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; gap:8px; margin-bottom:10px;">
+                <strong>Registradas ({{ items|length }})</strong>
+                <input id="buscar" type="search" placeholder="Buscar..." style="max-width:240px;">
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Clave</th>
+                        <th>Nombre</th>
+                        <th>Estado</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="tbody">
+                    {% for item in items %}
+                    <tr data-q="{{ ((item.clave or '') ~ ' ' ~ (item.nombre or '') ~ ' ' ~ (item.notas or ''))|lower }}">
+                        <td><strong>{{ item.clave }}</strong></td>
+                        <td>{{ item.nombre or '' }}</td>
+                        <td><span class="badge {{ 'on' if item.activo else 'off' }}">{{ 'Activa' if item.activo else 'Inactiva' }}</span></td>
+                        <td>
+                            {% if can_edit %}
+                            <a href="{{ url_for('catalogo_materias_primas_panel', id=item.id) }}">Editar</a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" style="color:#64748b;">Aún no hay materias primas. Da de alta la primera a la izquierda.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<script>
+    const buscar = document.getElementById('buscar');
+    const rows = Array.from(document.querySelectorAll('#tbody tr[data-q]'));
+    if (buscar) {
+        buscar.addEventListener('input', () => {
+            const q = (buscar.value || '').toLowerCase().trim();
+            rows.forEach((tr) => {
+                tr.style.display = !q || tr.dataset.q.includes(q) ? '' : 'none';
+            });
+        });
+    }
+</script>
+</body>
+</html>

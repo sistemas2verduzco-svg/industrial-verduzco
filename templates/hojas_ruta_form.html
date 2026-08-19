@@ -887,11 +887,11 @@
                     <div id="fabricacion_mp_field" style="grid-column: 1 / -1;">
                         <label>Materias primas de fabricación (puedes agregar varias)</label>
                         <div class="clave-picker-wrap">
-                            <input type="text" id="mp_search" class="clave-picker-input" placeholder="Busca claves de materia prima..." autocomplete="off">
+                            <input type="text" id="mp_search" class="clave-picker-input" placeholder="Busca en el catalogo de materias primas..." autocomplete="off">
                             <div id="mp_results" class="clave-picker-results"></div>
                         </div>
                         <div id="mp_chips" class="mp-chips"></div>
-                        <div class="field-note">Solo aplica a Hojas de ruta Entregas. Elige las claves con las que se fabrica este material.</div>
+                        <div class="field-note">No usa claves de producto. Catalogo propio: <a href="/catalogo_materias_primas">Materias primas</a>.</div>
                     </div>
                     {% endif %}
                     <div style="grid-column: 1 / -1;">
@@ -1265,11 +1265,11 @@
                 <div id="edit_fabricacion_mp_field" style="grid-column: 1 / -1;">
                     <label>Materias primas de fabricación (puedes agregar varias)</label>
                     <div class="clave-picker-wrap">
-                        <input type="text" id="edit_mp_search" class="clave-picker-input" placeholder="Busca claves de materia prima..." autocomplete="off">
+                        <input type="text" id="edit_mp_search" class="clave-picker-input" placeholder="Busca en el catalogo de materias primas..." autocomplete="off">
                         <div id="edit_mp_results" class="clave-picker-results"></div>
                     </div>
                     <div id="edit_mp_chips" class="mp-chips"></div>
-                    <div class="field-note">Solo Hojas de ruta Entregas. No afecta comentarios ni QC.</div>
+                    <div class="field-note">Catalogo aparte de productos. <a href="/catalogo_materias_primas">Administrar materias primas</a>.</div>
                 </div>
                 {% endif %}
                 <div style="grid-column: 1 / -1;">
@@ -1404,6 +1404,7 @@
         const IS_ENTREGAS_FORM = API_HOJAS_BASE === '/api/hojas_ruta';
         const ALLOW_TIPO_SWITCH = {{ (allow_tipo_switch or false)|tojson }};
         let clavesData = [];
+        let materiasPrimaData = [];
         let clavePicker = null;
         let editClavePicker = null;
         let createMpPicker = null;
@@ -1461,16 +1462,48 @@
         }
 
         function materiasPayload(list) {
-            return list.map((x) => ({ clave_id: x.id }));
+            return list.map((x) => ({
+                materia_prima_id: x.id,
+                clave: x.clave || '',
+                nombre: x.nombre || '',
+            }));
         }
 
         function normalizeMateriasFromDataset(raw) {
             if (!Array.isArray(raw)) return [];
             return raw.map((item) => ({
-                id: Number(item.clave_id || item.id || 0),
+                id: Number(item.materia_prima_id || item.clave_id || item.id || 0),
                 clave: item.clave || '',
                 nombre: item.nombre || item.clave || '',
-            })).filter((x) => x.id > 0);
+            })).filter((x) => x.id > 0 || (x.clave || '').trim());
+        }
+
+        function filterMateriasPrimaData(q, limit = 30) {
+            const terms = normClaveSearchText(q).split(/\s+/).filter(Boolean);
+            if (!terms.length) return [];
+            return materiasPrimaData.filter(c => {
+                const hay = normClaveSearchText(`${c.clave || ''} ${c.nombre || ''} ${c.notas || ''}`);
+                return terms.every(t => hay.includes(t));
+            }).slice(0, limit);
+        }
+
+        async function registrarMateriaPrimaNueva(texto) {
+            const clave = String(texto || '').trim();
+            if (!clave) return null;
+            const res = await fetch('/api/catalogo_materias_primas', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ clave, nombre: clave }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error((data && data.error) ? data.error : 'No se pudo registrar la materia prima');
+            }
+            if (!materiasPrimaData.some((x) => Number(x.id) === Number(data.id))) {
+                materiasPrimaData.push(data);
+            }
+            return data;
         }
 
         function setupMpPicker(cfg) {
@@ -1480,14 +1513,33 @@
 
             function renderResults() {
                 const q = searchEl.value.trim();
-                const items = filterClavesData(q);
+                const items = filterMateriasPrimaData(q);
                 resultsEl.innerHTML = '';
                 if (!q) {
                     resultsEl.style.display = 'none';
                     return;
                 }
                 if (!items.length) {
-                    resultsEl.innerHTML = '<div class="clave-picker-empty">Sin coincidencias</div>';
+                    const empty = document.createElement('div');
+                    empty.className = 'clave-picker-empty';
+                    empty.textContent = 'No esta en el catalogo de materias primas.';
+                    resultsEl.appendChild(empty);
+                    const addBtn = document.createElement('button');
+                    addBtn.type = 'button';
+                    addBtn.className = 'clave-picker-item';
+                    addBtn.innerHTML = '<strong>Registrar nueva</strong><span></span>';
+                    addBtn.querySelector('span').textContent = q;
+                    addBtn.addEventListener('click', async () => {
+                        try {
+                            const created = await registrarMateriaPrimaNueva(q);
+                            if (created) cfg.onPick(created);
+                            searchEl.value = '';
+                            resultsEl.style.display = 'none';
+                        } catch (err) {
+                            alert(err.message || String(err));
+                        }
+                    });
+                    resultsEl.appendChild(addBtn);
                     resultsEl.style.display = 'block';
                     return;
                 }
@@ -2104,6 +2156,15 @@
             });
         }
 
+        async function loadMateriasPrimasCatalog() {
+            const res = await fetch('/api/catalogo_materias_primas', { credentials: 'same-origin' });
+            const payload = await res.json();
+            if (!res.ok) {
+                throw new Error((payload && payload.error) ? payload.error : ('HTTP ' + res.status));
+            }
+            materiasPrimaData = Array.isArray(payload) ? payload : [];
+        }
+
         async function loadClaves(retry = 0) {
             try {
                 const res = await fetch('/api/claves_procesos', { credentials: 'same-origin' });
@@ -2121,6 +2182,14 @@
                 }
 
                 clavesData = Array.isArray(payload) ? payload : [];
+                if (IS_ENTREGAS_FORM) {
+                    try {
+                        await loadMateriasPrimasCatalog();
+                    } catch (mpErr) {
+                        console.error(mpErr);
+                        materiasPrimaData = [];
+                    }
+                }
                 if (!clavePicker) {
                     clavePicker = setupClavePicker({
                         searchId: 'clave_search',

@@ -705,12 +705,36 @@ class HojaRutaEntrega(db.Model):
         }
 
 
+class CatalogoMateriaPrima(db.Model):
+    """Catálogo de materias primas. Independiente de claves de producto."""
+    __tablename__ = 'catalogo_materias_primas'
+
+    id = db.Column(db.Integer, primary_key=True)
+    clave = db.Column(db.String(100), nullable=False, unique=True)
+    nombre = db.Column(db.String(255), nullable=True)
+    notas = db.Column(db.Text, nullable=True)
+    activo = db.Column(db.Boolean, default=True, nullable=False)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'clave': self.clave,
+            'nombre': self.nombre,
+            'notas': self.notas,
+            'activo': bool(self.activo),
+            'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,
+        }
+
+
 class HojaRutaEntregaMateriaPrima(db.Model):
-    """Materias primas (claves) con las que se fabrica el producto de una hoja de entrega."""
+    """Materias primas del catálogo usadas para fabricar el producto de una hoja de entrega."""
     __tablename__ = 'hojas_ruta_entrega_materias_primas'
 
     id = db.Column(db.Integer, primary_key=True)
     hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_entrega.id'), nullable=False, index=True)
+    catalogo_mp_id = db.Column(db.Integer, nullable=True, index=True)
     clave_producto_id = db.Column(db.Integer, nullable=True, index=True)
     clave = db.Column(db.String(100), nullable=False)
     nombre = db.Column(db.String(255), nullable=True)
@@ -722,10 +746,12 @@ class HojaRutaEntregaMateriaPrima(db.Model):
     )
 
     def to_dict(self):
+        mp_id = self.catalogo_mp_id
         return {
             'id': self.id,
             'hoja_ruta_id': self.hoja_ruta_id,
-            'clave_id': self.clave_producto_id,
+            'materia_prima_id': mp_id,
+            'clave_id': mp_id,
             'clave': self.clave,
             'nombre': self.nombre,
             'orden': self.orden,
