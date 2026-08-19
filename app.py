@@ -1758,6 +1758,7 @@ _CATALOGO_MP_TABLE_READY = False
 
 
 def _ensure_catalogo_materias_primas_table():
+    """Crea el catalogo solo si no existe. Nunca borra ni altera tablas de produccion."""
     global _CATALOGO_MP_TABLE_READY
 
     if _CATALOGO_MP_TABLE_READY:
@@ -1777,6 +1778,7 @@ def _ensure_catalogo_materias_primas_table():
 
 
 def _ensure_hoja_entrega_materias_primas_table():
+    """Crea/altera SOLO la tabla puente de materias primas. No toca hojas existentes."""
     global _HOJA_MP_TABLE_READY
 
     if _HOJA_MP_TABLE_READY:
