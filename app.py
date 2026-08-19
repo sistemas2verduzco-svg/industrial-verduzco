@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash, abort
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, CatalogoMateriaPrima, HojaRutaEntregaMateriaPrima, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqNotaVenta, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaBOMProceso, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, OdooSyncRun, OdooPedidoVenta, OdooPedidoVentaLinea, OdooOrdenCompra, OdooOrdenCompraLinea, MaquinariaSolicitud, MaquinariaSolicitudItem, AlertaBuzonGeneral, Tecnico, LogVerificacion, EmpaqueCliente, EmpaquePedido, EmpaquePedidoItem, EmpaqueCaja, EmpaqueMovimiento, EmpaqueLineaProgreso, EmpaqueSeguimientoLog, AlmacenCajaSurtidoSesion, AlmacenCajaSurtidoCaja, AlmacenCajaSurtidoLecturaBascula, AlmacenCajaSurtidoItem
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, CatalogoMateriaPrima, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqNotaVenta, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaBOMProceso, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, OdooSyncRun, OdooPedidoVenta, OdooPedidoVentaLinea, OdooOrdenCompra, OdooOrdenCompraLinea, MaquinariaSolicitud, MaquinariaSolicitudItem, AlertaBuzonGeneral, Tecnico, LogVerificacion, EmpaqueCliente, EmpaquePedido, EmpaquePedidoItem, EmpaqueCaja, EmpaqueMovimiento, EmpaqueLineaProgreso, EmpaqueSeguimientoLog, AlmacenCajaSurtidoSesion, AlmacenCajaSurtidoCaja, AlmacenCajaSurtidoLecturaBascula, AlmacenCajaSurtidoItem
 from auth import AuthManager
 from email_manager import EmailManager
 from odoo_client import OdooClient, OdooError
@@ -1753,12 +1753,12 @@ def _ensure_hoja_cargas_historial_table():
         return False
 
 
-_HOJA_MP_TABLE_READY = False
+_HOJA_MP_CAMPO_READY = False
 _CATALOGO_MP_TABLE_READY = False
 
 
 def _ensure_catalogo_materias_primas_table():
-    """Crea el catalogo solo si no existe. Nunca borra ni altera tablas de produccion."""
+    """Crea el catalogo de materias primas solo si no existe. No toca hojas."""
     global _CATALOGO_MP_TABLE_READY
 
     if _CATALOGO_MP_TABLE_READY:
@@ -1777,26 +1777,25 @@ def _ensure_catalogo_materias_primas_table():
         return False
 
 
-def _ensure_hoja_entrega_materias_primas_table():
-    """Crea/altera SOLO la tabla puente de materias primas. No toca hojas existentes."""
-    global _HOJA_MP_TABLE_READY
+def _ensure_hoja_materias_primas_campo():
+    """Agrega un campo nullable en la hoja de entrega existente. No crea otra tabla de hojas."""
+    global _HOJA_MP_CAMPO_READY
 
-    if _HOJA_MP_TABLE_READY:
+    if _HOJA_MP_CAMPO_READY:
         return True
 
     try:
         if not _ensure_catalogo_materias_primas_table():
             return False
-        HojaRutaEntregaMateriaPrima.__table__.create(bind=db.engine, checkfirst=True)
         with db.engine.begin() as conn:
             conn.execute(text(
-                "ALTER TABLE hojas_ruta_entrega_materias_primas "
-                "ADD COLUMN IF NOT EXISTS catalogo_mp_id INTEGER"
+                "ALTER TABLE hojas_ruta_entrega "
+                "ADD COLUMN IF NOT EXISTS materias_primas_json TEXT"
             ))
-        _HOJA_MP_TABLE_READY = True
+        _HOJA_MP_CAMPO_READY = True
         return True
     except Exception as exc:
-        logger.warning(f"No se pudo asegurar la tabla de materias primas de hojas: {exc}")
+        logger.warning(f"No se pudo agregar el campo materias_primas_json: {exc}")
         try:
             db.session.rollback()
         except Exception:
@@ -1869,46 +1868,64 @@ def _parse_materias_primas_payload(raw_items):
             continue
         seen.add(mp_obj.id)
         result.append({
-            'catalogo_mp_id': mp_obj.id,
+            'materia_prima_id': mp_obj.id,
+            'clave_id': mp_obj.id,
             'clave': (mp_obj.clave or '').strip(),
             'nombre': _clean_nullable_text(mp_obj.nombre) or mp_obj.clave,
         })
     return result
 
 
+def _decode_materias_primas_campo(raw):
+    if not raw:
+        return []
+    data = raw
+    if isinstance(raw, str):
+        try:
+            data = json.loads(raw)
+        except Exception:
+            return []
+    if not isinstance(data, list):
+        return []
+    result = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        mp_id = item.get('materia_prima_id') or item.get('id') or item.get('catalogo_mp_id') or item.get('clave_id')
+        result.append({
+            'materia_prima_id': mp_id,
+            'clave_id': mp_id,
+            'clave': item.get('clave') or '',
+            'nombre': item.get('nombre') or item.get('clave') or '',
+            'orden': item.get('orden') or 0,
+        })
+    return result
+
+
 def _replace_hoja_entrega_materias_primas(hoja_id, raw_items):
-    if not _ensure_hoja_entrega_materias_primas_table():
-        logger.warning("No se guardaron materias primas: tabla no disponible")
+    if not _ensure_hoja_materias_primas_campo():
+        logger.warning("No se guardaron materias primas: campo no disponible")
+        return []
+
+    hoja = HojaRutaEntrega.query.get(hoja_id)
+    if not hoja:
         return []
 
     parsed = _parse_materias_primas_payload(raw_items)
-    HojaRutaEntregaMateriaPrima.query.filter_by(hoja_ruta_id=hoja_id).delete(synchronize_session=False)
+    payload = []
     for idx, item in enumerate(parsed, start=1):
-        db.session.add(HojaRutaEntregaMateriaPrima(
-            hoja_ruta_id=hoja_id,
-            catalogo_mp_id=item['catalogo_mp_id'],
-            clave_producto_id=None,
-            clave=item['clave'],
-            nombre=item['nombre'],
-            orden=idx,
-        ))
-    return parsed
+        payload.append({
+            'materia_prima_id': item['materia_prima_id'],
+            'clave': item['clave'],
+            'nombre': item['nombre'],
+            'orden': idx,
+        })
+    hoja.materias_primas_json = json.dumps(payload, ensure_ascii=False) if payload else None
+    return payload
 
 
-def _materias_primas_por_hojas(hoja_ids):
-    if not hoja_ids or not _ensure_hoja_entrega_materias_primas_table():
-        return {}
-    rows = HojaRutaEntregaMateriaPrima.query.filter(
-        HojaRutaEntregaMateriaPrima.hoja_ruta_id.in_(hoja_ids)
-    ).order_by(
-        HojaRutaEntregaMateriaPrima.hoja_ruta_id.asc(),
-        HojaRutaEntregaMateriaPrima.orden.asc(),
-        HojaRutaEntregaMateriaPrima.id.asc(),
-    ).all()
-    by_hoja = {}
-    for row in rows:
-        by_hoja.setdefault(row.hoja_ruta_id, []).append(row.to_dict())
-    return by_hoja
+def _materias_primas_de_hoja(hoja):
+    return _decode_materias_primas_campo(getattr(hoja, 'materias_primas_json', None))
 
 
 _HOJA_IMPRESIONES_PARCIALES_TABLE_READY = False
@@ -4581,6 +4598,8 @@ def log_access_y_cierre_por_hora():
         # skip static files and health checks
         if path.startswith('/static') or path.startswith('/favicon'):
             return
+        _ensure_catalogo_materias_primas_table()
+        _ensure_hoja_materias_primas_campo()
         # sync push: payload grande; no registrar en access_logs
         if path.startswith('/api/contpaq/') and path.endswith('/sync/push'):
             return
@@ -8711,6 +8730,7 @@ def api_hojas_ruta_lista_para_entregas():
 @requires_any_permission([('hojas_entregas', 'view'), ('hojas', 'view'), ('catalog', 'view')])
 def hojas_ruta_entregas_form():
     """Formulario simplificado para crear hojas de ruta de produccion."""
+    _ensure_hoja_materias_primas_campo()
     almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria', 'Walmart', 'ALMACEN 3']
     # Listado completo para consulta
     hojas = HojaRutaEntrega.query.order_by(HojaRutaEntrega.fecha_creacion.desc()).all()
@@ -8743,8 +8763,6 @@ def hojas_ruta_entregas_form():
         ).all()
         for item in historial_cargas:
             historial_cargas_por_hoja.setdefault(item.hoja_ruta_id, []).append(_serialize_hoja_carga_historial(item))
-
-    materias_por_hoja = _materias_primas_por_hojas(hoja_ids)
 
     impresion_parcial_totales = {}
     if hoja_ids and _ensure_hoja_impresiones_parciales_table():
@@ -8791,7 +8809,7 @@ def hojas_ruta_entregas_form():
             'almacen': h.almacen,
             'orden_trabajo': h.orden_trabajo_hr,
             'comentarios': comentarios_val,
-            'materias_primas': materias_por_hoja.get(h.id, []),
+            'materias_primas': _materias_primas_de_hoja(h),
             'scrap_qc': scrap_summary,
             'firma_ing_jose': h.supervisor,
             'firma_ing_rodrigo': h.operador,
@@ -9077,6 +9095,7 @@ def qc_estaciones_maquina(maquina_id):
 @requires_any_permission([('hojas_entregas', 'create'), ('hojas', 'create'), ('catalog', 'edit')])
 def api_crear_hoja_ruta():
     """Crear una hoja de ruta con formato simplificado y procesos desde la clave."""
+    _ensure_hoja_materias_primas_campo()
     data = request.get_json() or {}
     clave_id = data.get('clave_id')
     calidad = (data.get('calidad') or '').strip()
@@ -9304,6 +9323,7 @@ def api_crear_hoja_ruta():
 @requires_any_permission([('hojas_entregas', 'edit'), ('hojas', 'edit'), ('catalog', 'edit')])
 def api_actualizar_hoja_ruta(hoja_id):
     """Actualizar campos editables de una hoja de ruta."""
+    _ensure_hoja_materias_primas_campo()
     hoja = HojaRutaEntrega.query.get_or_404(hoja_id)
     data = request.get_json() or {}
     estado_change_dt = None

@@ -647,6 +647,7 @@ class HojaRutaEntrega(db.Model):
     almacen = db.Column(db.String(100), nullable=True)
     no_sin_orden = db.Column(db.String(100), nullable=True)
     materia_prima = db.Column(db.String(255), nullable=True)
+    materias_primas_json = db.Column(db.Text, nullable=True)
     total_tiempo = db.Column(db.String(50), nullable=True)
     dias_a_laborar = db.Column(db.Float, nullable=True)
     fecha_termino = db.Column(db.DateTime, nullable=True)
@@ -688,6 +689,7 @@ class HojaRutaEntrega(db.Model):
             'almacen': self.almacen,
             'no_sin_orden': self.no_sin_orden,
             'materia_prima': self.materia_prima,
+            'materias_primas_json': self.materias_primas_json,
             'total_tiempo': self.total_tiempo,
             'dias_a_laborar': self.dias_a_laborar,
             'fecha_termino': self.fecha_termino.isoformat() if self.fecha_termino else None,
@@ -706,7 +708,7 @@ class HojaRutaEntrega(db.Model):
 
 
 class CatalogoMateriaPrima(db.Model):
-    """Catálogo de materias primas. Independiente de claves de producto."""
+    """Catálogo de materias primas. Independiente de claves de producto y de hojas de ruta."""
     __tablename__ = 'catalogo_materias_primas'
 
     id = db.Column(db.Integer, primary_key=True)
@@ -725,36 +727,6 @@ class CatalogoMateriaPrima(db.Model):
             'notas': self.notas,
             'activo': bool(self.activo),
             'fecha_creacion': self.fecha_creacion.isoformat() if self.fecha_creacion else None,
-        }
-
-
-class HojaRutaEntregaMateriaPrima(db.Model):
-    """Materias primas del catálogo usadas para fabricar el producto de una hoja de entrega."""
-    __tablename__ = 'hojas_ruta_entrega_materias_primas'
-
-    id = db.Column(db.Integer, primary_key=True)
-    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_entrega.id'), nullable=False, index=True)
-    catalogo_mp_id = db.Column(db.Integer, nullable=True, index=True)
-    clave_producto_id = db.Column(db.Integer, nullable=True, index=True)
-    clave = db.Column(db.String(100), nullable=False)
-    nombre = db.Column(db.String(255), nullable=True)
-    orden = db.Column(db.Integer, nullable=False, default=0)
-    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-
-    __table_args__ = (
-        db.UniqueConstraint('hoja_ruta_id', 'clave', name='uq_hoja_entrega_mp_clave'),
-    )
-
-    def to_dict(self):
-        mp_id = self.catalogo_mp_id
-        return {
-            'id': self.id,
-            'hoja_ruta_id': self.hoja_ruta_id,
-            'materia_prima_id': mp_id,
-            'clave_id': mp_id,
-            'clave': self.clave,
-            'nombre': self.nombre,
-            'orden': self.orden,
         }
 
 
