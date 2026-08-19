@@ -884,16 +884,16 @@
                         </select>
                         <div id="contpaq_ot_hint" class="field-note">Selecciona una clave y cantidad para sugerir OTs disponibles.</div>
                     </div>
-                    {% endif %}
-                    <div style="grid-column: 1 / -1;">
-                        <label>Materia prima (puedes agregar varias)</label>
+                    <div id="fabricacion_mp_field" style="grid-column: 1 / -1;">
+                        <label>Materias primas de fabricación (puedes agregar varias)</label>
                         <div class="clave-picker-wrap">
-                            <input type="text" id="mp_search" class="clave-picker-input" placeholder="Busca y selecciona la materia prima..." autocomplete="off">
+                            <input type="text" id="mp_search" class="clave-picker-input" placeholder="Busca claves de materia prima..." autocomplete="off">
                             <div id="mp_results" class="clave-picker-results"></div>
                         </div>
                         <div id="mp_chips" class="mp-chips"></div>
-                        <div class="field-note">Selecciona cada clave de materia prima con la que se fabrica este material. Puedes agregar mas de una.</div>
+                        <div class="field-note">Solo aplica a Hojas de ruta Entregas. Elige las claves con las que se fabrica este material.</div>
                     </div>
+                    {% endif %}
                     <div style="grid-column: 1 / -1;">
                         <label>Descripcion de la clave</label>
                         <textarea id="descripcion_clave" readonly placeholder="Se carga automaticamente desde la clave seleccionada"></textarea>
@@ -975,7 +975,9 @@
                         <th>Historial Piezas</th>
                         <th>Almacen</th>
                         <th>Orden Trabajo</th>
-                        <th>Materia prima</th>
+                        {% if not nuevo_modulo %}
+                        <th>Materias primas de fabricación</th>
+                        {% endif %}
                         <th>Hoja producción</th>
                         <th>Comentarios</th>
                         <th>Scrap QC</th>
@@ -1014,6 +1016,7 @@
                         </td>
                         <td>{{ h.almacen or '' }}</td>
                         <td>{{ h.orden_trabajo or '' }}</td>
+                        {% if not nuevo_modulo %}
                         <td>
                             {% if h.materias_primas %}
                                 {% for mp in h.materias_primas %}
@@ -1023,6 +1026,7 @@
                                 <span style="color:#6b7280;">—</span>
                             {% endif %}
                         </td>
+                        {% endif %}
                         <td style="text-align:center; font-size:18px;">{% if h.hoja_en_produccion %}✓{% endif %}</td>
                         <td>{{ h.comentarios or '' }}</td>
                         <td>
@@ -1257,15 +1261,17 @@
                     <input type="checkbox" id="edit_hoja_en_produccion">
                     <label for="edit_hoja_en_produccion" style="margin:0;">Hoja de ruta en producción</label>
                 </div>
-                <div style="grid-column: 1 / -1;">
-                    <label>Materia prima (puedes agregar varias)</label>
+                {% if not nuevo_modulo %}
+                <div id="edit_fabricacion_mp_field" style="grid-column: 1 / -1;">
+                    <label>Materias primas de fabricación (puedes agregar varias)</label>
                     <div class="clave-picker-wrap">
-                        <input type="text" id="edit_mp_search" class="clave-picker-input" placeholder="Busca y selecciona la materia prima..." autocomplete="off">
+                        <input type="text" id="edit_mp_search" class="clave-picker-input" placeholder="Busca claves de materia prima..." autocomplete="off">
                         <div id="edit_mp_results" class="clave-picker-results"></div>
                     </div>
                     <div id="edit_mp_chips" class="mp-chips"></div>
-                    <div class="field-note">Estas claves se guardan junto con la hoja, sin afectar comentarios ni QC.</div>
+                    <div class="field-note">Solo Hojas de ruta Entregas. No afecta comentarios ni QC.</div>
                 </div>
+                {% endif %}
                 <div style="grid-column: 1 / -1;">
                     <label>Comentarios</label>
                     <textarea id="edit_comentarios" placeholder="Especificacion de refaccion o notas tecnicas"></textarea>
@@ -1644,7 +1650,6 @@
             { key: 'historial_cargas_resumen', label: 'Historial Cargas Piezas' },
             { key: 'almacen', label: 'Almacen' },
             { key: 'orden_trabajo', label: 'Orden trabajo' },
-            { key: 'materias_primas', label: 'Materia prima' },
             { key: 'comentarios', label: 'Comentarios' },
             { key: 'firma_ing_jose', label: 'Firma Jose' },
             { key: 'firma_ing_rodrigo', label: 'Firma Osvaldo' },
@@ -1657,6 +1662,13 @@
             { key: 'facturacion_registro_fecha', label: 'Fecha Registro Facturación' },
             { key: 'facturacion_registro_notas', label: 'Notas Registro Facturación' }
         ];
+        if (IS_ENTREGAS_FORM) {
+            const otIdx = REPORT_COLUMNS.findIndex((c) => c.key === 'orden_trabajo');
+            REPORT_COLUMNS.splice(otIdx >= 0 ? otIdx + 1 : REPORT_COLUMNS.length, 0, {
+                key: 'materias_primas',
+                label: 'Materias primas de fabricación',
+            });
+        }
         let reportDataDraft = [];
         let selectedPrintPartialHoja = null;
 
@@ -1896,6 +1908,11 @@
                 otHint.textContent = 'Las OTs de CONTPAQ aplican solo para hojas de Produccion / Entrega.';
             }
 
+            const fabMpField = document.getElementById('fabricacion_mp_field');
+            if (fabMpField) {
+                fabMpField.style.display = (IS_ENTREGAS_FORM && isEntrega) ? '' : 'none';
+            }
+
             if (!isEntrega && ordenTrabajoInput && ordenTrabajoInput.value && ordenTrabajoInput.value.startsWith('OT-')) {
                 // Mantener campo editable, pero limpiar sugerencias arrastradas de CONTPAQ al cambiar a MP.
                 ordenTrabajoInput.value = '';
@@ -2119,7 +2136,7 @@
                         resultsId: 'edit_clave_results',
                     });
                 }
-                if (!createMpPicker) {
+                if (!createMpPicker && IS_ENTREGAS_FORM) {
                     createMpPicker = setupMpPicker({
                         searchId: 'mp_search',
                         resultsId: 'mp_results',
@@ -2130,7 +2147,7 @@
                     });
                     refreshCreateMpChips();
                 }
-                if (!editMpPicker) {
+                if (!editMpPicker && IS_ENTREGAS_FORM) {
                     editMpPicker = setupMpPicker({
                         searchId: 'edit_mp_search',
                         resultsId: 'edit_mp_results',
@@ -2196,9 +2213,11 @@
                 almacen: document.getElementById('almacen').value,
                 orden_trabajo: document.getElementById('orden_trabajo').value.trim(),
                 comentarios: document.getElementById('comentarios').value.trim(),
-                materias_primas: materiasPayload(createMpItems),
                 hoja_en_produccion: document.getElementById('hoja_en_produccion').checked
             };
+            if (IS_ENTREGAS_FORM && tipoHoja === 'entrega') {
+                payload.materias_primas = materiasPayload(createMpItems);
+            }
 
             if (!payload.clave_id || !payload.calidad || !payload.cantidad_piezas || !payload.almacen) {
                 alert('Completa los campos obligatorios');
@@ -2308,10 +2327,12 @@
                 almacen: document.getElementById('edit_almacen').value,
                 orden_trabajo: document.getElementById('edit_orden').value.trim(),
                 comentarios: document.getElementById('edit_comentarios').value.trim(),
-                materias_primas: materiasPayload(editMpItems),
                 hoja_en_produccion: document.getElementById('edit_hoja_en_produccion').checked,
                 estado: document.getElementById('edit_estado').value
             };
+            if (IS_ENTREGAS_FORM) {
+                payload.materias_primas = materiasPayload(editMpItems);
+            }
 
             if (!hojaId || !payload.clave_id || !payload.calidad || !payload.cantidad_piezas || !payload.almacen) {
                 alert('Completa clave, calidad, cantidad y almacen para guardar');

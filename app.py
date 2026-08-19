@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash, abort
-from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaEntregaMateriaPrima, HojaRutaNuevaMateriaPrima, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqNotaVenta, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaBOMProceso, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, OdooSyncRun, OdooPedidoVenta, OdooPedidoVentaLinea, OdooOrdenCompra, OdooOrdenCompraLinea, MaquinariaSolicitud, MaquinariaSolicitudItem, AlertaBuzonGeneral, Tecnico, LogVerificacion, EmpaqueCliente, EmpaquePedido, EmpaquePedidoItem, EmpaqueCaja, EmpaqueMovimiento, EmpaqueLineaProgreso, EmpaqueSeguimientoLog, AlmacenCajaSurtidoSesion, AlmacenCajaSurtidoCaja, AlmacenCajaSurtidoLecturaBascula, AlmacenCajaSurtidoItem
+from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, HojaRutaEntregaMateriaPrima, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqNotaVenta, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaBOMProceso, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, OdooSyncRun, OdooPedidoVenta, OdooPedidoVentaLinea, OdooOrdenCompra, OdooOrdenCompraLinea, MaquinariaSolicitud, MaquinariaSolicitudItem, AlertaBuzonGeneral, Tecnico, LogVerificacion, EmpaqueCliente, EmpaquePedido, EmpaquePedidoItem, EmpaqueCaja, EmpaqueMovimiento, EmpaqueLineaProgreso, EmpaqueSeguimientoLog, AlmacenCajaSurtidoSesion, AlmacenCajaSurtidoCaja, AlmacenCajaSurtidoLecturaBascula, AlmacenCajaSurtidoItem
 from auth import AuthManager
 from email_manager import EmailManager
 from odoo_client import OdooClient, OdooError
@@ -1828,60 +1828,20 @@ def _replace_hoja_entrega_materias_primas(hoja_id, raw_items):
     return parsed
 
 
-def _materias_primas_por_hojas(hoja_ids, model=HojaRutaEntregaMateriaPrima, ensure_fn=_ensure_hoja_entrega_materias_primas_table):
-    if not hoja_ids or not ensure_fn():
+def _materias_primas_por_hojas(hoja_ids):
+    if not hoja_ids or not _ensure_hoja_entrega_materias_primas_table():
         return {}
-    rows = model.query.filter(
-        model.hoja_ruta_id.in_(hoja_ids)
+    rows = HojaRutaEntregaMateriaPrima.query.filter(
+        HojaRutaEntregaMateriaPrima.hoja_ruta_id.in_(hoja_ids)
     ).order_by(
-        model.hoja_ruta_id.asc(),
-        model.orden.asc(),
-        model.id.asc(),
+        HojaRutaEntregaMateriaPrima.hoja_ruta_id.asc(),
+        HojaRutaEntregaMateriaPrima.orden.asc(),
+        HojaRutaEntregaMateriaPrima.id.asc(),
     ).all()
     by_hoja = {}
     for row in rows:
         by_hoja.setdefault(row.hoja_ruta_id, []).append(row.to_dict())
     return by_hoja
-
-
-_HOJA_NUEVA_MP_TABLE_READY = False
-
-
-def _ensure_hoja_nueva_materias_primas_table():
-    global _HOJA_NUEVA_MP_TABLE_READY
-
-    if _HOJA_NUEVA_MP_TABLE_READY:
-        return True
-
-    try:
-        HojaRutaNuevaMateriaPrima.__table__.create(bind=db.engine, checkfirst=True)
-        _HOJA_NUEVA_MP_TABLE_READY = True
-        return True
-    except Exception as exc:
-        logger.warning(f"No se pudo asegurar la tabla de materias primas de hojas MP: {exc}")
-        try:
-            db.session.rollback()
-        except Exception:
-            pass
-        return False
-
-
-def _replace_hoja_nueva_materias_primas(hoja_id, raw_items):
-    if not _ensure_hoja_nueva_materias_primas_table():
-        logger.warning("No se guardaron materias primas MP: tabla no disponible")
-        return []
-
-    parsed = _parse_materias_primas_payload(raw_items)
-    HojaRutaNuevaMateriaPrima.query.filter_by(hoja_ruta_id=hoja_id).delete(synchronize_session=False)
-    for idx, item in enumerate(parsed, start=1):
-        db.session.add(HojaRutaNuevaMateriaPrima(
-            hoja_ruta_id=hoja_id,
-            clave_producto_id=item['clave_producto_id'],
-            clave=item['clave'],
-            nombre=item['nombre'],
-            orden=idx,
-        ))
-    return parsed
 
 
 _HOJA_IMPRESIONES_PARCIALES_TABLE_READY = False
@@ -7774,25 +7734,11 @@ def hojas_ruta_nuevo_form():
     """Formulario para crear hojas de ruta nuevas."""
     almacenes = ['AlmacenPT', 'AlmacenMP', 'Maquinaria', 'Walmart', 'ALMACEN 3']
     hojas = HojaRutaNueva.query.order_by(HojaRutaNueva.fecha_creacion.desc()).all()
-    hoja_ids = [h.id for h in hojas]
-    materias_por_hoja = _materias_primas_por_hojas(
-        hoja_ids,
-        model=HojaRutaNuevaMateriaPrima,
-        ensure_fn=_ensure_hoja_nueva_materias_primas_table,
-    )
-    claves_all = ClaveProducto.query.all()
-    claves_idx = {
-        (str(c.clave or '').strip().upper()): c
-        for c in claves_all
-        if str(c.clave or '').strip()
-    }
     hojas_data = []
     for h in hojas:
         item = h.to_dict()
         item['serie'] = item.get('nombre')
         item['clave'] = item.get('pn')
-        clave_obj = claves_idx.get(str(h.pn or '').strip().upper())
-        item['clave_id'] = clave_obj.id if clave_obj else None
         item['descripcion_clave'] = _resolve_clave_descripcion_by_pn(h.pn)
         item['qr_payload'] = f"HRNID:{h.id};SERIE:{h.nombre or ''}"
         item['qr_deeplink'] = request.url_root.rstrip('/') + f"/hoja_nuevo/{h.id}"
@@ -7801,7 +7747,6 @@ def hojas_ruta_nuevo_form():
         item['firma_ing_jose'] = item.get('supervisor')
         item['firma_ing_rodrigo'] = item.get('operador')
         item['historial_cargas'] = []
-        item['materias_primas'] = materias_por_hoja.get(h.id, [])
         item['estaciones'] = _build_mp_virtual_estaciones_by_pn(h.pn, _mp_parse_completed_process_ids(h.materia_prima))
         hojas_data.append(item)
 
@@ -10020,8 +9965,6 @@ def api_crear_hoja_ruta_nuevo():
         hoja.nombre = f"HRN-{fecha_actual.strftime('%Y%m%d')}-{clave_segura}-{hoja.id:04d}"
 
         _recompute_mp_time_plan(hoja)
-        if 'materias_primas' in data:
-            _replace_hoja_nueva_materias_primas(hoja.id, data.get('materias_primas'))
 
         db.session.commit()
         result = hoja.to_dict()
@@ -10070,9 +10013,6 @@ def api_actualizar_hoja_ruta_nuevo(hoja_id):
             hoja.materia_prima = _mp_upsert_process_state_block(comentarios_usuario, _mp_parse_completed_process_ids(hoja.materia_prima))
         else:
             hoja.materia_prima = comentarios_usuario or None
-
-    if 'materias_primas' in data:
-        _replace_hoja_nueva_materias_primas(hoja.id, data.get('materias_primas'))
 
     _recompute_mp_time_plan(hoja)
 
