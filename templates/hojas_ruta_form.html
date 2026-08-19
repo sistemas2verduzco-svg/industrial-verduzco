@@ -568,6 +568,35 @@
             font-size: 13px;
         }
 
+        .mp-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+            min-height: 8px;
+        }
+        .mp-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #ecfeff;
+            border: 1px solid #67e8f9;
+            color: #155e75;
+            border-radius: 999px;
+            padding: 4px 8px 4px 10px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .mp-chip button {
+            border: none;
+            background: transparent;
+            color: #0e7490;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+            padding: 0;
+        }
+
         .hojas-counter {
             font-size: 12px;
             color: #4b5563;
@@ -857,6 +886,15 @@
                     </div>
                     {% endif %}
                     <div style="grid-column: 1 / -1;">
+                        <label>Materia prima (puedes agregar varias)</label>
+                        <div class="clave-picker-wrap">
+                            <input type="text" id="mp_search" class="clave-picker-input" placeholder="Busca y selecciona la materia prima..." autocomplete="off">
+                            <div id="mp_results" class="clave-picker-results"></div>
+                        </div>
+                        <div id="mp_chips" class="mp-chips"></div>
+                        <div class="field-note">Selecciona cada clave de materia prima con la que se fabrica este material. Puedes agregar mas de una.</div>
+                    </div>
+                    <div style="grid-column: 1 / -1;">
                         <label>Descripcion de la clave</label>
                         <textarea id="descripcion_clave" readonly placeholder="Se carga automaticamente desde la clave seleccionada"></textarea>
                     </div>
@@ -937,6 +975,7 @@
                         <th>Historial Piezas</th>
                         <th>Almacen</th>
                         <th>Orden Trabajo</th>
+                        <th>Materia prima</th>
                         <th>Hoja producción</th>
                         <th>Comentarios</th>
                         <th>Scrap QC</th>
@@ -975,6 +1014,15 @@
                         </td>
                         <td>{{ h.almacen or '' }}</td>
                         <td>{{ h.orden_trabajo or '' }}</td>
+                        <td>
+                            {% if h.materias_primas %}
+                                {% for mp in h.materias_primas %}
+                                    <div style="font-size:12px; font-weight:600;">{{ mp.clave }}{% if mp.nombre %} — {{ mp.nombre }}{% endif %}</div>
+                                {% endfor %}
+                            {% else %}
+                                <span style="color:#6b7280;">—</span>
+                            {% endif %}
+                        </td>
                         <td style="text-align:center; font-size:18px;">{% if h.hoja_en_produccion %}✓{% endif %}</td>
                         <td>{{ h.comentarios or '' }}</td>
                         <td>
@@ -1042,6 +1090,7 @@
                                 data-hoja-en-produccion="{{ 'true' if h.hoja_en_produccion else 'false' }}"
                                 data-estado="{{ (h.estado or '')|e }}"
                                 data-comentarios='{{ (h.comentarios or "")|tojson }}'
+                                data-materias-primas='{{ (h.materias_primas or [])|tojson }}'
                                 onclick="abrirModalEdicion(this)">
                                 Editar
                             </button>
@@ -1209,6 +1258,15 @@
                     <label for="edit_hoja_en_produccion" style="margin:0;">Hoja de ruta en producción</label>
                 </div>
                 <div style="grid-column: 1 / -1;">
+                    <label>Materia prima (puedes agregar varias)</label>
+                    <div class="clave-picker-wrap">
+                        <input type="text" id="edit_mp_search" class="clave-picker-input" placeholder="Busca y selecciona la materia prima..." autocomplete="off">
+                        <div id="edit_mp_results" class="clave-picker-results"></div>
+                    </div>
+                    <div id="edit_mp_chips" class="mp-chips"></div>
+                    <div class="field-note">Estas claves se guardan junto con la hoja, sin afectar comentarios ni QC.</div>
+                </div>
+                <div style="grid-column: 1 / -1;">
                     <label>Comentarios</label>
                     <textarea id="edit_comentarios" placeholder="Especificacion de refaccion o notas tecnicas"></textarea>
                 </div>
@@ -1342,6 +1400,117 @@
         let clavesData = [];
         let clavePicker = null;
         let editClavePicker = null;
+        let createMpPicker = null;
+        let editMpPicker = null;
+        let createMpItems = [];
+        let editMpItems = [];
+
+        function mpLabel(c) {
+            return `${c.clave || ''}${c.nombre ? (' — ' + c.nombre) : ''}`.trim();
+        }
+
+        function renderMpChips(list, chipsId, onRemove) {
+            const box = document.getElementById(chipsId);
+            if (!box) return;
+            box.innerHTML = '';
+            list.forEach((item, idx) => {
+                const chip = document.createElement('span');
+                chip.className = 'mp-chip';
+                const text = document.createElement('span');
+                text.textContent = mpLabel(item);
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.setAttribute('aria-label', 'Quitar');
+                btn.textContent = '×';
+                btn.addEventListener('click', () => onRemove(idx));
+                chip.appendChild(text);
+                chip.appendChild(btn);
+                box.appendChild(chip);
+            });
+        }
+
+        function refreshCreateMpChips() {
+            renderMpChips(createMpItems, 'mp_chips', (idx) => {
+                createMpItems.splice(idx, 1);
+                refreshCreateMpChips();
+            });
+        }
+
+        function refreshEditMpChips() {
+            renderMpChips(editMpItems, 'edit_mp_chips', (idx) => {
+                editMpItems.splice(idx, 1);
+                refreshEditMpChips();
+            });
+        }
+
+        function addMpItem(list, clave) {
+            const id = Number(clave && clave.id);
+            if (!Number.isFinite(id) || id <= 0) return list;
+            if (list.some((x) => Number(x.id) === id)) return list;
+            return list.concat([{
+                id,
+                clave: clave.clave || '',
+                nombre: clave.nombre || clave.clave || '',
+            }]);
+        }
+
+        function materiasPayload(list) {
+            return list.map((x) => ({ clave_id: x.id }));
+        }
+
+        function normalizeMateriasFromDataset(raw) {
+            if (!Array.isArray(raw)) return [];
+            return raw.map((item) => ({
+                id: Number(item.clave_id || item.id || 0),
+                clave: item.clave || '',
+                nombre: item.nombre || item.clave || '',
+            })).filter((x) => x.id > 0);
+        }
+
+        function setupMpPicker(cfg) {
+            const searchEl = document.getElementById(cfg.searchId);
+            const resultsEl = document.getElementById(cfg.resultsId);
+            if (!searchEl || !resultsEl) return null;
+
+            function renderResults() {
+                const q = searchEl.value.trim();
+                const items = filterClavesData(q);
+                resultsEl.innerHTML = '';
+                if (!q) {
+                    resultsEl.style.display = 'none';
+                    return;
+                }
+                if (!items.length) {
+                    resultsEl.innerHTML = '<div class="clave-picker-empty">Sin coincidencias</div>';
+                    resultsEl.style.display = 'block';
+                    return;
+                }
+                items.forEach((c) => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'clave-picker-item';
+                    const strong = document.createElement('strong');
+                    strong.textContent = c.clave || '';
+                    const span = document.createElement('span');
+                    span.textContent = c.nombre || '';
+                    btn.appendChild(strong);
+                    btn.appendChild(span);
+                    btn.addEventListener('click', () => {
+                        cfg.onPick(c);
+                        searchEl.value = '';
+                        resultsEl.style.display = 'none';
+                    });
+                    resultsEl.appendChild(btn);
+                });
+                resultsEl.style.display = 'block';
+            }
+
+            searchEl.addEventListener('input', renderResults);
+            searchEl.addEventListener('focus', () => {
+                if (searchEl.value.trim()) renderResults();
+            });
+            return true;
+        }
 
         function normClaveSearchText(v) {
             return String(v || '')
@@ -1453,7 +1622,7 @@
         }
 
         document.addEventListener('click', (ev) => {
-            ['clave_results', 'edit_clave_results'].forEach(id => {
+            ['clave_results', 'edit_clave_results', 'mp_results', 'edit_mp_results'].forEach(id => {
                 const box = document.getElementById(id);
                 const wrap = box ? box.closest('.clave-picker-wrap') : null;
                 if (box && wrap && !wrap.contains(ev.target)) {
@@ -1475,6 +1644,7 @@
             { key: 'historial_cargas_resumen', label: 'Historial Cargas Piezas' },
             { key: 'almacen', label: 'Almacen' },
             { key: 'orden_trabajo', label: 'Orden trabajo' },
+            { key: 'materias_primas', label: 'Materia prima' },
             { key: 'comentarios', label: 'Comentarios' },
             { key: 'firma_ing_jose', label: 'Firma Jose' },
             { key: 'firma_ing_rodrigo', label: 'Firma Osvaldo' },
@@ -1949,6 +2119,27 @@
                         resultsId: 'edit_clave_results',
                     });
                 }
+                if (!createMpPicker) {
+                    createMpPicker = setupMpPicker({
+                        searchId: 'mp_search',
+                        resultsId: 'mp_results',
+                        onPick: (c) => {
+                            createMpItems = addMpItem(createMpItems, c);
+                            refreshCreateMpChips();
+                        },
+                    });
+                    refreshCreateMpChips();
+                }
+                if (!editMpPicker) {
+                    editMpPicker = setupMpPicker({
+                        searchId: 'edit_mp_search',
+                        resultsId: 'edit_mp_results',
+                        onPick: (c) => {
+                            editMpItems = addMpItem(editMpItems, c);
+                            refreshEditMpChips();
+                        },
+                    });
+                }
             } catch (err) {
                 console.error(err);
                 const msg = String(err && err.message ? err.message : err || '');
@@ -2005,6 +2196,7 @@
                 almacen: document.getElementById('almacen').value,
                 orden_trabajo: document.getElementById('orden_trabajo').value.trim(),
                 comentarios: document.getElementById('comentarios').value.trim(),
+                materias_primas: materiasPayload(createMpItems),
                 hoja_en_produccion: document.getElementById('hoja_en_produccion').checked
             };
 
@@ -2092,6 +2284,12 @@
             } catch (e) {
                 document.getElementById('edit_comentarios').value = '';
             }
+            try {
+                editMpItems = normalizeMateriasFromDataset(JSON.parse(btn.getAttribute('data-materias-primas') || '[]'));
+            } catch (e) {
+                editMpItems = [];
+            }
+            refreshEditMpChips();
             renderHistorialCargas(btn.dataset.hojaId || '');
             document.getElementById('editModal').style.display = 'flex';
         }
@@ -2110,6 +2308,7 @@
                 almacen: document.getElementById('edit_almacen').value,
                 orden_trabajo: document.getElementById('edit_orden').value.trim(),
                 comentarios: document.getElementById('edit_comentarios').value.trim(),
+                materias_primas: materiasPayload(editMpItems),
                 hoja_en_produccion: document.getElementById('edit_hoja_en_produccion').checked,
                 estado: document.getElementById('edit_estado').value
             };
@@ -2240,6 +2439,15 @@
             if (v === null || v === undefined) return '';
             if (key === 'historial_cargas_resumen') {
                 return formatHistorialCargasForReport(row);
+            }
+            if (key === 'materias_primas') {
+                const arr = Array.isArray(v) ? v : [];
+                return arr.map((x) => {
+                    const clave = String(x.clave || '').trim();
+                    const nombre = String(x.nombre || '').trim();
+                    if (clave && nombre && nombre !== clave) return clave + ' — ' + nombre;
+                    return clave || nombre;
+                }).filter(Boolean).join(' | ');
             }
             if (key === 'firma_ing_jose' || key === 'firma_ing_rodrigo') {
                 const raw = String(v || '').trim().toUpperCase();

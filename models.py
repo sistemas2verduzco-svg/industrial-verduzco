@@ -705,6 +705,60 @@ class HojaRutaEntrega(db.Model):
         }
 
 
+class HojaRutaEntregaMateriaPrima(db.Model):
+    """Materias primas (claves) con las que se fabrica el producto de una hoja de entrega."""
+    __tablename__ = 'hojas_ruta_entrega_materias_primas'
+
+    id = db.Column(db.Integer, primary_key=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_entrega.id'), nullable=False, index=True)
+    clave_producto_id = db.Column(db.Integer, nullable=True, index=True)
+    clave = db.Column(db.String(100), nullable=False)
+    nombre = db.Column(db.String(255), nullable=True)
+    orden = db.Column(db.Integer, nullable=False, default=0)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint('hoja_ruta_id', 'clave', name='uq_hoja_entrega_mp_clave'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'hoja_ruta_id': self.hoja_ruta_id,
+            'clave_id': self.clave_producto_id,
+            'clave': self.clave,
+            'nombre': self.nombre,
+            'orden': self.orden,
+        }
+
+
+class HojaRutaNuevaMateriaPrima(db.Model):
+    """Materias primas (claves) asociadas a una hoja de acondicionamiento MP."""
+    __tablename__ = 'hojas_ruta_nueva_materias_primas'
+
+    id = db.Column(db.Integer, primary_key=True)
+    hoja_ruta_id = db.Column(db.Integer, db.ForeignKey('hojas_ruta_nueva.id'), nullable=False, index=True)
+    clave_producto_id = db.Column(db.Integer, nullable=True, index=True)
+    clave = db.Column(db.String(100), nullable=False)
+    nombre = db.Column(db.String(255), nullable=True)
+    orden = db.Column(db.Integer, nullable=False, default=0)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint('hoja_ruta_id', 'clave', name='uq_hoja_nueva_mp_clave'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'hoja_ruta_id': self.hoja_ruta_id,
+            'clave_id': self.clave_producto_id,
+            'clave': self.clave,
+            'nombre': self.nombre,
+            'orden': self.orden,
+        }
+
+
 class HojaRutaCargaPiezasHistorial(db.Model):
     """Historial de cambios de cantidad de piezas por hoja de ruta."""
     __tablename__ = 'hojas_ruta_cargas_historial'
