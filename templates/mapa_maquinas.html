@@ -3,25 +3,27 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Mapa de Maquinas</title>
+    <title>Mapa de Maquinado Interactivas</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
     <style>
         :root {
             --bg-1: #061428;
             --bg-2: #031024;
             --panel: #091d35;
-            --panel-2: #0d2746;
             --line: #1e4d78;
             --txt: #d9edff;
             --muted: #8eb5d6;
             --ok: #14c678;
             --warn: #f4b400;
+            --mover: #ff9900;
             --idle: #95a4b5;
             --accent: #19b5ff;
+            --paro: #c83c3c;
         }
 
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
 
         body {
             margin: 0;
@@ -39,91 +41,49 @@
             align-items: center;
             justify-content: space-between;
             gap: 14px;
-            padding: 16px 20px;
+            padding: 14px 20px;
             border-bottom: 1px solid rgba(37, 93, 146, 0.5);
             background: linear-gradient(180deg, rgba(7, 27, 51, 0.96), rgba(7, 27, 51, 0.75));
             backdrop-filter: blur(4px);
             position: sticky;
             top: 0;
-            z-index: 10;
+            z-index: 20;
         }
 
-        .topbar-left {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            min-width: 0;
-        }
+        .topbar-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
 
         .logo-pill {
-            width: 38px;
-            height: 38px;
-            border-radius: 8px;
+            width: 40px; height: 40px; border-radius: 8px;
             border: 1px solid #2b6a9a;
-            display: grid;
-            place-items: center;
+            display: grid; place-items: center;
             background: linear-gradient(160deg, #09355c, #051f3f);
-            color: #8ed5ff;
-            font-weight: 700;
+            color: #8ed5ff; font-weight: 700; font-size: 18px;
         }
 
-        .title-group {
-            min-width: 0;
-        }
+        .title { font-size: 22px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; }
+        .subtitle { margin-top: 3px; color: var(--muted); font-size: 13px; }
 
-        .title {
-            font-size: 22px;
-            line-height: 1;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .subtitle {
-            margin-top: 4px;
-            color: var(--muted);
-            font-size: 13px;
-        }
-
-        .topbar-right {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            color: var(--muted);
-            font-size: 12px;
-        }
+        .topbar-right { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; flex-wrap: wrap; }
 
         .btn {
             border: 1px solid #2d6996;
             background: linear-gradient(180deg, #0b3259, #072542);
-            color: #cde9ff;
-            border-radius: 8px;
-            padding: 8px 12px;
-            font-size: 12px;
-            text-decoration: none;
-            cursor: pointer;
+            color: #cde9ff; border-radius: 8px;
+            padding: 8px 12px; font-size: 12px; text-decoration: none; cursor: pointer;
+            font-family: inherit; font-weight: 600;
         }
+        .btn:hover { border-color: #40b5ff; }
+        .btn.active { border-color: var(--accent); color: #fff; }
 
         .dashboard {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) 310px;
+            grid-template-columns: minmax(0, 1fr) 300px;
             gap: 14px;
             padding: 14px;
         }
 
-        .main-zone {
-            display: block;
-            min-width: 0;
-        }
-
-        .stack-panel {
-            margin-top: 10px;
-        }
-
         .panel {
-            background: linear-gradient(180deg, rgba(8, 31, 56, 0.9), rgba(7, 23, 44, 0.9));
+            background: linear-gradient(180deg, rgba(8, 31, 56, 0.92), rgba(7, 23, 44, 0.92));
             border: 1px solid rgba(40, 102, 157, 0.6);
             border-radius: 12px;
             box-shadow: inset 0 1px 0 rgba(120, 180, 220, 0.12), 0 8px 28px rgba(0, 0, 0, 0.35);
@@ -132,15 +92,221 @@
         .panel-title {
             padding: 10px 12px;
             border-bottom: 1px solid rgba(43, 107, 162, 0.45);
-            font-size: 13px;
-            color: #93cfff;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
+            font-size: 12px; font-weight: 700;
+            color: #93cfff; text-transform: uppercase; letter-spacing: 0.4px;
+            display: flex; align-items: center; justify-content: space-between;
         }
 
+        .filter-bar {
+            display: flex; align-items: center; gap: 8px;
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(43, 107, 162, 0.35);
+            flex-wrap: wrap;
+        }
+
+        .filter-label { font-size: 12px; color: var(--muted); }
+        .filter-btn {
+            border: 1px solid #2d6996;
+            background: linear-gradient(180deg, #0b3259, #072542);
+            color: #8eb5d6; border-radius: 20px;
+            padding: 5px 14px; font-size: 12px; font-weight: 600;
+            cursor: pointer; font-family: inherit;
+        }
+        .filter-btn.active { border-color: #14c678; color: #9ff5cf; background: rgba(20,198,120,0.15); }
+        .filter-btn.active-warn { border-color: var(--warn); color: #ffe093; background: rgba(244,180,0,0.15); }
+        .filter-count {
+            display: inline-block; margin-left: 4px;
+            background: rgba(255,255,255,0.12); border-radius: 999px;
+            padding: 1px 7px; font-size: 11px;
+        }
+
+        /* Floor plan */
+        .floor-wrap {
+            position: relative;
+            overflow: auto;
+            padding: 8px;
+            min-height: 520px;
+        }
+
+        .floor-canvas {
+            position: relative;
+            width: 100%;
+            min-width: 900px;
+            aspect-ratio: 1200 / 680;
+        }
+
+        .floor-svg {
+            width: 100%; height: 100%;
+            display: block;
+            border-radius: 8px;
+        }
+
+        .machine-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+
+        .map-pin {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            padding: 0;
+            pointer-events: auto;
+            z-index: 2;
+            transition: transform 0.15s ease, z-index 0s;
+        }
+
+        .map-pin:hover, .map-pin.focused {
+            transform: translate(-50%, -50%) scale(1.12);
+            z-index: 10;
+        }
+
+        .pin-body {
+            width: 52px; height: 52px;
+            border-radius: 8px;
+            border: 2px solid rgba(120, 190, 255, 0.5);
+            background: linear-gradient(180deg, rgba(15, 50, 85, 0.95), rgba(8, 30, 55, 0.95));
+            display: grid; place-items: center;
+            position: relative;
+        }
+
+        .pin-body svg { width: 34px; height: 34px; }
+
+        .pin-label {
+            display: block;
+            margin-top: 4px;
+            font-size: 10px; font-weight: 700;
+            color: #c8e6ff;
+            text-align: center;
+            max-width: 80px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+        }
+
+        .pin-popup {
+            display: none;
+            position: absolute;
+            bottom: calc(100% + 8px);
+            left: 50%;
+            transform: translateX(-50%);
+            min-width: 180px;
+            max-width: 260px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(80, 150, 210, 0.7);
+            background: rgba(6, 22, 42, 0.96);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+            font-size: 11px;
+            text-align: left;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        .map-pin:hover .pin-popup,
+        .map-pin.focused .pin-popup { display: block; }
+
+        .pin-popup .pop-head {
+            font-weight: 700; font-size: 12px;
+            color: #fff; margin-bottom: 4px;
+            border-bottom: 1px solid rgba(60,120,180,0.4);
+            padding-bottom: 4px;
+        }
+
+        .pin-popup .pop-row { color: var(--muted); margin-top: 2px; }
+        .pin-popup .pop-row b { color: #d5ecff; }
+
+        .state-mover .pin-body {
+            border-color: var(--mover);
+            box-shadow: 0 0 16px rgba(255, 153, 0, 0.7), 0 0 32px rgba(255, 153, 0, 0.3);
+        }
+        .state-produciendo .pin-body {
+            border-color: var(--ok);
+            box-shadow: 0 0 14px rgba(20, 198, 120, 0.6), 0 0 28px rgba(20, 198, 120, 0.25);
+        }
+        .state-activa .pin-body {
+            border-color: var(--warn);
+            box-shadow: 0 0 12px rgba(244, 180, 0, 0.55);
+        }
+        .state-sin_hoja .pin-body {
+            border-color: rgba(149, 164, 181, 0.5);
+            opacity: 0.85;
+        }
+        .state-paro .pin-body {
+            border-color: var(--paro);
+            opacity: 0.65;
+            box-shadow: 0 0 10px rgba(200, 60, 60, 0.4);
+        }
+
+        .zoom-bar {
+            position: absolute; top: 12px; right: 12px;
+            display: flex; gap: 6px; z-index: 5;
+        }
+        .zoom-bar button {
+            width: 32px; height: 32px;
+            border: 1px solid #2d6996;
+            background: rgba(7, 30, 55, 0.9);
+            color: #cde9ff; border-radius: 6px;
+            cursor: pointer; font-size: 16px; font-weight: 700;
+        }
+
+        /* Sidebar */
+        .rail { display: grid; gap: 10px; align-content: start; }
+
+        .stat-card { padding: 12px; }
+
+        .stat-title {
+            font-size: 12px; font-weight: 700;
+            color: #8abbe2; text-transform: uppercase; letter-spacing: 0.3px;
+        }
+
+        .stat-value {
+            margin-top: 6px;
+            font-size: 36px; line-height: 1;
+            font-weight: 700; color: #e4f4ff;
+        }
+
+        .split-stats {
+            margin-top: 10px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+        }
+
+        .split-box {
+            border: 1px solid rgba(50, 107, 155, 0.5);
+            border-radius: 8px; padding: 8px 6px;
+            text-align: center;
+            background: rgba(6, 24, 44, 0.55);
+        }
+        .split-box .k { display: block; color: var(--muted); font-size: 10px; margin-bottom: 2px; }
+        .split-box .v { font-size: 18px; font-weight: 700; }
+
+        .eff-grid { margin-top: 10px; display: grid; gap: 8px; }
+        .eff-row {
+            border: 1px solid rgba(50, 107, 155, 0.5);
+            border-radius: 8px; padding: 8px;
+            background: rgba(6, 24, 44, 0.55);
+        }
+        .eff-head { display: flex; justify-content: space-between; align-items: baseline; }
+        .eff-label { color: #93cfff; font-size: 11px; text-transform: uppercase; }
+        .eff-value { font-size: 20px; font-weight: 700; }
+        .eff-meta { margin-top: 3px; color: var(--muted); font-size: 10px; }
+
+        .legend { display: grid; gap: 5px; font-size: 11px; color: var(--muted); margin-top: 8px; }
+        .legend-item { display: flex; align-items: center; gap: 8px; }
+        .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+        /* Card fallback view */
+        .cards-view { display: none; padding: 12px; }
+        .cards-view.visible { display: block; }
+        .floor-view.hidden { display: none; }
+
         .primary-grid {
-            padding: 12px;
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
             gap: 10px;
@@ -148,541 +314,60 @@
 
         .machine-card {
             background: linear-gradient(180deg, rgba(11, 45, 78, 0.85), rgba(8, 31, 58, 0.85));
-            border: 1px solid #2a638f;
-            border-radius: 10px;
-            padding: 8px;
-            display: grid;
-            gap: 8px;
-            min-height: 130px;
-            transition: transform 0.15s ease, border-color 0.15s ease;
+            border: 1px solid #2a638f; border-radius: 10px;
+            padding: 8px; display: grid; gap: 6px; min-height: 110px;
         }
-
-        .machine-card:hover {
-            transform: translateY(-2px);
-            border-color: #40b5ff;
-        }
-
-        .state-produciendo {
-            box-shadow: inset 0 0 0 1px rgba(20, 198, 120, 0.35);
-        }
-
-        .state-activa {
-            box-shadow: inset 0 0 0 1px rgba(244, 180, 0, 0.35);
-        }
-
-        .state-mover {
-            box-shadow: inset 0 0 0 2px rgba(255, 153, 0, 0.85);
-            border-color: rgba(255, 153, 0, 0.7);
-            background: linear-gradient(180deg, rgba(96, 58, 12, 0.92), rgba(74, 43, 7, 0.9));
-        }
-
-        .state-sin_hoja {
-            box-shadow: inset 0 0 0 1px rgba(149, 164, 181, 0.25);
-        }
-
-        .state-paro {
-            box-shadow: inset 0 0 0 2px rgba(200, 60, 60, 0.5);
-            border-color: rgba(180, 50, 50, 0.5);
-            background: linear-gradient(180deg, rgba(60, 15, 15, 0.92), rgba(40, 10, 10, 0.88));
-            opacity: 0.75;
-        }
-
-        .machine-head {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            min-width: 0;
-        }
-
-        .machine-icon {
-            width: 34px;
-            height: 34px;
-            border-radius: 6px;
-            border: 1px solid #2f7bb0;
-            background: linear-gradient(180deg, #11406b, #0a2d4c);
-            position: relative;
-            flex: 0 0 auto;
-        }
-
-        .machine-icon::before {
-            content: "";
-            position: absolute;
-            left: 7px;
-            top: 6px;
-            width: 18px;
-            height: 12px;
-            border: 1px solid #7ac7ff;
-            border-radius: 2px;
-            background: rgba(117, 191, 243, 0.16);
-        }
-
-        .machine-icon::after {
-            content: "";
-            position: absolute;
-            left: 12px;
-            bottom: 5px;
-            width: 8px;
-            height: 4px;
-            border-radius: 2px;
-            background: #8ad4ff;
-            opacity: 0.85;
-        }
-
-        .machine-name {
-            font-size: 14px;
-            font-weight: 700;
-            line-height: 1;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .machine-badge {
-            margin-top: 4px;
-            font-size: 11px;
-            border-radius: 999px;
-            padding: 2px 7px;
-            display: inline-block;
-            font-weight: 700;
-            letter-spacing: 0.2px;
-        }
-
-        .badge-produciendo {
-            color: #9ff5cf;
-            background: rgba(20, 198, 120, 0.15);
-        }
-
-        .badge-activa {
-            color: #ffe093;
-            background: rgba(244, 180, 0, 0.15);
-        }
-
-        .badge-mover {
-            color: #ffe7bf;
-            background: rgba(255, 153, 0, 0.24);
-        }
-
-        .badge-sin_hoja {
-            color: #c2cfdd;
-            background: rgba(149, 164, 181, 0.16);
-        }
-
-        .badge-paro {
-            color: #f5b0b0;
-            background: rgba(200, 60, 60, 0.20);
-        }
-
-        .machine-meta {
-            font-size: 11px;
-            color: var(--muted);
-            display: grid;
-            gap: 4px;
-        }
-
-        .machine-meta b {
-            color: #d5ecff;
-            font-weight: 700;
-        }
-
-        .machine-link {
-            margin-top: auto;
-            text-align: right;
-            color: #5ec6ff;
-            text-decoration: none;
-            font-size: 11px;
-            font-weight: 700;
-        }
-
-        .rail {
-            display: grid;
-            gap: 10px;
-            align-content: start;
-        }
-
-        .stat-card {
-            padding: 10px;
-        }
-
-        .stat-title {
-            font-size: 12px;
-            color: #8abbe2;
-        }
-
-        .stat-value {
-            margin-top: 6px;
-            font-size: 34px;
-            line-height: 1;
-            font-weight: 700;
-            color: #e4f4ff;
-        }
-
-        .split-stats {
-            margin-top: 10px;
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 6px;
-        }
-
-        .split-box {
-            border: 1px solid rgba(50, 107, 155, 0.5);
-            border-radius: 8px;
-            padding: 8px 6px;
-            text-align: center;
-            background: rgba(6, 24, 44, 0.55);
-        }
-
-        .split-box .k {
-            display: block;
-            color: var(--muted);
-            font-size: 10px;
-            margin-bottom: 2px;
-        }
-
-        .split-box .v {
-            font-size: 16px;
-            font-weight: 700;
-        }
-
-        .progress-wrap {
-            margin-top: 12px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .ring {
-            --pct: 0;
-            width: 64px;
-            height: 64px;
-            border-radius: 50%;
-            background: conic-gradient(var(--accent) calc(var(--pct) * 1%), #123252 0);
-            display: grid;
-            place-items: center;
-        }
-
-        .ring::before {
-            content: "";
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            background: #0b213f;
-            border: 1px solid #295e8f;
-        }
-
-        .progress-text {
-            font-size: 12px;
-            color: var(--muted);
-        }
-
-        .legend {
-            display: grid;
-            gap: 6px;
-            font-size: 12px;
-            color: var(--muted);
-        }
-
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .eff-grid {
-            margin-top: 10px;
-            display: grid;
-            gap: 8px;
-        }
-
-        .eff-row {
-            border: 1px solid rgba(50, 107, 155, 0.5);
-            border-radius: 8px;
-            padding: 8px;
-            background: rgba(6, 24, 44, 0.55);
-        }
-
-        .eff-head {
-            display: flex;
-            align-items: baseline;
-            justify-content: space-between;
-            gap: 8px;
-        }
-
-        .eff-label {
-            color: #93cfff;
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.2px;
-        }
-
-        .eff-value {
-            color: #d9edff;
-            font-size: 18px;
-            font-weight: 700;
-        }
-
-        .eff-meta {
-            margin-top: 4px;
-            color: var(--muted);
-            font-size: 11px;
-        }
-
-        .eff-kpi-grid {
-            margin-top: 10px;
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 6px;
-        }
-
-        .eff-kpi {
-            border: 1px solid rgba(50, 107, 155, 0.45);
-            border-radius: 8px;
-            padding: 7px;
-            background: rgba(5, 21, 39, 0.55);
-        }
-
-        .eff-kpi-label {
-            display: block;
-            color: var(--muted);
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.25px;
-        }
-
-        .eff-kpi-value {
-            margin-top: 3px;
-            font-size: 16px;
-            font-weight: 700;
-            color: #d9edff;
-        }
-
-        .eff-kpi-meta {
-            margin-top: 2px;
-            font-size: 10px;
-            color: #8abbe2;
-        }
-
-        .eff-kpi-highlight {
-            border-color: rgba(25, 181, 255, 0.65);
-            background: rgba(6, 28, 48, 0.62);
-        }
-
-        .dot {
-            width: 9px;
-            height: 9px;
-            border-radius: 50%;
-            display: inline-block;
-        }
-
-        .empty {
-            padding: 28px 14px;
-            text-align: center;
-            color: var(--muted);
-            font-size: 13px;
-        }
-
-        .filter-bar {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px 12px;
-            border-bottom: 1px solid rgba(43, 107, 162, 0.35);
-            flex-wrap: wrap;
-        }
-
-        .filter-label {
-            font-size: 12px;
-            color: var(--muted);
-            margin-right: 4px;
-        }
-
-        .filter-btn {
-            border: 1px solid #2d6996;
-            background: linear-gradient(180deg, #0b3259, #072542);
-            color: #8eb5d6;
-            border-radius: 20px;
-            padding: 5px 14px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.15s ease;
-            letter-spacing: 0.2px;
-        }
-
-        .filter-btn:hover {
-            border-color: #40b5ff;
-            color: #cde9ff;
-        }
-
-        .filter-btn.active {
-            border-color: #14c678;
-            background: linear-gradient(180deg, rgba(20,198,120,0.2), rgba(20,198,120,0.1));
-            color: #9ff5cf;
-        }
-
-        .filter-btn.active-warn {
-            border-color: var(--warn);
-            background: linear-gradient(180deg, rgba(244,180,0,0.2), rgba(244,180,0,0.1));
-            color: #ffe093;
-        }
-
-        .filter-count {
-            display: inline-block;
-            margin-left: 5px;
-            background: rgba(255,255,255,0.12);
-            border-radius: 999px;
-            padding: 1px 7px;
-            font-size: 11px;
-        }
+        .machine-card.state-mover { border-color: var(--mover); box-shadow: 0 0 12px rgba(255,153,0,0.4); }
+        .machine-card.state-produciendo { border-color: var(--ok); }
+        .machine-name { font-size: 13px; font-weight: 700; }
+        .machine-badge { font-size: 10px; border-radius: 999px; padding: 2px 7px; display: inline-block; font-weight: 700; }
+        .badge-mover { color: #ffe7bf; background: rgba(255,153,0,0.24); }
+        .badge-produciendo { color: #9ff5cf; background: rgba(20,198,120,0.15); }
+        .badge-activa { color: #ffe093; background: rgba(244,180,0,0.15); }
+        .badge-sin_hoja { color: #c2cfdd; background: rgba(149,164,181,0.16); }
+        .badge-paro { color: #f5b0b0; background: rgba(200,60,60,0.2); }
+        .machine-meta { font-size: 10px; color: var(--muted); }
+        .machine-link { color: #5ec6ff; font-size: 10px; text-decoration: none; text-align: right; }
 
         .toast-zone {
-            position: fixed;
-            right: 16px;
-            bottom: 16px;
-            z-index: 40;
-            display: grid;
-            gap: 8px;
-            max-width: min(360px, 90vw);
+            position: fixed; right: 16px; bottom: 16px; z-index: 40;
+            display: grid; gap: 8px; max-width: min(360px, 90vw);
         }
-
         .toast {
             border: 1px solid #2a6b96;
             background: linear-gradient(160deg, #0d2f54, #0b2342);
-            border-radius: 10px;
-            padding: 10px 12px;
-            color: #d7ecff;
-            font-size: 12px;
-            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.38);
+            border-radius: 10px; padding: 10px 12px;
+            color: #d7ecff; font-size: 12px;
+            box-shadow: 0 8px 22px rgba(0,0,0,0.38);
         }
-
-        .toast.ok {
-            border-color: rgba(20, 198, 120, 0.6);
-            background: linear-gradient(160deg, #0f3f39, #0a2d2a);
-        }
+        .toast.ok { border-color: rgba(20,198,120,0.6); background: linear-gradient(160deg, #0f3f39, #0a2d2a); }
 
         .emergency-overlay {
-            position: fixed;
-            inset: 0;
+            position: fixed; inset: 0;
             background: rgba(120, 0, 0, 0.68);
-            z-index: 60;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            padding: 14px;
+            z-index: 60; display: none;
+            align-items: center; justify-content: center; padding: 14px;
         }
-
         .emergency-card {
             width: min(760px, 96vw);
-            border: 3px solid #ffc2c2;
-            border-radius: 18px;
+            border: 3px solid #ffc2c2; border-radius: 18px;
             background: linear-gradient(160deg, #7a0000, #b40000 55%, #8f0000);
-            color: #fff4f4;
-            text-align: center;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+            color: #fff4f4; text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.45);
             padding: 24px 18px;
         }
-
-        .emergency-title {
-            font-size: clamp(30px, 5vw, 56px);
-            font-weight: 900;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-            margin: 0;
-        }
-
-        .emergency-sub {
-            margin-top: 10px;
-            font-size: clamp(14px, 2.3vw, 20px);
-            font-weight: 700;
-            color: #ffe0e0;
-        }
-
-        .emergency-count {
-            margin-top: 18px;
-            font-size: clamp(50px, 9vw, 96px);
-            font-weight: 900;
-            line-height: 1;
-            color: #fff;
-            text-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
-        }
-
-        .emergency-foot {
-            margin-top: 10px;
-            font-size: clamp(13px, 2vw, 18px);
-            color: #ffd6d6;
-        }
+        .emergency-title { font-size: clamp(30px, 5vw, 56px); font-weight: 900; margin: 0; }
+        .emergency-count { margin-top: 18px; font-size: clamp(50px, 9vw, 96px); font-weight: 900; }
+        .emergency-sub, .emergency-foot { color: #ffe0e0; margin-top: 10px; }
 
         @media (max-width: 1080px) {
-            .dashboard {
-                grid-template-columns: 1fr;
-            }
-
-            .rail {
-                grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            }
+            .dashboard { grid-template-columns: 1fr; }
+            .rail { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
         }
-
-        @media (max-width: 840px) {
-            .primary-grid {
-                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-                padding: 10px;
-                gap: 8px;
-            }
-
-            .machine-card {
-                min-height: 118px;
-            }
-
-            .split-stats {
-                grid-template-columns: 1fr;
-            }
-
-            .eff-kpi-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .stat-value {
-                font-size: 28px;
-            }
-        }
-
         @media (max-width: 640px) {
-            .title {
-                font-size: 18px;
-            }
-
-            .subtitle {
-                font-size: 12px;
-            }
-
-            .topbar {
-                flex-wrap: wrap;
-                padding: 12px;
-            }
-
-            .topbar-right {
-                width: 100%;
-                justify-content: space-between;
-            }
-
-            .dashboard {
-                padding: 10px;
-                gap: 10px;
-            }
-
-            .btn {
-                width: 100%;
-                text-align: center;
-            }
-
-            .topbar-right {
-                display: grid;
-                grid-template-columns: 1fr;
-                gap: 8px;
-            }
-
-            .progress-wrap {
-                justify-content: flex-start;
-            }
+            .title { font-size: 16px; }
+            .floor-canvas { min-width: 700px; }
+            .split-stats { grid-template-columns: 1fr 1fr; }
         }
     </style>
 </head>
@@ -690,84 +375,140 @@
     <header class="topbar">
         <div class="topbar-left">
             <div class="logo-pill">M</div>
-            <div class="title-group">
-                <div class="title">Mapa de Maquinas - Produccion</div>
-                <div class="subtitle">Vista operacional de maquinas activas</div>
+            <div>
+                <div class="title">Mapa de Maquinado Interactivas</div>
+                <div class="subtitle">Planta en tiempo real · controlcalidad360</div>
             </div>
         </div>
         <div class="topbar-right">
-            <a class="btn" href="/hojas_ruta">Volver a Estaciones</a>
+            <button class="btn active" id="btnViewPlano" type="button">Plano</button>
+            <button class="btn" id="btnViewTarjetas" type="button">Tarjetas</button>
+            <a class="btn" href="/hojas_ruta">Estaciones</a>
             <span id="refreshInfo">Actualizando...</span>
         </div>
     </header>
 
     <main class="dashboard">
-        <section class="main-zone">
-            <section class="panel">
-                <div class="panel-title">
-                    <span>Maquinas produciendo</span>
-                    <span id="primaryCount">0 equipos</span>
-                </div>
-                <div class="filter-bar">
-                    <span class="filter-label">Filtrar:</span>
-                    <button class="filter-btn active" id="filterTodas" onclick="setFilter('todas')">Todas <span class="filter-count" id="fcTodas">0</span></button>
-                    <button class="filter-btn" id="filterConHoja" onclick="setFilter('con_hoja')">Con hoja de ruta <span class="filter-count" id="fcConHoja">0</span></button>
-                    <button class="filter-btn" id="filterSinHoja" onclick="setFilter('sin_hoja')">Sin hoja de ruta <span class="filter-count" id="fcSinHoja">0</span></button>
-                </div>
-                <div class="primary-grid" id="primaryGrid"></div>
-            </section>
+        <section class="panel">
+            <div class="filter-bar">
+                <span class="filter-label">Filtrar:</span>
+                <button class="filter-btn active" id="filterTodas" type="button">Todas <span class="filter-count" id="fcTodas">0</span></button>
+                <button class="filter-btn" id="filterConHoja" type="button">Con hoja <span class="filter-count" id="fcConHoja">0</span></button>
+                <button class="filter-btn" id="filterSinHoja" type="button">Sin hoja <span class="filter-count" id="fcSinHoja">0</span></button>
+            </div>
 
-            <section class="panel stack-panel">
-                <div class="panel-title">
-                    <span>Maquinas no trabajando</span>
-                    <span id="secondaryCount">0 equipos</span>
+            <div class="floor-wrap floor-view" id="floorView">
+                <div class="floor-canvas" id="floorCanvas">
+                    <svg class="floor-svg" viewBox="0 0 1200 680" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                        <defs>
+                            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(40,80,120,0.15)" stroke-width="0.5"/>
+                            </pattern>
+                            <filter id="glow-green"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                            <filter id="glow-orange"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                        </defs>
+                        <rect width="1200" height="680" fill="#0a1628"/>
+                        <rect width="1200" height="680" fill="url(#grid)"/>
+
+                        <!-- Paredes exteriores -->
+                        <rect x="20" y="20" width="1160" height="640" fill="none" stroke="#4a6078" stroke-width="6" rx="4"/>
+                        <!-- Pilares -->
+                        <g fill="#2a3d52" stroke="#5a7088" stroke-width="1">
+                            <rect x="280" y="200" width="28" height="28" rx="2"/>
+                            <rect x="580" y="200" width="28" height="28" rx="2"/>
+                            <rect x="280" y="400" width="28" height="28" rx="2"/>
+                            <rect x="580" y="400" width="28" height="28" rx="2"/>
+                            <rect x="780" y="200" width="28" height="28" rx="2"/>
+                        </g>
+
+                        <!-- Zonas -->
+                        <rect x="40" y="40" width="250" height="155" fill="rgba(25,181,255,0.06)" stroke="rgba(25,181,255,0.35)" stroke-width="1.5" stroke-dasharray="6 4" rx="6"/>
+                        <text x="55" y="62" fill="#5ec6ff" font-size="13" font-weight="700" font-family="Rajdhani,sans-serif">ZONA CNC</text>
+
+                        <rect x="310" y="40" width="310" height="155" fill="rgba(20,198,120,0.06)" stroke="rgba(20,198,120,0.35)" stroke-width="1.5" stroke-dasharray="6 4" rx="6"/>
+                        <text x="325" y="62" fill="#5ee8a8" font-size="13" font-weight="700" font-family="Rajdhani,sans-serif">ZONA MAQUINADO - ACTIVOS</text>
+
+                        <rect x="40" y="220" width="720" height="340" fill="rgba(149,164,181,0.05)" stroke="rgba(149,164,181,0.3)" stroke-width="1.5" stroke-dasharray="6 4" rx="6"/>
+                        <text x="55" y="242" fill="#a8bdd4" font-size="13" font-weight="700" font-family="Rajdhani,sans-serif">ZONA MECANIZADO - NO TRABAJANDO</text>
+
+                        <rect x="640" y="420" width="200" height="140" fill="rgba(244,180,0,0.08)" stroke="rgba(244,180,0,0.4)" stroke-width="1.5" rx="6"/>
+                        <text x="655" y="442" fill="#ffe093" font-size="12" font-weight="700" font-family="Rajdhani,sans-serif">ZONA ACABADOS - ACTIVOS</text>
+                        <!-- Pallet producto terminado -->
+                        <g transform="translate(700, 480)">
+                            <rect x="0" y="20" width="80" height="50" fill="#3a2a10" stroke="#f4b400" stroke-width="2" rx="4" filter="url(#glow-orange)"/>
+                            <rect x="8" y="8" width="30" height="20" fill="#5a4018" stroke="#f4b400" stroke-width="1" rx="2"/>
+                            <rect x="42" y="8" width="30" height="20" fill="#5a4018" stroke="#f4b400" stroke-width="1" rx="2"/>
+                            <text x="40" y="88" fill="#ffe093" font-size="10" font-weight="700" text-anchor="middle" font-family="Rajdhani,sans-serif">PRODUCTO TERMINADO</text>
+                        </g>
+
+                        <rect x="800" y="40" width="360" height="280" fill="rgba(60,80,110,0.12)" stroke="rgba(100,130,170,0.35)" stroke-width="1.5" rx="6"/>
+                        <text x="815" y="62" fill="#8eb5d6" font-size="13" font-weight="700" font-family="Rajdhani,sans-serif">OFICINAS</text>
+                        <!-- Escritorios oficina -->
+                        <g fill="none" stroke="#4a6080" stroke-width="1.5">
+                            <rect x="830" y="90" width="60" height="35" rx="3"/><rect x="920" y="90" width="60" height="35" rx="3"/>
+                            <rect x="1010" y="90" width="60" height="35" rx="3"/><rect x="830" y="160" width="60" height="35" rx="3"/>
+                            <rect x="920" y="160" width="60" height="35" rx="3"/><rect x="1010" y="160" width="60" height="35" rx="3"/>
+                            <circle cx="860" cy="145" r="8" fill="#3a5070"/><circle cx="950" cy="145" r="8" fill="#3a5070"/>
+                        </g>
+
+                        <!-- Rutas de producto -->
+                        <path d="M 30 600 Q 120 580 200 520 T 380 460 T 560 380 T 720 460 T 740 500" fill="none" stroke="#14c678" stroke-width="4" stroke-linecap="round" filter="url(#glow-green)" opacity="0.85"/>
+                        <text x="100" y="575" fill="#5ee8a8" font-size="11" font-weight="600" font-family="Rajdhani,sans-serif">RUTA PRODUCTO 1</text>
+
+                        <path d="M 30 620 Q 250 600 400 500 T 650 350 T 850 280" fill="none" stroke="#ff9900" stroke-width="3" stroke-dasharray="10 6" stroke-linecap="round" opacity="0.8"/>
+                        <text x="280" y="610" fill="#ffb84d" font-size="11" font-weight="600" font-family="Rajdhani,sans-serif">RUTA PRODUCTO 2</text>
+
+                        <path d="M 30 560 L 180 500 L 350 420 L 500 300 L 620 250 L 700 420 L 740 500" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="5 5"/>
+                        <text x="40" y="548" fill="#8eb5d6" font-size="10" font-family="Rajdhani,sans-serif">RUTA PRODUCTO MAESTRA</text>
+
+                        <!-- Flechas flujo -->
+                        <polygon points="370,425 385,415 385,435" fill="#14c678" opacity="0.9"/>
+                        <polygon points="610,255 625,245 625,265" fill="#14c678" opacity="0.9"/>
+                        <polygon points="695,415 710,405 710,425" fill="#ff9900" opacity="0.9"/>
+                    </svg>
+
+                    <div class="zoom-bar">
+                        <button type="button" id="zoomOut" title="Alejar">−</button>
+                        <button type="button" id="zoomIn" title="Acercar">+</button>
+                    </div>
+                    <div class="machine-layer" id="machineLayer"></div>
                 </div>
-                <div class="primary-grid" id="secondaryGrid"></div>
-            </section>
+            </div>
+
+            <div class="cards-view" id="cardsView">
+                <div class="primary-grid" id="cardsGrid"></div>
+            </div>
         </section>
 
         <aside class="rail">
             <section class="panel stat-card">
-                <div class="stat-title">Total de Maquinas</div>
+                <div class="stat-title">Resumen Planta</div>
                 <div class="stat-value" id="totalMaquinas">0</div>
-
                 <div class="split-stats">
                     <div class="split-box">
-                        <span class="k">En curso</span>
-                        <span class="v" id="countProduciendo">0</span>
+                        <span class="k">Activas</span>
+                        <span class="v" id="countActivas">0</span>
                     </div>
                     <div class="split-box">
                         <span class="k">Mover</span>
                         <span class="v" id="countMover">0</span>
                     </div>
                     <div class="split-box">
-                        <span class="k">Activa</span>
-                        <span class="v" id="countActiva">0</span>
+                        <span class="k">Por programar</span>
+                        <span class="v" id="countSinHoja">0</span>
                     </div>
                     <div class="split-box">
-                        <span class="k">Sin hoja</span>
-                        <span class="v" id="countSinHoja">0</span>
+                        <span class="k">En curso</span>
+                        <span class="v" id="countProduciendo">0</span>
+                    </div>
+                    <div class="split-box">
+                        <span class="k">Con hoja</span>
+                        <span class="v" id="countConHoja">0</span>
                     </div>
                     <div class="split-box">
                         <span class="k">Paro</span>
                         <span class="v" id="countParo">0</span>
                     </div>
-                </div>
-
-                <div class="progress-wrap">
-                    <div class="ring" id="prodRing"></div>
-                    <div class="progress-text" id="prodText">0% en curso</div>
-                </div>
-            </section>
-
-            <section class="panel stat-card">
-                <div class="stat-title">Leyenda de Estado</div>
-                <div class="legend" style="margin-top:8px;">
-                    <div class="legend-item"><span class="dot" style="background:#ff9900;"></span> MOVER (proceso culminado)</div>
-                    <div class="legend-item"><span class="dot" style="background:var(--ok);"></span> Produciendo</div>
-                    <div class="legend-item"><span class="dot" style="background:var(--warn);"></span> Activa sin estacion</div>
-                    <div class="legend-item"><span class="dot" style="background:var(--idle);"></span> Sin hoja activa</div>
-                    <div class="legend-item"><span class="dot" style="background:rgba(200,60,60,0.8);"></span> Paro de turno / mantenimiento</div>
                 </div>
             </section>
 
@@ -796,32 +537,16 @@
                         <div class="eff-meta" id="effWeekMeta">Prod 00:00:00 / Disp 00:00:00</div>
                     </div>
                 </div>
-                <div class="eff-kpi-grid">
-                    <div class="eff-kpi">
-                        <span class="eff-kpi-label">Utilizacion actual</span>
-                        <span class="eff-kpi-value" id="effUtilNow">0%</span>
-                        <div class="eff-kpi-meta" id="effUtilMeta">Prod 0 / 0</div>
-                    </div>
-                    <div class="eff-kpi">
-                        <span class="eff-kpi-label">Asignacion activa</span>
-                        <span class="eff-kpi-value" id="effAssignNow">0%</span>
-                        <div class="eff-kpi-meta" id="effAssignMeta">Con hoja 0 / 0</div>
-                    </div>
-                    <div class="eff-kpi">
-                        <span class="eff-kpi-label">Avance promedio</span>
-                        <span class="eff-kpi-value" id="effAvgProgress">0%</span>
-                        <div class="eff-kpi-meta" id="effProgressMeta">Procesos medidos 0</div>
-                    </div>
-                    <div class="eff-kpi">
-                        <span class="eff-kpi-label">OEE Lite</span>
-                        <span class="eff-kpi-value" id="effOeeLite">0%</span>
-                        <div class="eff-kpi-meta" id="effOeeMeta">Disp x ritmo</div>
-                    </div>
-                </div>
-                <div class="eff-kpi eff-kpi-highlight" style="margin-top:8px;">
-                    <span class="eff-kpi-label">Tiempo semanal general</span>
-                    <span class="eff-kpi-value" id="effWeekWorked">00:00:00</span>
-                    <div class="eff-kpi-meta" id="effWeekWorkedMeta">Productivo semanal acumulado</div>
+            </section>
+
+            <section class="panel stat-card">
+                <div class="stat-title">Leyenda</div>
+                <div class="legend">
+                    <div class="legend-item"><span class="dot" style="background:#ff9900;"></span> MOVER</div>
+                    <div class="legend-item"><span class="dot" style="background:var(--ok);"></span> Produciendo</div>
+                    <div class="legend-item"><span class="dot" style="background:var(--warn);"></span> Activa</div>
+                    <div class="legend-item"><span class="dot" style="background:var(--idle);"></span> Sin hoja</div>
+                    <div class="legend-item"><span class="dot" style="background:var(--paro);"></span> Paro</div>
                 </div>
             </section>
         </aside>
@@ -829,9 +554,9 @@
 
     <div class="toast-zone" id="toastZone"></div>
 
-    <div id="emergencyStopOverlay" class="emergency-overlay" aria-live="assertive" aria-modal="true" role="alertdialog">
+    <div id="emergencyStopOverlay" class="emergency-overlay" aria-live="assertive" role="alertdialog">
         <div class="emergency-card">
-            <h2 class="emergency-title">PARO DE MAQUINAS:</h2>
+            <h2 class="emergency-title">PARO DE MAQUINAS</h2>
             <div class="emergency-sub">Preparar apagado seguro de equipo</div>
             <div id="emergencyCountdown" class="emergency-count">15</div>
             <div class="emergency-foot">Cuenta regresiva</div>
@@ -840,229 +565,197 @@
 
     <script>
         const MAP_REFRESH_MS = 6000;
+        const MAP_W = 1200;
+        const MAP_H = 680;
+        const ZONES = {
+            cnc:         { x: 50,  y: 75,  w: 230, h: 105 },
+            maquinado:   { x: 320, y: 75,  w: 290, h: 105 },
+            mecanizado:  { x: 55,  y: 255, w: 690, h: 285 },
+            acabados:    { x: 655, y: 455, w: 170, h: 90 },
+        };
+
         const notifiedDone = new Set();
         let emergencyShownKey = null;
         let allMaquinas = [];
         let currentFilter = 'todas';
+        let viewMode = 'plano';
+        let zoomLevel = 1;
+        let focusedPin = null;
+
+        const ICONS = {
+            cnc: '<svg viewBox="0 0 40 40"><rect x="6" y="12" width="28" height="18" rx="2" fill="#1a4a70" stroke="#5ec6ff" stroke-width="1.5"/><rect x="10" y="8" width="20" height="6" rx="1" fill="#2a6a9a"/><circle cx="20" cy="21" r="5" fill="#0d3050" stroke="#8ed5ff" stroke-width="1"/></svg>',
+            fresadora: '<svg viewBox="0 0 40 40"><rect x="8" y="14" width="24" height="16" rx="2" fill="#1a4a70" stroke="#5ec6ff" stroke-width="1.5"/><rect x="14" y="6" width="12" height="10" fill="#2a6a9a" stroke="#8ed5ff" stroke-width="1"/><line x1="20" y1="22" x2="20" y2="30" stroke="#8ed5ff" stroke-width="2"/></svg>',
+            torno: '<svg viewBox="0 0 40 40"><ellipse cx="20" cy="22" rx="14" ry="8" fill="#1a4a70" stroke="#f4b400" stroke-width="1.5"/><rect x="6" y="18" width="8" height="8" fill="#2a6a9a"/><circle cx="28" cy="22" r="4" fill="#0d3050" stroke="#ffe093" stroke-width="1"/></svg>',
+            taladro: '<svg viewBox="0 0 40 40"><rect x="14" y="8" width="12" height="24" rx="2" fill="#1a4a70" stroke="#5ec6ff" stroke-width="1.5"/><polygon points="20,32 14,26 26,26" fill="#8ed5ff"/><circle cx="20" cy="14" r="3" fill="#2a6a9a"/></svg>',
+            default: '<svg viewBox="0 0 40 40"><rect x="10" y="12" width="20" height="18" rx="3" fill="#1a4a70" stroke="#5ec6ff" stroke-width="1.5"/><circle cx="20" cy="21" r="4" fill="#0d3050" stroke="#8ed5ff"/></svg>',
+        };
+
+        function safeText(v, fb) {
+            return (v === null || v === undefined || v === '') ? fb : String(v);
+        }
+
+        function getIconTipo(tipo) {
+            const t = (tipo || '').toLowerCase();
+            if (t.includes('cnc')) return 'cnc';
+            if (t.includes('fres')) return 'fresadora';
+            if (t.includes('torn')) return 'torno';
+            if (t.includes('talad') || t.includes('drill')) return 'taladro';
+            return 'default';
+        }
+
+        function getZoneKey(machine) {
+            if (machine.pos_x != null && machine.pos_y != null) return null;
+            const tipo = getIconTipo(machine.tipo);
+            const active = ['produciendo', 'mover', 'activa'].includes(machine.estado_code);
+            if (!active) return 'mecanizado';
+            if (tipo === 'cnc') return 'cnc';
+            if (tipo === 'fresadora') return 'maquinado';
+            if (active && (tipo === 'torno' || tipo === 'taladro')) return 'maquinado';
+            return 'mecanizado';
+        }
+
+        function layoutInZone(machines, zoneKey) {
+            const z = ZONES[zoneKey];
+            if (!z || !machines.length) return {};
+            const cols = Math.ceil(Math.sqrt(machines.length * (z.w / z.h)));
+            const rows = Math.ceil(machines.length / cols);
+            const cellW = z.w / cols;
+            const cellH = z.h / rows;
+            const positions = {};
+            machines.forEach((m, i) => {
+                const col = i % cols;
+                const row = Math.floor(i / cols);
+                positions[m.id] = {
+                    x: z.x + cellW * (col + 0.5),
+                    y: z.y + cellH * (row + 0.5),
+                };
+            });
+            return positions;
+        }
+
+        function computePositions(maquinas) {
+            const positions = {};
+            const byZone = { cnc: [], maquinado: [], mecanizado: [], acabados: [] };
+
+            maquinas.forEach(m => {
+                if (m.pos_x != null && m.pos_y != null) {
+                    positions[m.id] = { x: Number(m.pos_x), y: Number(m.pos_y) };
+                } else {
+                    const zk = getZoneKey(m);
+                    if (zk) byZone[zk].push(m);
+                }
+            });
+
+            Object.keys(byZone).forEach(zk => {
+                const laid = layoutInZone(byZone[zk], zk);
+                Object.assign(positions, laid);
+            });
+            return positions;
+        }
+
+        function filterMaquinas(maquinas) {
+            const conHoja = maquinas.filter(m => ['produciendo', 'activa', 'mover'].includes(m.estado_code));
+            const sinHoja = maquinas.filter(m => m.estado_code === 'sin_hoja');
+            if (currentFilter === 'con_hoja') return conHoja;
+            if (currentFilter === 'sin_hoja') return sinHoja;
+            return maquinas;
+        }
 
         function setFilter(filter) {
             currentFilter = filter;
-            ['todas', 'con_hoja', 'sin_hoja'].forEach(f => {
-                const btn = document.getElementById('filter' + f.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(''));
-                if (btn) btn.className = 'filter-btn';
+            ['filterTodas', 'filterConHoja', 'filterSinHoja'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.className = 'filter-btn';
             });
-            const activeBtn = document.getElementById(
-                filter === 'todas' ? 'filterTodas' :
-                filter === 'con_hoja' ? 'filterConHoja' : 'filterSinHoja'
-            );
-            if (activeBtn) {
-                activeBtn.className = filter === 'sin_hoja' ? 'filter-btn active-warn' : 'filter-btn active';
-            }
-            renderMachineGroups(allMaquinas);
+            const map = { todas: 'filterTodas', con_hoja: 'filterConHoja', sin_hoja: 'filterSinHoja' };
+            const active = document.getElementById(map[filter]);
+            if (active) active.className = filter === 'sin_hoja' ? 'filter-btn active-warn' : 'filter-btn active';
+            renderAll();
         }
 
-        function getSecondsUntilTarget(now, hour, minute) {
-            const target = new Date(now);
-            target.setHours(hour, minute, 0, 0);
-            return Math.floor((target.getTime() - now.getTime()) / 1000);
+        function setView(mode) {
+            viewMode = mode;
+            document.getElementById('floorView').classList.toggle('hidden', mode !== 'plano');
+            document.getElementById('cardsView').classList.toggle('visible', mode === 'tarjetas');
+            document.getElementById('btnViewPlano').classList.toggle('active', mode === 'plano');
+            document.getElementById('btnViewTarjetas').classList.toggle('active', mode === 'tarjetas');
         }
 
-        function showEmergencyCountdown(initialSeconds, slotKey) {
-            const overlay = document.getElementById('emergencyStopOverlay');
-            const countEl = document.getElementById('emergencyCountdown');
-            if (!overlay || !countEl) return;
-
-            emergencyShownKey = slotKey;
-            overlay.style.display = 'flex';
-
-            let secondsLeft = initialSeconds;
-            countEl.textContent = String(secondsLeft);
-
-            const timer = setInterval(() => {
-                secondsLeft -= 1;
-                if (secondsLeft <= 0) {
-                    countEl.textContent = '0';
-                    clearInterval(timer);
-                    setTimeout(() => {
-                        overlay.style.display = 'none';
-                    }, 2000);
-                    return;
-                }
-                countEl.textContent = String(secondsLeft);
-            }, 1000);
-        }
-
-        function checkEmergencyStopWindow() {
-            const now = new Date();
-
-            // Monday-Friday only.
-            const weekday = now.getDay();
-            if (weekday === 0 || weekday === 6) {
-                return;
-            }
-
-            // 15 seconds before 12:00 and 16:00.
-            const slots = [
-                { hour: 12, minute: 0, key: `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}-12` },
-                { hour: 16, minute: 0, key: `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}-16` }
-            ];
-
-            for (const slot of slots) {
-                const sec = getSecondsUntilTarget(now, slot.hour, slot.minute);
-                if (sec <= 15 && sec >= 1) {
-                    if (emergencyShownKey !== slot.key) {
-                        showEmergencyCountdown(sec, slot.key);
-                    }
-                    return;
-                }
-            }
-        }
-
-        function safeText(value, fallback) {
-            if (value === null || value === undefined || value === '') {
-                return fallback;
-            }
-            return String(value);
-        }
-
-        function makeMetaRow(label, value) {
-            const row = document.createElement('div');
-            const b = document.createElement('b');
-            b.textContent = label + ': ';
-            row.appendChild(b);
-            row.appendChild(document.createTextNode(safeText(value, 'N/A')));
-            return row;
-        }
-
-        function buildMachineCard(machine) {
-            const card = document.createElement('article');
-            card.className = 'machine-card state-' + safeText(machine.estado_code, 'sin_hoja');
-
-            const head = document.createElement('div');
-            head.className = 'machine-head';
-
-            const icon = document.createElement('div');
-            icon.className = 'machine-icon';
-
-            const titleWrap = document.createElement('div');
-            titleWrap.style.minWidth = '0';
-
-            const name = document.createElement('div');
-            name.className = 'machine-name';
-            name.textContent = safeText(machine.nombre, 'Maquina sin nombre');
-
-            const badge = document.createElement('div');
+        function buildPin(machine, pos) {
             const code = safeText(machine.estado_code, 'sin_hoja');
-            badge.className = 'machine-badge badge-' + code;
-            badge.textContent = safeText(machine.estado_label, 'Sin hoja');
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'map-pin state-' + code;
+            btn.style.left = ((pos.x / MAP_W) * 100) + '%';
+            btn.style.top = ((pos.y / MAP_H) * 100) + '%';
+            btn.setAttribute('aria-label', safeText(machine.nombre, 'Maquina'));
 
-            titleWrap.appendChild(name);
-            titleWrap.appendChild(badge);
-            head.appendChild(icon);
-            head.appendChild(titleWrap);
+            const body = document.createElement('div');
+            body.className = 'pin-body';
+            body.innerHTML = ICONS[getIconTipo(machine.tipo)];
 
-            const meta = document.createElement('div');
-            meta.className = 'machine-meta';
-            meta.appendChild(makeMetaRow('Pieza', machine.pieza));
-            meta.appendChild(makeMetaRow('Hoja', machine.hoja_serie));
-            meta.appendChild(makeMetaRow('Equipo', machine.activo ? 'ACTIVA' : 'INACTIVA'));
-            meta.appendChild(makeMetaRow('Estacion', machine.estacion_actual || 'Sin produccion'));
-            meta.appendChild(makeMetaRow('Tiempo pza/proceso', machine.tiempo_proceso_pieza || 'N/A'));
-            meta.appendChild(makeMetaRow('Objetivo proceso', machine.tiempo_objetivo_proceso || 'N/A'));
-            meta.appendChild(makeMetaRow('Transcurrido', machine.tiempo_transcurrido_proceso || 'N/A'));
-            meta.appendChild(makeMetaRow('Restante', machine.tiempo_restante_proceso || 'N/A'));
-            meta.appendChild(makeMetaRow('Trabajado semana', machine.tiempo_productivo_semana_hms || '00:00:00'));
-            meta.appendChild(makeMetaRow('Termino', machine.fecha_termino ? new Date(machine.fecha_termino).toLocaleString() : 'N/A'));
-            if (machine.proceso_culminado) {
-                meta.appendChild(makeMetaRow('Estado proceso', 'CULMINADO - MOVER PIEZAS'));
-            }
+            const label = document.createElement('span');
+            label.className = 'pin-label';
+            label.textContent = safeText(machine.nombre, 'Máquina');
+            label.title = safeText(machine.nombre, '');
 
-            const link = document.createElement('a');
-            link.className = 'machine-link';
-            link.href = safeText(machine.detalle_url, '/hojas_ruta/' + machine.id);
-            link.textContent = 'Abrir detalle >';
+            const popup = document.createElement('div');
+            popup.className = 'pin-popup';
+            popup.innerHTML =
+                '<div class="pop-head">ID: ' + safeText(machine.nombre, 'N/A') + ' | ' + safeText(machine.estado_label, '').toUpperCase() + '</div>' +
+                '<div class="pop-row"><b>Pieza:</b> ' + safeText(machine.pieza, 'N/A') + '</div>' +
+                '<div class="pop-row"><b>Hoja:</b> ' + safeText(machine.hoja_serie, 'N/A') + '</div>' +
+                '<div class="pop-row"><b>Estación:</b> ' + safeText(machine.estacion_actual, 'Sin producción') + '</div>';
 
-            card.appendChild(head);
-            card.appendChild(meta);
-            card.appendChild(link);
+            btn.appendChild(body);
+            btn.appendChild(label);
+            btn.appendChild(popup);
+
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (focusedPin === btn) {
+                    window.location.href = safeText(machine.detalle_url, '/hojas_ruta/' + machine.id);
+                    return;
+                }
+                if (focusedPin) focusedPin.classList.remove('focused');
+                focusedPin = btn;
+                btn.classList.add('focused');
+            });
+
+            return btn;
+        }
+
+        function buildCard(machine) {
+            const code = safeText(machine.estado_code, 'sin_hoja');
+            const card = document.createElement('article');
+            card.className = 'machine-card state-' + code;
+            card.innerHTML =
+                '<div class="machine-name">' + safeText(machine.nombre, 'Máquina') + '</div>' +
+                '<span class="machine-badge badge-' + code + '">' + safeText(machine.estado_label, '') + '</span>' +
+                '<div class="machine-meta">Pieza: ' + safeText(machine.pieza, 'N/A') + '<br>Hoja: ' + safeText(machine.hoja_serie, 'N/A') + '</div>' +
+                '<a class="machine-link" href="' + safeText(machine.detalle_url, '#') + '">Detalle ›</a>';
             return card;
         }
 
-        function pushToast(message, kind = 'ok') {
-            const zone = document.getElementById('toastZone');
-            if (!zone) return;
-
-            const toast = document.createElement('div');
-            toast.className = 'toast ' + kind;
-            toast.textContent = message;
-            zone.appendChild(toast);
-
-            setTimeout(() => {
-                toast.remove();
-            }, 9000);
-        }
-
-        function processCompletionNotifications(maquinas) {
+        function renderFloor(maquinas) {
+            const layer = document.getElementById('machineLayer');
+            layer.innerHTML = '';
+            const positions = computePositions(maquinas);
             maquinas.forEach(m => {
-                if (!m || !m.proceso_culminado) return;
-                const key = `${m.id}-${m.hoja_serie || ''}-${m.estacion_actual_id || ''}`;
-                if (notifiedDone.has(key)) return;
-
-                notifiedDone.add(key);
-                pushToast(`Proceso culminado en ${m.nombre}. Hoja: ${m.hoja_serie || 'N/A'}`);
+                const pos = positions[m.id];
+                if (!pos) return;
+                layer.appendChild(buildPin(m, pos));
             });
         }
 
-        function renderMachineGroups(maquinas) {
-            const primary = document.getElementById('primaryGrid');
-            const secondary = document.getElementById('secondaryGrid');
-            primary.innerHTML = '';
-            secondary.innerHTML = '';
-
-            const mover = maquinas.filter(m => m.estado_code === 'mover');
-            const produciendo = maquinas.filter(m => m.estado_code === 'produciendo');
-            const paro = maquinas.filter(m => m.estado_code === 'paro');
-            const conHoja = maquinas.filter(m => m.estado_code === 'produciendo' || m.estado_code === 'activa' || m.estado_code === 'mover');
-            const sinHoja = maquinas.filter(m => m.estado_code === 'sin_hoja');
-
-            // Actualizar contadores en botones
-            document.getElementById('fcTodas').textContent = maquinas.length;
-            document.getElementById('fcConHoja').textContent = conHoja.length;
-            document.getElementById('fcSinHoja').textContent = sinHoja.length;
-
-            let topList = [];
-            let bottomList = [];
-            if (currentFilter === 'con_hoja') {
-                topList = mover.concat(produciendo);
-                bottomList = maquinas.filter(m => m.estado_code === 'activa');
-            } else if (currentFilter === 'sin_hoja') {
-                topList = [];
-                bottomList = sinHoja;
-            } else {
-                topList = mover.concat(produciendo);
-                bottomList = maquinas.filter(m => m.estado_code !== 'produciendo' && m.estado_code !== 'mover');
+        function renderCards(maquinas) {
+            const grid = document.getElementById('cardsGrid');
+            grid.innerHTML = '';
+            if (!maquinas.length) {
+                grid.innerHTML = '<div style="color:var(--muted);padding:20px;text-align:center;">Sin máquinas en este filtro.</div>';
+                return;
             }
-
-            if (!topList.length) {
-                const emptyMain = document.createElement('div');
-                emptyMain.className = 'empty';
-                emptyMain.textContent = 'No hay maquinas produciendo en este filtro.';
-                primary.appendChild(emptyMain);
-            } else {
-                topList.forEach(m => primary.appendChild(buildMachineCard(m)));
-            }
-
-            if (!bottomList.length) {
-                const emptySecondary = document.createElement('div');
-                emptySecondary.className = 'empty';
-                emptySecondary.textContent = 'No hay maquinas para mostrar en no trabajando.';
-                secondary.appendChild(emptySecondary);
-            } else {
-                bottomList.forEach(m => secondary.appendChild(buildMachineCard(m)));
-            }
-
-            document.getElementById('primaryCount').textContent = topList.length + ' equipos';
-            document.getElementById('secondaryCount').textContent = bottomList.length + ' equipos';
+            maquinas.forEach(m => grid.appendChild(buildCard(m)));
         }
 
         function renderStats(maquinas) {
@@ -1072,77 +765,134 @@
             const activa = maquinas.filter(m => m.estado_code === 'activa').length;
             const sinHoja = maquinas.filter(m => m.estado_code === 'sin_hoja').length;
             const paro = maquinas.filter(m => m.estado_code === 'paro').length;
+            const conHoja = mover + produciendo + activa;
+            const activas = produciendo + activa + mover;
 
             document.getElementById('totalMaquinas').textContent = String(total);
             document.getElementById('countMover').textContent = String(mover);
             document.getElementById('countProduciendo').textContent = String(produciendo);
-            document.getElementById('countActiva').textContent = String(activa);
+            document.getElementById('countActivas').textContent = String(activas);
             document.getElementById('countSinHoja').textContent = String(sinHoja);
+            document.getElementById('countConHoja').textContent = String(conHoja);
             document.getElementById('countParo').textContent = String(paro);
 
-            const pct = total ? Math.round((produciendo * 100) / total) : 0;
-            const ring = document.getElementById('prodRing');
-            ring.style.setProperty('--pct', String(pct));
-            document.getElementById('prodText').textContent = pct + '% en curso';
+            document.getElementById('fcTodas').textContent = String(total);
+            document.getElementById('fcConHoja').textContent = String(conHoja);
+            document.getElementById('fcSinHoja').textContent = String(sinHoja);
         }
 
         function renderEfficiency(eff) {
-            const hora = eff && eff.hora ? eff.hora : { porcentaje: 0, productivo_hms: '00:00:00', disponible_hms: '00:00:00' };
-            const dia = eff && eff.dia ? eff.dia : { porcentaje: 0, productivo_hms: '00:00:00', disponible_hms: '00:00:00' };
-            const semana = eff && eff.semana ? eff.semana : { porcentaje: 0, productivo_hms: '00:00:00', disponible_hms: '00:00:00' };
-            const kpis = eff && eff.kpis ? eff.kpis : {
-                utilizacion_actual_pct: 0,
-                asignacion_actual_pct: 0,
-                avance_promedio_pct: 0,
-                oee_lite_pct: 0,
-                maquinas_produciendo: 0,
-                maquinas_asignadas: 0,
-                procesos_medidos: 0,
-                alcance_maquinas: 0,
-            };
+            const hora = eff?.hora || { porcentaje: 0, productivo_hms: '00:00:00', disponible_hms: '00:00:00' };
+            const dia = eff?.dia || { porcentaje: 0, productivo_hms: '00:00:00', disponible_hms: '00:00:00' };
+            const semana = eff?.semana || { porcentaje: 0, productivo_hms: '00:00:00', disponible_hms: '00:00:00' };
 
-            document.getElementById('effHourPct').textContent = `${hora.porcentaje}%`;
-            document.getElementById('effDayPct').textContent = `${dia.porcentaje}%`;
-            document.getElementById('effWeekPct').textContent = `${semana.porcentaje}%`;
+            document.getElementById('effHourPct').textContent = hora.porcentaje + '%';
+            document.getElementById('effDayPct').textContent = dia.porcentaje + '%';
+            document.getElementById('effWeekPct').textContent = semana.porcentaje + '%';
+            document.getElementById('effHourMeta').textContent = 'Prod ' + hora.productivo_hms + ' / Disp ' + hora.disponible_hms;
+            document.getElementById('effDayMeta').textContent = 'Prod ' + dia.productivo_hms + ' / Disp ' + dia.disponible_hms;
+            document.getElementById('effWeekMeta').textContent = 'Prod ' + semana.productivo_hms + ' / Disp ' + semana.disponible_hms;
+        }
 
-            document.getElementById('effHourMeta').textContent = `Prod ${hora.productivo_hms} / Disp ${hora.disponible_hms}`;
-            document.getElementById('effDayMeta').textContent = `Prod ${dia.productivo_hms} / Disp ${dia.disponible_hms}`;
-            document.getElementById('effWeekMeta').textContent = `Prod ${semana.productivo_hms} / Disp ${semana.disponible_hms}`;
-            document.getElementById('effWeekWorked').textContent = `${semana.productivo_hms}`;
-            document.getElementById('effWeekWorkedMeta').textContent = `Semana actual · ${semana.porcentaje}% de disponibilidad base`;
+        function pushToast(message) {
+            const zone = document.getElementById('toastZone');
+            const toast = document.createElement('div');
+            toast.className = 'toast ok';
+            toast.textContent = message;
+            zone.appendChild(toast);
+            setTimeout(() => toast.remove(), 9000);
+        }
 
-            document.getElementById('effUtilNow').textContent = `${kpis.utilizacion_actual_pct}%`;
-            document.getElementById('effAssignNow').textContent = `${kpis.asignacion_actual_pct}%`;
-            document.getElementById('effAvgProgress').textContent = `${kpis.avance_promedio_pct}%`;
-            document.getElementById('effOeeLite').textContent = `${kpis.oee_lite_pct}%`;
+        function processCompletionNotifications(maquinas) {
+            maquinas.forEach(m => {
+                if (!m?.proceso_culminado) return;
+                const key = m.id + '-' + (m.hoja_serie || '') + '-' + (m.estacion_actual_id || '');
+                if (notifiedDone.has(key)) return;
+                notifiedDone.add(key);
+                pushToast('Proceso culminado en ' + m.nombre + '. Hoja: ' + (m.hoja_serie || 'N/A'));
+            });
+        }
 
-            document.getElementById('effUtilMeta').textContent = `Prod ${kpis.maquinas_produciendo} / ${kpis.alcance_maquinas}`;
-            document.getElementById('effAssignMeta').textContent = `Con hoja ${kpis.maquinas_asignadas} / ${kpis.alcance_maquinas}`;
-            document.getElementById('effProgressMeta').textContent = `Procesos medidos ${kpis.procesos_medidos}`;
-            document.getElementById('effOeeMeta').textContent = `Disp dia ${dia.porcentaje}% x ritmo ${kpis.ritmo_objetivo_pct || 0}%`;
+        function renderAll() {
+            const visible = filterMaquinas(allMaquinas);
+            renderFloor(visible);
+            renderCards(visible);
+            renderStats(allMaquinas);
         }
 
         async function loadMapa() {
             const info = document.getElementById('refreshInfo');
             try {
                 const res = await fetch('/api/mapa_maquinas', { credentials: 'same-origin' });
-                if (!res.ok) {
-                    throw new Error('HTTP ' + res.status);
-                }
-
+                if (!res.ok) throw new Error('HTTP ' + res.status);
                 const data = await res.json();
-                const maquinas = Array.isArray(data.maquinas) ? data.maquinas : [];
-                allMaquinas = maquinas;
-                renderMachineGroups(maquinas);
-                renderStats(maquinas);
-                renderEfficiency(data.eficiencia_planta || null);
-                processCompletionNotifications(maquinas);
+                allMaquinas = Array.isArray(data.maquinas) ? data.maquinas : [];
+                renderAll();
+                renderEfficiency(data.eficiencia_planta);
+                processCompletionNotifications(allMaquinas);
                 info.textContent = 'Actualizado ' + new Date().toLocaleTimeString();
-            } catch (error) {
-                console.error(error);
+            } catch (err) {
+                console.error(err);
                 info.textContent = 'Error al actualizar';
             }
         }
+
+        function getSecondsUntilTarget(now, hour, minute) {
+            const target = new Date(now);
+            target.setHours(hour, minute, 0, 0);
+            return Math.floor((target - now) / 1000);
+        }
+
+        function showEmergencyCountdown(sec, key) {
+            const overlay = document.getElementById('emergencyStopOverlay');
+            const countEl = document.getElementById('emergencyCountdown');
+            emergencyShownKey = key;
+            overlay.style.display = 'flex';
+            let left = sec;
+            countEl.textContent = String(left);
+            const t = setInterval(() => {
+                left -= 1;
+                if (left <= 0) { countEl.textContent = '0'; clearInterval(t); setTimeout(() => { overlay.style.display = 'none'; }, 2000); return; }
+                countEl.textContent = String(left);
+            }, 1000);
+        }
+
+        function checkEmergencyStopWindow() {
+            const now = new Date();
+            if (now.getDay() === 0 || now.getDay() === 6) return;
+            const slots = [
+                { hour: 12, minute: 0, key: now.toDateString() + '-12' },
+                { hour: 16, minute: 0, key: now.toDateString() + '-16' },
+            ];
+            for (const s of slots) {
+                const sec = getSecondsUntilTarget(now, s.hour, s.minute);
+                if (sec <= 15 && sec >= 1 && emergencyShownKey !== s.key) {
+                    showEmergencyCountdown(sec, s.key);
+                    return;
+                }
+            }
+        }
+
+        document.getElementById('filterTodas').addEventListener('click', () => setFilter('todas'));
+        document.getElementById('filterConHoja').addEventListener('click', () => setFilter('con_hoja'));
+        document.getElementById('filterSinHoja').addEventListener('click', () => setFilter('sin_hoja'));
+        document.getElementById('btnViewPlano').addEventListener('click', () => setView('plano'));
+        document.getElementById('btnViewTarjetas').addEventListener('click', () => setView('tarjetas'));
+
+        document.getElementById('zoomIn').addEventListener('click', () => {
+            zoomLevel = Math.min(2, zoomLevel + 0.15);
+            document.getElementById('floorCanvas').style.transform = 'scale(' + zoomLevel + ')';
+            document.getElementById('floorCanvas').style.transformOrigin = 'top left';
+        });
+        document.getElementById('zoomOut').addEventListener('click', () => {
+            zoomLevel = Math.max(0.7, zoomLevel - 0.15);
+            document.getElementById('floorCanvas').style.transform = 'scale(' + zoomLevel + ')';
+            document.getElementById('floorCanvas').style.transformOrigin = 'top left';
+        });
+
+        document.addEventListener('click', () => {
+            if (focusedPin) { focusedPin.classList.remove('focused'); focusedPin = null; }
+        });
 
         loadMapa();
         setInterval(loadMapa, MAP_REFRESH_MS);
