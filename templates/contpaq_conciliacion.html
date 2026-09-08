@@ -461,14 +461,25 @@
             for (const pedido of items) {
                 const pedidoRows = [];
                 for (const d of (pedido.detalles || [])) {
+                    const precioUnit = d.precio_unitario != null ? Number(d.precio_unitario) : null;
+                    const totalPartida = d.total_partida != null ? Number(d.total_partida) : null;
                     const precioPublico = d.precio_publico_unitario;
                     const totalPublico = d.total_partida_precio_publico;
+                    const baseSucursal = (precioPublico != null && precioPublico !== '')
+                        ? Number(precioPublico)
+                        : precioUnit;
                     const precioSucursal = d.precio_sucursal_unitario != null
                         ? d.precio_sucursal_unitario
-                        : (precioPublico != null ? Math.round(Number(precioPublico) * 0.8 * 100) / 100 : null);
+                        : (baseSucursal != null && Number.isFinite(baseSucursal)
+                            ? Math.round(baseSucursal * 0.8 * 100) / 100
+                            : null);
                     const totalSucursal = d.total_partida_precio_sucursal != null
                         ? d.total_partida_precio_sucursal
-                        : (totalPublico != null ? Math.round(Number(totalPublico) * 0.8 * 100) / 100 : null);
+                        : (totalPublico != null && totalPublico !== ''
+                            ? Math.round(Number(totalPublico) * 0.8 * 100) / 100
+                            : (totalPartida != null && Number.isFinite(totalPartida)
+                                ? Math.round(totalPartida * 0.8 * 100) / 100
+                                : null));
                     pedidoRows.push({
                         semana: pedido.semana_match_key || pedido.titulo || pedido.periodo_semana || '',
                         fecha: d.fecha_documento || pedido.fecha_documento || '',
