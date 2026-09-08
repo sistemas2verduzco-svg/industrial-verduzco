@@ -439,11 +439,17 @@
             if (resumen) {
                 const semanas = (resumen.totales_por_semana || []).slice(0, 8)
                     .map(s => `${s.semana}: ${money(s.total)} (${s.pedidos} pedidos)`).join(' | ');
+                const totalSucursal = resumen.total_importe_precio_sucursal != null
+                    ? resumen.total_importe_precio_sucursal
+                    : (resumen.total_importe || 0);
+                const totalPublico = resumen.total_importe_precio_publico != null
+                    ? resumen.total_importe_precio_publico
+                    : Math.round(Number(totalSucursal) * 1.2 * 100) / 100;
                 resumenEl.style.display = 'block';
                 resumenEl.innerHTML = `
                     <div class="summary-line"><b>Total pedidos:</b> ${resumen.total_pedidos || 0} | <b>Total partidas:</b> ${resumen.total_partidas || 0} | <b>Total remisiones:</b> ${resumen.total_remisiones || 0}</div>
-                    <div class="summary-line"><b>Total importe pedidos:</b> ${money(resumen.total_importe || 0)} | <b>Total precio publico:</b> ${money(resumen.total_importe_precio_publico || 0)} | <b>Total precio sucursal (-20%):</b> ${money(resumen.total_importe_precio_sucursal || 0)} | <b>Faltantes desde indice:</b> ${resumen.total_faltantes_desde_indice || 0}</div>
-                    <div class="summary-line"><b>Totales por semana:</b> ${semanas || 'Sin datos'}</div>
+                    <div class="summary-line"><b>Total precio sucursal:</b> ${money(totalSucursal)} | <b>Total precio publico (+20%):</b> ${money(totalPublico)} | <b>Faltantes desde indice:</b> ${resumen.total_faltantes_desde_indice || 0}</div>
+                    <div class="summary-line"><b>Totales por semana (precio sucursal):</b> ${semanas || 'Sin datos'}</div>
                 `;
             } else {
                 resumenEl.style.display = 'none';
@@ -461,25 +467,27 @@
             for (const pedido of items) {
                 const pedidoRows = [];
                 for (const d of (pedido.detalles || [])) {
-                    const precioUnit = d.precio_unitario != null ? Number(d.precio_unitario) : null;
-                    const totalPartida = d.total_partida != null ? Number(d.total_partida) : null;
-                    const precioPublico = d.precio_publico_unitario;
-                    const totalPublico = d.total_partida_precio_publico;
-                    const baseSucursal = (precioPublico != null && precioPublico !== '')
-                        ? Number(precioPublico)
-                        : precioUnit;
                     const precioSucursal = d.precio_sucursal_unitario != null
-                        ? d.precio_sucursal_unitario
-                        : (baseSucursal != null && Number.isFinite(baseSucursal)
-                            ? Math.round(baseSucursal * 0.8 * 100) / 100
-                            : null);
+                        ? Number(d.precio_sucursal_unitario)
+                        : (d.precio_unitario != null ? Number(d.precio_unitario) : null);
                     const totalSucursal = d.total_partida_precio_sucursal != null
-                        ? d.total_partida_precio_sucursal
-                        : (totalPublico != null && totalPublico !== ''
-                            ? Math.round(Number(totalPublico) * 0.8 * 100) / 100
-                            : (totalPartida != null && Number.isFinite(totalPartida)
-                                ? Math.round(totalPartida * 0.8 * 100) / 100
-                                : null));
+                        ? Number(d.total_partida_precio_sucursal)
+                        : (d.total_partida != null ? Number(d.total_partida) : null);
+                    const precioPublico = d.precio_publico_unitario != null
+                        ? Number(d.precio_publico_unitario)
+                        : (precioSucursal != null && Number.isFinite(precioSucursal)
+                            ? Math.round(precioSucursal * 1.2 * 100) / 100
+                            : null);
+                    const totalPublico = d.total_partida_precio_publico != null
+                        ? Number(d.total_partida_precio_publico)
+                        : (totalSucursal != null && Number.isFinite(totalSucursal)
+                            ? Math.round(totalSucursal * 1.2 * 100) / 100
+                            : null);
+                    const diferencia = d.diferencia_precio_publico != null
+                        ? Number(d.diferencia_precio_publico)
+                        : (totalPublico != null && totalSucursal != null
+                            ? Math.round((totalPublico - totalSucursal) * 100) / 100
+                            : null);
                     pedidoRows.push({
                         semana: pedido.semana_match_key || pedido.titulo || pedido.periodo_semana || '',
                         fecha: d.fecha_documento || pedido.fecha_documento || '',
@@ -490,13 +498,11 @@
                         clave: d.clave_producto || '',
                         descripcion: d.descripcion || '',
                         cantidad: d.cantidad ?? '',
-                        precio: d.precio_unitario,
-                        total: d.total_partida,
-                        precioPublico,
-                        totalPublico,
                         precioSucursal,
                         totalSucursal,
-                        diferencia: d.diferencia_precio_publico,
+                        precioPublico,
+                        totalPublico,
+                        diferencia,
                         inyectado: d.es_inyectado ? 'SI' : '',
                     });
                 }
@@ -519,9 +525,8 @@
                     }
                 }
 
-                const pedidoTotalSucursalPartida = pedidoRows.reduce((acc, r) => acc + (Number(r.total) || 0), 0);
+                const pedidoTotalSucursal = pedidoRows.reduce((acc, r) => acc + (Number(r.totalSucursal) || 0), 0);
                 const pedidoTotalPublico = pedidoRows.reduce((acc, r) => acc + (Number(r.totalPublico) || 0), 0);
-                const pedidoTotalPrecioSucursal = pedidoRows.reduce((acc, r) => acc + (Number(r.totalSucursal) || 0), 0);
                 const pedidoTotalDiferencia = pedidoRows.reduce((acc, r) => acc + (Number(r.diferencia) || 0), 0);
 
                 let pedidoRowsHtml = '';
@@ -537,12 +542,10 @@
                             <td>${esc(r.clave)}</td>
                             <td>${esc(r.descripcion)}</td>
                             <td>${esc(r.cantidad)}</td>
-                            <td>${money(r.precio)}</td>
-                            <td>${money(r.total)}</td>
-                            <td>${money(r.precioPublico)}</td>
-                            <td>${money(r.totalPublico)}</td>
                             <td>${money(r.precioSucursal)}</td>
                             <td>${money(r.totalSucursal)}</td>
+                            <td>${money(r.precioPublico)}</td>
+                            <td>${money(r.totalPublico)}</td>
                             <td>${money(r.diferencia)}</td>
                             <td>${esc(r.inyectado)}</td>
                         </tr>
@@ -571,15 +574,14 @@
                         <table>
                             <thead>
                                 <tr>
-                                    <th>Semana</th><th>Fecha</th><th>Folio</th><th>Serie</th><th>Sucursal</th><th>Partida</th><th>Clave</th><th>Descripcion</th><th>Cantidad</th><th>Precio Unitario</th><th>Total Partida</th><th>Precio Publico</th><th>Total Precio Publico</th><th>Precio Sucursal (-20%)</th><th>Total Precio Sucursal</th><th>Diferencia</th><th>Inyectado</th>
+                                    <th>Semana</th><th>Fecha</th><th>Folio</th><th>Serie</th><th>Sucursal</th><th>Partida</th><th>Clave</th><th>Descripcion</th><th>Cantidad</th><th>Precio Sucursal</th><th>Total Precio Sucursal</th><th>Precio Publico (+20%)</th><th>Total Precio Publico</th><th>Diferencia</th><th>Inyectado</th>
                                 </tr>
                             </thead>
-                            <tbody>${pedidoRowsHtml || '<tr><td colspan="17">Sin partidas</td></tr>'}</tbody>
+                            <tbody>${pedidoRowsHtml || '<tr><td colspan="15">Sin partidas</td></tr>'}</tbody>
                         </table>
                         <div class="summary-box" style="margin:0 12px 12px;">
-                            <div class="summary-line"><b>Total Partida:</b> ${money(pedido.pedido_total ?? pedidoTotalSucursalPartida)}</div>
-                            <div class="summary-line"><b>Total Precio Publico:</b> ${money(pedidoTotalPublico)}</div>
-                            <div class="summary-line"><b>Total Precio Sucursal (-20%):</b> ${money(pedidoTotalPrecioSucursal)}</div>
+                            <div class="summary-line"><b>Total Precio Sucursal:</b> ${money(pedido.pedido_total ?? pedidoTotalSucursal)}</div>
+                            <div class="summary-line"><b>Total Precio Publico (+20%):</b> ${money(pedidoTotalPublico)}</div>
                             <div class="summary-line"><b>Diferencia:</b> ${money(pedidoTotalDiferencia)}</div>
                         </div>
                     </div>
