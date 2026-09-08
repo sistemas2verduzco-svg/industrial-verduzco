@@ -311,8 +311,8 @@
     <script>
         const CAN_EDIT_CONTPAQ = {{ 'true' if has_permission('contpaq', 'edit') else 'false' }};
         const CONCILIACION_ENDPOINT = '/api/contpaq/conciliacion';
-        // Factor real S01446: 152948.32 / 115667.62
-        const PRECIO_PUBLICO_FACTOR = 152948.32 / 115667.62;
+        // Precio publico = precio sucursal / 0.80
+        const PRECIO_PUBLICO_FACTOR = 1 / 0.80;
         const CONCILIACION_SOURCE_LABELS = {
             contpaq: 'CONTPAQ',
             odoo: 'Odoo',
@@ -458,7 +458,7 @@
                 resumenEl.style.display = 'block';
                 resumenEl.innerHTML = `
                     <div class="summary-line"><b>Total pedidos:</b> ${resumen.total_pedidos || 0} | <b>Total partidas:</b> ${resumen.total_partidas || 0} | <b>Total remisiones:</b> ${resumen.total_remisiones || 0}</div>
-                    <div class="summary-line"><b>Total precio sucursal:</b> ${money(totalSucursal)} | <b>Total precio publico (calc):</b> ${money(totalPublico)} | <b>Faltantes desde indice:</b> ${resumen.total_faltantes_desde_indice || 0}</div>
+                    <div class="summary-line"><b>Total precio sucursal:</b> ${money(totalSucursal)} | <b>Total precio publico (/0.80):</b> ${money(totalPublico)} | <b>Faltantes desde indice:</b> ${resumen.total_faltantes_desde_indice || 0}</div>
                     <div class="summary-line"><b>Totales por semana (precio sucursal):</b> ${semanas || 'Sin datos'}</div>
                 `;
             } else {
@@ -594,14 +594,14 @@
                         <table>
                             <thead>
                                 <tr>
-                                    <th>Semana</th><th>Fecha</th><th>Folio</th><th>Serie</th><th>Sucursal</th><th>Partida</th><th>Clave</th><th>Descripcion</th><th>Cantidad</th><th>Precio Sucursal</th><th>Total Precio Sucursal</th><th>Precio Publico (calc)</th><th>Total Precio Publico</th><th>Diferencia</th><th>Inyectado</th>
+                                    <th>Semana</th><th>Fecha</th><th>Folio</th><th>Serie</th><th>Sucursal</th><th>Partida</th><th>Clave</th><th>Descripcion</th><th>Cantidad</th><th>Precio Sucursal</th><th>Total Precio Sucursal</th><th>Precio Publico (/0.80)</th><th>Total Precio Publico</th><th>Diferencia</th><th>Inyectado</th>
                                 </tr>
                             </thead>
                             <tbody>${pedidoRowsHtml || '<tr><td colspan="15">Sin partidas</td></tr>'}</tbody>
                         </table>
                         <div class="summary-box" style="margin:0 12px 12px;">
                             <div class="summary-line"><b>Total Precio Sucursal:</b> ${money(pedidoTotalSucursal)}</div>
-                            <div class="summary-line"><b>Total Precio Publico (calc):</b> ${money(pedidoTotalPublico)}</div>
+                            <div class="summary-line"><b>Total Precio Publico (/0.80):</b> ${money(pedidoTotalPublico)}</div>
                             <div class="summary-line"><b>Diferencia:</b> ${money(pedidoTotalDiferencia)}</div>
                         </div>
                     </div>

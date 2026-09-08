@@ -4466,18 +4466,17 @@ def _contpaq_read_precio_publico_rows(file_storage, filename, ext, sheet_name='P
     return rows
 
 
-# Precio del pedido = precio sucursal.
-# Precio publico = sucursal * FACTOR (formula fija historica).
-# Factor tomado del caso real S01446:
-#   sucursal 115,667.62  ->  publico 152,948.32
-PRECIO_PUBLICO_FACTOR = 152948.32 / 115667.62  # ≈ 1.32230845
+# Precio sucursal = el del pedido.
+# Precio publico = sucursal / 0.80.
+# Ejemplo S01344: 58725.10 / 0.80 = 73406.375 ≈ 73406.37
+PRECIO_PUBLICO_FACTOR = 1.0 / 0.80  # 1.25
 
 
 def _precios_sucursal_y_publico(precio_unitario, total_partida=None, cantidad=None, precio_publico_lista=None):
     """Arma precios de reporte para una partida.
 
     - Precio sucursal: el que trae el pedido (unitario / total partida)
-    - Precio publico: sucursal * PRECIO_PUBLICO_FACTOR (calculado)
+    - Precio publico: sucursal / 0.80 (calculado)
     - Diferencia: publico - sucursal
 
     Nota: precio_publico_lista se acepta por compatibilidad pero NO se usa.
@@ -14049,7 +14048,7 @@ def _build_conciliacion_odoo_response(
         if header_total is None:
             header_total = _to_float(p.amount_total)
         pedido_total = float(header_total) if header_total is not None else round(lines_sum, 2)
-        # Publico calculado = sucursal * PRECIO_PUBLICO_FACTOR (formula fija historica).
+        # Precio publico = precio sucursal / 0.80.
         pedido_total_publico = round(pedido_total * PRECIO_PUBLICO_FACTOR, 2)
 
         total_importe += pedido_total
