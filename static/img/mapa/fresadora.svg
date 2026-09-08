@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 100" fill="none">
+  <!-- FRESADORA vertical Bridgeport - vista lateral -->
+  <rect x="4" y="88" width="212" height="6" fill="#1e2530" stroke="#5a6a7f"/>
+  <rect x="18" y="70" width="110" height="18" fill="#3d4a5c" stroke="#8a98a8" stroke-width="1.5"/>
+  <rect x="98" y="14" width="30" height="58" fill="#4a5668" stroke="#9aa8b8" stroke-width="1.5"/>
+  <rect x="102" y="18" width="22" height="50" fill="#3a4555"/>
+  <!-- Cabezal -->
+  <rect x="78" y="4" width="70" height="22" rx="2" fill="#4a5668" stroke="#f0c040" stroke-width="1.5"/>
+  <rect x="84" y="8" width="24" height="14" fill="#2a3545" stroke="#7a8a9f"/>
+  <circle cx="130" cy="12" r="7" fill="#141c28" stroke="#d4af37" stroke-width="1.2"/>
+  <!-- Husillo y fresa -->
+  <rect x="110" y="26" width="10" height="24" fill="#7a8a9f" stroke="#9aa8b8"/>
+  <line x1="115" y1="26" x2="115" y2="50" stroke="#e8eef4" stroke-width="2"/>
+  <path d="M115 50l-8 12h16l-8-12z" fill="#f0c040" stroke="#c8960a"/>
+  <!-- Rodilla -->
+  <rect x="40" y="54" width="76" height="16" fill="#4a5668" stroke="#8a98a8"/>
+  <!-- Mesa T-slots -->
+  <rect x="26" y="46" width="104" height="10" fill="#3a4555" stroke="#d4af37" stroke-width="1.2"/>
+  <line x1="32" y1="49" x2="124" y2="49" stroke="#5a6a7f"/>
+  <line x1="32" y1="53" x2="124" y2="53" stroke="#5a6a7f"/>
+  <circle cx="52" cy="62" r="6" fill="none" stroke="#7a8a9f" stroke-width="1.2"/>
+  <path d="M52 56v12M46 62h12" stroke="#7a8a9f"/>
+  <rect x="62" y="40" width="28" height="6" fill="#8a98a8" stroke="#c0ccd8"/>
+  <path d="M100 46V36h20v10" fill="none" stroke="#f0c040" stroke-width="1" opacity="0.5"/>
+</svg>

@@ -125,20 +125,21 @@
             position: relative;
             overflow: auto;
             padding: 8px;
-            min-height: 520px;
+            min-height: 560px;
+            max-height: 75vh;
+            background: #050a12;
+            border-radius: 0 0 12px 12px;
         }
 
         .floor-canvas {
             position: relative;
-            width: 100%;
-            min-width: 900px;
-            aspect-ratio: 1200 / 680;
+            min-height: 420px;
         }
 
         .floor-svg {
-            width: 100%; height: 100%;
             display: block;
-            border-radius: 8px;
+            border-radius: 6px;
+            height: auto;
         }
 
         .machine-layer {
@@ -147,7 +148,8 @@
             pointer-events: none;
         }
 
-        .map-pin {
+        /* ── Máquina estilo mockup (flotante, sin caja) ── */
+        .machine-unit {
             position: absolute;
             transform: translate(-50%, -50%);
             border: none;
@@ -156,91 +158,178 @@
             padding: 0;
             pointer-events: auto;
             z-index: 2;
-            transition: transform 0.15s ease, z-index 0s;
+            width: 128px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            transition: transform 0.2s ease, z-index 0s;
+            --glow: #f4c430;
+            --glow-soft: rgba(244, 196, 48, 0.55);
+            --tag-border: rgba(244, 196, 48, 0.75);
+            --label-color: #ffe566;
         }
 
-        .map-pin:hover, .map-pin.focused {
-            transform: translate(-50%, -50%) scale(1.12);
-            z-index: 10;
+        .machine-unit:hover,
+        .machine-unit.focused {
+            transform: translate(-50%, -50%) scale(1.1);
+            z-index: 20;
         }
 
-        .pin-body {
-            width: 52px; height: 52px;
-            border-radius: 8px;
-            border: 2px solid rgba(120, 190, 255, 0.5);
-            background: linear-gradient(180deg, rgba(15, 50, 85, 0.95), rgba(8, 30, 55, 0.95));
-            display: grid; place-items: center;
-            position: relative;
-        }
-
-        .pin-body svg { width: 34px; height: 34px; }
-
-        .pin-label {
-            display: block;
-            margin-top: 4px;
-            font-size: 10px; font-weight: 700;
-            color: #c8e6ff;
+        .unit-id-line {
+            width: 100%;
+            padding: 2px 6px;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
             text-align: center;
-            max-width: 80px;
+            color: #f0f6ff;
+            background: rgba(4, 10, 22, 0.92);
+            border: 1px solid var(--tag-border);
+            border-radius: 3px 3px 0 0;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+            box-shadow: 0 0 12px var(--glow-soft);
         }
 
-        .pin-popup {
+        .unit-estado-bar {
+            width: 100%;
+            padding: 2px 6px;
+            font-size: 8.5px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-align: center;
+            text-transform: uppercase;
+            color: #1a1000;
+            background: linear-gradient(180deg, var(--glow), color-mix(in srgb, var(--glow) 70%, #000));
+            border: 1px solid var(--tag-border);
+            border-top: none;
+            border-radius: 0 0 3px 3px;
+            box-shadow: 0 0 16px var(--glow-soft);
+        }
+
+        .unit-art {
+            width: 120px;
+            height: 80px;
+            display: grid;
+            place-items: center;
+            margin-top: 2px;
+            position: relative;
+        }
+
+        .unit-art::before {
+            content: "";
+            position: absolute;
+            inset: 8% 12%;
+            border-radius: 50%;
+            background: radial-gradient(ellipse, var(--glow-soft) 0%, transparent 70%);
+            filter: blur(8px);
+            z-index: 0;
+        }
+
+        .unit-art img {
+            width: 118px;
+            height: auto;
+            max-height: 78px;
+            display: block;
+            position: relative;
+            z-index: 1;
+            object-fit: contain;
+            filter:
+                drop-shadow(0 0 4px var(--glow))
+                drop-shadow(0 0 14px var(--glow-soft))
+                drop-shadow(0 0 28px var(--glow-soft));
+        }
+
+        .machine-unit.state-mover .unit-art img,
+        .machine-unit.state-produciendo .unit-art img {
+            animation: pulse-glow-img 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-glow-img {
+            0%, 100% { filter: drop-shadow(0 0 4px var(--glow)) drop-shadow(0 0 14px var(--glow-soft)) drop-shadow(0 0 28px var(--glow-soft)); }
+            50% { filter: drop-shadow(0 0 8px var(--glow)) drop-shadow(0 0 22px var(--glow-soft)) drop-shadow(0 0 42px var(--glow-soft)); }
+        }
+
+        .unit-foot {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: var(--label-color);
+            text-align: center;
+            text-shadow: 0 0 10px var(--glow-soft), 0 0 20px var(--glow-soft);
+            max-width: 140px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .unit-detail {
             display: none;
             position: absolute;
-            bottom: calc(100% + 8px);
+            top: calc(100% + 4px);
             left: 50%;
             transform: translateX(-50%);
-            min-width: 180px;
-            max-width: 260px;
+            min-width: 200px;
             padding: 8px 10px;
-            border-radius: 8px;
-            border: 1px solid rgba(80, 150, 210, 0.7);
-            background: rgba(6, 22, 42, 0.96);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-            font-size: 11px;
+            border-radius: 6px;
+            border: 1px solid var(--tag-border);
+            background: rgba(4, 10, 22, 0.97);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.6), 0 0 20px var(--glow-soft);
+            font-size: 10px;
             text-align: left;
-            z-index: 20;
+            z-index: 30;
             pointer-events: none;
         }
 
-        .map-pin:hover .pin-popup,
-        .map-pin.focused .pin-popup { display: block; }
+        .machine-unit:hover .unit-detail,
+        .machine-unit.focused .unit-detail { display: block; }
+        .unit-detail b { color: #b8dcff; }
 
-        .pin-popup .pop-head {
-            font-weight: 700; font-size: 12px;
-            color: #fff; margin-bottom: 4px;
-            border-bottom: 1px solid rgba(60,120,180,0.4);
-            padding-bottom: 4px;
+        /* Paletas por estado/tipo */
+        .machine-unit.glow-gold {
+            --glow: #f4c430;
+            --glow-soft: rgba(244, 196, 48, 0.6);
+            --tag-border: rgba(244, 196, 48, 0.85);
+            --label-color: #ffe566;
+        }
+        .machine-unit.glow-orange {
+            --glow: #ff9900;
+            --glow-soft: rgba(255, 153, 0, 0.65);
+            --tag-border: rgba(255, 153, 0, 0.9);
+            --label-color: #ffcc66;
+        }
+        .machine-unit.glow-cyan {
+            --glow: #2dd4ff;
+            --glow-soft: rgba(45, 212, 255, 0.55);
+            --tag-border: rgba(45, 212, 255, 0.8);
+            --label-color: #7ee8ff;
+        }
+        .machine-unit.glow-green {
+            --glow: #34d399;
+            --glow-soft: rgba(52, 211, 153, 0.5);
+            --tag-border: rgba(52, 211, 153, 0.75);
+            --label-color: #6ee7b7;
+        }
+        .machine-unit.glow-dim {
+            --glow: #64748b;
+            --glow-soft: rgba(100, 116, 139, 0.3);
+            --tag-border: rgba(100, 116, 139, 0.5);
+            --label-color: #94a3b8;
         }
 
-        .pin-popup .pop-row { color: var(--muted); margin-top: 2px; }
-        .pin-popup .pop-row b { color: #d5ecff; }
+        .machine-unit.state-mover .unit-estado-bar {
+            animation: pulse-bar 2s ease-in-out infinite;
+        }
 
-        .state-mover .pin-body {
-            border-color: var(--mover);
-            box-shadow: 0 0 16px rgba(255, 153, 0, 0.7), 0 0 32px rgba(255, 153, 0, 0.3);
+        @keyframes pulse-bar {
+            0%, 100% { box-shadow: 0 0 12px var(--glow-soft); }
+            50% { box-shadow: 0 0 22px var(--glow-soft); }
         }
-        .state-produciendo .pin-body {
-            border-color: var(--ok);
-            box-shadow: 0 0 14px rgba(20, 198, 120, 0.6), 0 0 28px rgba(20, 198, 120, 0.25);
-        }
-        .state-activa .pin-body {
-            border-color: var(--warn);
-            box-shadow: 0 0 12px rgba(244, 180, 0, 0.55);
-        }
-        .state-sin_hoja .pin-body {
-            border-color: rgba(149, 164, 181, 0.5);
-            opacity: 0.85;
-        }
-        .state-paro .pin-body {
-            border-color: var(--paro);
-            opacity: 0.65;
-            box-shadow: 0 0 10px rgba(200, 60, 60, 0.4);
-        }
+
+        .machine-unit.state-paro { opacity: 0.45; filter: grayscale(0.6); }
 
         .zoom-bar {
             position: absolute; top: 12px; right: 12px;
@@ -399,73 +488,7 @@
 
             <div class="floor-wrap floor-view" id="floorView">
                 <div class="floor-canvas" id="floorCanvas">
-                    <svg class="floor-svg" viewBox="0 0 1200 680" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                        <defs>
-                            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(40,80,120,0.15)" stroke-width="0.5"/>
-                            </pattern>
-                            <filter id="glow-green"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-                            <filter id="glow-orange"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-                        </defs>
-                        <rect width="1200" height="680" fill="#0a1628"/>
-                        <rect width="1200" height="680" fill="url(#grid)"/>
-
-                        <!-- Paredes exteriores -->
-                        <rect x="20" y="20" width="1160" height="640" fill="none" stroke="#4a6078" stroke-width="6" rx="4"/>
-                        <!-- Pilares -->
-                        <g fill="#2a3d52" stroke="#5a7088" stroke-width="1">
-                            <rect x="280" y="200" width="28" height="28" rx="2"/>
-                            <rect x="580" y="200" width="28" height="28" rx="2"/>
-                            <rect x="280" y="400" width="28" height="28" rx="2"/>
-                            <rect x="580" y="400" width="28" height="28" rx="2"/>
-                            <rect x="780" y="200" width="28" height="28" rx="2"/>
-                        </g>
-
-                        <!-- Zonas -->
-                        <rect x="40" y="40" width="250" height="155" fill="rgba(25,181,255,0.06)" stroke="rgba(25,181,255,0.35)" stroke-width="1.5" stroke-dasharray="6 4" rx="6"/>
-                        <text x="55" y="62" fill="#5ec6ff" font-size="13" font-weight="700" font-family="Rajdhani,sans-serif">ZONA CNC</text>
-
-                        <rect x="310" y="40" width="310" height="155" fill="rgba(20,198,120,0.06)" stroke="rgba(20,198,120,0.35)" stroke-width="1.5" stroke-dasharray="6 4" rx="6"/>
-                        <text x="325" y="62" fill="#5ee8a8" font-size="13" font-weight="700" font-family="Rajdhani,sans-serif">ZONA MAQUINADO - ACTIVOS</text>
-
-                        <rect x="40" y="220" width="720" height="340" fill="rgba(149,164,181,0.05)" stroke="rgba(149,164,181,0.3)" stroke-width="1.5" stroke-dasharray="6 4" rx="6"/>
-                        <text x="55" y="242" fill="#a8bdd4" font-size="13" font-weight="700" font-family="Rajdhani,sans-serif">ZONA MECANIZADO - NO TRABAJANDO</text>
-
-                        <rect x="640" y="420" width="200" height="140" fill="rgba(244,180,0,0.08)" stroke="rgba(244,180,0,0.4)" stroke-width="1.5" rx="6"/>
-                        <text x="655" y="442" fill="#ffe093" font-size="12" font-weight="700" font-family="Rajdhani,sans-serif">ZONA ACABADOS - ACTIVOS</text>
-                        <!-- Pallet producto terminado -->
-                        <g transform="translate(700, 480)">
-                            <rect x="0" y="20" width="80" height="50" fill="#3a2a10" stroke="#f4b400" stroke-width="2" rx="4" filter="url(#glow-orange)"/>
-                            <rect x="8" y="8" width="30" height="20" fill="#5a4018" stroke="#f4b400" stroke-width="1" rx="2"/>
-                            <rect x="42" y="8" width="30" height="20" fill="#5a4018" stroke="#f4b400" stroke-width="1" rx="2"/>
-                            <text x="40" y="88" fill="#ffe093" font-size="10" font-weight="700" text-anchor="middle" font-family="Rajdhani,sans-serif">PRODUCTO TERMINADO</text>
-                        </g>
-
-                        <rect x="800" y="40" width="360" height="280" fill="rgba(60,80,110,0.12)" stroke="rgba(100,130,170,0.35)" stroke-width="1.5" rx="6"/>
-                        <text x="815" y="62" fill="#8eb5d6" font-size="13" font-weight="700" font-family="Rajdhani,sans-serif">OFICINAS</text>
-                        <!-- Escritorios oficina -->
-                        <g fill="none" stroke="#4a6080" stroke-width="1.5">
-                            <rect x="830" y="90" width="60" height="35" rx="3"/><rect x="920" y="90" width="60" height="35" rx="3"/>
-                            <rect x="1010" y="90" width="60" height="35" rx="3"/><rect x="830" y="160" width="60" height="35" rx="3"/>
-                            <rect x="920" y="160" width="60" height="35" rx="3"/><rect x="1010" y="160" width="60" height="35" rx="3"/>
-                            <circle cx="860" cy="145" r="8" fill="#3a5070"/><circle cx="950" cy="145" r="8" fill="#3a5070"/>
-                        </g>
-
-                        <!-- Rutas de producto -->
-                        <path d="M 30 600 Q 120 580 200 520 T 380 460 T 560 380 T 720 460 T 740 500" fill="none" stroke="#14c678" stroke-width="4" stroke-linecap="round" filter="url(#glow-green)" opacity="0.85"/>
-                        <text x="100" y="575" fill="#5ee8a8" font-size="11" font-weight="600" font-family="Rajdhani,sans-serif">RUTA PRODUCTO 1</text>
-
-                        <path d="M 30 620 Q 250 600 400 500 T 650 350 T 850 280" fill="none" stroke="#ff9900" stroke-width="3" stroke-dasharray="10 6" stroke-linecap="round" opacity="0.8"/>
-                        <text x="280" y="610" fill="#ffb84d" font-size="11" font-weight="600" font-family="Rajdhani,sans-serif">RUTA PRODUCTO 2</text>
-
-                        <path d="M 30 560 L 180 500 L 350 420 L 500 300 L 620 250 L 700 420 L 740 500" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="5 5"/>
-                        <text x="40" y="548" fill="#8eb5d6" font-size="10" font-family="Rajdhani,sans-serif">RUTA PRODUCTO MAESTRA</text>
-
-                        <!-- Flechas flujo -->
-                        <polygon points="370,425 385,415 385,435" fill="#14c678" opacity="0.9"/>
-                        <polygon points="610,255 625,245 625,265" fill="#14c678" opacity="0.9"/>
-                        <polygon points="695,415 710,405 710,425" fill="#ff9900" opacity="0.9"/>
-                    </svg>
+                    <svg class="floor-svg" id="floorSvg" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"></svg>
 
                     <div class="zoom-bar">
                         <button type="button" id="zoomOut" title="Alejar">−</button>
@@ -565,14 +588,20 @@
 
     <script>
         const MAP_REFRESH_MS = 6000;
-        const MAP_W = 1200;
-        const MAP_H = 680;
-        const ZONES = {
-            cnc:         { x: 50,  y: 75,  w: 230, h: 105 },
-            maquinado:   { x: 320, y: 75,  w: 290, h: 105 },
-            mecanizado:  { x: 55,  y: 255, w: 690, h: 285 },
-            acabados:    { x: 655, y: 455, w: 170, h: 90 },
-        };
+        const CELL_W = 210;
+        const CELL_H = 168;
+        const ZONE_LABEL_H = 24;
+        const ZONE_GAP = 28;
+        const PAD = 40;
+        let MAP_W = 1200;
+        let MAP_H = 520;
+
+        const PLANT_ZONES = [
+            { key: 'cnc', label: 'ZONA CNC', columnas: 3, stroke: 'rgba(244,196,48,0.45)', fill: 'rgba(244,196,48,0.06)' },
+            { key: 'torno', label: 'ZONA TORNOS', columnas: 4, stroke: 'rgba(45,212,255,0.4)', fill: 'rgba(45,212,255,0.06)' },
+            { key: 'taladro', label: 'ZONA TALADROS', columnas: 2, stroke: 'rgba(120,200,255,0.35)', fill: 'rgba(120,200,255,0.05)' },
+            { key: 'fresadora', label: 'ZONA FRESADORAS', columnas: 2, stroke: 'rgba(200,205,215,0.35)', fill: 'rgba(200,205,215,0.05)' },
+        ];
 
         const notifiedDone = new Set();
         let emergencyShownKey = null;
@@ -582,13 +611,24 @@
         let zoomLevel = 1;
         let focusedPin = null;
 
-        const ICONS = {
-            cnc: '<svg viewBox="0 0 40 40"><rect x="6" y="12" width="28" height="18" rx="2" fill="#1a4a70" stroke="#5ec6ff" stroke-width="1.5"/><rect x="10" y="8" width="20" height="6" rx="1" fill="#2a6a9a"/><circle cx="20" cy="21" r="5" fill="#0d3050" stroke="#8ed5ff" stroke-width="1"/></svg>',
-            fresadora: '<svg viewBox="0 0 40 40"><rect x="8" y="14" width="24" height="16" rx="2" fill="#1a4a70" stroke="#5ec6ff" stroke-width="1.5"/><rect x="14" y="6" width="12" height="10" fill="#2a6a9a" stroke="#8ed5ff" stroke-width="1"/><line x1="20" y1="22" x2="20" y2="30" stroke="#8ed5ff" stroke-width="2"/></svg>',
-            torno: '<svg viewBox="0 0 40 40"><ellipse cx="20" cy="22" rx="14" ry="8" fill="#1a4a70" stroke="#f4b400" stroke-width="1.5"/><rect x="6" y="18" width="8" height="8" fill="#2a6a9a"/><circle cx="28" cy="22" r="4" fill="#0d3050" stroke="#ffe093" stroke-width="1"/></svg>',
-            taladro: '<svg viewBox="0 0 40 40"><rect x="14" y="8" width="12" height="24" rx="2" fill="#1a4a70" stroke="#5ec6ff" stroke-width="1.5"/><polygon points="20,32 14,26 26,26" fill="#8ed5ff"/><circle cx="20" cy="14" r="3" fill="#2a6a9a"/></svg>',
-            default: '<svg viewBox="0 0 40 40"><rect x="10" y="12" width="20" height="18" rx="3" fill="#1a4a70" stroke="#5ec6ff" stroke-width="1.5"/><circle cx="20" cy="21" r="4" fill="#0d3050" stroke="#8ed5ff"/></svg>',
+        const ICON_SRC = {
+            cnc: '/static/img/mapa/cnc.svg',
+            fresadora: '/static/img/mapa/fresadora.svg',
+            torno: '/static/img/mapa/torno.svg',
+            taladro: '/static/img/mapa/taladro.svg',
+            default: '/static/img/mapa/default.svg',
         };
+
+        function getGlowClass(machine) {
+            const code = machine.estado_code || 'sin_hoja';
+            const tipo = getIconTipo(machine.tipo);
+            if (code === 'mover') return 'glow-orange';
+            if (code === 'produciendo') return 'glow-gold';
+            if (code === 'activa') return 'glow-cyan';
+            if (code === 'paro') return 'glow-dim';
+            if (tipo === 'taladro' || tipo === 'torno') return 'glow-cyan';
+            return 'glow-gold';
+        }
 
         function safeText(v, fb) {
             return (v === null || v === undefined || v === '') ? fb : String(v);
@@ -603,54 +643,149 @@
             return 'default';
         }
 
-        function getZoneKey(machine) {
-            if (machine.pos_x != null && machine.pos_y != null) return null;
-            const tipo = getIconTipo(machine.tipo);
-            const active = ['produciendo', 'mover', 'activa'].includes(machine.estado_code);
-            if (!active) return 'mecanizado';
-            if (tipo === 'cnc') return 'cnc';
-            if (tipo === 'fresadora') return 'maquinado';
-            if (active && (tipo === 'torno' || tipo === 'taladro')) return 'maquinado';
-            return 'mecanizado';
-        }
-
-        function layoutInZone(machines, zoneKey) {
-            const z = ZONES[zoneKey];
-            if (!z || !machines.length) return {};
-            const cols = Math.ceil(Math.sqrt(machines.length * (z.w / z.h)));
-            const rows = Math.ceil(machines.length / cols);
-            const cellW = z.w / cols;
-            const cellH = z.h / rows;
-            const positions = {};
-            machines.forEach((m, i) => {
-                const col = i % cols;
-                const row = Math.floor(i / cols);
-                positions[m.id] = {
-                    x: z.x + cellW * (col + 0.5),
-                    y: z.y + cellH * (row + 0.5),
-                };
-            });
-            return positions;
-        }
-
-        function computePositions(maquinas) {
-            const positions = {};
-            const byZone = { cnc: [], maquinado: [], mecanizado: [], acabados: [] };
-
+        function groupByTipo(maquinas) {
+            const g = { cnc: [], torno: [], fresadora: [], taladro: [], default: [] };
             maquinas.forEach(m => {
-                if (m.pos_x != null && m.pos_y != null) {
-                    positions[m.id] = { x: Number(m.pos_x), y: Number(m.pos_y) };
-                } else {
-                    const zk = getZoneKey(m);
-                    if (zk) byZone[zk].push(m);
+                const t = getIconTipo(m.tipo);
+                if (g[t]) g[t].push(m);
+                else g.default.push(m);
+            });
+            Object.keys(g).forEach(k => {
+                g[k].sort((a, b) => safeText(a.nombre, '').localeCompare(safeText(b.nombre, ''), 'es', { numeric: true }));
+            });
+            if (g.default.length) g.fresadora.push(...g.default);
+            return g;
+        }
+
+        function splitIntoColumnas(machines, columnCount) {
+            const cols = Array.from({ length: columnCount }, () => []);
+            if (!machines.length) return cols;
+
+            const base = Math.floor(machines.length / columnCount);
+            let extra = machines.length % columnCount;
+            let idx = 0;
+            for (let c = 0; c < columnCount; c++) {
+                const count = base + (c < extra ? 1 : 0);
+                cols[c] = machines.slice(idx, idx + count);
+                idx += count;
+            }
+            return cols;
+        }
+
+        function buildLinearLayout(byTipo) {
+            const zoneLayouts = [];
+            let x = PAD;
+            let maxH = 0;
+
+            PLANT_ZONES.forEach((zoneDef, zi) => {
+                const machines = byTipo[zoneDef.key] || [];
+                const columnas = splitIntoColumnas(machines, zoneDef.columnas);
+                const rows = Math.max(1, ...columnas.map(col => col.length));
+                const zoneW = zoneDef.columnas * CELL_W;
+                const zoneH = ZONE_LABEL_H + rows * CELL_H;
+                maxH = Math.max(maxH, zoneH);
+
+                zoneLayouts.push({
+                    def: zoneDef,
+                    columnas,
+                    rows,
+                    x0: x,
+                    y0: PAD,
+                    width: zoneW,
+                    height: zoneH,
+                });
+
+                x += zoneW + (zi < PLANT_ZONES.length - 1 ? ZONE_GAP : 0);
+            });
+
+            return { zoneLayouts, totalW: x, contentH: maxH };
+        }
+
+        function placeZoneMachines(zoneLayout, positions) {
+            const { def, columnas, x0, y0 } = zoneLayout;
+            columnas.forEach((colMachines, ci) => {
+                const colX = x0 + CELL_W * (ci + 0.5);
+                colMachines.forEach((m, ri) => {
+                    positions[m.id] = {
+                        x: colX,
+                        y: y0 + ZONE_LABEL_H + ri * CELL_H + CELL_H * 0.56,
+                        col: ci,
+                        row: ri,
+                        zone: def.key,
+                    };
+                });
+            });
+        }
+
+        function computePlantLayout(maquinas) {
+            const byTipo = groupByTipo(maquinas);
+            const { zoneLayouts, totalW, contentH } = buildLinearLayout(byTipo);
+
+            MAP_W = totalW + PAD;
+            MAP_H = PAD * 2 + contentH;
+
+            const positions = {};
+            zoneLayouts.forEach(z => placeZoneMachines(z, positions));
+
+            return { byTipo, zoneLayouts, contentH, positions };
+        }
+
+        function renderFloorSvg(layout) {
+            const svg = document.getElementById('floorSvg');
+            if (!svg) return;
+
+            const { zoneLayouts, contentH } = layout;
+
+            let h = '';
+            h += '<defs><pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">';
+            h += '<path d="M24 0L0 0 0 24" fill="none" stroke="rgba(80,90,110,0.14)" stroke-width="0.5"/></pattern></defs>';
+            h += `<rect width="${MAP_W}" height="${MAP_H}" fill="#0f1520"/>`;
+            h += `<rect width="${MAP_W}" height="${MAP_H}" fill="url(#grid)"/>`;
+            h += `<rect x="12" y="12" width="${MAP_W - 24}" height="${MAP_H - 24}" fill="#1e2129" stroke="#b8bcc4" stroke-width="3" rx="3"/>`;
+
+            zoneLayouts.forEach((zone, zi) => {
+                const { def, columnas, rows, x0, y0, width, height } = zone;
+
+                h += `<rect x="${x0}" y="${y0}" width="${width}" height="${height}" fill="${def.fill}" stroke="${def.stroke}" stroke-width="1.5" rx="3"/>`;
+                h += `<text x="${x0 + width / 2}" y="${y0 + 18}" fill="rgba(220,225,235,0.92)" font-size="14" font-weight="700" font-family="Rajdhani,sans-serif" text-anchor="middle">${def.label}</text>`;
+
+                for (let ci = 0; ci < def.columnas; ci++) {
+                    const colMachines = columnas[ci] || [];
+                    const colRows = Math.max(1, colMachines.length);
+                    const colX = x0 + ci * CELL_W;
+
+                    for (let ri = 0; ri < colRows; ri++) {
+                        const cellY = y0 + ZONE_LABEL_H + ri * CELL_H;
+                        h += `<rect x="${colX + 6}" y="${cellY + 6}" width="${CELL_W - 12}" height="${CELL_H - 12}" fill="rgba(20,24,32,0.35)" stroke="rgba(100,110,130,0.25)" stroke-width="1" rx="4"/>`;
+                        h += `<text x="${colX + CELL_W / 2}" y="${cellY + CELL_H - 4}" fill="rgba(120,130,150,0.4)" font-size="9" text-anchor="middle" font-family="Rajdhani,sans-serif">C${ci + 1}-F${ri + 1}</text>`;
+                    }
+
+                    if (ci < def.columnas - 1) {
+                        const sepX = colX + CELL_W;
+                        h += `<line x1="${sepX}" y1="${y0 + ZONE_LABEL_H + 4}" x2="${sepX}" y2="${y0 + height - 4}" stroke="rgba(244,196,48,0.12)" stroke-width="1" stroke-dasharray="6 5"/>`;
+                    }
+                }
+
+                if (zi < zoneLayouts.length - 1) {
+                    const gapX = x0 + width;
+                    h += `<line x1="${gapX + ZONE_GAP / 2}" y1="${y0 + 8}" x2="${gapX + ZONE_GAP / 2}" y2="${y0 + contentH - 8}" stroke="rgba(244,196,48,0.18)" stroke-width="1" stroke-dasharray="5 4"/>`;
                 }
             });
 
-            Object.keys(byZone).forEach(zk => {
-                const laid = layoutInZone(byZone[zk], zk);
-                Object.assign(positions, laid);
-            });
-            return positions;
+            svg.setAttribute('viewBox', `0 0 ${MAP_W} ${MAP_H}`);
+            svg.setAttribute('width', String(MAP_W));
+            svg.setAttribute('height', String(MAP_H));
+            svg.innerHTML = h;
+
+            const canvas = document.getElementById('floorCanvas');
+            if (canvas) {
+                canvas.style.width = MAP_W + 'px';
+                canvas.style.height = MAP_H + 'px';
+            }
+        }
+
+        function computePositions(maquinas) {
+            return computePlantLayout(maquinas).positions;
         }
 
         function filterMaquinas(maquinas) {
@@ -683,33 +818,51 @@
 
         function buildPin(machine, pos) {
             const code = safeText(machine.estado_code, 'sin_hoja');
+            const tipo = getIconTipo(machine.tipo);
+            const nombre = safeText(machine.nombre, 'Máquina');
+            const estadoLabel = safeText(machine.estado_label, 'Sin hoja').toUpperCase();
+            const glow = getGlowClass(machine);
+
             const btn = document.createElement('button');
             btn.type = 'button';
-            btn.className = 'map-pin state-' + code;
+            btn.className = 'machine-unit state-' + code + ' tipo-' + tipo + ' ' + glow;
             btn.style.left = ((pos.x / MAP_W) * 100) + '%';
             btn.style.top = ((pos.y / MAP_H) * 100) + '%';
-            btn.setAttribute('aria-label', safeText(machine.nombre, 'Maquina'));
+            btn.setAttribute('aria-label', nombre);
 
-            const body = document.createElement('div');
-            body.className = 'pin-body';
-            body.innerHTML = ICONS[getIconTipo(machine.tipo)];
+            const idLine = document.createElement('div');
+            idLine.className = 'unit-id-line';
+            idLine.textContent = 'ID: ' + nombre;
 
-            const label = document.createElement('span');
-            label.className = 'pin-label';
-            label.textContent = safeText(machine.nombre, 'Máquina');
-            label.title = safeText(machine.nombre, '');
+            const estadoBar = document.createElement('div');
+            estadoBar.className = 'unit-estado-bar';
+            estadoBar.textContent = 'ESTADO: ' + estadoLabel;
 
-            const popup = document.createElement('div');
-            popup.className = 'pin-popup';
-            popup.innerHTML =
-                '<div class="pop-head">ID: ' + safeText(machine.nombre, 'N/A') + ' | ' + safeText(machine.estado_label, '').toUpperCase() + '</div>' +
-                '<div class="pop-row"><b>Pieza:</b> ' + safeText(machine.pieza, 'N/A') + '</div>' +
-                '<div class="pop-row"><b>Hoja:</b> ' + safeText(machine.hoja_serie, 'N/A') + '</div>' +
-                '<div class="pop-row"><b>Estación:</b> ' + safeText(machine.estacion_actual, 'Sin producción') + '</div>';
+            const art = document.createElement('div');
+            art.className = 'unit-art';
+            const img = document.createElement('img');
+            img.src = ICON_SRC[tipo] || ICON_SRC.default;
+            img.alt = nombre;
+            img.loading = 'lazy';
+            art.appendChild(img);
 
-            btn.appendChild(body);
-            btn.appendChild(label);
-            btn.appendChild(popup);
+            const foot = document.createElement('div');
+            foot.className = 'unit-foot';
+            foot.textContent = nombre;
+
+            const detail = document.createElement('div');
+            detail.className = 'unit-detail';
+            detail.innerHTML =
+                '<div><b>Pieza:</b> ' + safeText(machine.pieza, 'N/A') + '</div>' +
+                '<div><b>Hoja:</b> ' + safeText(machine.hoja_serie, 'N/A') + '</div>' +
+                '<div><b>Estación:</b> ' + safeText(machine.estacion_actual, 'Sin producción') + '</div>' +
+                '<div style="margin-top:4px;color:var(--label-color);">Doble clic → detalle</div>';
+
+            btn.appendChild(idLine);
+            btn.appendChild(estadoBar);
+            btn.appendChild(art);
+            btn.appendChild(foot);
+            btn.appendChild(detail);
 
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -738,11 +891,14 @@
         }
 
         function renderFloor(maquinas) {
+            const layout = computePlantLayout(maquinas);
+            renderFloorSvg(layout);
             const layer = document.getElementById('machineLayer');
             layer.innerHTML = '';
-            const positions = computePositions(maquinas);
+            layer.style.width = MAP_W + 'px';
+            layer.style.height = MAP_H + 'px';
             maquinas.forEach(m => {
-                const pos = positions[m.id];
+                const pos = layout.positions[m.id];
                 if (!pos) return;
                 layer.appendChild(buildPin(m, pos));
             });
