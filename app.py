@@ -4466,15 +4466,13 @@ def _contpaq_read_precio_publico_rows(file_storage, filename, ext, sheet_name='P
     return rows
 
 
-# Precio del pedido = precio sucursal. Precio publico = sucursal + 20%.
-PRECIO_PUBLICO_MARGEN = 0.20
-
-
-def _precios_sucursal_y_publico(precio_unitario, total_partida=None, cantidad=None):
-    """Deriva precios de reporte desde el precio del pedido.
+def _precios_sucursal_y_publico(precio_unitario, total_partida=None, cantidad=None, precio_publico_lista=None):
+    """Arma precios de reporte para una partida.
 
     - Precio sucursal: el que trae el pedido (unitario / total partida)
-    - Precio publico: sucursal + 20%
+    - Precio publico: el de la lista de precios publicos (Excel/catalogo),
+      NO una formula fija (+20%), porque en la practica el diferencial no es 20%
+      (ej. S01446: sucursal 115,667.62 vs publico 152,948.32 ≈ +32%).
     - Diferencia: publico - sucursal
 
     Returns:
@@ -4487,15 +4485,9 @@ def _precios_sucursal_y_publico(precio_unitario, total_partida=None, cantidad=No
     if total_suc is None and precio_suc is not None and cant is not None:
         total_suc = round(precio_suc * cant, 2)
 
-    precio_pub = (
-        round(precio_suc * (1.0 + PRECIO_PUBLICO_MARGEN), 2)
-        if precio_suc is not None else None
-    )
-    total_pub = (
-        round(total_suc * (1.0 + PRECIO_PUBLICO_MARGEN), 2)
-        if total_suc is not None else None
-    )
-    if total_pub is None and precio_pub is not None and cant is not None:
+    precio_pub = _to_float(precio_publico_lista)
+    total_pub = None
+    if precio_pub is not None and cant is not None:
         total_pub = round(precio_pub * cant, 2)
 
     diferencia = (
@@ -13995,6 +13987,8 @@ def _build_conciliacion_odoo_response(
     for p in pedidos:
         pedido_rows = []
         lines_sum = 0.0
+        publico_sum = 0.0
+        publico_count = 0
         semana_norm = _contpaq_title_week_key(p.titulo, _conciliacion_odoo_periodo_semana(p), p.date_order)
         periodo_semana = _conciliacion_odoo_periodo_semana(p)
 
@@ -14005,10 +13999,17 @@ def _build_conciliacion_odoo_response(
             if partida_total is None and cantidad_num is not None and precio_unit is not None:
                 partida_total = round(cantidad_num * precio_unit, 2)
             partida_total = float(partida_total or 0)
+            precio_lista = public_price_map.get(_norm_txt(d.product_key))
             precio_suc, total_suc, precio_pub, total_pub, diferencia = _precios_sucursal_y_publico(
-                precio_unit, total_partida=partida_total, cantidad=cantidad_num
+                precio_unit,
+                total_partida=partida_total,
+                cantidad=cantidad_num,
+                precio_publico_lista=precio_lista,
             )
             lines_sum += partida_total
+            if total_pub is not None:
+                publico_sum += total_pub
+                publico_count += 1
             total_partidas += 1
 
             pedido_rows.append({
@@ -14034,7 +14035,8 @@ def _build_conciliacion_odoo_response(
         if header_total is None:
             header_total = _to_float(p.amount_total)
         pedido_total = float(header_total) if header_total is not None else round(lines_sum, 2)
-        pedido_total_publico = round(pedido_total * (1.0 + PRECIO_PUBLICO_MARGEN), 2)
+        # Publico = suma real de lista de precios; sin formula inventada.
+        pedido_total_publico = round(publico_sum, 2) if publico_count else None
 
         total_importe += pedido_total
         sem = periodo_semana or 'SIN SEMANA'
@@ -14114,8 +14116,12 @@ def _build_conciliacion_odoo_response(
             cantidad = _to_float(f.get('cantidad'))
             precio = _to_float(f.get('precio_unitario'))
             total_partida = round(cantidad * precio, 2) if cantidad is not None and precio is not None else 0.0
+            precio_lista = public_price_map.get(_norm_txt(f.get('clave_producto')))
             precio_suc, total_suc, precio_pub, total_pub, diferencia = _precios_sucursal_y_publico(
-                precio, total_partida=total_partida, cantidad=cantidad
+                precio,
+                total_partida=total_partida,
+                cantidad=cantidad,
+                precio_publico_lista=precio_lista,
             )
 
             target_item = items[target_idx]
@@ -14143,9 +14149,14 @@ def _build_conciliacion_odoo_response(
 
             target_item['pedido_total'] = round(_to_float(target_item.get('pedido_total')) + total_partida, 2)
             target_item['pedido_total_precio_sucursal'] = target_item['pedido_total']
-            target_item['pedido_total_precio_publico'] = round(
-                target_item['pedido_total'] * (1.0 + PRECIO_PUBLICO_MARGEN), 2
-            )
+            pub_sum = 0.0
+            pub_n = 0
+            for det in target_item.get('detalles') or []:
+                tp = _to_float(det.get('total_partida_precio_publico'))
+                if tp is not None:
+                    pub_sum += tp
+                    pub_n += 1
+            target_item['pedido_total_precio_publico'] = round(pub_sum, 2) if pub_n else None
             target_item['es_faltante'] = True
             total_partidas += 1
             total_importe += total_partida
@@ -14358,14 +14369,22 @@ def _compute_conciliacion_resumen_from_items(items):
             if d.get('es_inyectado'):
                 total_faltantes += 1
 
-        # Preferir totales a nivel pedido (Odoo amount_untaxed / suma Contpaq)
-        # para que el panel superior coincida con el pie de cada tarjeta.
+        # Preferir totales a nivel pedido para que el panel superior coincida
+        # con el pie de cada tarjeta.
         total_suc = _to_float(it.get('pedido_total_precio_sucursal'))
         if total_suc is None:
             total_suc = pedido_total
         total_pub = _to_float(it.get('pedido_total_precio_publico'))
-        if total_pub is None and total_suc is not None:
-            total_pub = round(total_suc * (1.0 + PRECIO_PUBLICO_MARGEN), 2)
+        # Si no hay total publico a nivel pedido, sumar partidas con lista.
+        if total_pub is None:
+            pub_sum = 0.0
+            pub_n = 0
+            for d in detalles:
+                tp = _to_float(d.get('total_partida_precio_publico'))
+                if tp is not None:
+                    pub_sum += tp
+                    pub_n += 1
+            total_pub = round(pub_sum, 2) if pub_n else None
 
         if total_suc is not None:
             total_importe_precio_sucursal += total_suc
@@ -14798,6 +14817,8 @@ def _build_conciliacion_contpaq_response(
         for p in pedidos:
             pedido_rows = []
             pedido_total = 0.0
+            publico_sum = 0.0
+            publico_count = 0
             semana_norm = _contpaq_title_week_key(p.titulo, p.periodo_semana, p.fecha_documento)
             sucursal_norm = _norm_txt(p.sucursal)
             folio_norm = _norm_txt(p.doc_folio)
@@ -14806,10 +14827,17 @@ def _build_conciliacion_contpaq_response(
                 partida_total = float(d.total_partida or 0)
                 cantidad_num = _to_float(d.cantidad)
                 precio_unit = _to_float(d.precio_unitario)
+                precio_lista = public_price_map.get(_norm_txt(d.clave_producto))
                 precio_suc, total_suc, precio_pub, total_pub, diferencia = _precios_sucursal_y_publico(
-                    precio_unit, total_partida=partida_total, cantidad=cantidad_num
+                    precio_unit,
+                    total_partida=partida_total,
+                    cantidad=cantidad_num,
+                    precio_publico_lista=precio_lista,
                 )
                 pedido_total += partida_total
+                if total_pub is not None:
+                    publico_sum += total_pub
+                    publico_count += 1
                 total_partidas += 1
 
                 pedido_rows.append({
@@ -14870,7 +14898,7 @@ def _build_conciliacion_contpaq_response(
                 'fecha_documento': p.fecha_documento.isoformat() if p.fecha_documento else None,
                 'pedido_total': round(pedido_total, 2),
                 'pedido_total_precio_sucursal': round(pedido_total, 2),
-                'pedido_total_precio_publico': round(pedido_total * (1.0 + PRECIO_PUBLICO_MARGEN), 2),
+                'pedido_total_precio_publico': round(publico_sum, 2) if publico_count else None,
                 'detalles': pedido_rows,
                 'remisiones': remisiones_rows,
                 'fuente': 'contpaq',
@@ -14982,9 +15010,13 @@ def _build_conciliacion_contpaq_response(
 
                 cantidad = _to_float(f.get('cantidad'))
                 precio = _to_float(f.get('precio_unitario'))
-                total_partida = round(cantidad * precio, 2)
+                total_partida = round(cantidad * precio, 2) if cantidad is not None and precio is not None else 0.0
+                precio_lista = public_price_map.get(_norm_txt(f.get('clave_producto')))
                 precio_suc, total_suc, precio_pub, total_pub, diferencia = _precios_sucursal_y_publico(
-                    precio, total_partida=total_partida, cantidad=cantidad
+                    precio,
+                    total_partida=total_partida,
+                    cantidad=cantidad,
+                    precio_publico_lista=precio_lista,
                 )
 
                 target_item = items[target_idx]
@@ -15012,9 +15044,14 @@ def _build_conciliacion_contpaq_response(
 
                 target_item['pedido_total'] = round(_to_float(target_item.get('pedido_total')) + total_partida, 2)
                 target_item['pedido_total_precio_sucursal'] = target_item['pedido_total']
-                target_item['pedido_total_precio_publico'] = round(
-                    target_item['pedido_total'] * (1.0 + PRECIO_PUBLICO_MARGEN), 2
-                )
+                pub_sum = 0.0
+                pub_n = 0
+                for det in target_item.get('detalles') or []:
+                    tp = _to_float(det.get('total_partida_precio_publico'))
+                    if tp is not None:
+                        pub_sum += tp
+                        pub_n += 1
+                target_item['pedido_total_precio_publico'] = round(pub_sum, 2) if pub_n else None
                 target_item['es_faltante'] = True
 
                 # Si el faltante vino de un pedido D, inyectar solo las partidas de remision
