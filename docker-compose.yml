@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: catalogo_pass
       POSTGRES_DB: catalogo_db
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -22,6 +22,8 @@ services:
   app:
     build: .
     container_name: catalogo_app
+    ports:
+        - "5000:5000"
     networks:
       - catalogo_network
     env_file:
@@ -102,9 +104,39 @@ services:
     networks:
       - catalogo_network
 
+  # MySQL Empaque360 (sistema de pesos) — convive con Postgres de Control Calidad 360
+  empaque_db:
+    image: mysql:8.0
+    container_name: empaque_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: empaqueops
+      MYSQL_USER: empaque_app
+      MYSQL_PASSWORD: ${EMPAQUE_MYSQL_PASSWORD:-Empaque360*App2024}
+      MYSQL_ROOT_PASSWORD: ${EMPAQUE_MYSQL_ROOT_PASSWORD:-Empaque360*Root2024}
+    ports:
+      # Misma 3307 que en planta, para no romper connection strings de apps
+      - "3307:3306"
+    volumes:
+      - empaque_mysql_data:/var/lib/mysql
+    networks:
+      - catalogo_network
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max_connections=200
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-pEmpaque360*Root2024"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
 volumes:
   postgres_data:
   pgadmin_data:
+  empaque_mysql_data:
 
 networks:
   catalogo_network:
