@@ -33,6 +33,14 @@ services:
       FLASK_ENV: production
       TEMPLATES_AUTO_RELOAD: "1"
       DATABASE_URL: postgresql://catalogo_user:catalogo_pass@db:5432/catalogo_db
+      EMPAQUE_MYSQL_HOST: empaque_db
+      EMPAQUE_MYSQL_PORT: "3306"
+      EMPAQUE_MYSQL_DATABASE: empaqueops
+      EMPAQUE_MYSQL_USER: empaque_app
+      EMPAQUE_MYSQL_PASSWORD: ${EMPAQUE_MYSQL_PASSWORD:-Empaque360*App2024}
+      EMPAQUE_ODOO_SYNC_ENABLED: ${EMPAQUE_ODOO_SYNC_ENABLED:-1}
+      EMPAQUE_ODOO_SYNC_INTERVAL_MINUTES: ${EMPAQUE_ODOO_SYNC_INTERVAL_MINUTES:-30}
+      EMPAQUE_ODOO_SYNC_LOOKBACK_DAYS: ${EMPAQUE_ODOO_SYNC_LOOKBACK_DAYS:-3}
     volumes:
       - .:/app
     restart: unless-stopped

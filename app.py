@@ -4,6 +4,7 @@ from auth import AuthManager
 from email_manager import EmailManager
 from odoo_client import OdooClient, OdooError
 from odoo_sync import run_odoo_sync
+from empaque_odoo_sync import run_empaque_odoo_sync
 import os
 import json
 from dotenv import load_dotenv
@@ -2945,6 +2946,16 @@ _ODOO_SYNC_STOP = threading.Event()
 _ODOO_SCHEDULER_INIT = False
 _ODOO_SYNC_LOCK = threading.Lock()
 
+# Empaque360: Odoo -> MySQL empaqueops (Desktop/Ventas/Salida)
+EMPAQUE_ODOO_SYNC_ENABLED = os.getenv('EMPAQUE_ODOO_SYNC_ENABLED', '0').strip().lower() in ('1', 'true', 'yes', 'on')
+EMPAQUE_ODOO_SYNC_INTERVAL_MINUTES = max(5, int(os.getenv('EMPAQUE_ODOO_SYNC_INTERVAL_MINUTES', '30') or 30))
+EMPAQUE_ODOO_SYNC_STARTUP_DELAY_SECONDS = max(10, int(os.getenv('EMPAQUE_ODOO_SYNC_STARTUP_DELAY_SECONDS', '60') or 60))
+_EMPAQUE_ODOO_SYNC_THREAD = None
+_EMPAQUE_ODOO_SYNC_STOP = threading.Event()
+_EMPAQUE_ODOO_SCHEDULER_INIT = False
+_EMPAQUE_ODOO_SYNC_LOCK = threading.Lock()
+_EMPAQUE_ODOO_LAST_RESULT = None
+
 _CONTPAQ_SYNC_LOCK = threading.Lock()
 _CONTPAQ_SYNC_THREAD = None
 _CONTPAQ_SYNC_STOP = threading.Event()
@@ -4637,6 +4648,7 @@ def log_access_y_cierre_por_hora():
         _start_contpaq_scheduler_once()
         _start_machine_schedule_scheduler_once()
         _start_odoo_scheduler_once()
+        _start_empaque_odoo_scheduler_once()
 
         path = request.path
         # skip static files and health checks
@@ -15275,6 +15287,80 @@ def api_empaque_sync_push():
         return jsonify({'ok': False, 'error': str(exc)}), 500
 
 
+def _run_empaque_odoo_sync_guarded(trigger='manual'):
+    global _EMPAQUE_ODOO_LAST_RESULT
+    if not _EMPAQUE_ODOO_SYNC_LOCK.acquire(blocking=False):
+        return {'ok': False, 'error': 'Sync Empaque-Odoo ya en curso'}
+    try:
+        result = run_empaque_odoo_sync(trigger=trigger)
+        _EMPAQUE_ODOO_LAST_RESULT = result
+        return result
+    finally:
+        _EMPAQUE_ODOO_SYNC_LOCK.release()
+
+
+@app.route('/api/empaque/odoo/sync', methods=['POST'])
+def api_empaque_odoo_sync():
+    """Importa pedidos Odoo -> MySQL empaqueops (nube). Acepta X-API-KEY o sesión login."""
+    authed = False
+    ok, err = _require_sync_key()
+    if ok:
+        authed = True
+    elif session.get('user'):
+        authed = True
+    if not authed:
+        return err if err else (jsonify({'error': 'No autorizado'}), 401)
+
+    result = _run_empaque_odoo_sync_guarded(trigger='manual_api')
+    status = 200 if result.get('ok') else 500
+    return jsonify(result), status
+
+
+@app.route('/api/empaque/odoo/sync/status', methods=['GET'])
+@login_required
+def api_empaque_odoo_sync_status():
+    return jsonify({
+        'enabled': EMPAQUE_ODOO_SYNC_ENABLED,
+        'interval_minutes': EMPAQUE_ODOO_SYNC_INTERVAL_MINUTES,
+        'last': _EMPAQUE_ODOO_LAST_RESULT,
+    })
+
+
+def _empaque_odoo_scheduler_loop():
+    sleep(EMPAQUE_ODOO_SYNC_STARTUP_DELAY_SECONDS)
+    while not _EMPAQUE_ODOO_SYNC_STOP.is_set():
+        try:
+            _run_empaque_odoo_sync_guarded(trigger='scheduler')
+        except Exception as exc:
+            logger.error('[EMPAQUE-ODOO] Error en scheduler: %s', exc, exc_info=True)
+        total_wait = EMPAQUE_ODOO_SYNC_INTERVAL_MINUTES * 60
+        waited = 0
+        while waited < total_wait and not _EMPAQUE_ODOO_SYNC_STOP.is_set():
+            sleep(1)
+            waited += 1
+
+
+def _start_empaque_odoo_scheduler_once():
+    global _EMPAQUE_ODOO_SYNC_THREAD
+    global _EMPAQUE_ODOO_SCHEDULER_INIT
+    if _EMPAQUE_ODOO_SCHEDULER_INIT:
+        return
+    _EMPAQUE_ODOO_SCHEDULER_INIT = True
+    if not EMPAQUE_ODOO_SYNC_ENABLED:
+        logger.info('[EMPAQUE-ODOO] Scheduler deshabilitado por EMPAQUE_ODOO_SYNC_ENABLED=0')
+        return
+    _EMPAQUE_ODOO_SYNC_THREAD = threading.Thread(
+        target=_empaque_odoo_scheduler_loop,
+        name='empaque-odoo-sync-scheduler',
+        daemon=True,
+    )
+    _EMPAQUE_ODOO_SYNC_THREAD.start()
+    logger.info(
+        '[EMPAQUE-ODOO] Scheduler iniciado (cada %s min)',
+        EMPAQUE_ODOO_SYNC_INTERVAL_MINUTES,
+    )
+
+
 @app.route('/empaque/clientes', methods=['GET'])
 @login_required
 @requires_any_permission([('empaque', 'view'), ('empaque', 'edit')])
@@ -17578,4 +17664,5 @@ if __name__ == '__main__':
     _start_contpaq_scheduler_once()
     _start_machine_schedule_scheduler_once()
     _start_odoo_scheduler_once()
+    _start_empaque_odoo_scheduler_once()
     app.run(host='0.0.0.0', port=5000, debug=False)
