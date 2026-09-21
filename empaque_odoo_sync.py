@@ -17,8 +17,6 @@ import os
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-import pymysql
-
 from odoo_client import OdooClient, OdooError
 
 logger = logging.getLogger(__name__)
@@ -29,6 +27,13 @@ def _env(name: str, default: str = '') -> str:
 
 
 def _mysql_connect():
+    try:
+        import pymysql
+    except ImportError as exc:
+        raise RuntimeError(
+            'Falta pymysql en la imagen. Corre: docker compose build app && docker compose up -d app'
+        ) from exc
+
     host = _env('EMPAQUE_MYSQL_HOST', 'empaque_db')
     port = int(_env('EMPAQUE_MYSQL_PORT', '3306') or 3306)
     database = _env('EMPAQUE_MYSQL_DATABASE', 'empaqueops')
