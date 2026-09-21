@@ -126,6 +126,8 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --max_connections=200
+      # Igual que Windows: SalesOrders == salesorders (requerido por Empaque360)
+      - --lower-case-table-names=1
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-pEmpaque360*Root2024"]
       interval: 10s
