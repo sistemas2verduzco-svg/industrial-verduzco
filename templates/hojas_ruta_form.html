@@ -953,7 +953,7 @@
                     placeholder="Buscar por ID, serie, clave, descripcion, comentarios, estado..."
                     autocomplete="off">
                 <button type="button" id="hojasSearchClear" class="btn btn-secondary" style="padding:7px 10px;">Limpiar</button>
-                <button type="button" class="btn btn-secondary" style="padding:8px 10px;" onclick="abrirImpresionParcialModal()">Impresion parcial</button>
+                <button type="button" class="btn btn-secondary" style="padding:8px 10px;" onclick="abrirImpresionParcialModal()">Impresion parcial / Historial</button>
                 <button type="button" class="btn btn-secondary" style="padding:8px 10px;" onclick="abrirReportesModal()">Reportes</button>
                 {% if has_permission('entregas', 'edit') or has_permission('catalog', 'edit') or has_permission('hojas_entregas', 'view') %}
                 <button type="button" id="btnPanelEntregas" style="padding:8px 14px; background:#0f766e; color:#fff; border:none; border-radius:6px; font-weight:700; cursor:pointer; font-size:13px;" onclick="abrirPanelEntregas()">&#128661; Enviar a Entregas</button>
@@ -996,7 +996,10 @@
                         <td>{{ h.calidad or '' }}</td>
                         <td>{{ h.fecha_salida[:16] if h.fecha_salida else '' }}</td>
                         <td>{{ h.cantidad_piezas or '' }}</td>
-                        <td class="js-impresion-parcial-total" data-total="{{ h.impresion_parcial_total or 0 }}" data-movs="{{ h.impresion_parcial_movs or 0 }}"><strong>{{ h.impresion_parcial_total or 0 }}</strong><div style="font-size:11px; color:#6b7280;">{{ h.impresion_parcial_movs or 0 }} mov.</div></td>
+                        <td class="js-impresion-parcial-total" data-total="{{ h.impresion_parcial_total or 0 }}" data-movs="{{ h.impresion_parcial_movs or 0 }}" style="cursor:pointer;" title="Ver historial / reimprimir" onclick="abrirHistorialImpresionParcial({{ h.id }})">
+                            <strong>{{ h.impresion_parcial_total or 0 }}</strong>
+                            <div style="font-size:11px; color:#0b74de;">{{ h.impresion_parcial_movs or 0 }} mov. · historial</div>
+                        </td>
                         <td>
                             {% if h.historial_cargas and h.historial_cargas|length > 0 %}
                                 {% set mov = h.historial_cargas[0] %}
@@ -1185,16 +1188,20 @@
 
     
     <div id="printPartialModal" class="modal-backdrop" onclick="if(event.target===this){cerrarImpresionParcialModal();}">
-        <div class="modal-card" style="width:min(860px, 96vw);">
-            <h3 style="margin:0 0 10px 0;">Impresion Parcial de Hoja de Ruta</h3>
-            <div style="font-size:12px; color:#64748b; margin-bottom:10px;">Busca la hoja, captura una cantidad solo para impresion y genera la hoja sin modificar lotes ni cantidad base.</div>
+        <div class="modal-card" style="width:min(920px, 96vw); max-height:92vh; overflow:auto;">
+            <h3 style="margin:0 0 10px 0;">Impresion Parcial / Historial</h3>
+            <div style="font-size:12px; color:#64748b; margin-bottom:10px;">
+                1) Busca y pulsa <strong>Usar</strong> en la hoja &nbsp;→&nbsp;
+                2) Abajo aparece el <strong>historial</strong> con <strong>Reimprimir</strong> &nbsp;→&nbsp;
+                3) O captura cantidad nueva y pulsa <strong>Registrar e imprimir</strong>.
+            </div>
 
             <div class="grid">
                 <div style="grid-column:1 / -1;">
                     <label>Buscar hoja (serie, clave, ID)</label>
                     <input id="printPartialSearch" type="search" placeholder="Ej: HR-20260331-... o clave CH29" oninput="buscarHojasImpresionParcial()">
                 </div>
-                <div id="printPartialResults" style="grid-column:1 / -1; border:1px solid #e5e7eb; border-radius:8px; max-height:190px; overflow:auto; padding:8px; background:#f8fafc;"></div>
+                <div id="printPartialResults" style="grid-column:1 / -1; border:1px solid #e5e7eb; border-radius:8px; max-height:140px; overflow:auto; padding:8px; background:#f8fafc;"></div>
 
                 <div style="grid-column:1 / -1; border:1px solid #dbe3ee; border-radius:8px; background:#f9fafb; padding:10px;">
                     <div><strong>Serie:</strong> <span id="ppSerie">-</span></div>
@@ -1204,15 +1211,25 @@
                     <div><strong>Acumulado impreso parcial:</strong> <span id="ppAcumulado">0</span></div>
                 </div>
 
+                <div style="grid-column:1 / -1;" id="printPartialHistorySection">
+                    <label style="display:flex; justify-content:space-between; align-items:center; gap:8px; color:#0b74de;">
+                        <span>Historial de impresiones parciales (reimprimir)</span>
+                        <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="cargarHistorialImpresionParcial()">Actualizar</button>
+                    </label>
+                    <div id="printPartialHistory" style="border:2px solid #0b74de; border-radius:8px; min-height:120px; max-height:260px; overflow:auto; padding:10px; background:#f0f7ff;">
+                        <div style="color:#64748b; font-size:13px;"><strong>Selecciona una hoja</strong> (botón Usar) para ver su historial y poder reimprimir.</div>
+                    </div>
+                </div>
+
                 <div>
-                    <label>Cantidad para imprimir *</label>
+                    <label>Cantidad nueva para imprimir *</label>
                     <input id="ppCantidad" type="number" min="1" step="1" placeholder="Ingresa cantidad a imprimir">
                 </div>
             </div>
 
             <div class="modal-actions">
-                <button class="btn btn-secondary" type="button" onclick="cerrarImpresionParcialModal()">Cancelar</button>
-                <button class="btn btn-primary" type="button" onclick="registrarImpresionParcial()">Registrar e imprimir</button>
+                <button class="btn btn-secondary" type="button" onclick="cerrarImpresionParcialModal()">Cerrar</button>
+                <button class="btn btn-primary" type="button" onclick="registrarImpresionParcial()">Registrar e imprimir (nuevo)</button>
             </div>
         </div>
     </div>
@@ -1731,6 +1748,72 @@
                 .replace(/[\u0300-\u036f]/g, '');
         }
 
+        function renderImpresionParcialCell(hojaId, total, movs) {
+            const row = document.querySelector(`tr[data-hoja-id="${hojaId}"] .js-impresion-parcial-total`);
+            if (!row) return;
+            row.setAttribute('data-total', String(total || 0));
+            row.setAttribute('data-movs', String(movs || 0));
+            row.setAttribute('title', 'Ver historial / reimprimir');
+            row.style.cursor = 'pointer';
+            row.setAttribute('onclick', `abrirHistorialImpresionParcial(${hojaId})`);
+            row.innerHTML = `<strong>${total || 0}</strong><div style="font-size:11px; color:#0b74de;">${movs || 0} mov. · historial</div>`;
+        }
+
+        function renderHistorialImpresionParcial(movimientos) {
+            const wrap = document.getElementById('printPartialHistory');
+            if (!wrap) return;
+            const rows = Array.isArray(movimientos) ? movimientos : [];
+            if (!rows.length) {
+                wrap.innerHTML = '<div style="color:#6b7280; font-size:12px;">Sin impresiones parciales registradas.</div>';
+                return;
+            }
+            wrap.innerHTML = rows.map((mov) => {
+                const fechaTxt = formatFechaHistorial(mov.fecha_creacion);
+                const usuarioTxt = mov.usuario || 'sistema';
+                const qty = Number(mov.cantidad_impresa || 0);
+                return `
+                    <div style="display:flex; justify-content:space-between; gap:8px; align-items:center; border-bottom:1px solid #e5e7eb; padding:8px 4px;">
+                        <div style="font-size:12px;">
+                            <strong>${qty} pieza(s)</strong>
+                            <div style="color:#64748b;">${fechaTxt} · ${usuarioTxt}</div>
+                            <div style="color:#94a3b8; font-size:11px;">Mov. #${mov.id}</div>
+                        </div>
+                        <button type="button" class="btn btn-secondary" style="padding:5px 8px; white-space:nowrap;" onclick="reimprimirImpresionParcial(${Number(mov.id)})">Reimprimir</button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function cargarHistorialImpresionParcial() {
+            const wrap = document.getElementById('printPartialHistory');
+            if (!selectedPrintPartialHoja) {
+                if (wrap) wrap.innerHTML = '<div style="color:#64748b; font-size:13px;"><strong>Selecciona una hoja</strong> (botón Usar) para ver su historial y poder reimprimir.</div>';
+                return;
+            }
+            if (wrap) wrap.innerHTML = '<div style="color:#6b7280; font-size:12px;">Cargando historial...</div>';
+            try {
+                const res = await fetch(API_HOJAS_BASE + '/' + selectedPrintPartialHoja.id + '/impresiones_parciales', {
+                    credentials: 'same-origin',
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.error || 'No se pudo cargar el historial');
+                }
+                selectedPrintPartialHoja.impresion_parcial_total = data.impresion_parcial_total || 0;
+                selectedPrintPartialHoja.impresion_parcial_movs = data.impresion_parcial_movs || 0;
+                document.getElementById('ppAcumulado').textContent = String(data.impresion_parcial_total || 0);
+                renderImpresionParcialCell(
+                    selectedPrintPartialHoja.id,
+                    data.impresion_parcial_total || 0,
+                    data.impresion_parcial_movs || 0
+                );
+                renderHistorialImpresionParcial(data.movimientos || []);
+            } catch (err) {
+                console.error(err);
+                if (wrap) wrap.innerHTML = `<div style="color:#b91c1c; font-size:12px;">Error: ${err.message}</div>`;
+            }
+        }
+
         function abrirImpresionParcialModal() {
             selectedPrintPartialHoja = null;
             document.getElementById('printPartialSearch').value = '';
@@ -1740,8 +1823,20 @@
             document.getElementById('ppCalidad').textContent = '-';
             document.getElementById('ppCantidadOriginal').textContent = '0';
             document.getElementById('ppAcumulado').textContent = '0';
+            const hist = document.getElementById('printPartialHistory');
+            if (hist) hist.innerHTML = '<div style="color:#64748b; font-size:13px;"><strong>Selecciona una hoja</strong> (botón Usar) para ver su historial y poder reimprimir.</div>';
             buscarHojasImpresionParcial();
             document.getElementById('printPartialModal').style.display = 'flex';
+        }
+
+        function abrirHistorialImpresionParcial(hojaId) {
+            abrirImpresionParcialModal();
+            const hoja = hojasReporteData.find(h => Number(h.id) === Number(hojaId));
+            if (hoja && hoja.serie) {
+                document.getElementById('printPartialSearch').value = hoja.serie;
+                buscarHojasImpresionParcial();
+            }
+            seleccionarHojaImpresionParcial(hojaId);
         }
 
         function cerrarImpresionParcialModal() {
@@ -1758,6 +1853,10 @@
             document.getElementById('ppCantidadOriginal').textContent = String(hoja.cantidad_piezas || 0);
             document.getElementById('ppAcumulado').textContent = String(hoja.impresion_parcial_total || 0);
             document.getElementById('ppCantidad').value = hoja.cantidad_piezas || '';
+            cargarHistorialImpresionParcial().then(() => {
+                const section = document.getElementById('printPartialHistorySection');
+                if (section) section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            });
         }
 
         function buscarHojasImpresionParcial() {
@@ -1782,14 +1881,42 @@
             }
 
             wrap.innerHTML = rows.map((h) => `
-                <div style="display:flex; justify-content:space-between; gap:8px; align-items:center; border-bottom:1px solid #e5e7eb; padding:6px 4px;">
+                <div style="display:flex; justify-content:space-between; gap:8px; align-items:center; border-bottom:1px solid #e5e7eb; padding:6px 4px; cursor:pointer;" onclick="seleccionarHojaImpresionParcial(${h.id})">
                     <div style="font-size:12px;">
                         <strong>${h.serie || ('HOJA #' + h.id)}</strong>
-                        <div style="color:#64748b;">Clave: ${h.clave || '-'} | Calidad: ${h.calidad || '-'} | Piezas: ${h.cantidad_piezas || 0}</div>
+                        <div style="color:#64748b;">Clave: ${h.clave || '-'} | Calidad: ${h.calidad || '-'} | Piezas: ${h.cantidad_piezas || 0} | Parcial: ${h.impresion_parcial_total || 0} (${h.impresion_parcial_movs || 0} mov.)</div>
                     </div>
-                    <button type="button" class="btn btn-secondary" style="padding:5px 8px;" onclick="seleccionarHojaImpresionParcial(${h.id})">Usar</button>
+                    <button type="button" class="btn btn-secondary" style="padding:5px 8px;" onclick="event.stopPropagation(); seleccionarHojaImpresionParcial(${h.id})">Usar</button>
                 </div>
             `).join('');
+        }
+
+        async function reimprimirImpresionParcial(movId) {
+            if (!selectedPrintPartialHoja) {
+                alert('Selecciona una hoja de ruta.');
+                return;
+            }
+            try {
+                const res = await fetch(
+                    API_HOJAS_BASE + '/' + selectedPrintPartialHoja.id + '/impresiones_parciales/' + movId + '/reimprimir',
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                    }
+                );
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.error || 'No se pudo reimprimir');
+                }
+                const printUrl = data.print_url || (
+                    `${(API_HOJAS_BASE || '/api/hojas_ruta').replace('/api/hojas_ruta', '/hoja')}/${selectedPrintPartialHoja.id}?print_qty=${data.cantidad_impresion}&auto_print=1`
+                );
+                window.open(printUrl, '_blank');
+            } catch (err) {
+                console.error(err);
+                alert('Error: ' + err.message);
+            }
         }
 
         async function registrarImpresionParcial() {
@@ -1818,18 +1945,15 @@
 
                 selectedPrintPartialHoja.impresion_parcial_total = data.impresion_parcial_total || 0;
                 selectedPrintPartialHoja.impresion_parcial_movs = data.impresion_parcial_movs || 0;
-
-                const row = document.querySelector(`tr[data-hoja-id="${selectedPrintPartialHoja.id}"] .js-impresion-parcial-total`);
-                if (row) {
-                    row.setAttribute('data-total', String(data.impresion_parcial_total || 0));
-                    row.setAttribute('data-movs', String(data.impresion_parcial_movs || 0));
-                    row.innerHTML = `<strong>${data.impresion_parcial_total || 0}</strong><div style="font-size:11px; color:#6b7280;">${data.impresion_parcial_movs || 0} mov.</div>`;
-                }
-
-                cerrarImpresionParcialModal();
+                renderImpresionParcialCell(
+                    selectedPrintPartialHoja.id,
+                    data.impresion_parcial_total || 0,
+                    data.impresion_parcial_movs || 0
+                );
 
                 const printUrl = data.print_url || (`${(API_HOJAS_BASE || '/api/hojas_ruta').replace('/api/hojas_ruta', '/hoja')}/${selectedPrintPartialHoja.id}?print_qty=${cantidad}&auto_print=1`);
                 window.open(printUrl, '_blank');
+                await cargarHistorialImpresionParcial();
             } catch (err) {
                 console.error(err);
                 alert('Error: ' + err.message);

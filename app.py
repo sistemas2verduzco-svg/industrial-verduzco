@@ -9002,8 +9002,87 @@ def api_hoja_ruta_impresion_parcial(hoja_id):
         'cantidad_impresion': cantidad_impresion,
         'impresion_parcial_total': int(total_impreso),
         'impresion_parcial_movs': HojaRutaImpresionParcial.query.filter_by(hoja_ruta_id=hoja.id).count(),
+        'movimiento': movimiento.to_dict(),
         'print_url': print_url,
     }), 200
+
+
+@app.route('/api/hojas_ruta/<int:hoja_id>/impresiones_parciales', methods=['GET'])
+@login_required
+@requires_any_permission([('hojas_entregas', 'view'), ('hojas', 'view'), ('catalog', 'view'), ('entregas', 'view'), ('almacen', 'view'), ('facturacion', 'view')])
+def api_hoja_ruta_impresiones_parciales_historial(hoja_id):
+    """Historial de impresiones parciales de una hoja (sin alterar lotes)."""
+    hoja = HojaRutaEntrega.query.get_or_404(hoja_id)
+    if not _ensure_hoja_impresiones_parciales_table():
+        return jsonify({'error': 'No se pudo preparar tabla de impresiones parciales'}), 500
+
+    movimientos = HojaRutaImpresionParcial.query.filter_by(
+        hoja_ruta_id=hoja.id
+    ).order_by(
+        HojaRutaImpresionParcial.fecha_creacion.desc(),
+        HojaRutaImpresionParcial.id.desc(),
+    ).all()
+
+    total_impreso = sum(int(m.cantidad_impresa or 0) for m in movimientos)
+    items = []
+    for mov in movimientos:
+        item = mov.to_dict()
+        item['print_url'] = url_for(
+            'hoja_ruta_entregas_ver',
+            hoja_id=hoja.id,
+            print_qty=int(mov.cantidad_impresa or 0),
+            auto_print=1,
+            _external=False,
+        )
+        items.append(item)
+
+    return jsonify({
+        'ok': True,
+        'hoja_id': hoja.id,
+        'serie': hoja.nombre,
+        'cantidad_piezas': hoja.cantidad_piezas,
+        'impresion_parcial_total': int(total_impreso),
+        'impresion_parcial_movs': len(items),
+        'movimientos': items,
+    }), 200
+
+
+@app.route('/api/hojas_ruta/<int:hoja_id>/impresiones_parciales/<int:mov_id>/reimprimir', methods=['POST'])
+@login_required
+@requires_any_permission([('hojas_entregas', 'view'), ('hojas', 'view'), ('catalog', 'view'), ('entregas', 'view'), ('almacen', 'view'), ('facturacion', 'view')])
+def api_hoja_ruta_impresion_parcial_reimprimir(hoja_id, mov_id):
+    """Devuelve URL de reimpresion de un movimiento previo (no crea registro nuevo)."""
+    hoja = HojaRutaEntrega.query.get_or_404(hoja_id)
+    if not _ensure_hoja_impresiones_parciales_table():
+        return jsonify({'error': 'No se pudo preparar tabla de impresiones parciales'}), 500
+
+    mov = HojaRutaImpresionParcial.query.filter_by(
+        id=mov_id,
+        hoja_ruta_id=hoja.id,
+    ).first_or_404()
+
+    cantidad = int(mov.cantidad_impresa or 0)
+    if cantidad <= 0:
+        return jsonify({'error': 'El movimiento no tiene cantidad valida para reimprimir'}), 400
+
+    print_url = url_for(
+        'hoja_ruta_entregas_ver',
+        hoja_id=hoja.id,
+        print_qty=cantidad,
+        auto_print=1,
+        _external=False,
+    )
+
+    return jsonify({
+        'ok': True,
+        'hoja_id': hoja.id,
+        'movimiento_id': mov.id,
+        'cantidad_impresion': cantidad,
+        'reimpresion': True,
+        'print_url': print_url,
+        'movimiento': mov.to_dict(),
+    }), 200
+
 
 @app.route('/api/hojas_ruta/resolver_codigo', methods=['POST'])
 @login_required
