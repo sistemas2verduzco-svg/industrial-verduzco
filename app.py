@@ -9084,6 +9084,115 @@ def api_hoja_ruta_impresion_parcial_reimprimir(hoja_id, mov_id):
     }), 200
 
 
+def _resumen_impresiones_parciales_hoja(hoja_id):
+    total_impreso = db.session.query(
+        func.coalesce(func.sum(HojaRutaImpresionParcial.cantidad_impresa), 0)
+    ).filter(HojaRutaImpresionParcial.hoja_ruta_id == hoja_id).scalar() or 0
+    movs = HojaRutaImpresionParcial.query.filter_by(hoja_ruta_id=hoja_id).count()
+    return int(total_impreso), int(movs)
+
+
+@app.route('/api/hojas_ruta/<int:hoja_id>/impresiones_parciales/<int:mov_id>', methods=['PATCH', 'PUT'])
+@login_required
+@requires_any_permission([('hojas_entregas', 'edit'), ('hojas', 'edit'), ('catalog', 'edit')])
+def api_hoja_ruta_impresion_parcial_corregir(hoja_id, mov_id):
+    """Corrige la cantidad de un movimiento de impresion parcial (no altera lotes de la hoja)."""
+    hoja = HojaRutaEntrega.query.get_or_404(hoja_id)
+    if not _ensure_hoja_impresiones_parciales_table():
+        return jsonify({'error': 'No se pudo preparar tabla de impresiones parciales'}), 500
+
+    mov = HojaRutaImpresionParcial.query.filter_by(
+        id=mov_id,
+        hoja_ruta_id=hoja.id,
+    ).first_or_404()
+
+    data = request.get_json() or {}
+    cantidad_nueva = data.get('cantidad_impresa', data.get('cantidad_impresion'))
+    try:
+        cantidad_nueva = int(cantidad_nueva)
+    except Exception:
+        return jsonify({'error': 'cantidad_impresa invalida'}), 400
+
+    if cantidad_nueva <= 0:
+        return jsonify({'error': 'La cantidad corregida debe ser mayor a cero'}), 400
+
+    cantidad_anterior = int(mov.cantidad_impresa or 0)
+    if cantidad_nueva == cantidad_anterior:
+        total_impreso, movs = _resumen_impresiones_parciales_hoja(hoja.id)
+        return jsonify({
+            'ok': True,
+            'hoja_id': hoja.id,
+            'sin_cambios': True,
+            'cantidad_anterior': cantidad_anterior,
+            'cantidad_impresa': cantidad_nueva,
+            'impresion_parcial_total': total_impreso,
+            'impresion_parcial_movs': movs,
+            'movimiento': mov.to_dict(),
+        }), 200
+
+    usuario = _current_username_for_audit(get_current_user())
+    mov.cantidad_impresa = cantidad_nueva
+    # Marca de auditoria ligera en el mismo registro (sin migracion).
+    base_usuario = (mov.usuario or '').strip() or 'sistema'
+    marca = f' | corregido por {usuario} ({cantidad_anterior}->{cantidad_nueva})'
+    if ' | corregido por ' in base_usuario:
+        base_usuario = base_usuario.split(' | corregido por ')[0].strip()
+    mov.usuario = (base_usuario + marca)[:120]
+
+    try:
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        logger.error(f"Error corrigiendo impresion parcial {mov.id} hoja {hoja.id}: {exc}", exc_info=True)
+        return jsonify({'error': 'No se pudo corregir la impresion parcial'}), 500
+
+    total_impreso, movs = _resumen_impresiones_parciales_hoja(hoja.id)
+    return jsonify({
+        'ok': True,
+        'hoja_id': hoja.id,
+        'movimiento_id': mov.id,
+        'cantidad_anterior': cantidad_anterior,
+        'cantidad_impresa': cantidad_nueva,
+        'impresion_parcial_total': total_impreso,
+        'impresion_parcial_movs': movs,
+        'movimiento': mov.to_dict(),
+    }), 200
+
+
+@app.route('/api/hojas_ruta/<int:hoja_id>/impresiones_parciales/<int:mov_id>', methods=['DELETE'])
+@login_required
+@requires_any_permission([('hojas_entregas', 'edit'), ('hojas', 'edit'), ('catalog', 'edit')])
+def api_hoja_ruta_impresion_parcial_eliminar(hoja_id, mov_id):
+    """Elimina un movimiento de impresion parcial (correccion / anular registro erroneo)."""
+    hoja = HojaRutaEntrega.query.get_or_404(hoja_id)
+    if not _ensure_hoja_impresiones_parciales_table():
+        return jsonify({'error': 'No se pudo preparar tabla de impresiones parciales'}), 500
+
+    mov = HojaRutaImpresionParcial.query.filter_by(
+        id=mov_id,
+        hoja_ruta_id=hoja.id,
+    ).first_or_404()
+
+    mov_payload = mov.to_dict()
+    try:
+        db.session.delete(mov)
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        logger.error(f"Error eliminando impresion parcial {mov_id} hoja {hoja.id}: {exc}", exc_info=True)
+        return jsonify({'error': 'No se pudo eliminar la impresion parcial'}), 500
+
+    total_impreso, movs = _resumen_impresiones_parciales_hoja(hoja.id)
+    return jsonify({
+        'ok': True,
+        'hoja_id': hoja.id,
+        'eliminado': True,
+        'movimiento': mov_payload,
+        'impresion_parcial_total': total_impreso,
+        'impresion_parcial_movs': movs,
+    }), 200
+
+
 @app.route('/api/hojas_ruta/resolver_codigo', methods=['POST'])
 @login_required
 @requires_any_permission([('hojas_entregas', 'view'), ('hojas', 'view'), ('catalog', 'view')])

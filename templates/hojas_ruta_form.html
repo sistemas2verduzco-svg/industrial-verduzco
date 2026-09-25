@@ -1192,7 +1192,7 @@
             <h3 style="margin:0 0 10px 0;">Impresion Parcial / Historial</h3>
             <div style="font-size:12px; color:#64748b; margin-bottom:10px;">
                 1) Busca y pulsa <strong>Usar</strong> en la hoja &nbsp;→&nbsp;
-                2) Abajo aparece el <strong>historial</strong> con <strong>Reimprimir</strong> &nbsp;→&nbsp;
+                2) En el historial: <strong>Reimprimir</strong>, <strong>Corregir</strong> cantidad o <strong>Eliminar</strong> &nbsp;→&nbsp;
                 3) O captura cantidad nueva y pulsa <strong>Registrar e imprimir</strong>.
             </div>
 
@@ -1771,17 +1771,111 @@
                 const fechaTxt = formatFechaHistorial(mov.fecha_creacion);
                 const usuarioTxt = mov.usuario || 'sistema';
                 const qty = Number(mov.cantidad_impresa || 0);
+                const movId = Number(mov.id);
                 return `
-                    <div style="display:flex; justify-content:space-between; gap:8px; align-items:center; border-bottom:1px solid #e5e7eb; padding:8px 4px;">
+                    <div style="display:flex; justify-content:space-between; gap:8px; align-items:flex-start; border-bottom:1px solid #e5e7eb; padding:8px 4px;">
                         <div style="font-size:12px;">
                             <strong>${qty} pieza(s)</strong>
                             <div style="color:#64748b;">${fechaTxt} · ${usuarioTxt}</div>
-                            <div style="color:#94a3b8; font-size:11px;">Mov. #${mov.id}</div>
+                            <div style="color:#94a3b8; font-size:11px;">Mov. #${movId}</div>
                         </div>
-                        <button type="button" class="btn btn-secondary" style="padding:5px 8px; white-space:nowrap;" onclick="reimprimirImpresionParcial(${Number(mov.id)})">Reimprimir</button>
+                        <div style="display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end;">
+                            <button type="button" class="btn btn-secondary" style="padding:5px 8px; white-space:nowrap;" onclick="reimprimirImpresionParcial(${movId})">Reimprimir</button>
+                            <button type="button" class="btn btn-secondary" style="padding:5px 8px; white-space:nowrap;" onclick="corregirImpresionParcial(${movId}, ${qty})">Corregir</button>
+                            <button type="button" class="btn btn-delete" style="padding:5px 8px; white-space:nowrap;" onclick="eliminarImpresionParcial(${movId}, ${qty})">Eliminar</button>
+                        </div>
                     </div>
                 `;
             }).join('');
+        }
+
+        async function corregirImpresionParcial(movId, cantidadActual) {
+            if (!selectedPrintPartialHoja) {
+                alert('Selecciona una hoja de ruta.');
+                return;
+            }
+            const raw = window.prompt(
+                `Corregir cantidad del movimiento #${movId}.\nCantidad actual: ${cantidadActual}\nIngresa la cantidad correcta:`,
+                String(cantidadActual || '')
+            );
+            if (raw === null) return;
+            const cantidad = parseInt(String(raw).trim(), 10);
+            if (!Number.isFinite(cantidad) || cantidad <= 0) {
+                alert('Cantidad inválida. Debe ser un entero mayor a cero.');
+                return;
+            }
+            if (cantidad === Number(cantidadActual)) {
+                alert('La cantidad es la misma. No hay cambios.');
+                return;
+            }
+            if (!window.confirm(`¿Guardar corrección?\n${cantidadActual} → ${cantidad} pieza(s)`)) return;
+
+            try {
+                const res = await fetch(
+                    API_HOJAS_BASE + '/' + selectedPrintPartialHoja.id + '/impresiones_parciales/' + movId,
+                    {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ cantidad_impresa: cantidad }),
+                    }
+                );
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.error || 'No se pudo corregir');
+                }
+                selectedPrintPartialHoja.impresion_parcial_total = data.impresion_parcial_total || 0;
+                selectedPrintPartialHoja.impresion_parcial_movs = data.impresion_parcial_movs || 0;
+                document.getElementById('ppAcumulado').textContent = String(data.impresion_parcial_total || 0);
+                renderImpresionParcialCell(
+                    selectedPrintPartialHoja.id,
+                    data.impresion_parcial_total || 0,
+                    data.impresion_parcial_movs || 0
+                );
+                await cargarHistorialImpresionParcial();
+                if (window.confirm('Corrección guardada. ¿Reimprimir ahora con la cantidad corregida?')) {
+                    await reimprimirImpresionParcial(movId);
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Error: ' + err.message);
+            }
+        }
+
+        async function eliminarImpresionParcial(movId, cantidadActual) {
+            if (!selectedPrintPartialHoja) {
+                alert('Selecciona una hoja de ruta.');
+                return;
+            }
+            if (!window.confirm(
+                `¿Eliminar el movimiento #${movId} (${cantidadActual} pieza(s))?\nEsto baja el acumulado parcial. No modifica lotes ni piezas de la hoja.`
+            )) return;
+
+            try {
+                const res = await fetch(
+                    API_HOJAS_BASE + '/' + selectedPrintPartialHoja.id + '/impresiones_parciales/' + movId,
+                    {
+                        method: 'DELETE',
+                        credentials: 'same-origin',
+                    }
+                );
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.error || 'No se pudo eliminar');
+                }
+                selectedPrintPartialHoja.impresion_parcial_total = data.impresion_parcial_total || 0;
+                selectedPrintPartialHoja.impresion_parcial_movs = data.impresion_parcial_movs || 0;
+                document.getElementById('ppAcumulado').textContent = String(data.impresion_parcial_total || 0);
+                renderImpresionParcialCell(
+                    selectedPrintPartialHoja.id,
+                    data.impresion_parcial_total || 0,
+                    data.impresion_parcial_movs || 0
+                );
+                await cargarHistorialImpresionParcial();
+            } catch (err) {
+                console.error(err);
+                alert('Error: ' + err.message);
+            }
         }
 
         async function cargarHistorialImpresionParcial() {
