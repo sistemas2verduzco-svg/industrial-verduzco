@@ -8928,6 +8928,7 @@ def hojas_ruta_entregas_form():
 @requires_any_permission([('hojas_entregas', 'view'), ('hojas', 'view'), ('catalog', 'view'), ('entregas', 'view'), ('almacen', 'view'), ('facturacion', 'view')])
 def hoja_ruta_entregas_ver(hoja_id):
     """Vista independiente para ver una hoja por ID, sin requerir máquina."""
+    _ensure_hoja_materias_primas_campo()
     hoja = HojaRutaEntrega.query.get_or_404(hoja_id)
     h = hoja.to_dict()
     print_qty = request.args.get('print_qty', type=int)
@@ -8938,6 +8939,7 @@ def hoja_ruta_entregas_ver(hoja_id):
     h['comentarios_usuario'] = _qc_strip_scrap_summary(comentarios_bruto)
     h['scrap_qc'] = _qc_parse_scrap_summary(comentarios_bruto)
     h['descripcion_clave'] = _resolve_clave_descripcion_by_pn(hoja.pn)
+    h['materias_primas'] = _materias_primas_de_hoja(hoja)
     h['qr_payload'] = f"HRID:{hoja.id};SERIE:{hoja.nombre or ''}"
     h['qr_deeplink'] = request.url_root.rstrip('/') + f"/hoja/{hoja.id}"
     estaciones = EstacionTrabajo.query.filter_by(hoja_ruta_id=hoja.id).order_by(EstacionTrabajo.orden).all()

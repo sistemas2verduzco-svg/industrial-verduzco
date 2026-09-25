@@ -634,6 +634,33 @@
             <div class="v">{{ hoja.comentarios_usuario or '' }}</div>
           </div>
           <div class="field" style="grid-column: 1 / -1;">
+            <div class="k">Materias Primas</div>
+            {% if hoja.materias_primas %}
+            <div class="v">
+              <table style="width:100%; border-collapse:collapse; margin-top:4px;">
+                <thead>
+                  <tr>
+                    <th style="text-align:left; border-bottom:1px solid #cbd5e1; padding:4px 6px; font-size:11px;">#</th>
+                    <th style="text-align:left; border-bottom:1px solid #cbd5e1; padding:4px 6px; font-size:11px;">Clave</th>
+                    <th style="text-align:left; border-bottom:1px solid #cbd5e1; padding:4px 6px; font-size:11px;">Nombre</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for mp in hoja.materias_primas|sort(attribute='orden') %}
+                  <tr>
+                    <td style="padding:4px 6px; border-bottom:1px solid #e2e8f0;">{{ mp.orden or loop.index }}</td>
+                    <td style="padding:4px 6px; border-bottom:1px solid #e2e8f0; font-weight:700;">{{ mp.clave or '' }}</td>
+                    <td style="padding:4px 6px; border-bottom:1px solid #e2e8f0;">{{ mp.nombre or mp.clave or '' }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% else %}
+            <div class="v" style="color:#64748b;">Sin materias primas registradas.</div>
+            {% endif %}
+          </div>
+          <div class="field" style="grid-column: 1 / -1;">
             <div class="k">Resumen Scrap QC</div>
             {% if hoja.scrap_qc %}
             <div class="v v-preline">Lote inicial: {{ hoja.scrap_qc.lote_inicial }}
