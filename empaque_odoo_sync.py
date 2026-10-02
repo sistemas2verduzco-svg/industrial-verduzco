@@ -162,6 +162,7 @@ def _fetch_order_items(client: OdooClient, order_id: int, order_name: str) -> Li
             code = _m2o_name(line.get('product_id')) or f'P{product_id}'
         items.append({
             'source_line_number': line_id,  # id estable de sale.order.line
+            'sort_order': int(line.get('sequence') or 0),
             'external_order_number': order_name,
             'product_code': _clip(code, 80),
             'product_name': _clip(line.get('name'), 200),
@@ -206,14 +207,15 @@ def _upsert_items(cur, external_order: str, items: Sequence[Dict[str, Any]]) -> 
         cur.execute(
             """
             INSERT INTO SalesOrderItems
-                (SalesOrderId, SourceLineNumber, ProductCode, ProductName,
+                (SalesOrderId, SourceLineNumber, SortOrder, ProductCode, ProductName,
                  QuantityOrdered, UnitWeightFromContpaqiKg, ImportedAtUtc)
             SELECT
                 so.SalesOrderId,
-                %s, %s, %s, %s, %s, UTC_TIMESTAMP()
+                %s, %s, %s, %s, %s, %s, UTC_TIMESTAMP()
             FROM SalesOrders so
             WHERE so.ExternalOrderNumber = %s
             ON DUPLICATE KEY UPDATE
+                SortOrder = VALUES(SortOrder),
                 ProductCode = VALUES(ProductCode),
                 ProductName = VALUES(ProductName),
                 QuantityOrdered = VALUES(QuantityOrdered),
@@ -222,6 +224,7 @@ def _upsert_items(cur, external_order: str, items: Sequence[Dict[str, Any]]) -> 
             """,
             (
                 int(item['source_line_number']),
+                int(item.get('sort_order') or 0),
                 item['product_code'],
                 item['product_name'],
                 float(item['quantity_ordered']),
@@ -245,6 +248,18 @@ def _upsert_items(cur, external_order: str, items: Sequence[Dict[str, Any]]) -> 
             [external_order, *keep_ids],
         )
     return count
+
+
+def _ensure_sort_order_column(cur) -> None:
+    """SortOrder = sequence de sale.order.line (orden en que Odoo muestra las partidas)."""
+    try:
+        cur.execute(
+            'ALTER TABLE SalesOrderItems '
+            'ADD COLUMN SortOrder INT NOT NULL DEFAULT 0 AFTER SourceLineNumber'
+        )
+    except Exception as exc:
+        if getattr(exc, 'args', [None])[0] != 1060:  # 1060 = columna ya existe
+            raise
 
 
 def run_empaque_odoo_sync(trigger: str = 'manual', lookback_days: Optional[int] = None) -> Dict[str, Any]:
@@ -276,6 +291,7 @@ def run_empaque_odoo_sync(trigger: str = 'manual', lookback_days: Optional[int] 
         conn = _mysql_connect()
         today = date.today()
         with conn.cursor() as cur:
+            _ensure_sort_order_column(cur)
             for offset in range(lookback):
                 day = today - timedelta(days=offset)
                 day_orders = 0
