@@ -108,10 +108,15 @@
         <a href="/contpaq/maximos-minimos" class="sb-link" data-base="/contpaq/maximos-minimos"><span>📊</span> <span>Maximos y Minimos</span></a>
         {% endif %}
 
-        {% if has_permission('empaque', 'view') or current_user and current_user.es_admin %}
+        {% if has_permission('empaque', 'view') or has_permission('facturacion', 'view') or current_user and current_user.es_admin %}
         <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">EMPAQUE / CLIENTES</div>
+        {% if has_permission('empaque', 'view') or current_user and current_user.es_admin %}
         <a href="/empaque/clientes" class="sb-link" data-base="/empaque/clientes"><span>🔐</span> <span>Claves clientes</span></a>
+        {% endif %}
+        <a href="/cuentas_t" class="sb-link" data-base="/cuentas_t"><span>📒</span> <span>Cuentas T</span></a>
+        {% if has_permission('empaque', 'view') or current_user and current_user.es_admin %}
         <a href="/seguimiento" class="sb-link" data-base="/seguimiento" target="_blank" rel="noopener"><span>🔗</span> <span>Portal seguimiento</span></a>
+        {% endif %}
         {% endif %}
 
         {% if has_permission('tickets', 'view') or current_user and current_user.es_admin %}

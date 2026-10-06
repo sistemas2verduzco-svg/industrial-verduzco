@@ -87,26 +87,42 @@ class OdooClient:
     # ------------------------------------------------------------------ #
     # Construccion desde entorno
     # ------------------------------------------------------------------ #
+    @staticmethod
+    def _env_conn(prefix: str = 'ODOO_') -> Dict[str, str]:
+        """Lee URL/DB/usuario/secreto con `prefix`; cada valor cae a ODOO_* si falta."""
+        def get(name: str) -> str:
+            value = _clean(os.getenv(f'{prefix}{name}'))
+            if not value and prefix != 'ODOO_':
+                value = _clean(os.getenv(f'ODOO_{name}'))
+            return value
+
+        url = get('URL')
+        return {
+            'url': url,
+            'db': get('DB') or _derive_db_from_url(url),
+            'username': get('USERNAME'),
+            'secret': get('API_KEY') or get('PASSWORD'),
+            'timeout': get('TIMEOUT'),
+        }
+
     @classmethod
-    def from_env(cls) -> 'OdooClient':
-        url = _clean(os.getenv('ODOO_URL'))
-        db = _clean(os.getenv('ODOO_DB')) or _derive_db_from_url(url)
-        username = _clean(os.getenv('ODOO_USERNAME'))
-        secret = _clean(os.getenv('ODOO_API_KEY')) or _clean(os.getenv('ODOO_PASSWORD'))
+    def from_env(cls, prefix: str = 'ODOO_') -> 'OdooClient':
+        conn = cls._env_conn(prefix)
+        url, db, username, secret = conn['url'], conn['db'], conn['username'], conn['secret']
         if not url or not db or not username or not secret:
             missing = [
                 name for name, val in (
-                    ('ODOO_URL', url),
-                    ('ODOO_DB (no se pudo deducir del URL)', db),
-                    ('ODOO_USERNAME', username),
-                    ('ODOO_API_KEY/ODOO_PASSWORD', secret),
+                    (f'{prefix}URL', url),
+                    (f'{prefix}DB (no se pudo deducir del URL)', db),
+                    (f'{prefix}USERNAME', username),
+                    (f'{prefix}API_KEY/{prefix}PASSWORD', secret),
                 ) if not val
             ]
             raise OdooError(
                 'Configuracion de Odoo incompleta. Faltan: ' + ', '.join(missing)
             )
         try:
-            timeout = int(os.getenv('ODOO_TIMEOUT', '30') or '30')
+            timeout = int(conn['timeout'] or '30')
         except Exception:
             timeout = 30
         return cls(
@@ -121,13 +137,10 @@ class OdooClient:
             model_bom=os.getenv('ODOO_MODEL_BOM', 'mrp.bom'),
         )
 
-    @staticmethod
-    def is_configured() -> bool:
-        url = _clean(os.getenv('ODOO_URL'))
-        db = _clean(os.getenv('ODOO_DB')) or _derive_db_from_url(url)
-        username = _clean(os.getenv('ODOO_USERNAME'))
-        secret = _clean(os.getenv('ODOO_API_KEY')) or _clean(os.getenv('ODOO_PASSWORD'))
-        return bool(url and db and username and secret)
+    @classmethod
+    def is_configured(cls, prefix: str = 'ODOO_') -> bool:
+        conn = cls._env_conn(prefix)
+        return bool(conn['url'] and conn['db'] and conn['username'] and conn['secret'])
 
     # ------------------------------------------------------------------ #
     # Conexion / autenticacion

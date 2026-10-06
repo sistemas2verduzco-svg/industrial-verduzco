@@ -8,3 +8,6 @@ encryption.key
 # Temporary Office lock files (Windows)
 ~$*
 data/~$*
+
+# Marcas diarias de la sync nocturna de Cuentas T
+uploads/cuenta_t_sync/

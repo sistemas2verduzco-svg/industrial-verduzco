@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cuentas T — Control Calidad 360</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .wrap { max-width: 1300px; margin: 0 auto; padding: 20px 16px 40px; }
+        .ct-band { background:#14213D; color:#fff; border-radius:10px 10px 0 0; padding:16px 20px; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:center; }
+        .ct-band .sub { color:#FCA311; font-size:.75rem; letter-spacing:2px; text-transform:uppercase; }
+        .ct-band h2 { margin:2px 0 0; color:#fff; letter-spacing:1px; }
+        .ct-accent { height:4px; background:#FCA311; margin-bottom:16px; border-radius:0 0 4px 4px; }
+        .muted { color:#5B6475; font-size:.9rem; }
+        .card { background:#fff; border:1px solid #E3E7EF; border-radius:10px; padding:14px 16px; margin-bottom:14px; }
+        .toolbar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+        input[type=text], select { height:40px; border:1px solid #cbd5e1; border-radius:8px; padding:0 12px; }
+        input[type=text] { min-width:260px; }
+        .btn { height:40px; border:0; border-radius:8px; padding:0 14px; font-weight:700; cursor:pointer;
+               background:#14213D; color:#fff; text-decoration:none; display:inline-flex; align-items:center; gap:6px; }
+        .btn-amber { background:#FCA311; color:#14213D; }
+        .btn-sm { height:30px; font-size:.8rem; padding:0 10px; }
+        .btn[disabled] { opacity:.6; cursor:wait; }
+        table.ct-list { width:100%; border-collapse:collapse; font-size:.9rem; }
+        .ct-list th { background:#14213D; color:#fff; font-size:.72rem; letter-spacing:1px; text-transform:uppercase; padding:9px 8px; text-align:left; }
+        .ct-list td { padding:9px 8px; border-bottom:1px solid #E3E7EF; vertical-align:top; }
+        .ct-list tr:hover td { background:#F4F6FA; }
+        .n { text-align:right !important; white-space:nowrap; }
+        .pos { color:#D64545; font-weight:700; }
+        .neg { color:#2E9E5B; font-weight:700; }
+        .err { color:#D64545; font-size:.8rem; }
+        .ok-time { color:#5B6475; font-size:.8rem; }
+        .alert { padding:10px 14px; border-radius:8px; margin-bottom:12px; }
+        .alert-warn { background:#FFF4E0; border-left:4px solid #FCA311; color:#14213D; }
+        .alert-err { background:#fdeaea; border-left:4px solid #D64545; color:#7f1d1d; }
+        .cliente-link { color:#14213D; font-weight:700; text-decoration:none; }
+        .cliente-link:hover { text-decoration:underline; text-decoration-color:#FCA311; }
+    </style>
+</head>
+<body>
+{% include '_sidebar.html' %}
+<div class="container wrap">
+    <div class="ct-band">
+        <div>
+            <div class="sub">Estado de cuenta por cliente</div>
+            <h2>CUENTAS T</h2>
+        </div>
+        <div class="toolbar">
+            <button type="button" class="btn btn-amber" id="btnSyncAll" {% if not configurado or corriendo %}disabled{% endif %}>
+                {% if corriendo %}Sincronizando…{% else %}⟳ Sincronizar todos{% endif %}
+            </button>
+        </div>
+    </div>
+    <div class="ct-accent"></div>
+
+    {% if not configurado %}
+    <div class="alert alert-err">
+        Falta configurar la conexión a Odoo para Cuentas T (<code>CUENTA_T_ODOO_URL</code>, <code>CUENTA_T_ODOO_DB</code>,
+        <code>CUENTA_T_ODOO_USERNAME</code>, <code>CUENTA_T_ODOO_API_KEY</code>). Se muestran solo los datos guardados.
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="muted" style="margin-bottom:10px;">
+            Datos tal cual los arma Odoo{% if odoo_url %} (<code>{{ odoo_url }}</code>){% endif %}. El MES solo lee.
+            Sincronización nocturna:
+            {% if nocturna_activa %}<b>activa, {{ '%02d' % nocturna_hora }}:00</b>{% else %}<b>desactivada</b> (CUENTA_T_SYNC_ENABLED=1 para activarla){% endif %}.
+            {% if ultima and ultima.get('finished_at') %}
+            · Última corrida general: {{ ultima.get('trigger') }}, {{ ultima.get('actualizados') }} actualizados,
+            {{ ultima.get('errores') }} con error{% if ultima.get('error') %} — <span class="err">{{ ultima.get('error') }}</span>{% endif %}.
+            {% endif %}
+        </div>
+        <form class="toolbar" method="get">
+            <input type="text" name="q" value="{{ q }}" placeholder="Buscar cliente, clave o RFC">
+            <select name="f">
+                <option value="" {% if not filtro %}selected{% endif %}>Todos</option>
+                <option value="debe" {% if filtro == 'debe' %}selected{% endif %}>Cliente DEBE</option>
+                <option value="favor" {% if filtro == 'favor' %}selected{% endif %}>A favor del cliente</option>
+                <option value="error" {% if filtro == 'error' %}selected{% endif %}>Con error</option>
+            </select>
+            <button class="btn" type="submit">Buscar</button>
+            <span class="muted">{{ clientes|length }} clientes</span>
+        </form>
+    </div>
+
+    <div class="card" style="padding:0; overflow-x:auto;">
+        <table class="ct-list">
+            <thead>
+                <tr>
+                    <th>Cliente</th>
+                    <th>Clave</th>
+                    <th>RFC</th>
+                    <th class="n">Cargos</th>
+                    <th class="n">Abonos</th>
+                    <th class="n">Saldo</th>
+                    <th>Última sincronización</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for c in clientes %}
+                <tr>
+                    <td><a class="cliente-link" href="{{ url_for('cuenta_t_detalle_page', cliente_id=c.cliente_id) }}">{{ c.cliente }}</a>
+                        <div class="ok-time">{{ c.saldo_texto }}</div></td>
+                    <td>{{ c.clave }}</td>
+                    <td>{{ c.rfc }}</td>
+                    <td class="n">$ {{ '{:,.2f}'.format(c.total_cargos) }}</td>
+                    <td class="n">$ {{ '{:,.2f}'.format(c.total_abonos) }}</td>
+                    <td class="n {{ 'pos' if c.saldo > 0.005 else ('neg' if c.saldo < -0.005 else '') }}">$ {{ '{:,.2f}'.format(c.saldo) }}</td>
+                    <td>
+                        {% if c.synced_at %}<div class="ok-time">{{ c.synced_at.strftime('%d/%m/%Y %H:%M') }}</div>{% else %}<div class="ok-time">Nunca</div>{% endif %}
+                        {% if c.last_error %}<div class="err" title="{{ c.last_error }}">⚠ Error {{ c.last_error_at.strftime('%d/%m %H:%M') if c.last_error_at else '' }}</div>{% endif %}
+                    </td>
+                    <td><button type="button" class="btn btn-sm" data-actualizar="{{ c.cliente_id }}" {% if not configurado %}disabled{% endif %}>Actualizar</button></td>
+                </tr>
+            {% else %}
+                <tr><td colspan="8" class="muted" style="text-align:center; padding:22px;">
+                    {% if q or filtro %}Sin resultados.{% else %}Aún no hay Cuentas T guardadas. Usa “Sincronizar todos”.{% endif %}
+                </td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+<script>
+(function () {
+    const btnAll = document.getElementById('btnSyncAll');
+    if (btnAll) {
+        btnAll.addEventListener('click', async () => {
+            if (!confirm('¿Sincronizar la Cuenta T de todos los clientes desde Odoo? Puede tardar varios minutos.')) return;
+            btnAll.disabled = true;
+            btnAll.textContent = 'Sincronizando…';
+            try {
+                const r = await fetch('/api/cuentas_t/sincronizar', { method: 'POST' });
+                const d = await r.json();
+                if (!r.ok || !d.ok) throw new Error(d.error || 'No se pudo iniciar');
+                esperarFin();
+            } catch (e) {
+                alert('Error: ' + e.message);
+                btnAll.disabled = false;
+                btnAll.textContent = '⟳ Sincronizar todos';
+            }
+        });
+        {% if corriendo %}esperarFin();{% endif %}
+    }
+
+    function esperarFin() {
+        const timer = setInterval(async () => {
+            try {
+                const r = await fetch('/api/cuentas_t/estado');
+                const d = await r.json();
+                if (!d.corriendo) { clearInterval(timer); location.reload(); }
+            } catch (e) { /* reintenta */ }
+        }, 4000);
+    }
+
+    document.querySelectorAll('[data-actualizar]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.actualizar;
+            btn.disabled = true;
+            btn.textContent = '…';
+            try {
+                const r = await fetch(`/api/cuentas_t/${id}/actualizar`, { method: 'POST' });
+                const d = await r.json();
+                if (!d.ok) alert('Odoo regresó error; se conserva la última sincronización buena.\n\n' + (d.error || ''));
+            } catch (e) {
+                alert('Error: ' + e.message);
+            }
+            location.reload();
+        });
+    });
+})();
+</script>
+</body>
+</html>

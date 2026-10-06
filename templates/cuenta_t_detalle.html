@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cuenta T — {{ cuenta.cliente }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .wrap { max-width: 1300px; margin: 0 auto; padding: 20px 16px 40px; }
+        .top { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+        .back { color:#14213D; font-weight:700; text-decoration:none; }
+        .back:hover { text-decoration:underline; text-decoration-color:#FCA311; }
+        .btn { height:40px; border:0; border-radius:8px; padding:0 14px; font-weight:700; cursor:pointer;
+               background:#FCA311; color:#14213D; display:inline-flex; align-items:center; }
+        .btn[disabled] { opacity:.6; cursor:wait; }
+        .sync { color:#5B6475; font-size:.88rem; }
+        .alert-err { background:#fdeaea; border-left:4px solid #D64545; color:#7f1d1d; padding:10px 14px; border-radius:8px; margin-bottom:12px; }
+        .alert-warn { background:#FFF4E0; border-left:4px solid #FCA311; color:#14213D; padding:10px 14px; border-radius:8px; margin-bottom:12px; }
+        .sheet { background:#fff; border:1px solid #E3E7EF; border-radius:10px; padding:0 0 12px; overflow:hidden; }
+        .sheet .vct-client, .sheet .vct-kpi, .sheet .vct-legend, .sheet .vct-scroll { margin-left:14px; margin-right:14px; }
+    </style>
+</head>
+<body>
+{% include '_sidebar.html' %}
+<div class="container wrap">
+    <div class="top">
+        <a class="back" href="{{ url_for('cuentas_t_page') }}">← Cuentas T</a>
+        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+            <span class="sync">
+                Última sincronización buena:
+                <b>{{ cuenta.synced_at.strftime('%d/%m/%Y %H:%M') if cuenta.synced_at else 'nunca' }}</b>
+            </span>
+            <button type="button" class="btn" id="btnActualizar" {% if not configurado %}disabled title="Falta configurar Odoo"{% endif %}>⟳ Actualizar</button>
+        </div>
+    </div>
+
+    {% if cuenta.last_error %}
+    <div class="alert-err">
+        <b>Odoo regresó error{% if cuenta.last_error_at %} el {{ cuenta.last_error_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}.</b>
+        {% if cuenta.tiene_datos %}Se muestra la última sincronización buena.{% endif %}
+        <div style="margin-top:4px; font-size:.85rem; white-space:pre-wrap;">{{ cuenta.last_error }}</div>
+    </div>
+    {% endif %}
+
+    {% if cuenta.tiene_datos %}
+    <div class="sheet">
+        {% set ct_links = true %}
+        {% include '_cuenta_t_tabla.html' %}
+    </div>
+    {% else %}
+    <div class="alert-warn">Este cliente todavía no tiene una sincronización buena. Usa “Actualizar”.</div>
+    {% endif %}
+</div>
+<script>
+document.getElementById('btnActualizar')?.addEventListener('click', async (ev) => {
+    const btn = ev.currentTarget;
+    btn.disabled = true;
+    btn.textContent = 'Consultando Odoo…';
+    try {
+        const r = await fetch('/api/cuentas_t/{{ cuenta.cliente_id }}/actualizar', { method: 'POST' });
+        const d = await r.json();
+        if (!d.ok) alert('Odoo regresó error; se conserva la última sincronización buena.\n\n' + (d.error || ''));
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+    location.reload();
+});
+</script>
+</body>
+</html>

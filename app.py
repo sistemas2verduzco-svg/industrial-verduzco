@@ -5,6 +5,8 @@ from email_manager import EmailManager
 from odoo_client import OdooClient, OdooError
 from odoo_sync import run_odoo_sync
 from empaque_odoo_sync import run_empaque_odoo_sync
+import cuenta_t_sync
+from models import OdooCuentaT
 import os
 import json
 from dotenv import load_dotenv
@@ -2956,6 +2958,16 @@ _EMPAQUE_ODOO_SCHEDULER_INIT = False
 _EMPAQUE_ODOO_SYNC_LOCK = threading.Lock()
 _EMPAQUE_ODOO_LAST_RESULT = None
 
+# Cuentas T: Odoo (verduzco.cuenta.t.wizard.api_cuenta_t) -> odoo_cuentas_t, una vez por noche
+CUENTA_T_SYNC_ENABLED = os.getenv('CUENTA_T_SYNC_ENABLED', '0').strip().lower() in ('1', 'true', 'yes', 'on')
+CUENTA_T_SYNC_HOUR = min(23, max(0, int(os.getenv('CUENTA_T_SYNC_HOUR', '2') or 2)))
+CUENTA_T_SYNC_TZ = (os.getenv('CUENTA_T_SYNC_TZ') or 'America/Mexico_City').strip()
+_CUENTA_T_SYNC_THREAD = None
+_CUENTA_T_SYNC_STOP = threading.Event()
+_CUENTA_T_SCHEDULER_INIT = False
+_CUENTA_T_TABLE_READY = False
+_CUENTA_T_PORTAL_PARTNER_CACHE = {}
+
 _CONTPAQ_SYNC_LOCK = threading.Lock()
 _CONTPAQ_SYNC_THREAD = None
 _CONTPAQ_SYNC_STOP = threading.Event()
@@ -4649,6 +4661,7 @@ def log_access_y_cierre_por_hora():
         _start_machine_schedule_scheduler_once()
         _start_odoo_scheduler_once()
         _start_empaque_odoo_scheduler_once()
+        _start_cuenta_t_scheduler_once()
 
         path = request.path
         # skip static files and health checks
@@ -7063,9 +7076,17 @@ def seguimiento_empaque_cliente():
             view.get('customer_code'),
             view.get('customer_name'),
         )
+    cuenta_t = None
+    if view and section == 'cuenta':
+        try:
+            cuenta_t = _cuenta_t_for_portal(view.get('customer_code'), view.get('customer_name'))
+        except Exception as exc:
+            logger.warning('[CUENTA-T] Portal: %s', exc)
+            db.session.rollback()
 
     return render_template(
         'seguimiento_empaque.html',
+        cuenta_t=cuenta_t,
         error=error,
         view=view,
         clave=clave,
@@ -15551,6 +15572,283 @@ def _start_empaque_odoo_scheduler_once():
     )
 
 
+def _ensure_cuenta_t_table():
+    global _CUENTA_T_TABLE_READY
+    if _CUENTA_T_TABLE_READY:
+        return True
+    try:
+        OdooCuentaT.__table__.create(bind=db.engine, checkfirst=True)
+        _CUENTA_T_TABLE_READY = True
+    except Exception as exc:
+        logger.error('[CUENTA-T] No se pudo crear odoo_cuentas_t: %s', exc)
+    return _CUENTA_T_TABLE_READY
+
+
+def _cuenta_t_local_dt(value):
+    if not value:
+        return None
+    try:
+        tz = ZoneInfo(CUENTA_T_SYNC_TZ)
+    except Exception:
+        tz = ZoneInfo('America/Mexico_City')
+    return value.replace(tzinfo=dt_timezone.utc).astimezone(tz)
+
+
+def _cuenta_t_view(row, *, include_links=True):
+    """Datos listos para el parcial `_cuenta_t_tabla.html`."""
+    secciones = cuenta_t_sync.secciones_de(row)
+    if include_links:
+        for sec in secciones:
+            for doc in sec.get('documentos') or []:
+                doc['url'] = cuenta_t_sync.odoo_move_url(doc.get('move_id'))
+                for ap in doc.get('aplicaciones') or []:
+                    ap['url'] = cuenta_t_sync.odoo_move_url(ap.get('move_id'))
+    if row.periodo_desde or row.periodo_hasta:
+        desde = row.periodo_desde.strftime('%d/%m/%Y') if row.periodo_desde else 'inicio'
+        hasta = row.periodo_hasta.strftime('%d/%m/%Y') if row.periodo_hasta else 'hoy'
+        periodo = f'{desde} al {hasta}'
+    else:
+        periodo = 'Todo el historial'
+    return {
+        'cliente_id': row.cliente_id,
+        'cliente': row.cliente or f'Cliente {row.cliente_id}',
+        'clave': row.clave or '',
+        'rfc': row.rfc or '',
+        'moneda': row.moneda or 'MXN',
+        'total_cargos': row.total_cargos or 0.0,
+        'total_abonos': row.total_abonos or 0.0,
+        'saldo': row.saldo or 0.0,
+        'saldo_texto': row.saldo_texto or '',
+        'secciones': secciones,
+        'periodo': periodo,
+        'tiene_datos': row.synced_at is not None,
+        'synced_at': _cuenta_t_local_dt(row.synced_at),
+        'last_error': row.last_error or '',
+        'last_error_at': _cuenta_t_local_dt(row.last_error_at),
+    }
+
+
+def _cuenta_t_sync_in_background(partner_ids=None, trigger='manual'):
+    def _worker():
+        with app.app_context():
+            try:
+                _ensure_cuenta_t_table()
+                result = cuenta_t_sync.sync_cuentas(db, OdooCuentaT, partner_ids=partner_ids,
+                                                    trigger=trigger, wait=False)
+                logger.info('[CUENTA-T] Sync %s: %s', trigger, result)
+            except Exception as exc:
+                logger.error('[CUENTA-T] Error en sync %s: %s', trigger, exc, exc_info=True)
+            finally:
+                db.session.remove()
+
+    thread = threading.Thread(target=_worker, name=f'cuenta-t-sync-{trigger}', daemon=True)
+    thread.start()
+    return thread
+
+
+def _cuenta_t_claim_nightly(fecha_local):
+    """Marca atómica por día para que solo un worker de gunicorn corra la sync nocturna."""
+    marker_dir = os.path.join('uploads', 'cuenta_t_sync')
+    os.makedirs(marker_dir, exist_ok=True)
+    path = os.path.join(marker_dir, f'nightly_{fecha_local.isoformat()}')
+    try:
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        return False
+    with os.fdopen(fd, 'w') as fh:
+        fh.write(f'{os.getpid()} {datetime.utcnow().isoformat()}\n')
+    for name in os.listdir(marker_dir):
+        if name.startswith('nightly_') and name < f'nightly_{(fecha_local - timedelta(days=14)).isoformat()}':
+            try:
+                os.remove(os.path.join(marker_dir, name))
+            except OSError:
+                pass
+    return True
+
+
+def _cuenta_t_scheduler_loop():
+    try:
+        tz = ZoneInfo(CUENTA_T_SYNC_TZ)
+    except Exception:
+        tz = ZoneInfo('America/Mexico_City')
+    while not _CUENTA_T_SYNC_STOP.is_set():
+        now = datetime.now(tz)
+        target = now.replace(hour=CUENTA_T_SYNC_HOUR, minute=0, second=0, microsecond=0)
+        if target <= now:
+            target += timedelta(days=1)
+        while datetime.now(tz) < target and not _CUENTA_T_SYNC_STOP.is_set():
+            sleep(30)
+        if _CUENTA_T_SYNC_STOP.is_set():
+            return
+        try:
+            if not _cuenta_t_claim_nightly(target.date()):
+                continue
+            with app.app_context():
+                try:
+                    _ensure_cuenta_t_table()
+                    result = cuenta_t_sync.sync_cuentas(db, OdooCuentaT, trigger='nocturna')
+                    logger.info('[CUENTA-T] Sync nocturna: %s', result)
+                finally:
+                    db.session.remove()
+        except Exception as exc:
+            logger.error('[CUENTA-T] Error en scheduler: %s', exc, exc_info=True)
+
+
+def _start_cuenta_t_scheduler_once():
+    global _CUENTA_T_SYNC_THREAD
+    global _CUENTA_T_SCHEDULER_INIT
+    if _CUENTA_T_SCHEDULER_INIT:
+        return
+    _CUENTA_T_SCHEDULER_INIT = True
+    if not CUENTA_T_SYNC_ENABLED:
+        logger.info('[CUENTA-T] Scheduler deshabilitado por CUENTA_T_SYNC_ENABLED=0')
+        return
+    _CUENTA_T_SYNC_THREAD = threading.Thread(
+        target=_cuenta_t_scheduler_loop,
+        name='cuenta-t-sync-scheduler',
+        daemon=True,
+    )
+    _CUENTA_T_SYNC_THREAD.start()
+    logger.info('[CUENTA-T] Scheduler iniciado (diario a las %02d:00 %s)', CUENTA_T_SYNC_HOUR, CUENTA_T_SYNC_TZ)
+
+
+def _cuenta_t_for_portal(customer_code, customer_name=None):
+    """Cuenta T guardada del cliente del portal. Nunca consulta Odoo en vivo salvo para
+    resolver (una vez) el contacto comercial cuando el código es un contacto hijo."""
+    if not _ensure_cuenta_t_table():
+        return None
+    code = (customer_code or '').strip()
+    row = None
+    if code.isdigit():
+        pid = int(code)
+        row = OdooCuentaT.query.filter_by(cliente_id=pid).first()
+        if row is None:
+            comm = _CUENTA_T_PORTAL_PARTNER_CACHE.get(pid)
+            if comm is None and cuenta_t_sync.is_configured():
+                try:
+                    comm = cuenta_t_sync.resolver_cliente_comercial(cuenta_t_sync.get_client(), pid) or 0
+                    _CUENTA_T_PORTAL_PARTNER_CACHE[pid] = comm
+                except Exception as exc:
+                    logger.warning('[CUENTA-T] No se pudo resolver partner %s: %s', pid, exc)
+            if comm and comm != pid:
+                row = OdooCuentaT.query.filter_by(cliente_id=comm).first()
+    if row is None and customer_name:
+        row = OdooCuentaT.query.filter(
+            func.lower(OdooCuentaT.cliente) == customer_name.strip().lower()
+        ).first()
+    if row is None or row.synced_at is None:
+        return None
+    return _cuenta_t_view(row, include_links=False)
+
+
+_CUENTA_T_PERMS = [('facturacion', 'view'), ('empaque', 'view')]
+
+
+@app.route('/cuentas_t', methods=['GET'])
+@login_required
+@requires_any_permission(_CUENTA_T_PERMS)
+def cuentas_t_page():
+    _ensure_cuenta_t_table()
+    q = (request.args.get('q') or '').strip()
+    filtro = (request.args.get('f') or '').strip().lower()
+    query = OdooCuentaT.query
+    if q:
+        like = f'%{q}%'
+        query = query.filter(db.or_(
+            OdooCuentaT.cliente.ilike(like),
+            OdooCuentaT.clave.ilike(like),
+            OdooCuentaT.rfc.ilike(like),
+        ))
+    if filtro == 'debe':
+        query = query.filter(OdooCuentaT.saldo > 0.005)
+    elif filtro == 'favor':
+        query = query.filter(OdooCuentaT.saldo < -0.005)
+    elif filtro == 'error':
+        query = query.filter(OdooCuentaT.last_error.isnot(None))
+    rows = query.order_by(OdooCuentaT.cliente.asc().nullslast(), OdooCuentaT.cliente_id.asc()).all()
+    clientes = [{
+        'cliente_id': r.cliente_id,
+        'cliente': r.cliente or f'Cliente {r.cliente_id}',
+        'clave': r.clave or '',
+        'rfc': r.rfc or '',
+        'moneda': r.moneda or '',
+        'total_cargos': r.total_cargos or 0.0,
+        'total_abonos': r.total_abonos or 0.0,
+        'saldo': r.saldo or 0.0,
+        'saldo_texto': r.saldo_texto or '',
+        'synced_at': _cuenta_t_local_dt(r.synced_at),
+        'last_error': r.last_error or '',
+        'last_error_at': _cuenta_t_local_dt(r.last_error_at),
+    } for r in rows]
+    return render_template(
+        'cuentas_t.html',
+        clientes=clientes,
+        q=q,
+        filtro=filtro,
+        configurado=cuenta_t_sync.is_configured(),
+        odoo_url=cuenta_t_sync.odoo_base_url(),
+        corriendo=cuenta_t_sync.is_running(),
+        ultima=cuenta_t_sync.last_run(),
+        nocturna_activa=CUENTA_T_SYNC_ENABLED,
+        nocturna_hora=CUENTA_T_SYNC_HOUR,
+    )
+
+
+@app.route('/cuentas_t/<int:cliente_id>', methods=['GET'])
+@login_required
+@requires_any_permission(_CUENTA_T_PERMS)
+def cuenta_t_detalle_page(cliente_id):
+    _ensure_cuenta_t_table()
+    row = OdooCuentaT.query.filter_by(cliente_id=cliente_id).first()
+    if row is None:
+        return redirect(url_for('cuentas_t_page'))
+    return render_template(
+        'cuenta_t_detalle.html',
+        cuenta=_cuenta_t_view(row, include_links=True),
+        configurado=cuenta_t_sync.is_configured(),
+    )
+
+
+@app.route('/api/cuentas_t/<int:cliente_id>/actualizar', methods=['POST'])
+@login_required
+@requires_any_permission(_CUENTA_T_PERMS)
+def api_cuenta_t_actualizar(cliente_id):
+    _ensure_cuenta_t_table()
+    result = cuenta_t_sync.sync_cuentas(db, OdooCuentaT, partner_ids=[cliente_id], trigger='manual_cliente')
+    row = OdooCuentaT.query.filter_by(cliente_id=cliente_id).first()
+    payload = {
+        'ok': bool(result.get('ok')) and not result.get('errores'),
+        'error': (row.last_error if row and row.last_error else result.get('error')) or None,
+        'synced_at': row.synced_at.isoformat() if row and row.synced_at else None,
+    }
+    return jsonify(payload), (200 if payload['ok'] else 502)
+
+
+@app.route('/api/cuentas_t/sincronizar', methods=['POST'])
+@login_required
+@requires_any_permission(_CUENTA_T_PERMS)
+def api_cuentas_t_sincronizar():
+    if not cuenta_t_sync.is_configured():
+        return jsonify({'ok': False, 'error': 'Falta configurar CUENTA_T_ODOO_* / ODOO_* en el servidor.'}), 400
+    if cuenta_t_sync.is_running():
+        return jsonify({'ok': True, 'running': True, 'message': 'Ya hay una sincronización en curso.'})
+    _cuenta_t_sync_in_background(trigger='manual_todos')
+    return jsonify({'ok': True, 'running': True, 'message': 'Sincronización iniciada.'})
+
+
+@app.route('/api/cuentas_t/estado', methods=['GET'])
+@login_required
+@requires_any_permission(_CUENTA_T_PERMS)
+def api_cuentas_t_estado():
+    return jsonify({
+        'configurado': cuenta_t_sync.is_configured(),
+        'corriendo': cuenta_t_sync.is_running(),
+        'ultima': cuenta_t_sync.last_run(),
+        'nocturna_activa': CUENTA_T_SYNC_ENABLED,
+        'nocturna_hora': CUENTA_T_SYNC_HOUR,
+    })
+
+
 @app.route('/empaque/clientes', methods=['GET'])
 @login_required
 @requires_any_permission([('empaque', 'view'), ('empaque', 'edit')])
@@ -17855,4 +18153,5 @@ if __name__ == '__main__':
     _start_machine_schedule_scheduler_once()
     _start_odoo_scheduler_once()
     _start_empaque_odoo_scheduler_once()
+    _start_cuenta_t_scheduler_once()
     app.run(host='0.0.0.0', port=5000, debug=False)

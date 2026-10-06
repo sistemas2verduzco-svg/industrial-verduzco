@@ -2687,3 +2687,30 @@ class EmpaqueSeguimientoLog(db.Model):
     ip_cliente = db.Column(db.String(64), nullable=True, index=True)
     user_agent = db.Column(db.Text, nullable=True)
     resultado = db.Column(db.String(40), nullable=False, default='invalido', index=True)
+
+
+class OdooCuentaT(db.Model):
+    """Cuenta T por cliente tal como la arma Odoo (verduzco.cuenta.t.wizard.api_cuenta_t).
+
+    Se sobrescribe completa en cada sincronización buena; si Odoo falla solo se
+    registra el error y se conserva lo último bueno.
+    """
+    __tablename__ = 'odoo_cuentas_t'
+
+    id = db.Column(db.Integer, primary_key=True)
+    cliente_id = db.Column(db.Integer, nullable=False, unique=True, index=True)
+    cliente = db.Column(db.String(255), nullable=True, index=True)
+    clave = db.Column(db.String(80), nullable=True, index=True)
+    rfc = db.Column(db.String(40), nullable=True)
+    moneda = db.Column(db.String(10), nullable=True)
+    total_cargos = db.Column(db.Float, nullable=False, default=0.0)
+    total_abonos = db.Column(db.Float, nullable=False, default=0.0)
+    saldo = db.Column(db.Float, nullable=False, default=0.0)
+    saldo_texto = db.Column(db.String(60), nullable=True)
+    secciones_json = db.Column(db.Text, nullable=True)
+    periodo_desde = db.Column(db.Date, nullable=True)
+    periodo_hasta = db.Column(db.Date, nullable=True)
+    synced_at = db.Column(db.DateTime, nullable=True, index=True)
+    last_attempt_at = db.Column(db.DateTime, nullable=True)
+    last_error = db.Column(db.Text, nullable=True)
+    last_error_at = db.Column(db.DateTime, nullable=True)

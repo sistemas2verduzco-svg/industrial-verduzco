@@ -1,0 +1,153 @@
+{# Cuenta T (mismo diseño que el PDF de Odoo verduzco_cuenta_t_cliente).
+   Requiere `cuenta` (ver _cuenta_t_view en app.py). `ct_links` muestra ligas a Odoo. #}
+{% macro money(v) -%}$ {{ '{:,.2f}'.format(v or 0) }}{%- endmacro %}
+{% set flag_class = {'pagada': 'vct-green', 'pago': 'vct-orange', 'sin_relacion': 'vct-red'} %}
+<style>
+    .vct { font-family: Helvetica, Arial, sans-serif; color: #1E2433; font-size: 13px; }
+    .vct table { border-collapse: collapse; width: 100%; }
+    .vct-band { background: #14213D; color: #FFFFFF; border-radius: 8px 8px 0 0; }
+    .vct-band td { padding: 14px 18px; vertical-align: middle; }
+    .vct-band .vct-title { font-size: 24px; font-weight: bold; letter-spacing: 1px; }
+    .vct-band .vct-sub { font-size: 11px; color: #FCA311; letter-spacing: 2px; text-transform: uppercase; }
+    .vct-band .vct-right { text-align: right; font-size: 11px; color: #C9D1E0; }
+    .vct-accent { height: 4px; background: #FCA311; }
+    .vct-client { padding: 12px 4px 8px 4px; }
+    .vct-client .vct-name { font-size: 20px; font-weight: bold; color: #14213D; }
+    .vct-client .vct-meta { font-size: 12px; color: #5B6475; padding-top: 4px; }
+    .vct-kpi { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 4px 0 2px; }
+    .vct-box { border-radius: 6px; padding: 10px 14px; background: #F4F6FA; border-left: 5px solid #14213D; }
+    .vct-box .vct-lbl { font-size: 10.5px; letter-spacing: 1.5px; color: #5B6475; text-transform: uppercase; }
+    .vct-box .vct-num { font-size: 21px; font-weight: bold; color: #14213D; padding-top: 2px; }
+    .vct-box.vct-cargo { border-left-color: #D64545; }
+    .vct-box.vct-abono { border-left-color: #2E9E5B; }
+    .vct-box.vct-debe { background: #14213D; border-left-color: #FCA311; }
+    .vct-box.vct-debe .vct-lbl { color: #FCA311; }
+    .vct-box.vct-debe .vct-num { color: #FFFFFF; }
+    .vct-legend { font-size: 11px; color: #5B6475; padding: 10px 0 8px 0; line-height: 2; }
+    .vct-scroll { overflow-x: auto; }
+    .vct-grid { min-width: 900px; }
+    .vct-grid th { background: #14213D; color: #FFFFFF; font-size: 10.5px; letter-spacing: 1px;
+                   text-transform: uppercase; padding: 8px 8px; text-align: left; }
+    .vct-grid th.n, .vct-grid td.n { text-align: right; white-space: nowrap; }
+    .vct-grid td { padding: 6px 8px; border-bottom: 1px solid #E3E7EF; vertical-align: middle; }
+    .vct-grid tr.vct-sec td { background: #FFF4E0; color: #14213D; font-weight: bold; font-size: 12px;
+                              letter-spacing: 1.5px; border-left: 4px solid #FCA311; padding: 8px 10px; text-transform: uppercase; }
+    .vct-grid tr.vct-doc td { background: #FFFFFF; font-weight: bold; }
+    .vct-grid tr.vct-app td { background: #FAFBFD; color: #4A5263; }
+    .vct-grid tr.vct-app td.vct-ind { padding-left: 30px; }
+    .vct-grid tr.vct-foot td { background: #14213D; color: #FFFFFF; font-weight: bold; padding: 9px 8px; border: 0; }
+    .vct-grid a { color: inherit; text-decoration: underline dotted #9AA3B5; }
+    .vct-grid a:hover { color: #14213D; text-decoration-color: #FCA311; }
+    .vct-flag { display: inline-block; position: relative; height: 18px; line-height: 18px;
+                padding: 0 7px 0 8px; margin-right: 9px; color: #FFFFFF; font-size: 9px; font-weight: bold;
+                letter-spacing: 0.6px; border-left: 2px solid #1E2433; white-space: nowrap; text-transform: uppercase; }
+    .vct-flag:after { content: ""; position: absolute; top: 0; right: -7px; width: 0; height: 0;
+                      border-top: 9px solid transparent; border-bottom: 9px solid transparent; border-left: 7px solid; }
+    .vct-green { background: #2E9E5B; } .vct-green:after { border-left-color: #2E9E5B; }
+    .vct-orange { background: #F28C28; } .vct-orange:after { border-left-color: #F28C28; }
+    .vct-red { background: #D64545; } .vct-red:after { border-left-color: #D64545; }
+    .vct-neg { color: #2E9E5B; }
+    .vct-pos { color: #D64545; }
+    .vct-empty { padding: 18px; text-align: center; color: #5B6475; background: #F4F6FA; }
+    @media (max-width: 760px) { .vct-kpi { grid-template-columns: 1fr; } }
+</style>
+
+<div class="vct">
+    <table class="vct-band">
+        <tr>
+            <td>
+                <div class="vct-sub">Estado de cuenta</div>
+                <div class="vct-title">CUENTA T</div>
+            </td>
+            <td class="vct-right">
+                <div style="font-size: 13px; color: #FFFFFF; font-weight: bold;">Industrial Verduzco</div>
+                {% if cuenta.synced_at %}
+                <div>Actualizado: {{ cuenta.synced_at.strftime('%d/%m/%Y %H:%M') }}</div>
+                {% endif %}
+            </td>
+        </tr>
+    </table>
+    <div class="vct-accent"></div>
+
+    <div class="vct-client">
+        <div class="vct-name">{{ cuenta.cliente }}</div>
+        <div class="vct-meta">
+            {% if cuenta.clave %}Clave <b>{{ cuenta.clave }}</b> &nbsp;·&nbsp; {% endif %}
+            RFC <b>{{ cuenta.rfc or '—' }}</b> &nbsp;·&nbsp;
+            Periodo <b>{{ cuenta.periodo }}</b>
+            {% if cuenta.moneda %} &nbsp;·&nbsp; Moneda <b>{{ cuenta.moneda }}</b>{% endif %}
+        </div>
+    </div>
+
+    <div class="vct-kpi">
+        <div class="vct-box vct-cargo">
+            <div class="vct-lbl">Cargos (Debe)</div>
+            <div class="vct-num">{{ money(cuenta.total_cargos) }}</div>
+        </div>
+        <div class="vct-box vct-abono">
+            <div class="vct-lbl">Abonos (Haber)</div>
+            <div class="vct-num">{{ money(cuenta.total_abonos) }}</div>
+        </div>
+        <div class="vct-box vct-debe">
+            <div class="vct-lbl">Saldo · {{ cuenta.saldo_texto }}</div>
+            <div class="vct-num">{{ money(cuenta.saldo) }}</div>
+        </div>
+    </div>
+
+    <div class="vct-legend">
+        <span class="vct-flag vct-green">PAGADA</span> Factura con uno o varios pagos &nbsp;&nbsp;
+        <span class="vct-flag vct-orange">PAGO</span> Pago / nota de crédito aplicado &nbsp;&nbsp;
+        <span class="vct-flag vct-red">SIN RELACIÓN</span> Factura sin pago o pago sin aplicar
+    </div>
+
+    <div class="vct-scroll">
+    <table class="vct-grid">
+        <thead>
+            <tr>
+                <th style="width: 120px;">Bandera</th>
+                <th style="width: 86px;">Fecha</th>
+                <th>Documento</th>
+                <th>Pedido</th>
+                <th>Tipo</th>
+                <th>Concepto</th>
+                <th class="n">Cargo</th>
+                <th class="n">Abono</th>
+                <th class="n">Saldo</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for sec in cuenta.secciones %}
+            <tr class="vct-sec"><td colspan="9">{{ sec.nombre }}</td></tr>
+            {% for doc in sec.documentos %}
+                {% for l in [doc] + (doc.aplicaciones or []) %}
+                {% set nivel = not loop.first %}
+                <tr class="{{ 'vct-app' if nivel else 'vct-doc' }}">
+                    <td class="{{ 'vct-ind' if nivel else '' }}">
+                        <span class="vct-flag {{ flag_class.get(l.estado, 'vct-red') }}">{{ l.bandera }}</span>
+                    </td>
+                    <td>{% if l.fecha and l.fecha|length >= 10 %}{{ l.fecha[8:10] }}/{{ l.fecha[5:7] }}/{{ l.fecha[0:4] }}{% endif %}</td>
+                    <td class="{{ 'vct-ind' if nivel else '' }}">
+                        {% if ct_links and l.url %}<a href="{{ l.url }}" target="_blank" rel="noopener">{{ l.documento }}</a>{% else %}{{ l.documento }}{% endif %}
+                    </td>
+                    <td>{{ l.pedido }}</td>
+                    <td>{{ l.tipo }}</td>
+                    <td>{{ (l.concepto or '')[:60] }}</td>
+                    <td class="n">{% if l.cargo %}{{ money(l.cargo) }}{% endif %}</td>
+                    <td class="n">{% if l.abono %}{{ money(l.abono) }}{% endif %}</td>
+                    <td class="n {{ 'vct-pos' if l.saldo > 0.005 else ('vct-neg' if l.saldo < -0.005 else '') }}">{{ money(l.saldo) }}</td>
+                </tr>
+                {% endfor %}
+            {% endfor %}
+            {% else %}
+            <tr><td colspan="9" class="vct-empty">Sin movimientos en el periodo.</td></tr>
+            {% endfor %}
+            <tr class="vct-foot">
+                <td colspan="6" style="text-align: right; letter-spacing: 1.5px;">TOTALES</td>
+                <td class="n">{{ money(cuenta.total_cargos) }}</td>
+                <td class="n">{{ money(cuenta.total_abonos) }}</td>
+                <td class="n" style="color: #FCA311;">{{ money(cuenta.saldo) }}</td>
+            </tr>
+        </tbody>
+    </table>
+    </div>
+</div>

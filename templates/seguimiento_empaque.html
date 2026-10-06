@@ -443,7 +443,13 @@
 
         {% elif section == 'cuenta' %}
             <div class="section-label">Estado de cuenta</div>
-            <div class="empty">Pendiente. Aún no se define qué fuente usaremos aquí.</div>
+            {% if cuenta_t %}
+                {% set cuenta = cuenta_t %}
+                {% set ct_links = false %}
+                {% include '_cuenta_t_tabla.html' %}
+            {% else %}
+            <div class="empty">Tu estado de cuenta aún no está disponible. Si lo necesitas, contáctanos.</div>
+            {% endif %}
         {% endif %}
     </div>
     {% endif %}
