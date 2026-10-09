@@ -13699,13 +13699,18 @@ IMAGEN_CATALOGO_MAX_BYTES = 15 * 1024 * 1024
 _PERMS_PROCESOS_EDIT = [('procesos', 'create'), ('procesos', 'edit'), ('procesos', 'update')]
 _PERMS_MAQ_BOMS_EDIT = [('maquinaria_boms', 'create'), ('maquinaria_boms', 'edit'), ('maquinaria_boms', 'update')]
 _PERMS_MAQ_PROC_EDIT = [('maquinaria_procesos', 'create'), ('maquinaria_procesos', 'edit'), ('maquinaria_procesos', 'update')]
+_PERMS_MAQ_ESTACIONES_EDIT = [('maquinaria_estaciones', 'create'), ('maquinaria_estaciones', 'edit'), ('maquinaria_estaciones', 'update')]
 IMAGEN_CATALOGO_ENTIDADES = {
     'clave_producto': {'label': 'Clave de producto', 'perms': _PERMS_PROCESOS_EDIT},
     'operacion': {'label': 'Operación', 'perms': _PERMS_PROCESOS_EDIT},
     'centro_trabajo': {'label': 'Centro de trabajo', 'perms': _PERMS_PROCESOS_EDIT + _PERMS_MAQ_PROC_EDIT + _PERMS_MAQ_BOMS_EDIT},
     'maquina': {'label': 'Clave de máquina', 'perms': _PERMS_MAQ_BOMS_EDIT},
     'proceso_maquina': {'label': 'Proceso de máquina', 'perms': _PERMS_MAQ_PROC_EDIT + _PERMS_MAQ_BOMS_EDIT},
+    'estacion_maquina': {'label': 'Estación de trabajo', 'perms': _PERMS_MAQ_ESTACIONES_EDIT},
+    'estacion_operador': {'label': 'Operador', 'perms': _PERMS_MAQ_ESTACIONES_EDIT},
+    'estacion_proceso': {'label': 'Proceso de estación', 'perms': _PERMS_MAQ_ESTACIONES_EDIT},
 }
+_IMAGEN_REF_MAYUSCULAS = ('centro_trabajo', 'estacion_maquina')
 _IMAGENES_CATALOGO_TABLE_READY = False
 
 
@@ -13722,11 +13727,23 @@ def _ensure_imagenes_catalogo_table():
 
 
 def _imagen_catalogo_ref(entidad, ref):
-    """Centro de trabajo es texto libre: se normaliza para que 'ct-01 ' y 'CT-01' compartan imagen."""
+    """Centro de trabajo y clave de estación son texto libre: 'ct-01 ' y 'CT-01' comparten imagen."""
     txt = ' '.join(str(ref or '').split())
-    if entidad == 'centro_trabajo':
+    if entidad in _IMAGEN_REF_MAYUSCULAS:
         return txt.upper()[:160]
     return txt[:160]
+
+
+def _desligar_imagen_catalogo(entidad, ref):
+    """Los ids del catálogo de estaciones se reutilizan (max+1): al borrar el registro se suelta su imagen."""
+    try:
+        if not _ensure_imagenes_catalogo_table():
+            return
+        ImagenCatalogo.query.filter_by(entidad=entidad, ref=_imagen_catalogo_ref(entidad, ref)).delete()
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        logger.warning('[IMAGENES] No se pudo desligar %s %s: %s', entidad, ref, exc)
 
 
 def _puede_editar_imagen(entidad, user=None):
@@ -17921,6 +17938,11 @@ def maquinaria_estaciones_page():
         procesos=procesos_payload,
         status_catalogo=status_catalogo,
         ordenes=ordenes_payload,
+        imagenes_estaciones={
+            ent: imagenes_catalogo_map(ent)
+            for ent in ('estacion_maquina', 'estacion_operador', 'estacion_proceso')
+        },
+        puede_imagen_estaciones=_puede_editar_imagen('estacion_maquina'),
     ))
     # Force fresh HTML for this highly interactive board to avoid stale JS/template cache.
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
@@ -18168,6 +18190,7 @@ def api_maquinaria_estaciones_operators_delete():
         catalog['operators'] = keep
         _mye_write_catalog(catalog)
 
+    _desligar_imagen_catalogo('estacion_operador', operator_id)
     return jsonify({'ok': True, 'message': 'Operador eliminado'})
 
 
@@ -18228,6 +18251,7 @@ def api_maquinaria_estaciones_processes_delete():
         catalog['processes'] = keep
         _mye_write_catalog(catalog)
 
+    _desligar_imagen_catalogo('estacion_proceso', process_id)
     return jsonify({'ok': True, 'message': 'Proceso eliminado'})
 
 

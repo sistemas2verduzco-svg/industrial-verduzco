@@ -659,6 +659,14 @@
 </head>
 <body>
     {% include '_sidebar.html' %}
+    {% import '_imagen_catalogo.html' as imgcat with context %}
+    {{ imgcat.assets() }}
+    <style>
+        .mye-img-field { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; font-size: 11px; color: #4b5d73; }
+        .mye-img-field input[type=file] { font-size: 11px; padding: 3px; min-width: 0; flex: 1; }
+        .mye-card-img { display: flex; justify-content: center; margin: 4px 0; }
+        .mye-row-img { display: flex; gap: 8px; align-items: flex-start; }
+    </style>
     <div class="container mye-page">
         <div class="mye-header">
             <h2>Maquinaria y Ensamble - Estaciones de Trabajo</h2>
@@ -687,6 +695,7 @@
                 <div id="myeMachineForm" class="mye-inline-form">
                     <input id="myeNewMachineClave" type="text" placeholder="Clave maquina" />
                     <input id="myeNewMachineNombre" type="text" placeholder="Nombre" />
+                    <label class="mye-img-field">Imagen (opcional) <input id="myeNewMachineImg" type="file" accept="image/png,image/jpeg,image/gif,image/webp" /></label>
                     <button id="myeSaveMachineBtn" type="button">Guardar</button>
                 </div>
                 <div id="myeMachineGrid" class="mye-machines"></div>
@@ -701,6 +710,7 @@
                 <div id="myeProcessForm" class="mye-inline-form">
                     <input id="myeNewProcessName" type="text" placeholder="Nombre proceso" />
                     <input id="myeNewProcessDuration" type="text" placeholder="Duración HH:MM:SS (ej: 02:30:00)" value="01:00:00" title="Tiempo estimado del proceso en horas, minutos y segundos. Este tiempo se usa para la línea del tiempo." required />
+                    <label class="mye-img-field">Imagen (opcional) <input id="myeNewProcessImg" type="file" accept="image/png,image/jpeg,image/gif,image/webp" /></label>
                     <button id="myeSaveProcessBtn" type="button">Guardar</button>
                 </div>
                 <div id="myeProcessList" class="mye-process-list"></div>
@@ -722,6 +732,7 @@
                 <div id="myeOperatorForm" class="mye-inline-form">
                     <input id="myeNewOperatorName" type="text" placeholder="Nombre operador" />
                     <input id="myeNewOperatorRole" type="text" placeholder="Especialidad/rol" />
+                    <label class="mye-img-field">Foto (opcional) <input id="myeNewOperatorImg" type="file" accept="image/png,image/jpeg,image/gif,image/webp" /></label>
                     <button id="myeSaveOperatorBtn" type="button">Guardar</button>
                 </div>
                 <div id="myeOperators" class="mye-operator-list"></div>
@@ -746,6 +757,35 @@
         const MYE_MACHINES = {{ maquinas|tojson }};
         const MYE_PROCESSES = {{ procesos|tojson }};
         const MYE_STATUS = {{ status_catalogo|tojson }};
+        const MYE_IMG = {{ imagenes_estaciones|tojson }};
+        const MYE_PUEDE_IMG = {{ 'true' if puede_imagen_estaciones else 'false' }};
+        const myeImgUrl = (entidad, ref) => {
+            const key = String(ref == null ? '' : ref).trim().replace(/\s+/g, ' ');
+            return (MYE_IMG[entidad] || {})[entidad === 'estacion_maquina' ? key.toUpperCase() : key] || null;
+        };
+        const myeImgHtml = (entidad, ref, titulo, size) =>
+            window.imgcatThumbHtml(entidad, ref, myeImgUrl(entidad, ref), MYE_PUEDE_IMG, titulo, size);
+        document.addEventListener('imgcat:cambio', (ev) => {
+            const d = ev.detail || {};
+            if (!MYE_IMG[d.entidad]) return;
+            if (d.url) MYE_IMG[d.entidad][d.ref] = d.url;
+            else delete MYE_IMG[d.entidad][d.ref];
+        });
+        async function myeSubirImagenNueva(input, entidad, ref) {
+            const file = input && input.files && input.files[0];
+            if (!file || !ref) return null;
+            try {
+                const url = await window.imgcatSubir(entidad, ref, file);
+                const key = entidad === 'estacion_maquina' ? String(ref).trim().toUpperCase() : String(ref);
+                if (url) MYE_IMG[entidad][key] = url;
+                return url;
+            } catch (err) {
+                alert('Se guardó, pero la imagen no: ' + (err.message || err));
+                return null;
+            } finally {
+                input.value = '';
+            }
+        }
 
         (function() {
             const orderListEl = document.getElementById('myeOrderList');
@@ -1446,7 +1486,8 @@
                             <div style="display:flex; width:100%; justify-content:flex-end; margin-bottom:2px;">
                                 <button class="mye-item-delete" type="button" data-delete-machine-key="${textSafe(m.clave_maquina || '')}">Borrar</button>
                             </div>
-                            <div class="mye-machine-icon">${textSafe(icon)}</div>
+                            ${myeImgUrl('estacion_maquina', m.clave_maquina) ? '' : `<div class="mye-machine-icon">${textSafe(icon)}</div>`}
+                            <div class="mye-card-img">${myeImgHtml('estacion_maquina', m.clave_maquina || '', m.nombre_maquina || m.clave_maquina || '', 44)}</div>
                             <div style="font-weight:700; font-size:12px; color:#153a61; word-break:break-word;">${textSafe(m.clave_maquina || '-')}</div>
                             <div style="font-size:10px; color:#64748b;">OTs: ${linkedOt}</div>
                         </div>
@@ -1608,8 +1649,13 @@
 
                     return `
                         <article class="mye-operator-item" data-op-id="${op.id}" draggable="true">
-                            <div class="mye-op-name">${textSafe(op.username)}</div>
-                            <div class="mye-op-role">${textSafe(op.role || 'Operador')} | OTs: ${assigned}</div>
+                            <div class="mye-row-img">
+                                ${myeImgHtml('estacion_operador', op.id, op.username || '', 40)}
+                                <div style="min-width:0;">
+                                    <div class="mye-op-name">${textSafe(op.username)}</div>
+                                    <div class="mye-op-role">${textSafe(op.role || 'Operador')} | OTs: ${assigned}</div>
+                                </div>
+                            </div>
                             <div class="mye-time-chip">Tiempo activo: <span data-op-elapsed-id="${op.id}">${formatElapsed(activeMs)}</span></div>
                             <div class="mye-op-actions">
                                 <button class="mye-op-action-btn" type="button" data-op-action-id="${op.id}" data-op-action-type="${actionType}" ${actionDisabled ? 'disabled' : ''}>${textSafe(actionLabel)}</button>
@@ -2029,8 +2075,13 @@
                 processListEl.innerHTML = (MYE_PROCESSES || []).map(proc => {
                     return `
                         <article class="mye-process-item" data-proc-id="${proc.id}" draggable="true">
-                            <div class="mye-process-name">${textSafe(proc.nombre || '-')}</div>
-                            <div class="mye-process-meta">⏱ ${textSafe(formatHHMM(proc.duracion_default || 1))} | Creado: ${textSafe(proc.created_at ? proc.created_at.slice(0, 10) : '-')}</div>
+                            <div class="mye-row-img">
+                                ${myeImgHtml('estacion_proceso', proc.id, proc.nombre || '', 40)}
+                                <div style="min-width:0;">
+                                    <div class="mye-process-name">${textSafe(proc.nombre || '-')}</div>
+                                    <div class="mye-process-meta">⏱ ${textSafe(formatHHMM(proc.duracion_default || 1))} | Creado: ${textSafe(proc.created_at ? proc.created_at.slice(0, 10) : '-')}</div>
+                                </div>
+                            </div>
                             <div style="margin-top:6px;"><button class="mye-item-delete" type="button" data-delete-proc-id="${proc.id}">Borrar</button></div>
                         </article>
                     `;
@@ -2098,6 +2149,7 @@
                     };
                     MYE_OPERATORS.push(item);
                     operatorMap.set(item.id, item);
+                    await myeSubirImagenNueva(document.getElementById('myeNewOperatorImg'), 'estacion_operador', item.id);
 
                     renderOperators();
                     renderTimeline();
@@ -2136,6 +2188,7 @@
                     };
                     MYE_MACHINES.push(item);
                     machineMap.set(String(item.clave_maquina || '').toLowerCase(), item);
+                    await myeSubirImagenNueva(document.getElementById('myeNewMachineImg'), 'estacion_maquina', item.clave_maquina);
 
                     renderMachines();
                     showMessage(data.message || 'Maquina agregada', false);
@@ -2177,6 +2230,7 @@
                     };
                     MYE_PROCESSES.push(item);
                     processMap.set(item.id, item);
+                    await myeSubirImagenNueva(document.getElementById('myeNewProcessImg'), 'estacion_proceso', item.id);
 
                     renderProcesses();
                     showMessage(data.message || 'Proceso creado', false);

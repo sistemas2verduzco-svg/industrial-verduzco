@@ -63,9 +63,10 @@
         if (quitar) quitar.hidden = !url;
     }
 
+    const REF_MAYUSCULAS = ['centro_trabajo', 'estacion_maquina'];
     const normRef = (box) => {
         const ref = (box.dataset.ref || '').trim().replace(/\s+/g, ' ');
-        return box.dataset.entidad === 'centro_trabajo' ? ref.toUpperCase() : ref;
+        return REF_MAYUSCULAS.includes(box.dataset.entidad) ? ref.toUpperCase() : ref;
     };
 
     function pintar(box, url) {
@@ -73,7 +74,29 @@
         document.querySelectorAll(`.imgcat[data-entidad="${box.dataset.entidad}"]`).forEach(other => {
             if (normRef(other) === key) pintarUno(other, url);
         });
+        document.dispatchEvent(new CustomEvent('imgcat:cambio', {
+            detail: { entidad: box.dataset.entidad, ref: key, url: url || null },
+        }));
     }
+
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    // Misma marca que el macro `widget`, para tableros que se pintan con JS.
+    window.imgcatThumbHtml = function (entidad, ref, url, puede, titulo, size) {
+        const thumb = url
+            ? `<a class="imgcat-thumb" href="${esc(url)}" target="_blank" rel="noopener" draggable="false"><img src="${esc(url)}" alt="${esc(titulo)}" loading="lazy" draggable="false"></a>`
+            : `<a class="imgcat-thumb vacio" href="#" onclick="return false;" draggable="false"><span>📷</span></a>`;
+        const acciones = (puede && ref) ? `<span class="imgcat-acciones">
+                <button type="button" class="imgcat-btn" data-imgcat-subir>${url ? 'Cambiar' : 'Subir'}</button>
+                <button type="button" class="imgcat-btn imgcat-quitar" data-imgcat-quitar ${url ? '' : 'hidden'}>Quitar</button>
+            </span>` : '';
+        return `<span class="imgcat" data-entidad="${esc(entidad)}" data-ref="${esc(ref)}" style="--imgcat-size:${Number(size) || 40}px;" title="${esc(titulo)}">${thumb}${acciones}</span>`;
+    };
+
+    window.imgcatSubir = async function (entidad, ref, file) {
+        return enviar({ dataset: { entidad: entidad, ref: String(ref) } }, 'POST', file);
+    };
 
     async function enviar(box, method, file) {
         const fd = new FormData();
