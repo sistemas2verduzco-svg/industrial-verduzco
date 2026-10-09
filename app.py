@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash, abort
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, send_from_directory, make_response, flash, abort, g
 from models import db, Producto, Proveedor, ProductoProveedor, HistorialPreciosProveedor, Usuario, Ticket, ComentarioTicket, Role, Permission, QCReport, QCItem, QCProduccionRegistro, Máquina, ComponenteMáquina, HojaRutaEntrega, HojaRutaNueva, CatalogoMateriaPrima, HojaRutaCargaPiezasHistorial, HojaRutaFlujoLogistica, EntregaRegistro, AlmacenRegistro, FacturacionRegistro, EstacionTrabajo, EstacionPlantilla, ProcesoCatalogo, ClaveProducto, ClaveProceso, EntregaParcial, HojaRutaImpresionParcial, ContpaqSyncRun, ContpaqPedido, ContpaqPedidoDetalle, ContpaqRemision, ContpaqRemisionDetalle, ContpaqNotaVenta, ContpaqSucursalIndice, ContpaqPrecioPublico, ContpaqExistenciaStock, ContpaqSupplierOT, ContpaqSupplierOTDetalle, HojaRutaEntregaOTAsignacion, MaquinariaPedido, MaquinariaContpaqPedido, MaquinariaContpaqPedidoDetalle, MaquinariaBOM, MaquinariaBOMComponente, MaquinariaBOMProceso, MaquinariaOrdenTrabajo, MaquinariaOrdenBOMItem, MaquinariaOrdenProceso, MaquinariaCalidadRegistro, MaquinariaSerie, MaquinariaAlmacenResguardo, OdooSyncRun, OdooPedidoVenta, OdooPedidoVentaLinea, OdooOrdenCompra, OdooOrdenCompraLinea, MaquinariaSolicitud, MaquinariaSolicitudItem, AlertaBuzonGeneral, Tecnico, LogVerificacion, EmpaqueCliente, EmpaquePedido, EmpaquePedidoItem, EmpaqueCaja, EmpaqueMovimiento, EmpaqueLineaProgreso, EmpaqueSeguimientoLog, AlmacenCajaSurtidoSesion, AlmacenCajaSurtidoCaja, AlmacenCajaSurtidoLecturaBascula, AlmacenCajaSurtidoItem
 from auth import AuthManager
 from email_manager import EmailManager
@@ -6,7 +6,8 @@ from odoo_client import OdooClient, OdooError
 from odoo_sync import run_odoo_sync
 from empaque_odoo_sync import run_empaque_odoo_sync
 import cuenta_t_sync
-from models import OdooCuentaT
+from models import OdooCuentaT, ImagenCatalogo
+import io
 import os
 import json
 from dotenv import load_dotenv
@@ -2967,6 +2968,8 @@ _CUENTA_T_SYNC_STOP = threading.Event()
 _CUENTA_T_SCHEDULER_INIT = False
 _CUENTA_T_TABLE_READY = False
 _CUENTA_T_PORTAL_PARTNER_CACHE = {}
+_CUENTA_T_PORTAL_FAIL_AT = {}
+CUENTA_T_PORTAL_MAX_AGE_HOURS = max(1, int(os.getenv('CUENTA_T_PORTAL_MAX_AGE_HOURS', '24') or 24))
 
 _CONTPAQ_SYNC_LOCK = threading.Lock()
 _CONTPAQ_SYNC_THREAD = None
@@ -13688,6 +13691,181 @@ def _build_claves_procesos_export_rows(solo_activas=False):
     return rows
 
 
+# ==================== IMÁGENES DE CATÁLOGO ====================
+
+IMAGENES_CATALOGO_DIR = os.path.join('uploads', 'catalogo')
+IMAGEN_CATALOGO_MAX_LADO = 1600
+IMAGEN_CATALOGO_MAX_BYTES = 15 * 1024 * 1024
+_PERMS_PROCESOS_EDIT = [('procesos', 'create'), ('procesos', 'edit'), ('procesos', 'update')]
+_PERMS_MAQ_BOMS_EDIT = [('maquinaria_boms', 'create'), ('maquinaria_boms', 'edit'), ('maquinaria_boms', 'update')]
+_PERMS_MAQ_PROC_EDIT = [('maquinaria_procesos', 'create'), ('maquinaria_procesos', 'edit'), ('maquinaria_procesos', 'update')]
+IMAGEN_CATALOGO_ENTIDADES = {
+    'clave_producto': {'label': 'Clave de producto', 'perms': _PERMS_PROCESOS_EDIT},
+    'operacion': {'label': 'Operación', 'perms': _PERMS_PROCESOS_EDIT},
+    'centro_trabajo': {'label': 'Centro de trabajo', 'perms': _PERMS_PROCESOS_EDIT + _PERMS_MAQ_PROC_EDIT + _PERMS_MAQ_BOMS_EDIT},
+    'maquina': {'label': 'Clave de máquina', 'perms': _PERMS_MAQ_BOMS_EDIT},
+    'proceso_maquina': {'label': 'Proceso de máquina', 'perms': _PERMS_MAQ_PROC_EDIT + _PERMS_MAQ_BOMS_EDIT},
+}
+_IMAGENES_CATALOGO_TABLE_READY = False
+
+
+def _ensure_imagenes_catalogo_table():
+    global _IMAGENES_CATALOGO_TABLE_READY
+    if _IMAGENES_CATALOGO_TABLE_READY:
+        return True
+    try:
+        ImagenCatalogo.__table__.create(bind=db.engine, checkfirst=True)
+        _IMAGENES_CATALOGO_TABLE_READY = True
+    except Exception as exc:
+        logger.error('[IMAGENES] No se pudo crear imagenes_catalogo: %s', exc)
+    return _IMAGENES_CATALOGO_TABLE_READY
+
+
+def _imagen_catalogo_ref(entidad, ref):
+    """Centro de trabajo es texto libre: se normaliza para que 'ct-01 ' y 'CT-01' compartan imagen."""
+    txt = ' '.join(str(ref or '').split())
+    if entidad == 'centro_trabajo':
+        return txt.upper()[:160]
+    return txt[:160]
+
+
+def _puede_editar_imagen(entidad, user=None):
+    user = user or get_current_user()
+    cfg = IMAGEN_CATALOGO_ENTIDADES.get(entidad)
+    if not user or not cfg:
+        return False
+    return bool(user.es_admin or any(user.has_permission(m, a) for m, a in cfg['perms']))
+
+
+def _guardar_imagen_catalogo(entidad, ref, file_storage):
+    """Valida, reduce y guarda la imagen; reemplaza la vigente del registro. Regresa la URL."""
+    from PIL import Image, ImageOps
+
+    if entidad not in IMAGEN_CATALOGO_ENTIDADES:
+        raise ValueError('Tipo de registro no válido')
+    ref = _imagen_catalogo_ref(entidad, ref)
+    if not ref:
+        raise ValueError('Falta el registro al que pertenece la imagen')
+    if not file_storage or not file_storage.filename:
+        raise ValueError('No se seleccionó imagen')
+    if not allowed_file(file_storage.filename):
+        raise ValueError('Formato no permitido. Usa png, jpg, jpeg, gif o webp')
+    raw = file_storage.read()
+    if len(raw) > IMAGEN_CATALOGO_MAX_BYTES:
+        raise ValueError('La imagen pesa más de 15 MB')
+    try:
+        img = Image.open(io.BytesIO(raw))
+        img.load()
+        img = ImageOps.exif_transpose(img)
+    except Exception:
+        raise ValueError('El archivo no es una imagen válida')
+    img.thumbnail((IMAGEN_CATALOGO_MAX_LADO, IMAGEN_CATALOGO_MAX_LADO))
+    con_transparencia = img.mode in ('RGBA', 'LA', 'P') and (
+        img.mode != 'P' or 'transparency' in img.info
+    )
+    carpeta = os.path.join(IMAGENES_CATALOGO_DIR, entidad)
+    os.makedirs(carpeta, exist_ok=True)
+    base = secure_filename(ref)[:60] or 'img'
+    ext = 'png' if con_transparencia else 'jpg'
+    nombre = f"{base}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}.{ext}"
+    destino = os.path.join(carpeta, nombre)
+    if con_transparencia:
+        img.convert('RGBA').save(destino, 'PNG', optimize=True)
+    else:
+        img.convert('RGB').save(destino, 'JPEG', quality=85, optimize=True)
+
+    url = f'/uploads/catalogo/{entidad}/{nombre}'
+    _ensure_imagenes_catalogo_table()
+    row = ImagenCatalogo.query.filter_by(entidad=entidad, ref=ref).first()
+    if row is None:
+        row = ImagenCatalogo(entidad=entidad, ref=ref, url=url)
+        db.session.add(row)
+    row.url = url
+    row.nombre_original = (file_storage.filename or '')[:255]
+    user = get_current_user()
+    row.subido_por = (getattr(user, 'username', None) or session.get('user') or '')[:120] or None
+    row.updated_at = datetime.utcnow()
+    db.session.commit()
+    return url
+
+
+def _guardar_imagen_catalogo_desde_form(entidad, ref, campo='imagen'):
+    """Para formularios de alta/edición: guarda la imagen si se adjuntó; no rompe el guardado."""
+    file_storage = request.files.get(campo)
+    if not file_storage or not file_storage.filename or not ref:
+        return None
+    try:
+        return _guardar_imagen_catalogo(entidad, ref, file_storage)
+    except Exception as exc:
+        db.session.rollback()
+        logger.warning('[IMAGENES] %s %s: %s', entidad, ref, exc)
+        try:
+            flash(f'Se guardó el registro, pero la imagen no: {exc}', 'error')
+        except Exception:
+            pass
+        return None
+
+
+def imagenes_catalogo_map(entidad):
+    """{ref: url} de una entidad, una consulta por request."""
+    cache = g.setdefault('_imagenes_catalogo_cache', {})
+    if entidad not in cache:
+        cache[entidad] = {}
+        try:
+            if _ensure_imagenes_catalogo_table():
+                rows = db.session.query(ImagenCatalogo.ref, ImagenCatalogo.url).filter_by(entidad=entidad).all()
+                cache[entidad] = {r: u for r, u in rows}
+        except Exception as exc:
+            db.session.rollback()
+            logger.warning('[IMAGENES] No se pudieron leer imágenes de %s: %s', entidad, exc)
+    return cache[entidad]
+
+
+@app.context_processor
+def inject_imagenes_catalogo():
+    def imagen_catalogo(entidad, ref):
+        return imagenes_catalogo_map(entidad).get(_imagen_catalogo_ref(entidad, ref)) if ref else None
+
+    return dict(imagen_catalogo=imagen_catalogo, puede_editar_imagen=_puede_editar_imagen)
+
+
+@app.route('/api/imagenes-catalogo/<entidad>', methods=['POST', 'DELETE'])
+@login_required
+def api_imagen_catalogo(entidad):
+    if entidad not in IMAGEN_CATALOGO_ENTIDADES:
+        return jsonify({'ok': False, 'error': 'Tipo de registro no válido'}), 404
+    if not _puede_editar_imagen(entidad):
+        return jsonify({'ok': False, 'error': 'Permiso denegado'}), 403
+    ref = _imagen_catalogo_ref(entidad, request.form.get('ref') or request.args.get('ref'))
+    if not ref:
+        return jsonify({'ok': False, 'error': 'Falta el registro'}), 400
+    if request.method == 'DELETE':
+        _ensure_imagenes_catalogo_table()
+        row = ImagenCatalogo.query.filter_by(entidad=entidad, ref=ref).first()
+        if row:
+            db.session.delete(row)
+            db.session.commit()
+        return jsonify({'ok': True, 'url': None})
+    try:
+        url = _guardar_imagen_catalogo(entidad, ref, request.files.get('imagen'))
+    except ValueError as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 400
+    except Exception as exc:
+        db.session.rollback()
+        logger.error('[IMAGENES] Error subiendo %s %s: %s', entidad, ref, exc, exc_info=True)
+        return jsonify({'ok': False, 'error': 'No se pudo guardar la imagen'}), 500
+    return jsonify({'ok': True, 'url': url})
+
+
+@app.route('/uploads/catalogo/<entidad>/<filename>')
+@login_required
+def servir_imagen_catalogo(entidad, filename):
+    from flask import send_from_directory
+    if entidad not in IMAGEN_CATALOGO_ENTIDADES:
+        return jsonify({'error': 'Recurso no encontrado'}), 404
+    return send_from_directory(os.path.abspath(os.path.join(IMAGENES_CATALOGO_DIR, entidad)), filename)
+
+
 @app.route('/procesos')
 @login_required
 @requires_any_permission([('procesos', 'view'), ('procesos', 'edit'), ('procesos', 'update'), ('procesos', 'create'), ('procesos', 'delete')])
@@ -13755,6 +13933,7 @@ def procesos_clave_save():
             obj = ClaveProducto(clave=clave, nombre=nombre, notas=notas, activo=activo)
             db.session.add(obj)
         db.session.commit()
+        _guardar_imagen_catalogo_desde_form('clave_producto', obj.id)
         return redirect(url_for('procesos_panel', clave_id=obj.id))
     except Exception as e:
         db.session.rollback()
@@ -13870,6 +14049,8 @@ def procesos_base_save():
             p = ProcesoCatalogo(codigo=codigo or None, nombre=nombre, operacion=operacion, descripcion=descripcion, centro_trabajo=centro_trabajo, tiempo_estimado=tiempo_est, activo=activo)
             db.session.add(p)
         db.session.commit()
+        _guardar_imagen_catalogo_desde_form('operacion', p.id)
+        _guardar_imagen_catalogo_desde_form('centro_trabajo', centro_trabajo, campo='imagen_ct')
         return redirect(url_for('procesos_panel'))
     except Exception as e:
         db.session.rollback()
@@ -15713,16 +15894,17 @@ def _start_cuenta_t_scheduler_once():
 
 
 def _cuenta_t_for_portal(customer_code, customer_name=None):
-    """Cuenta T guardada del cliente del portal. Nunca consulta Odoo en vivo salvo para
-    resolver (una vez) el contacto comercial cuando el código es un contacto hijo."""
+    """Cuenta T del cliente del portal. Si no hay sincronización buena (o ya es vieja)
+    la pide a Odoo solo para ese cliente; si Odoo falla se muestra lo último bueno."""
     if not _ensure_cuenta_t_table():
         return None
     code = (customer_code or '').strip()
     row = None
+    comm = None
     if code.isdigit():
         pid = int(code)
         row = OdooCuentaT.query.filter_by(cliente_id=pid).first()
-        if row is None:
+        if row is None or row.synced_at is None:
             comm = _CUENTA_T_PORTAL_PARTNER_CACHE.get(pid)
             if comm is None and cuenta_t_sync.is_configured():
                 try:
@@ -15731,11 +15913,30 @@ def _cuenta_t_for_portal(customer_code, customer_name=None):
                 except Exception as exc:
                     logger.warning('[CUENTA-T] No se pudo resolver partner %s: %s', pid, exc)
             if comm and comm != pid:
-                row = OdooCuentaT.query.filter_by(cliente_id=comm).first()
+                row = OdooCuentaT.query.filter_by(cliente_id=comm).first() or row
+            comm = comm or pid
+        else:
+            comm = row.cliente_id
     if row is None and customer_name:
         row = OdooCuentaT.query.filter(
             func.lower(OdooCuentaT.cliente) == customer_name.strip().lower()
         ).first()
+        if row is not None:
+            comm = row.cliente_id
+
+    vieja = row is None or row.synced_at is None or (
+        datetime.utcnow() - row.synced_at > timedelta(hours=CUENTA_T_PORTAL_MAX_AGE_HOURS)
+    )
+    if vieja and comm and cuenta_t_sync.is_configured():
+        ultimo_fallo = _CUENTA_T_PORTAL_FAIL_AT.get(comm)
+        if not ultimo_fallo or (time() - ultimo_fallo) > 600:
+            result = cuenta_t_sync.sync_cuentas(db, OdooCuentaT, partner_ids=[comm], trigger='portal')
+            if result.get('errores') or not result.get('ok'):
+                _CUENTA_T_PORTAL_FAIL_AT[comm] = time()
+                logger.warning('[CUENTA-T] Portal: Odoo falló para %s: %s', comm, result)
+            else:
+                _CUENTA_T_PORTAL_FAIL_AT.pop(comm, None)
+            row = OdooCuentaT.query.filter_by(cliente_id=comm).first() or row
     if row is None or row.synced_at is None:
         return None
     return _cuenta_t_view(row, include_links=False)
@@ -16841,6 +17042,7 @@ def maquinaria_boms_create():
         db.session.rollback()
         flash(f'No se pudo crear el BOM: {exc}', 'error')
         return redirect(url_for('maquinaria_boms_page'))
+    _guardar_imagen_catalogo_desde_form('maquina', bom.id)
     return _maquinaria_boms_redirect(bom.id)
 
 
@@ -16996,6 +17198,8 @@ def maquinaria_procesos_maquina_create(bom_id):
     db.session.add(proc)
     bom.updated_at = datetime.utcnow()
     db.session.commit()
+    _guardar_imagen_catalogo_desde_form('proceso_maquina', proc.id)
+    _guardar_imagen_catalogo_desde_form('centro_trabajo', proc.centro_trabajo, campo='imagen_ct')
     flash('Proceso agregado.', 'success')
     return redirect(url_for('maquinaria_procesos_maquina_page', bom_id=bom.id))
 

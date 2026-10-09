@@ -26,6 +26,8 @@
 </head>
 <body>
     {% include '_sidebar.html' %}
+    {% import '_imagen_catalogo.html' as imgcat with context %}
+    {{ imgcat.assets() }}
     <div class="container page" style="padding-top:20px; max-width:1100px; padding-left:10px; padding-right:10px;">
         <h2 style="margin:0 0 4px 0;">Procesos por maquina</h2>
         <div class="muted" style="margin-bottom:8px;">
@@ -64,7 +66,7 @@
             <h3 style="margin:0 0 10px 0;">{{ bom_sel.clave_maquina }} — {{ bom_sel.nombre_maquina }}</h3>
 
             {% if has_permission('maquinaria_procesos', 'create') or has_permission('maquinaria_boms', 'create') or has_permission('maquinaria_boms', 'edit') or current_user.es_admin %}
-            <form method="post" action="/maquinaria/procesos-maquina/{{ bom_sel.id }}/create" class="grid-form" style="grid-template-columns:2fr 1fr 2fr repeat(4,70px) 1fr auto; margin-bottom:14px;">
+            <form method="post" action="/maquinaria/procesos-maquina/{{ bom_sel.id }}/create" class="grid-form" enctype="multipart/form-data" style="grid-template-columns:2fr 1fr 2fr repeat(4,70px) 1fr auto; margin-bottom:14px;">
                 <input class="field" type="text" name="nombre" placeholder="Nombre del proceso *" required>
                 <input class="field" type="text" name="centro_trabajo" placeholder="Centro trabajo">
                 <input class="field" type="text" name="operacion" placeholder="Operacion / descripcion">
@@ -74,13 +76,17 @@
                 <input class="field" type="text" name="t_to" placeholder="T.TO">
                 <input class="field" type="text" name="notas" placeholder="Notas">
                 <button class="btn btn-teal" type="submit">+ Proceso</button>
+                <div style="grid-column:1 / -1; display:flex; gap:24px; flex-wrap:wrap;">
+                    {{ imgcat.campo('imagen', 'Imagen de la operacion (opcional)') }}
+                    {{ imgcat.campo('imagen_ct', 'Imagen del centro de trabajo (opcional)') }}
+                </div>
             </form>
             {% endif %}
 
             <table>
                 <thead>
                     <tr>
-                        <th>#</th><th>Proceso</th><th>Centro</th><th>Operacion</th><th>T.E</th><th>T.TCT</th><th>T.TCO</th><th>T.TO</th><th>Notas</th>
+                        <th>#</th><th>Imagenes</th><th>Proceso</th><th>Centro</th><th>Operacion</th><th>T.E</th><th>T.TCT</th><th>T.TCO</th><th>T.TO</th><th>Notas</th>
                         {% if has_permission('maquinaria_procesos', 'edit') or has_permission('maquinaria_boms', 'edit') or current_user.es_admin %}<th></th>{% endif %}
                     </tr>
                 </thead>
@@ -88,6 +94,14 @@
                     {% for p in procesos %}
                     <tr>
                         <td><span class="proc-num">{{ p.orden }}</span></td>
+                        <td style="white-space:nowrap;">
+                            <div style="display:flex; flex-direction:column; gap:6px; font-size:11px; color:#64748b;">
+                                <span>Operacion<br>{{ imgcat.widget('proceso_maquina', p.id, 40, titulo=p.nombre) }}</span>
+                                {% if p.centro_trabajo %}
+                                <span>C.T. {{ p.centro_trabajo }}<br>{{ imgcat.widget('centro_trabajo', p.centro_trabajo, 40, titulo=p.centro_trabajo) }}</span>
+                                {% endif %}
+                            </div>
+                        </td>
                         {% if has_permission('maquinaria_procesos', 'edit') or has_permission('maquinaria_boms', 'edit') or current_user.es_admin %}
                         <form method="post" action="/maquinaria/procesos-maquina/proceso/{{ p.id }}/update" id="proc-form-{{ p.id }}"></form>
                         <td><input class="field" form="proc-form-{{ p.id }}" name="nombre" value="{{ p.nombre }}" required></td>
@@ -120,7 +134,7 @@
                     <form id="del-proc-{{ p.id }}" method="post" action="/maquinaria/procesos-maquina/proceso/{{ p.id }}/delete"></form>
                     {% endif %}
                     {% else %}
-                    <tr><td colspan="10" class="muted">Sin procesos. Agrega el primero arriba.</td></tr>
+                    <tr><td colspan="11" class="muted">Sin procesos. Agrega el primero arriba.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

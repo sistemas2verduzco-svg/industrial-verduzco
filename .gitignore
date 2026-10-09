@@ -11,3 +11,5 @@ data/~$*
 
 # Marcas diarias de la sync nocturna de Cuentas T
 uploads/cuenta_t_sync/
+# Imagenes subidas desde el catalogo (claves, operaciones, centros de trabajo, maquinas)
+uploads/catalogo/

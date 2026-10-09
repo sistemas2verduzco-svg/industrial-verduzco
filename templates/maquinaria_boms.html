@@ -68,6 +68,8 @@
 </head>
 <body>
     {% include '_sidebar.html' %}
+    {% import '_imagen_catalogo.html' as imgcat with context %}
+    {{ imgcat.assets() }}
     <div class="container bom-page" style="padding-top: 20px; padding-left: 10px; padding-right: 10px;">
         <h2 style="margin: 0 0 4px 0;">Maquinaria y Ensamble — BOMs</h2>
         <div class="muted" style="margin-bottom: 10px;">
@@ -104,13 +106,14 @@
         <details class="create-box panel" style="padding: 12px 16px;">
             <summary>+ Crear BOM nuevo (solo si no existe)</summary>
             {% if has_permission('maquinaria_boms', 'create') or has_permission('maquinaria_boms', 'edit') or current_user.es_admin %}
-            <form method="post" action="/maquinaria/boms/create" class="grid-meta">
+            <form method="post" action="/maquinaria/boms/create" class="grid-meta" enctype="multipart/form-data">
                 <input class="field" type="text" name="clave_maquina" placeholder="Clave maquina *" required style="text-transform:uppercase;">
                 <input class="field" type="text" name="version" placeholder="Version">
                 <input class="field" type="text" name="nombre_maquina" placeholder="Nombre maquina *" required>
                 <select class="field" name="estado"><option value="activo">activo</option><option value="inactivo">inactivo</option></select>
                 <button class="btn btn-blue" type="submit">Crear y abrir</button>
                 <input class="field" type="text" name="notas" placeholder="Notas (opcional)" style="grid-column: 1 / -2;">
+                <div style="grid-column: 1 / -1;">{{ imgcat.campo('imagen', 'Imagen de la maquina (opcional)') }}</div>
             </form>
             {% else %}
             <div class="muted">No tienes permiso para crear BOMs.</div>
@@ -120,6 +123,8 @@
         {% if bom_sel %}
         <div class="panel">
             <div class="bom-hero">
+                <div style="display:flex; gap:14px; align-items:flex-start;">
+                {{ imgcat.widget('maquina', bom_sel.id, 72, titulo=bom_sel.clave_maquina) }}
                 <div>
                     <h3>{{ bom_sel.clave_maquina }} — {{ bom_sel.nombre_maquina }}</h3>
                     <div class="stats">
@@ -128,6 +133,7 @@
                         <span class="stat-pill">{{ componentes|length }} componente(s)</span>
                         <span class="stat-pill">{{ (bom_sel.procesos_plantilla or [])|length }} proceso(s)</span>
                     </div>
+                </div>
                 </div>
                 <div class="actions-top">
                     <a class="link-proc" href="/maquinaria/procesos-maquina?bom_id={{ bom_sel.id }}">Editar procesos →</a>

@@ -2714,3 +2714,24 @@ class OdooCuentaT(db.Model):
     last_attempt_at = db.Column(db.DateTime, nullable=True)
     last_error = db.Column(db.Text, nullable=True)
     last_error_at = db.Column(db.DateTime, nullable=True)
+
+
+class ImagenCatalogo(db.Model):
+    """Imagen opcional de un registro de catálogo (clave, operación, centro de trabajo, máquina...).
+
+    Tabla aparte para no alterar las tablas existentes. Una imagen vigente por (entidad, ref).
+    """
+    __tablename__ = 'imagenes_catalogo'
+
+    id = db.Column(db.Integer, primary_key=True)
+    entidad = db.Column(db.String(40), nullable=False, index=True)
+    ref = db.Column(db.String(160), nullable=False)
+    url = db.Column(db.String(500), nullable=False)
+    nombre_original = db.Column(db.String(255), nullable=True)
+    subido_por = db.Column(db.String(120), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('entidad', 'ref', name='uq_imagen_catalogo_entidad_ref'),
+    )

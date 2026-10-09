@@ -1,4 +1,6 @@
 {% include '_sidebar.html' %}
+{% import '_imagen_catalogo.html' as imgcat with context %}
+{{ imgcat.assets() }}
 <div class="admin-container" style="padding:24px; max-width:100%; margin-left:280px; box-sizing:border-box;">
   <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:20px;">
     <h2 style="margin:0; font-size:28px; font-weight:600; color:#1a202c;">Procesos y Claves de Producción</h2>
@@ -29,9 +31,12 @@
         <input type="text" id="buscarClave" placeholder="Buscar por clave o descripcion..." style="width:100%; padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:12px; font-size:14px;">
         <div style="max-height:420px; overflow-y:auto; border-top:1px solid #edf2f7;">
           {% for c in claves %}
-          <a href="{{ url_for('procesos_panel', clave_id=c.id) }}" data-clave="{{ c.clave or '' }}" data-nombre="{{ c.nombre or '' }}" style="display:block; padding:12px 8px; text-decoration:none; color:#2d3748; border-bottom:1px solid #f7fafc; transition:background 0.2s;" class="clave-item">
-            <div style="font-weight:600; font-size:14px; color:#2b6cb0;">{{ c.clave }}</div>
-            <div style="font-size:12px; color:#718096; margin-top:2px;">{{ c.nombre or 'Sin nombre' }}</div>
+          <a href="{{ url_for('procesos_panel', clave_id=c.id) }}" data-clave="{{ c.clave or '' }}" data-nombre="{{ c.nombre or '' }}" style="display:flex; align-items:center; gap:10px; padding:12px 8px; text-decoration:none; color:#2d3748; border-bottom:1px solid #f7fafc; transition:background 0.2s;" class="clave-item">
+            {% if imagen_catalogo('clave_producto', c.id) %}<img src="{{ imagen_catalogo('clave_producto', c.id) }}" alt="" loading="lazy" style="width:34px; height:34px; object-fit:cover; border-radius:6px; border:1px solid #e2e8f0; flex:0 0 auto;">{% endif %}
+            <span>
+              <div style="font-weight:600; font-size:14px; color:#2b6cb0;">{{ c.clave }}</div>
+              <div style="font-size:12px; color:#718096; margin-top:2px;">{{ c.nombre or 'Sin nombre' }}</div>
+            </span>
           </a>
           {% else %}
           <div style="color:#a0aec0; padding:16px; text-align:center; font-size:13px;">Sin claves registradas</div>
@@ -53,7 +58,7 @@
           <button type="button" id="btnImportarProcesos" class="btn" style="padding:8px 12px; border:none; background:#2f855a; color:#fff; border-radius:6px; cursor:pointer; font-size:13px; font-weight:500;">📤 Seleccionar archivo</button>
           <small id="archivo-procesos-nombre" style="display:block; margin-top:6px; color:#666;"></small>
         </div>
-        <form id="formProceso" action="{{ url_for('procesos_base_save') }}" method="POST" style="display:grid; gap:10px; margin-bottom:12px;">
+        <form id="formProceso" action="{{ url_for('procesos_base_save') }}" method="POST" enctype="multipart/form-data" style="display:grid; gap:10px; margin-bottom:12px;">
           <input type="hidden" name="id" id="proc_id">
           <div>
             <label style="display:block; font-size:13px; font-weight:500; color:#4a5568; margin-bottom:4px;">Centro de trabajo</label>
@@ -75,6 +80,8 @@
             <label style="display:block; font-size:13px; font-weight:500; color:#4a5568; margin-bottom:4px;">Descripción</label>
             <textarea name="descripcion" id="proc_desc" rows="2" style="width:100%; padding:8px 10px; border:1px solid #e2e8f0; border-radius:6px; font-size:14px; resize:vertical;"></textarea>
           </div>
+          {{ imgcat.campo('imagen', 'Imagen de la operación (opcional)') }}
+          {{ imgcat.campo('imagen_ct', 'Imagen del centro de trabajo (opcional)') }}
           <div style="display:flex; align-items:center; gap:8px;">
             <input type="checkbox" id="proc_activo" name="activo" checked style="width:16px; height:16px;">
             <label for="proc_activo" style="font-size:13px; color:#4a5568;">Activo</label>
@@ -93,6 +100,12 @@
           <div class="itemProc" data-id="{{ p.id }}" data-codigo="{{ p.codigo or '' }}" data-nombre="{{ p.nombre }}" data-oper="{{ p.operacion or '' }}" data-ct="{{ p.centro_trabajo or '' }}" data-te="{{ p.tiempo_estimado or '' }}" data-desc="{{ p.descripcion or '' }}" style="padding:10px 8px; border-bottom:1px solid #f7fafc;">
             <div style="font-size:13px; font-weight:600; color:#2d3748; margin-bottom:4px;">{{ p.centro_trabajo or 'C.T.?' }} - {{ p.operacion or p.nombre }}</div>
             <div style="font-size:12px; color:#718096; margin-bottom:8px;">{{ p.descripcion or '' }}</div>
+            <div style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom:8px; font-size:11px; color:#718096;">
+              <span style="display:flex; flex-direction:column; gap:3px;">Operación {{ imgcat.widget('operacion', p.id, 40, titulo=p.operacion or p.nombre) }}</span>
+              {% if p.centro_trabajo %}
+              <span style="display:flex; flex-direction:column; gap:3px;">C.T. {{ p.centro_trabajo }} {{ imgcat.widget('centro_trabajo', p.centro_trabajo, 40, titulo=p.centro_trabajo) }}</span>
+              {% endif %}
+            </div>
             <div style="display:flex; gap:6px;">
               <button type="button" class="btnEditProc" style="padding:6px 10px; font-size:12px; border:1px solid #e2e8f0; background:#fff; border-radius:4px; cursor:pointer;">Editar</button>
               <form action="{{ url_for('procesos_base_delete', proc_id=p.id) }}" method="POST" onsubmit="return confirm('¿Eliminar proceso?');" style="display:inline;">
@@ -110,7 +123,7 @@
     <!-- Columna derecha: Editor de clave y secuencia -->
     <div style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
       <h3 style="margin:0 0 16px; font-size:20px; color:#2d3748; font-weight:600;">{{ 'Editar Clave: ' ~ clave_sel.clave if clave_sel else 'Nueva Clave' }}</h3>
-      <form action="{{ url_for('procesos_clave_save') }}" method="POST" style="margin-bottom:16px; display:grid; grid-template-columns: 1fr 1fr; gap:12px; align-items:end;">
+      <form action="{{ url_for('procesos_clave_save') }}" method="POST" enctype="multipart/form-data" style="margin-bottom:16px; display:grid; grid-template-columns: 1fr 1fr; gap:12px; align-items:end;">
         {% if clave_sel %}
         <input type="hidden" name="id" value="{{ clave_sel.id }}">
         {% endif %}
@@ -125,6 +138,14 @@
         <div style="grid-column:1 / span 2;">
           <label style="display:block; font-size:13px; font-weight:500; color:#4a5568; margin-bottom:4px;">Notas</label>
           <textarea name="notas" rows="2" style="width:100%; padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:14px; resize:vertical;">{{ clave_sel.notas if clave_sel else '' }}</textarea>
+        </div>
+        <div style="grid-column:1 / span 2;">
+          {% if clave_sel %}
+          <span style="display:block; font-size:13px; font-weight:500; color:#4a5568; margin-bottom:4px;">Imagen del producto</span>
+          {{ imgcat.widget('clave_producto', clave_sel.id, 72, titulo=clave_sel.clave) }}
+          {% else %}
+          {{ imgcat.campo('imagen', 'Imagen del producto (opcional)') }}
+          {% endif %}
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
           <input type="checkbox" id="activo_clave" name="activo" {% if not clave_sel or clave_sel.activo %}checked{% endif %} style="width:16px; height:16px;">
@@ -536,9 +557,16 @@
       document.getElementById('proc_te').value = wrap.dataset.te || '';
       document.getElementById('proc_desc').value = wrap.dataset.desc || '';
       document.getElementById('proc_activo').checked = true;
+      limpiarImagenesProc();
       window.scrollTo({ top: document.getElementById('formProceso').offsetTop - 20, behavior: 'smooth' });
     });
   });
+  function limpiarImagenesProc() {
+    document.querySelectorAll('#formProceso [data-imgcat-input]').forEach(inp => {
+      inp.value = '';
+      inp.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
   document.getElementById('btnLimpiarProc')?.addEventListener('click', () => {
     document.getElementById('proc_id').value = '';
     document.getElementById('proc_nombre').value = '';
@@ -547,6 +575,7 @@
     document.getElementById('proc_te').value = '';
     document.getElementById('proc_desc').value = '';
     document.getElementById('proc_activo').checked = true;
+    limpiarImagenesProc();
   });
 
   // Utility functions for time parsing and formatting

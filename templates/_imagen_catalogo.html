@@ -1,0 +1,129 @@
+{# Imágenes de catálogo. Importar con: {% import '_imagen_catalogo.html' as imgcat with context %} #}
+
+{% macro widget(entidad, ref, size=48, editable=none, titulo='') -%}
+{%- set url = imagen_catalogo(entidad, ref) if ref else none -%}
+{%- set puede = puede_editar_imagen(entidad) if editable is none else editable -%}
+<span class="imgcat" data-entidad="{{ entidad }}" data-ref="{{ ref or '' }}" style="--imgcat-size: {{ size }}px;" title="{{ titulo }}">
+    <a class="imgcat-thumb {{ '' if url else 'vacio' }}" href="{{ url or '#' }}" target="_blank" rel="noopener" {% if not url %}onclick="return false;"{% endif %}>
+        {%- if url %}<img src="{{ url }}" alt="{{ titulo }}" loading="lazy">{% else %}<span>📷</span>{% endif -%}
+    </a>
+    {%- if puede and ref %}
+    <span class="imgcat-acciones">
+        <button type="button" class="imgcat-btn" data-imgcat-subir>{{ 'Cambiar' if url else 'Subir' }}</button>
+        <button type="button" class="imgcat-btn imgcat-quitar" data-imgcat-quitar {% if not url %}hidden{% endif %}>Quitar</button>
+    </span>
+    {%- endif %}
+</span>
+{%- endmacro %}
+
+{% macro campo(name='imagen', label='Imagen (opcional)') -%}
+<label class="imgcat-campo">
+    <span class="imgcat-campo-label">{{ label }}</span>
+    <span class="imgcat-campo-row">
+        <span class="imgcat-thumb vacio" data-imgcat-preview><span>📷</span></span>
+        <input type="file" name="{{ name }}" accept="image/png,image/jpeg,image/gif,image/webp" data-imgcat-input>
+    </span>
+</label>
+{%- endmacro %}
+
+{% macro assets() -%}
+<style>
+    .imgcat { display: inline-flex; align-items: center; gap: 6px; vertical-align: middle; }
+    .imgcat-thumb { width: var(--imgcat-size, 48px); height: var(--imgcat-size, 48px); border-radius: 8px; overflow: hidden;
+                    border: 1px solid #e2e8f0; background: #f8fafc; display: inline-flex; align-items: center; justify-content: center;
+                    flex: 0 0 auto; text-decoration: none; }
+    .imgcat-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .imgcat-thumb.vacio { border-style: dashed; color: #94a3b8; font-size: calc(var(--imgcat-size, 48px) * .38); cursor: default; }
+    .imgcat-acciones { display: inline-flex; flex-direction: column; gap: 3px; }
+    .imgcat-btn { border: 1px solid #cbd5e1; background: #fff; color: #334155; border-radius: 6px; padding: 2px 8px;
+                  font-size: 11px; font-weight: 600; cursor: pointer; line-height: 1.5; }
+    .imgcat-btn:hover { border-color: #3182ce; color: #2b6cb0; }
+    .imgcat-btn.imgcat-quitar { color: #c53030; }
+    .imgcat-btn[disabled] { opacity: .6; cursor: wait; }
+    .imgcat-campo { display: block; }
+    .imgcat-campo-label { display: block; font-size: 13px; font-weight: 500; color: #4a5568; margin-bottom: 4px; }
+    .imgcat-campo-row { display: flex; align-items: center; gap: 8px; }
+    .imgcat-campo .imgcat-thumb { --imgcat-size: 44px; }
+    .imgcat-campo input[type=file] { font-size: 12px; max-width: 100%; }
+</style>
+<script>
+(function () {
+    if (window.__imgcatInit) return;
+    window.__imgcatInit = true;
+
+    function pintarUno(box, url) {
+        const thumb = box.querySelector('.imgcat-thumb');
+        thumb.classList.toggle('vacio', !url);
+        thumb.innerHTML = url ? `<img src="${url}" alt="">` : '<span>📷</span>';
+        thumb.href = url || '#';
+        thumb.onclick = url ? null : () => false;
+        const subir = box.querySelector('[data-imgcat-subir]');
+        const quitar = box.querySelector('[data-imgcat-quitar]');
+        if (subir) subir.textContent = url ? 'Cambiar' : 'Subir';
+        if (quitar) quitar.hidden = !url;
+    }
+
+    const normRef = (box) => {
+        const ref = (box.dataset.ref || '').trim().replace(/\s+/g, ' ');
+        return box.dataset.entidad === 'centro_trabajo' ? ref.toUpperCase() : ref;
+    };
+
+    function pintar(box, url) {
+        const key = normRef(box);
+        document.querySelectorAll(`.imgcat[data-entidad="${box.dataset.entidad}"]`).forEach(other => {
+            if (normRef(other) === key) pintarUno(other, url);
+        });
+    }
+
+    async function enviar(box, method, file) {
+        const fd = new FormData();
+        fd.append('ref', box.dataset.ref);
+        if (file) fd.append('imagen', file);
+        const url = `/api/imagenes-catalogo/${encodeURIComponent(box.dataset.entidad)}` +
+            (method === 'DELETE' ? `?ref=${encodeURIComponent(box.dataset.ref)}` : '');
+        const r = await fetch(url, { method, body: method === 'DELETE' ? null : fd });
+        let d = {};
+        try { d = await r.json(); } catch (e) { /* sin cuerpo */ }
+        if (!r.ok || !d.ok) throw new Error(d.error || `Error ${r.status}`);
+        return d.url;
+    }
+
+    document.addEventListener('click', async (ev) => {
+        const subir = ev.target.closest('[data-imgcat-subir]');
+        const quitar = ev.target.closest('[data-imgcat-quitar]');
+        if (!subir && !quitar) return;
+        ev.preventDefault();
+        const box = ev.target.closest('.imgcat');
+        if (quitar) {
+            if (!confirm('¿Quitar la imagen?')) return;
+            quitar.disabled = true;
+            try { pintar(box, await enviar(box, 'DELETE')); }
+            catch (e) { alert(e.message); }
+            quitar.disabled = false;
+            return;
+        }
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/png,image/jpeg,image/gif,image/webp';
+        input.onchange = async () => {
+            if (!input.files.length) return;
+            subir.disabled = true;
+            subir.textContent = 'Subiendo…';
+            try { pintar(box, await enviar(box, 'POST', input.files[0])); }
+            catch (e) { alert(e.message); pintar(box, box.querySelector('img')?.getAttribute('src') || null); }
+            subir.disabled = false;
+        };
+        input.click();
+    });
+
+    document.addEventListener('change', (ev) => {
+        const input = ev.target.closest('[data-imgcat-input]');
+        if (!input) return;
+        const prev = input.closest('.imgcat-campo').querySelector('[data-imgcat-preview]');
+        const file = input.files && input.files[0];
+        prev.classList.toggle('vacio', !file);
+        prev.innerHTML = file ? `<img src="${URL.createObjectURL(file)}" alt="">` : '<span>📷</span>';
+    });
+})();
+</script>
+{%- endmacro %}
