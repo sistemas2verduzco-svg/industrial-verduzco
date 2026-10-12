@@ -4958,8 +4958,11 @@ def requires_permission(module, action):
     return decorator
 
 
-def requires_any_permission(permission_pairs):
-    """Allow access if user has at least one permission pair from the list."""
+def requires_any_permission(permission_pairs, keep_catalog=False):
+    """Allow access if user has at least one permission pair from the list.
+
+    keep_catalog=True respeta los pares de 'catalog' aunque haya otros módulos.
+    """
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
@@ -4972,7 +4975,7 @@ def requires_any_permission(permission_pairs):
             pairs = list(permission_pairs or [])
             # En usuarios no admin, evita bypass por permisos de catálogo cuando
             # la ruta también declara permisos de otro módulo.
-            if not user.es_admin:
+            if not user.es_admin and not keep_catalog:
                 non_catalog_pairs = [pair for pair in pairs if pair[0] != 'catalog']
                 if non_catalog_pairs:
                     pairs = non_catalog_pairs
@@ -5108,9 +5111,11 @@ SIMPLE_PERMISSION_MODULES = [
     ('facturacion', 'Facturacion'),
     ('contpaq', 'CONTPAQ Conciliacion'),
     ('empaque', 'Empaque - Clientes y seguimiento'),
+    ('cuentas_t', 'Cuentas T (estado de cuenta Odoo)'),
     ('procesos', 'Procesos y claves'),
     ('proveedores', 'Proveedores'),
     ('tickets', 'Tickets'),
+    ('tecnicos', 'Tecnicos QR y credenciales'),
     ('maquinaria_pedidos', 'Maquinaria y ensamble - Pedidos'),
     ('maquinaria_ordenes', 'Maquinaria y ensamble - Ordenes de trabajo'),
     ('maquinaria_boms', 'Maquinaria y ensamble - BOMs'),
@@ -5416,6 +5421,7 @@ def hojas_ruta_form():
 
 @app.route('/producto/<int:producto_id>')
 @login_required
+@requires_permission('catalog', 'view')
 def producto_detalle(producto_id):
     producto = Producto.query.get_or_404(producto_id)
     # Traer proveedores y precios relacionados
@@ -6862,6 +6868,7 @@ def facturacion_regresar_entregas(item_id):
 
 
 @app.route('/uploads/<path:filename>')
+@login_required
 def uploaded_file(filename):
     # Sirve archivos desde la carpeta uploads de forma segura
     uploads_root = os.path.join(os.getcwd(), 'uploads')
@@ -7422,11 +7429,23 @@ def _tecnico_to_api(tecnico):
     data['firma_supervision_url'] = _get_tecnico_signature_url(tecnico.id, 'supervision')
     return data
 
+def _puede_ver_tecnicos(user):
+    if not user:
+        return False
+    return any(user.has_permission('tecnicos', a) for a in ('view', 'create', 'edit', 'update'))
+
+
+def _puede_editar_tecnicos(user):
+    if not user:
+        return False
+    return any(user.has_permission('tecnicos', a) for a in ('create', 'edit', 'update'))
+
+
 @app.route('/tecnicos')
 @login_required
 def tecnicos_admin():
     user = get_current_user()
-    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+    if not _puede_ver_tecnicos(user):
         return render_template('403.html'), 403
     return render_template('tecnicos.html')
 
@@ -7435,7 +7454,7 @@ def tecnicos_admin():
 @login_required
 def api_list_tecnicos():
     user = get_current_user()
-    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+    if not _puede_ver_tecnicos(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     tecnicos = Tecnico.query.order_by(Tecnico.creado_en.desc()).all()
     return jsonify({'tecnicos': [_tecnico_to_api(t) for t in tecnicos]})
@@ -7445,7 +7464,7 @@ def api_list_tecnicos():
 @login_required
 def api_crear_tecnico():
     user = get_current_user()
-    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+    if not _puede_editar_tecnicos(user):
         return jsonify({'error': 'Permiso denegado'}), 403
 
     nombre = (request.form.get('nombre') or '').strip()
@@ -7541,7 +7560,7 @@ def api_crear_tecnico():
 @login_required
 def api_editar_tecnico(tid):
     user = get_current_user()
-    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+    if not _puede_editar_tecnicos(user):
         return jsonify({'error': 'Permiso denegado'}), 403
 
     tecnico = Tecnico.query.get_or_404(tid)
@@ -7623,7 +7642,7 @@ def api_editar_tecnico(tid):
 @login_required
 def api_toggle_tecnico_estado(tid):
     user = get_current_user()
-    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+    if not _puede_editar_tecnicos(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     tecnico = Tecnico.query.get_or_404(tid)
     nuevo = Tecnico.ESTADO_SUSPENDIDO if tecnico.estado == Tecnico.ESTADO_ACTIVO else Tecnico.ESTADO_ACTIVO
@@ -7636,7 +7655,7 @@ def api_toggle_tecnico_estado(tid):
 @login_required
 def api_descargar_qr_tecnico(tid):
     user = get_current_user()
-    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+    if not _puede_ver_tecnicos(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     tecnico = Tecnico.query.get_or_404(tid)
     if not (tecnico.qr_imagen or '').strip():
@@ -7658,7 +7677,7 @@ def api_descargar_qr_tecnico(tid):
 @login_required
 def api_generar_link_firma_tecnico(tid):
     user = get_current_user()
-    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+    if not _puede_editar_tecnicos(user):
         return jsonify({'error': 'Permiso denegado'}), 403
 
     tecnico = Tecnico.query.get_or_404(tid)
@@ -7818,7 +7837,7 @@ def _send_credencial_jpeg(tecnico, variant, lado, vigente=True):
 @login_required
 def credencial_tecnico(tid):
     user = get_current_user()
-    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+    if not _puede_ver_tecnicos(user):
         return render_template('403.html'), 403
     tecnico = Tecnico.query.get_or_404(tid)
     # Generar QR si no existe
@@ -7837,7 +7856,7 @@ def credencial_tecnico(tid):
 @login_required
 def credencial_tecnico_export_jpg(tid, lado):
     user = get_current_user()
-    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+    if not _puede_ver_tecnicos(user):
         return render_template('403.html'), 403
     tecnico = Tecnico.query.get_or_404(tid)
     now = datetime.utcnow()
@@ -7849,7 +7868,7 @@ def credencial_tecnico_export_jpg(tid, lado):
 @login_required
 def credencial_walmart(tid):
     user = get_current_user()
-    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+    if not _puede_ver_tecnicos(user):
         return render_template('403.html'), 403
     tecnico = Tecnico.query.get_or_404(tid)
     if not (tecnico.qr_imagen or '').strip():
@@ -7876,7 +7895,7 @@ def credencial_walmart(tid):
 @login_required
 def credencial_seguridad_export_jpg(tid, lado):
     user = get_current_user()
-    if not (user and (user.es_admin or user.has_permission('catalog', 'edit'))):
+    if not _puede_ver_tecnicos(user):
         return render_template('403.html'), 403
     tecnico = Tecnico.query.get_or_404(tid)
     now = datetime.utcnow()
@@ -7950,6 +7969,7 @@ def hojas_ruta_nuevo_form():
 
 @app.route('/hojas_ruta_nuevo/<int:maquina_id>')
 @login_required
+@requires_any_permission([('hojas_mp', 'view'), ('hojas', 'view'), ('catalog', 'view')])
 def hojas_ruta_nuevo_detalle(maquina_id):
     """Detalle de hojas de ruta nuevas para una máquina específica."""
     maquina = Máquina.query.get_or_404(maquina_id)
@@ -8677,7 +8697,7 @@ def api_alertas_buzon_list():
 
 @app.route('/api/alertas_buzon/<int:alerta_id>/atender', methods=['POST'])
 @login_required
-@requires_permission('alertas_buzon', 'view')
+@requires_any_permission([('alertas_buzon', 'edit'), ('alertas_buzon', 'update')])
 def api_alertas_buzon_atender(alerta_id):
     if not _ensure_alertas_buzon_table():
         return jsonify({'error': 'No se pudo acceder al buzón de alertas'}), 500
@@ -8700,7 +8720,7 @@ def api_alertas_buzon_atender(alerta_id):
 
 @app.route('/api/alertas_buzon/atender_todas', methods=['POST'])
 @login_required
-@requires_permission('alertas_buzon', 'view')
+@requires_any_permission([('alertas_buzon', 'edit'), ('alertas_buzon', 'update')])
 def api_alertas_buzon_atender_todas():
     if not _ensure_alertas_buzon_table():
         return jsonify({'error': 'No se pudo acceder al buzón de alertas'}), 500
@@ -8724,7 +8744,7 @@ def api_alertas_buzon_atender_todas():
 
 @app.route('/api/alertas_buzon/test_whatsapp', methods=['POST'])
 @login_required
-@requires_permission('alertas_buzon', 'view')
+@requires_any_permission([('alertas_buzon', 'edit'), ('alertas_buzon', 'update')])
 def api_alertas_buzon_test_whatsapp():
     data = request.get_json(silent=True) or {}
     mensaje = (data.get('mensaje') or '').strip()
@@ -8738,7 +8758,7 @@ def api_alertas_buzon_test_whatsapp():
 
 @app.route('/api/alertas_buzon/test_telegram', methods=['POST'])
 @login_required
-@requires_permission('alertas_buzon', 'view')
+@requires_any_permission([('alertas_buzon', 'edit'), ('alertas_buzon', 'update')])
 def api_alertas_buzon_test_telegram():
     data = request.get_json(silent=True) or {}
     mensaje = (data.get('mensaje') or '').strip()
@@ -8752,7 +8772,7 @@ def api_alertas_buzon_test_telegram():
 
 @app.route('/api/alertas_buzon/<int:alerta_id>/reenviar_telegram', methods=['POST'])
 @login_required
-@requires_permission('alertas_buzon', 'view')
+@requires_any_permission([('alertas_buzon', 'edit'), ('alertas_buzon', 'update')])
 def api_alertas_buzon_reenviar_telegram(alerta_id):
     if not _ensure_alertas_buzon_table():
         return jsonify({'error': 'No se pudo acceder al buzón de alertas'}), 500
@@ -9317,6 +9337,7 @@ def api_resolver_codigo_hoja_ruta_nuevo():
 
 @app.route('/hojas_ruta/<int:maquina_id>')
 @login_required
+@requires_any_permission([('estaciones', 'view'), ('hojas_entregas', 'view'), ('catalog', 'view')])
 def hojas_ruta_entregas_detalle(maquina_id):
     """Detalle de hojas de ruta para una máquina específica."""
     maquina = Máquina.query.get_or_404(maquina_id)
@@ -9350,6 +9371,7 @@ def hojas_ruta_entregas_detalle(maquina_id):
 
 @app.route('/qc_estaciones/<int:maquina_id>')
 @login_required
+@requires_any_permission([('calidad', 'view'), ('estaciones', 'view'), ('catalog', 'view')])
 def qc_estaciones_maquina(maquina_id):
     """Vista independiente de control de calidad para producción por máquina."""
     maquina = Máquina.query.get_or_404(maquina_id)
@@ -10784,6 +10806,7 @@ def api_activar_hoja_maquina_nuevo(maquina_id):
 
 @app.route('/api/produccion/ingresar_piezas', methods=['POST'])
 @login_required
+@requires_any_permission([('estaciones', 'operate'), ('catalog', 'edit')])
 def api_ingresar_piezas():
     """Recibe: maquina_id, cantidad, clave, tiempo_total (HH:MM:SS opcional), producto (opcional).
     Crea una HojaRuta con esos datos y la marca como activa.
@@ -10905,6 +10928,7 @@ def api_ingresar_piezas():
 
 @app.route('/api/qc_estaciones', methods=['POST'])
 @login_required
+@requires_any_permission([('calidad', 'edit'), ('estaciones', 'operate'), ('catalog', 'edit')])
 def api_qc_estaciones_registro():
     """Registrar control de calidad de producción (independiente del QC de maquinaria)."""
     payload = request.get_json(silent=True) or request.form
@@ -11088,6 +11112,7 @@ def api_qc_estaciones_entregas_alert():
 
 @app.route('/api/maquinas/<int:maquina_id>/plantilla_default', methods=['POST'])
 @login_required
+@requires_any_permission([('estaciones', 'operate'), ('catalog', 'edit')])
 def api_set_plantilla_default(maquina_id):
     """Asigna una plantilla por defecto a una máquina (campo plantilla_default)."""
     data = request.get_json() or {}
@@ -11108,6 +11133,7 @@ def api_set_plantilla_default(maquina_id):
 
 @app.route('/api/estaciones/<int:estacion_id>', methods=['PUT'])
 @login_required
+@requires_any_permission([('estaciones', 'operate'), ('hojas_entregas', 'edit'), ('hojas', 'edit'), ('catalog', 'edit')])
 def api_actualizar_estacion(estacion_id):
     """Actualizar estado y detalles de una estación."""
     estacion = EstacionTrabajo.query.get_or_404(estacion_id)
@@ -11134,6 +11160,7 @@ def api_actualizar_estacion(estacion_id):
 
 @app.route('/api/plantillas_estaciones', methods=['GET'])
 @login_required
+@requires_any_permission([('estaciones', 'view'), ('hojas_entregas', 'view'), ('hojas_mp', 'view'), ('hojas', 'view'), ('catalog', 'view')])
 def api_list_plantillas():
     """Listar plantillas; opcionalmente filtrar por `maquina_tipo` query param."""
     tipo = request.args.get('maquina_tipo')
@@ -11146,6 +11173,7 @@ def api_list_plantillas():
 
 @app.route('/api/plantillas_estaciones/nombres')
 @login_required
+@requires_any_permission([('estaciones', 'view'), ('hojas_entregas', 'view'), ('hojas_mp', 'view'), ('hojas', 'view'), ('catalog', 'view')])
 def api_plantilla_nombres():
     """Devuelve nombres de plantillas (distinct) para un tipo de máquina dado."""
     tipo = request.args.get('maquina_tipo')
@@ -11163,6 +11191,8 @@ def api_plantilla_nombres():
 @app.route('/api/plantillas_estaciones', methods=['POST'])
 @login_required
 def api_create_plantilla():
+    if not is_admin_user():
+        return jsonify({'error': 'Permiso denegado'}), 403
     data = request.get_json() or {}
     required = ['maquina_tipo', 'operacion']
     for r in required:
@@ -11193,6 +11223,8 @@ def api_create_plantilla():
 @app.route('/api/plantillas_estaciones/<int:pid>', methods=['PUT'])
 @login_required
 def api_update_plantilla(pid):
+    if not is_admin_user():
+        return jsonify({'error': 'Permiso denegado'}), 403
     p = EstacionPlantilla.query.get_or_404(pid)
     data = request.get_json() or {}
     for k in ['plantilla_nombre', 'maquina_tipo', 'pro_c', 'centro_trabajo', 'operacion', 'orden', 't_e', 't_tct', 't_tco', 't_to']:
@@ -11209,6 +11241,8 @@ def api_update_plantilla(pid):
 @app.route('/api/plantillas_estaciones/<int:pid>', methods=['DELETE'])
 @login_required
 def api_delete_plantilla(pid):
+    if not is_admin_user():
+        return jsonify({'error': 'Permiso denegado'}), 403
     p = EstacionPlantilla.query.get_or_404(pid)
     try:
         db.session.delete(p)
@@ -11267,6 +11301,29 @@ def admin_users_page():
 
 
 # ======= API: Usuarios (admin only) ======
+def _pares_que_excede(actor, pares):
+    """Pares (modulo, accion) que el actor no tiene. Un admin no excede nada."""
+    if actor and actor.es_admin:
+        return []
+    return sorted({(m, a) for m, a in pares if not (actor and actor.has_permission(m, a))})
+
+
+def _respuesta_excede(pares):
+    lista = ', '.join(f'{m}:{a}' for m, a in pares[:10])
+    return jsonify({'error': f'No puedes otorgar permisos que tú no tienes ({lista})'}), 403
+
+
+def _pares_de(perms):
+    return {(p.module, p.action) for p in (perms or [])}
+
+
+def _protege_admin(actor, target):
+    """Solo un administrador puede modificar a otro administrador."""
+    if target and target.es_admin and not (actor and actor.es_admin):
+        return jsonify({'error': 'Solo un administrador puede modificar a otro administrador'}), 403
+    return None
+
+
 @app.route('/api/users')
 @login_required
 def api_list_users():
@@ -11340,6 +11397,10 @@ def api_create_role():
 
     role = Role(name=name, descripcion=description)
     role.permissions = _permissions_from_modules_and_ids(modules, permission_ids)
+    excede = _pares_que_excede(user, _pares_de(role.permissions))
+    if excede:
+        db.session.rollback()
+        return _respuesta_excede(excede)
     db.session.add(role)
     db.session.commit()
 
@@ -11360,6 +11421,9 @@ def api_set_role_permissions(role_id):
     role = Role.query.get_or_404(role_id)
     # fetch permissions
     perms = Permission.query.filter(Permission.id.in_(perm_ids)).all() if perm_ids else []
+    excede = _pares_que_excede(user, _pares_de(perms) - _pares_de(role.permissions))
+    if excede:
+        return _respuesta_excede(excede)
     role.permissions = perms
     db.session.add(role)
     db.session.commit()
@@ -11377,12 +11441,17 @@ def api_set_role_modules(role_id):
     modules = payload.get('modules', [])
     permission_ids = payload.get('permission_ids')
     role = Role.query.get_or_404(role_id)
+    antes = _pares_de(role.permissions)
 
     # If explicit permission IDs are provided, fully synchronize role permissions.
     if permission_ids is not None:
         role.permissions = _permissions_from_modules_and_ids(modules, permission_ids)
     else:
         _apply_role_modules(role, modules)
+    excede = _pares_que_excede(user, _pares_de(role.permissions) - antes)
+    if excede:
+        db.session.rollback()
+        return _respuesta_excede(excede)
 
     db.session.add(role)
     db.session.commit()
@@ -11408,6 +11477,8 @@ def api_create_user():
     modules = data.get('modules', []) or []
     permission_ids = data.get('permission_ids', []) or []
     es_admin = bool(data.get('es_admin', False))
+    if es_admin and not user.es_admin:
+        return jsonify({'error': 'Solo un administrador puede crear administradores'}), 403
     if not username or not password:
         return jsonify({'error': 'username y password requeridos'}), 400
     if Usuario.query.filter_by(username=username).first():
@@ -11427,12 +11498,19 @@ def api_create_user():
             return jsonify({'error': f'Ya existe un role con nombre {role_target_name}'}), 409
         role = Role(name=role_target_name, descripcion=custom_role_description or f'Perfil personalizado de {username}')
         role.permissions = _permissions_from_modules_and_ids(modules, permission_ids)
+        excede = _pares_que_excede(user, _pares_de(role.permissions))
+        if excede:
+            db.session.rollback()
+            return _respuesta_excede(excede)
         db.session.add(role)
         db.session.flush()
         u.role = role
     elif role_name:
         role = Role.query.filter_by(name=role_name).first()
         if role:
+            excede = _pares_que_excede(user, _pares_de(role.permissions))
+            if excede:
+                return _respuesta_excede(excede)
             u.role = role
 
     db.session.add(u)
@@ -11451,6 +11529,9 @@ def api_toggle_active(user_id):
     u = Usuario.query.get_or_404(user_id)
     if u.username == 'admin':
         return jsonify({'error': 'No se puede desactivar el usuario admin'}), 400
+    bloqueo = _protege_admin(user, u)
+    if bloqueo:
+        return bloqueo
     u.activo = not bool(u.activo)
     db.session.add(u)
     db.session.commit()
@@ -11468,10 +11549,16 @@ def api_set_role(user_id):
     u = Usuario.query.get_or_404(user_id)
     if u.username == 'admin' and role_name != 'admin':
         return jsonify({'error': 'El usuario admin debe conservar role admin'}), 400
+    bloqueo = _protege_admin(user, u)
+    if bloqueo:
+        return bloqueo
     if role_name:
         role = Role.query.filter_by(name=role_name).first()
         if not role:
             return jsonify({'error': 'Role no encontrado'}), 404
+        excede = _pares_que_excede(user, _pares_de(role.permissions))
+        if excede:
+            return _respuesta_excede(excede)
         u.role = role
     else:
         u.role = None
@@ -11489,6 +11576,9 @@ def api_delete_user(user_id):
     u = Usuario.query.get_or_404(user_id)
     if u.username == 'admin':
         return jsonify({'error': 'No se puede borrar el usuario admin'}), 400
+    bloqueo = _protege_admin(user, u)
+    if bloqueo:
+        return bloqueo
     db.session.delete(u)
     db.session.commit()
     return jsonify({'ok': True})
@@ -11527,11 +11617,17 @@ def api_update_user(user_id):
     if not _can_edit_users_module(user):
         return jsonify({'error': 'Permiso denegado'}), 403
     u = Usuario.query.get_or_404(user_id)
+    bloqueo = _protege_admin(user, u)
+    if bloqueo:
+        return bloqueo
     data = request.get_json() or {}
     correo = data.get('correo')
     password = data.get('password')
     es_admin = data.get('es_admin')
     role_name = data.get('role')
+
+    if es_admin is not None and bool(es_admin) != bool(u.es_admin) and not user.es_admin:
+        return jsonify({'error': 'Solo un administrador puede otorgar o quitar administrador'}), 403
 
     if correo is not None:
         u.correo = correo or None  # empty string -> None
@@ -11545,6 +11641,9 @@ def api_update_user(user_id):
         else:
             role = Role.query.filter_by(name=role_name).first()
             if role:
+                excede = _pares_que_excede(user, _pares_de(role.permissions))
+                if excede:
+                    return _respuesta_excede(excede)
                 u.role = role
     db.session.add(u)
     db.session.commit()
@@ -11590,7 +11689,7 @@ def test_telegram():
 
 @app.route('/proveedores')
 @login_required
-@requires_permission('catalog', 'view')
+@requires_any_permission([('proveedores', 'view'), ('catalog', 'edit')], keep_catalog=True)
 def proveedores():
     """Página de gestión de proveedores"""
     return render_template('proveedores.html')
@@ -11640,8 +11739,10 @@ def tickets_ingeniero_panel():
 
 # ========== Public read-only endpoints and consulta page ===========
 @app.route('/catalogo_consulta')
+@login_required
+@requires_permission('catalog', 'view')
 def catalogo_consulta():
-    """Página pública de consulta para accesos directos (sin login)."""
+    """Página de consulta del catálogo."""
     return render_template('catalogo_consulta.html')
 
 
@@ -11736,6 +11837,8 @@ def _catalogo_reporte_compra_data(query='', categoria='', clasificacion='', solo
 
 
 @app.route('/catalogo_consulta/reporte_compra')
+@login_required
+@requires_permission('catalog', 'view')
 def catalogo_consulta_reporte_compra():
     """Reporte imprimible de compra por producto (clave, descripcion, proveedor, precio y divisa)."""
     try:
@@ -11781,6 +11884,8 @@ def catalogo_consulta_reporte_compra():
 
 
 @app.route('/catalogo_consulta/reporte_compra_excel')
+@login_required
+@requires_permission('catalog', 'view')
 def catalogo_consulta_reporte_compra_excel():
     """Descarga en Excel del reporte de compra por producto."""
     try:
@@ -11832,8 +11937,10 @@ def catalogo_consulta_reporte_compra_excel():
 
 
 @app.route('/public/categorias', methods=['GET'])
+@login_required
+@requires_permission('catalog', 'view')
 def public_categorias():
-    """Public endpoint para obtener categorías distintas."""
+    """Categorías distintas del catálogo."""
     try:
         cats = db.session.query(Producto.categoria).filter(Producto.categoria != None).distinct().all()
         # cats is list of tuples
@@ -11844,8 +11951,10 @@ def public_categorias():
 
 
 @app.route('/public/productos/buscar', methods=['GET'])
+@login_required
+@requires_permission('catalog', 'view')
 def public_buscar_productos():
-    """Public endpoint para buscar productos (sin login)."""
+    """Buscar productos del catálogo de consulta."""
     try:
         query = request.args.get('q', '').lower()
         categoria = request.args.get('categoria', '').lower()
@@ -11864,8 +11973,10 @@ def public_buscar_productos():
 
 
 @app.route('/public/productos', methods=['GET'])
+@login_required
+@requires_permission('catalog', 'view')
 def public_get_productos():
-    """Public endpoint para listar todos los productos (sin login)."""
+    """Listar todos los productos del catálogo de consulta."""
     try:
         productos = Producto.query.all()
         return jsonify([_producto_sanitizado(p) for p in productos])
@@ -11877,6 +11988,7 @@ def public_get_productos():
 # GET - Obtener todos los productos
 @app.route('/api/productos', methods=['GET'])
 @login_required
+@requires_permission('catalog', 'view')
 def get_productos():
     productos = Producto.query.all()
     return jsonify([p.to_dict() for p in productos])
@@ -11884,6 +11996,7 @@ def get_productos():
 # GET - Obtener producto por ID
 @app.route('/api/productos/<int:id>', methods=['GET'])
 @login_required
+@requires_permission('catalog', 'view')
 def get_producto(id):
     producto = Producto.query.get(id)
     if not producto:
@@ -11893,6 +12006,7 @@ def get_producto(id):
 # POST - Crear producto
 @app.route('/api/productos', methods=['POST'])
 @login_required
+@requires_permission('catalog', 'edit')
 def crear_producto():
     data = request.get_json()
     
@@ -11916,6 +12030,7 @@ def crear_producto():
 # PUT - Actualizar producto
 @app.route('/api/productos/<int:id>', methods=['PUT'])
 @login_required
+@requires_permission('catalog', 'edit')
 def actualizar_producto(id):
     producto = Producto.query.get(id)
     
@@ -11938,6 +12053,7 @@ def actualizar_producto(id):
 # DELETE - Eliminar producto
 @app.route('/api/productos/<int:id>', methods=['DELETE'])
 @login_required
+@requires_permission('catalog', 'edit')
 def eliminar_producto(id):
     producto = Producto.query.get(id)
     
@@ -11952,6 +12068,8 @@ def eliminar_producto(id):
 # ==================== RUTAS ADICIONALES ====================
 
 @app.route('/api/estadisticas', methods=['GET'])
+@login_required
+@requires_permission('catalog', 'view')
 def estadisticas():
     """Estadísticas del catálogo"""
     total_productos = Producto.query.count()
@@ -11984,6 +12102,7 @@ def estadisticas():
 
 @app.route('/api/productos/buscar', methods=['GET'])
 @login_required
+@requires_permission('catalog', 'view')
 def buscar_productos():
     """Buscar productos por nombre, categoría o descripción"""
     query = request.args.get('q', '').lower()
@@ -12015,6 +12134,7 @@ def buscar_productos():
 
 @app.route('/api/productos/exportar', methods=['GET'])
 @login_required
+@requires_permission('catalog', 'view')
 def exportar_productos():
     """Exportar productos a CSV"""
     import csv
@@ -12046,6 +12166,7 @@ def exportar_productos():
 
 @app.route('/api/productos/exportar-excel', methods=['GET'])
 @login_required
+@requires_permission('catalog', 'view')
 def exportar_excel():
     """Exportar productos a XLSX con imágenes incrustadas"""
     try:
@@ -12525,12 +12646,15 @@ def contpaq_precio_publico_clear():
 
 @app.route('/api/productos/bajo-stock', methods=['GET'])
 @login_required
+@requires_permission('catalog', 'view')
 def bajo_stock():
     """Obtener productos con bajo stock (< 5 unidades)"""
     productos = Producto.query.filter(Producto.cantidad < 5).all()
     return jsonify([p.to_dict() for p in productos])
 
 @app.route('/api/categorias', methods=['GET'])
+@login_required
+@requires_permission('catalog', 'view')
 def obtener_categorias():
     """Obtener todas las categorías únicas"""
     categorias = db.session.query(Producto.categoria).distinct().filter(
@@ -12610,6 +12734,7 @@ def puerta():
 # GET - Obtener todos los proveedores
 @app.route('/api/proveedores', methods=['GET'])
 @login_required
+@requires_any_permission([('proveedores', 'view'), ('catalog', 'edit')], keep_catalog=True)
 def get_proveedores():
     proveedores = Proveedor.query.all()
     return jsonify([p.to_dict() for p in proveedores])
@@ -12617,6 +12742,7 @@ def get_proveedores():
 # GET - Obtener proveedor por ID
 @app.route('/api/proveedores/<int:id>', methods=['GET'])
 @login_required
+@requires_any_permission([('proveedores', 'view'), ('catalog', 'edit')], keep_catalog=True)
 def get_proveedor(id):
     proveedor = Proveedor.query.get(id)
     if not proveedor:
@@ -12626,6 +12752,7 @@ def get_proveedor(id):
 # POST - Crear proveedor
 @app.route('/api/proveedores', methods=['POST'])
 @login_required
+@requires_any_permission([('proveedores', 'edit'), ('catalog', 'edit')], keep_catalog=True)
 def crear_proveedor():
     data = request.get_json()
     
@@ -12655,6 +12782,7 @@ def crear_proveedor():
 # PUT - Actualizar proveedor
 @app.route('/api/proveedores/<int:id>', methods=['PUT'])
 @login_required
+@requires_any_permission([('proveedores', 'edit'), ('catalog', 'edit')], keep_catalog=True)
 def actualizar_proveedor(id):
     proveedor = Proveedor.query.get(id)
     
@@ -12678,6 +12806,7 @@ def actualizar_proveedor(id):
 # DELETE - Eliminar proveedor
 @app.route('/api/proveedores/<int:id>', methods=['DELETE'])
 @login_required
+@requires_any_permission([('proveedores', 'edit'), ('catalog', 'edit')], keep_catalog=True)
 def eliminar_proveedor(id):
     proveedor = Proveedor.query.get(id)
     
@@ -12694,6 +12823,7 @@ def eliminar_proveedor(id):
 # GET - Obtener proveedores de un producto
 @app.route('/api/productos/<int:producto_id>/proveedores', methods=['GET'])
 @login_required
+@requires_any_permission([('catalog', 'view'), ('proveedores', 'view')], keep_catalog=True)
 def get_proveedores_producto(producto_id):
     producto = Producto.query.get(producto_id)
     if not producto:
@@ -12704,6 +12834,7 @@ def get_proveedores_producto(producto_id):
 # POST - Asignar proveedor a producto
 @app.route('/api/productos/<int:producto_id>/proveedores', methods=['POST'])
 @login_required
+@requires_any_permission([('catalog', 'edit'), ('proveedores', 'edit')], keep_catalog=True)
 def asignar_proveedor(producto_id):
     data = request.get_json()
     
@@ -12753,6 +12884,7 @@ def asignar_proveedor(producto_id):
 # DELETE - Desasignar proveedor de producto
 @app.route('/api/productos/<int:producto_id>/proveedores/<int:proveedor_id>', methods=['DELETE'])
 @login_required
+@requires_any_permission([('catalog', 'edit'), ('proveedores', 'edit')], keep_catalog=True)
 def desasignar_proveedor(producto_id, proveedor_id):
     asignacion = ProductoProveedor.query.filter_by(
         producto_id=producto_id,
@@ -12918,6 +13050,7 @@ def precios_compra_sync():
 # GET - Obtener historial de precios de un proveedor en un producto
 @app.route('/api/productos/<int:producto_id>/proveedores/<int:proveedor_id>/historial', methods=['GET'])
 @login_required
+@requires_any_permission([('catalog', 'view'), ('proveedores', 'view')], keep_catalog=True)
 def get_historial_precios(producto_id, proveedor_id):
     asignacion = ProductoProveedor.query.filter_by(
         producto_id=producto_id,
@@ -12936,6 +13069,7 @@ def get_historial_precios(producto_id, proveedor_id):
 # POST - Agregar precio histórico
 @app.route('/api/productos/<int:producto_id>/proveedores/<int:proveedor_id>/historial', methods=['POST'])
 @login_required
+@requires_any_permission([('catalog', 'edit'), ('proveedores', 'edit')], keep_catalog=True)
 def agregar_precio_historico(producto_id, proveedor_id):
     asignacion = ProductoProveedor.query.filter_by(
         producto_id=producto_id,
@@ -12987,6 +13121,7 @@ def agregar_precio_historico(producto_id, proveedor_id):
 # DELETE - Eliminar precio histórico
 @app.route('/api/historial-precios/<int:precio_id>', methods=['DELETE'])
 @login_required
+@requires_any_permission([('catalog', 'edit'), ('proveedores', 'edit')], keep_catalog=True)
 def eliminar_precio_historico(precio_id):
     precio = HistorialPreciosProveedor.query.get(precio_id)
     
@@ -13006,6 +13141,7 @@ def allowed_file(filename):
 # POST - Subir imagen para producto
 @app.route('/api/productos/upload-imagen', methods=['POST'])
 @login_required
+@requires_permission('catalog', 'edit')
 def upload_imagen():
     if 'imagen' not in request.files:
         return jsonify({'error': 'No se envió archivo'}), 400
@@ -13041,6 +13177,7 @@ def upload_imagen():
 
 # GET - Servir imagen (ruta para acceso de archivos)
 @app.route('/uploads/productos/<filename>')
+@login_required
 def descargar_imagen(filename):
     from flask import send_from_directory
     try:
@@ -13101,6 +13238,7 @@ def crear_ticket():
 # 2. GET /api/bandeja-entrada (LOGIN REQUERIDO)
 @app.route('/api/bandeja-entrada', methods=['GET'])
 @ingeniero_login_required
+@requires_permission('tickets', 'view')
 def bandeja_entrada():
     """Ver todos los tickets con estado 'nuevo' (sin ingeniero_id)"""
     try:
@@ -13133,10 +13271,11 @@ def bandeja_entrada():
 # 3. POST /api/tickets/<id>/tomar (LOGIN REQUERIDO)
 @app.route('/api/tickets/<int:ticket_id>/tomar', methods=['POST'])
 @ingeniero_login_required
+@requires_permission('tickets', 'edit')
 def tomar_ticket(ticket_id):
     """Ingeniero 'toma' el ticket"""
     try:
-        usuario = Usuario.query.filter_by(username=session.get('ingeniero_user')).first()
+        usuario = get_current_user()
         if not usuario:
             return jsonify({'error': 'Usuario no encontrado'}), 401
         
@@ -13170,10 +13309,11 @@ def tomar_ticket(ticket_id):
 # 4. GET /api/mis-tickets (LOGIN REQUERIDO)
 @app.route('/api/mis-tickets', methods=['GET'])
 @ingeniero_login_required
+@requires_permission('tickets', 'view')
 def mis_tickets():
     """Ver tickets donde ingeniero_id = usuario actual (en_progreso o resuelto)"""
     try:
-        usuario = Usuario.query.filter_by(username=session.get('ingeniero_user')).first()
+        usuario = get_current_user()
         if not usuario:
             return jsonify({'error': 'Usuario no encontrado'}), 401
         
@@ -13221,10 +13361,11 @@ def mis_tickets():
 # 5. GET /api/tickets/<id> (LOGIN REQUERIDO)
 @app.route('/api/tickets/<int:ticket_id>', methods=['GET'])
 @ingeniero_login_required
+@requires_permission('tickets', 'view')
 def obtener_ticket(ticket_id):
     """Ver detalles de un ticket con todos sus comentarios"""
     try:
-        usuario = Usuario.query.filter_by(username=session.get('ingeniero_user')).first()
+        usuario = get_current_user()
         if not usuario:
             return jsonify({'error': 'Usuario no encontrado'}), 401
         
@@ -13286,10 +13427,11 @@ def obtener_ticket(ticket_id):
 # 6. POST /api/tickets/<id>/comentario (LOGIN REQUERIDO)
 @app.route('/api/tickets/<int:ticket_id>/comentario', methods=['POST'])
 @ingeniero_login_required
+@requires_permission('tickets', 'edit')
 def agregar_comentario(ticket_id):
     """Agregar comentario/documentación con imagen opcional"""
     try:
-        usuario = Usuario.query.filter_by(username=session.get('ingeniero_user')).first()
+        usuario = get_current_user()
         if not usuario:
             return jsonify({'error': 'Usuario no encontrado'}), 401
         
@@ -13336,10 +13478,11 @@ def agregar_comentario(ticket_id):
 # 7. PUT /api/tickets/<id>/estado (LOGIN REQUERIDO)
 @app.route('/api/tickets/<int:ticket_id>/estado', methods=['PUT'])
 @ingeniero_login_required
+@requires_permission('tickets', 'edit')
 def cambiar_estado_ticket(ticket_id):
     """Cambiar estado a 'resuelto'"""
     try:
-        usuario = Usuario.query.filter_by(username=session.get('ingeniero_user')).first()
+        usuario = get_current_user()
         if not usuario:
             return jsonify({'error': 'Usuario no encontrado'}), 401
         
@@ -13381,10 +13524,11 @@ def cambiar_estado_ticket(ticket_id):
 # 7.5 PUT /api/tickets/<id>/devolver (LOGIN REQUERIDO - devolver a bandeja)
 @app.route('/api/tickets/<int:ticket_id>/devolver', methods=['PUT'])
 @ingeniero_login_required
+@requires_permission('tickets', 'edit')
 def devolver_ticket(ticket_id):
     """Devolver ticket a la bandeja (poner como 'nuevo' sin ingeniero)"""
     try:
-        usuario = Usuario.query.filter_by(username=session.get('ingeniero_user')).first()
+        usuario = get_current_user()
         if not usuario:
             return jsonify({'error': 'Usuario no encontrado'}), 401
         
@@ -13419,10 +13563,11 @@ def devolver_ticket(ticket_id):
 # 8. POST /api/tickets/<id>/imagen (LOGIN REQUERIDO)
 @app.route('/api/tickets/<int:ticket_id>/imagen', methods=['POST'])
 @ingeniero_login_required
+@requires_permission('tickets', 'edit')
 def subir_imagen_ticket(ticket_id):
     """Subir imagen para comentario"""
     try:
-        usuario = Usuario.query.filter_by(username=session.get('ingeniero_user')).first()
+        usuario = get_current_user()
         if not usuario:
             return jsonify({'error': 'Usuario no encontrado'}), 401
         
@@ -13469,10 +13614,11 @@ def subir_imagen_ticket(ticket_id):
 # 9. GET /api/tickets/descargar/excel (LOGIN REQUERIDO)
 @app.route('/api/tickets/descargar/excel', methods=['GET'])
 @ingeniero_login_required
+@requires_any_permission([('tickets', 'export'), ('tickets', 'edit')])
 def descargar_tickets_excel():
     """Descargar en Excel los 'mis-tickets' con: numero, titulo, solicitante, estado, fecha_creacion, comentarios_count"""
     try:
-        usuario = Usuario.query.filter_by(username=session.get('ingeniero_user')).first()
+        usuario = get_current_user()
         if not usuario:
             return jsonify({'error': 'Usuario no encontrado'}), 401
         
@@ -13542,6 +13688,7 @@ def descargar_tickets_excel():
 # GET - Obtener lista de ingenieros (Admin)
 @app.route('/api/ingenieros', methods=['GET'])
 @login_required
+@requires_permission('tickets', 'view')
 def obtener_ingenieros():
     """Obtiene lista de ingenieros"""
     try:
@@ -15711,14 +15858,13 @@ def _run_empaque_odoo_sync_guarded(trigger='manual'):
 @app.route('/api/empaque/odoo/sync', methods=['POST'])
 def api_empaque_odoo_sync():
     """Importa pedidos Odoo -> MySQL empaqueops (nube). Acepta X-API-KEY o sesión login."""
-    authed = False
     ok, err = _require_sync_key()
-    if ok:
-        authed = True
-    elif session.get('user'):
-        authed = True
-    if not authed:
-        return err if err else (jsonify({'error': 'No autorizado'}), 401)
+    if not ok:
+        user = get_current_user()
+        if not user:
+            return err if err else (jsonify({'error': 'No autorizado'}), 401)
+        if not user.has_permission('empaque', 'edit'):
+            return jsonify({'error': 'Permiso denegado'}), 403
 
     result = _run_empaque_odoo_sync_guarded(trigger='manual_api')
     status = 200 if result.get('ok') else 500
@@ -15727,6 +15873,7 @@ def api_empaque_odoo_sync():
 
 @app.route('/api/empaque/odoo/sync/status', methods=['GET'])
 @login_required
+@requires_permission('empaque', 'view')
 def api_empaque_odoo_sync_status():
     return jsonify({
         'enabled': EMPAQUE_ODOO_SYNC_ENABLED,
@@ -15959,7 +16106,8 @@ def _cuenta_t_for_portal(customer_code, customer_name=None):
     return _cuenta_t_view(row, include_links=False)
 
 
-_CUENTA_T_PERMS = [('facturacion', 'view'), ('empaque', 'view')]
+_CUENTA_T_PERMS = [('cuentas_t', 'view')]
+_CUENTA_T_PERMS_EDIT = [('cuentas_t', 'edit'), ('cuentas_t', 'update')]
 
 
 @app.route('/cuentas_t', methods=['GET'])
@@ -16029,7 +16177,7 @@ def cuenta_t_detalle_page(cliente_id):
 
 @app.route('/api/cuentas_t/<int:cliente_id>/actualizar', methods=['POST'])
 @login_required
-@requires_any_permission(_CUENTA_T_PERMS)
+@requires_any_permission(_CUENTA_T_PERMS_EDIT)
 def api_cuenta_t_actualizar(cliente_id):
     _ensure_cuenta_t_table()
     result = cuenta_t_sync.sync_cuentas(db, OdooCuentaT, partner_ids=[cliente_id], trigger='manual_cliente')
@@ -16044,7 +16192,7 @@ def api_cuenta_t_actualizar(cliente_id):
 
 @app.route('/api/cuentas_t/sincronizar', methods=['POST'])
 @login_required
-@requires_any_permission(_CUENTA_T_PERMS)
+@requires_any_permission(_CUENTA_T_PERMS_EDIT)
 def api_cuentas_t_sincronizar():
     if not cuenta_t_sync.is_configured():
         return jsonify({'ok': False, 'error': 'Falta configurar CUENTA_T_ODOO_* / ODOO_* en el servidor.'}), 400
@@ -17474,6 +17622,18 @@ def _can_use_maquinaria_solicitudes(user):
                           or user.has_permission('maquinaria_ordenes', 'view')))
 
 
+def _can_edit_maquinaria_solicitudes(user):
+    if not user:
+        return False
+    if user.es_admin:
+        return True
+    return any(
+        user.has_permission(module, action)
+        for module in ('maquinaria_pedidos', 'maquinaria_ordenes')
+        for action in ('create', 'edit', 'update')
+    )
+
+
 def _new_solicitud_folio():
     base = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
     folio = f"SOL-{base}"
@@ -17511,7 +17671,7 @@ def api_maquinaria_odoo_pedido_detalle(odoo_id):
 def api_maquinaria_odoo_pedido_tomar(odoo_id):
     """Toma un pedido de venta Odoo y crea una solicitud en la plataforma."""
     user = get_current_user()
-    if not _can_use_maquinaria_solicitudes(user):
+    if not _can_edit_maquinaria_solicitudes(user):
         return jsonify({'ok': False, 'error': 'Sin permiso'}), 403
     _ensure_odoo_tables()
     pedido = OdooPedidoVenta.query.filter_by(odoo_id=odoo_id).first()
@@ -17612,7 +17772,7 @@ def api_maquinaria_solicitud_detalle(solicitud_id):
 def api_maquinaria_solicitud_stock_create():
     """Crea una solicitud de pedido de stock capturada en la plataforma."""
     user = get_current_user()
-    if not _can_use_maquinaria_solicitudes(user):
+    if not _can_edit_maquinaria_solicitudes(user):
         return jsonify({'ok': False, 'error': 'Sin permiso'}), 403
     _ensure_odoo_tables()
     payload = request.get_json(silent=True) or {}
@@ -17661,7 +17821,7 @@ def api_maquinaria_solicitud_stock_create():
 def api_maquinaria_solicitud_relacionar_oc(solicitud_id):
     """Relaciona una orden de compra de Odoo a la solicitud (solo referencia)."""
     user = get_current_user()
-    if not _can_use_maquinaria_solicitudes(user):
+    if not _can_edit_maquinaria_solicitudes(user):
         return jsonify({'ok': False, 'error': 'Sin permiso'}), 403
     _ensure_odoo_tables()
     sol = MaquinariaSolicitud.query.get(solicitud_id)
@@ -17692,7 +17852,7 @@ def api_maquinaria_solicitud_relacionar_oc(solicitud_id):
 def api_maquinaria_solicitud_generar(solicitud_id):
     """Genera la solicitud (la deja lista para continuar el proceso en la plataforma)."""
     user = get_current_user()
-    if not _can_use_maquinaria_solicitudes(user):
+    if not _can_edit_maquinaria_solicitudes(user):
         return jsonify({'ok': False, 'error': 'Sin permiso'}), 403
     _ensure_odoo_tables()
     sol = MaquinariaSolicitud.query.get(solicitud_id)
@@ -17752,7 +17912,7 @@ def api_maquinaria_solicitud_generar(solicitud_id):
 @login_required
 def api_maquinaria_solicitud_delete(solicitud_id):
     user = get_current_user()
-    if not _can_use_maquinaria_solicitudes(user):
+    if not _can_edit_maquinaria_solicitudes(user):
         return jsonify({'ok': False, 'error': 'Sin permiso'}), 403
     _ensure_odoo_tables()
     sol = MaquinariaSolicitud.query.get(solicitud_id)

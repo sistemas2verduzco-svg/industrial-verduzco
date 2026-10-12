@@ -23,7 +23,7 @@
 
 
     <nav class="sb-nav" style="display:flex; flex-direction:column; gap:4px;">
-        {% if has_permission('catalog', 'view') or current_user and current_user.es_admin %}
+        {% if has_permission('hojas_entregas', 'view') or has_permission('hojas_mp', 'view') or has_permission('hojas', 'view') or has_permission('procesos', 'view') or has_permission('calidad', 'view') or has_permission('estaciones', 'view') or has_permission('mapa', 'view') or has_permission('alertas_buzon', 'view') or current_user and current_user.es_admin %}
         <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">PRODUCCION</div>
         {% if has_permission('hojas_entregas', 'view') or has_permission('hojas_mp', 'view') or has_permission('hojas', 'view') or current_user and current_user.es_admin %}
         {% if has_permission('hojas_entregas', 'view') or has_permission('hojas', 'view') or current_user and current_user.es_admin %}
@@ -36,7 +36,7 @@
         {% if has_permission('procesos', 'view') or current_user and current_user.es_admin %}
         <a href="/procesos" class="sb-link" data-base="/procesos"><span>🧩</span> <span>Procesos y Claves</span></a>
         {% endif %}
-        {% if has_permission('hojas_entregas', 'view') or has_permission('hojas', 'view') or has_permission('catalog', 'view') or current_user and current_user.es_admin %}
+        {% if has_permission('hojas_entregas', 'view') or has_permission('hojas', 'view') or has_permission('procesos', 'view') or current_user and current_user.es_admin %}
         <a href="/catalogo_materias_primas" class="sb-link" data-base="/catalogo_materias_primas"><span>🧱</span> <span>Materias primas</span></a>
         {% endif %}
         {% if has_permission('calidad', 'view') or current_user and current_user.es_admin %}
@@ -59,6 +59,7 @@
             </span>
         </a>
         {% endif %}
+        {% endif %}
 
         {% if has_permission('entregas', 'view') or has_permission('almacen', 'view') or has_permission('facturacion', 'view') or current_user and current_user.es_admin %}
         <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">LOGISTICA</div>
@@ -70,7 +71,6 @@
         {% endif %}
         {% if has_permission('facturacion', 'view') or current_user and current_user.es_admin %}
         <a href="/facturacion" class="sb-link" data-base="/facturacion"><span>🧾</span> <span>Facturacion</span></a>
-        {% endif %}
         {% endif %}
         {% endif %}
 
@@ -108,12 +108,14 @@
         <a href="/contpaq/maximos-minimos" class="sb-link" data-base="/contpaq/maximos-minimos"><span>📊</span> <span>Maximos y Minimos</span></a>
         {% endif %}
 
-        {% if has_permission('empaque', 'view') or has_permission('facturacion', 'view') or current_user and current_user.es_admin %}
+        {% if has_permission('empaque', 'view') or has_permission('cuentas_t', 'view') or current_user and current_user.es_admin %}
         <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">EMPAQUE / CLIENTES</div>
         {% if has_permission('empaque', 'view') or current_user and current_user.es_admin %}
         <a href="/empaque/clientes" class="sb-link" data-base="/empaque/clientes"><span>🔐</span> <span>Claves clientes</span></a>
         {% endif %}
+        {% if has_permission('cuentas_t', 'view') or current_user and current_user.es_admin %}
         <a href="/cuentas_t" class="sb-link" data-base="/cuentas_t"><span>📒</span> <span>Cuentas T</span></a>
+        {% endif %}
         {% if has_permission('empaque', 'view') or current_user and current_user.es_admin %}
         <a href="/seguimiento" class="sb-link" data-base="/seguimiento" target="_blank" rel="noopener"><span>🔗</span> <span>Portal seguimiento</span></a>
         {% endif %}
@@ -126,7 +128,7 @@
         <a href="/reportar" class="sb-link sb-sub" data-base="/reportar"><span>📋</span> <span>Reportar</span></a>
         {% endif %}
 
-        {% if has_permission('catalog', 'view') or has_permission('catalog', 'edit') or has_permission('proveedores', 'view') or has_permission('admin', 'view') or has_permission('users', 'view') or has_permission('users', 'edit') or has_permission('roles', 'view') or has_permission('roles', 'edit') or has_permission('permissions', 'view') or has_permission('permissions', 'edit') or current_user and current_user.es_admin %}
+        {% if has_permission('catalog', 'view') or has_permission('catalog', 'edit') or has_permission('proveedores', 'view') or has_permission('tecnicos', 'view') or has_permission('admin', 'view') or has_permission('users', 'view') or has_permission('users', 'edit') or has_permission('roles', 'view') or has_permission('roles', 'edit') or has_permission('permissions', 'view') or has_permission('permissions', 'edit') or current_user and current_user.es_admin %}
         <div style="font-size:11px; color:#90caf9; font-weight:600; margin-top:15px; margin-bottom:8px; padding-left:8px;">ADMINISTRACION</div>
         {% if has_permission('catalog', 'view') or current_user and current_user.es_admin %}
         <a href="/" class="sb-link" data-exact="1"><span>🏠</span> <span>Catalogo</span></a>
@@ -137,7 +139,7 @@
         {% if has_permission('proveedores', 'view') or has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
         <a href="/proveedores" class="sb-link sb-sub" data-base="/proveedores"><span>🏢</span> <span>Proveedores</span></a>
         {% endif %}
-        {% if has_permission('catalog', 'edit') or current_user and current_user.es_admin %}
+        {% if has_permission('tecnicos', 'view') or current_user and current_user.es_admin %}
         <a href="/tecnicos" class="sb-link sb-sub" data-base="/tecnicos"><span>🪪</span> <span>Técnicos QR</span></a>
         {% endif %}
         {% if has_permission('users', 'view') or has_permission('users', 'edit') or has_permission('roles', 'view') or has_permission('roles', 'edit') or has_permission('permissions', 'view') or has_permission('permissions', 'edit') or current_user and current_user.es_admin %}

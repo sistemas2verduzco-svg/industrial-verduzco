@@ -45,8 +45,9 @@
             <div class="sub">Estado de cuenta por cliente</div>
             <h2>CUENTAS T</h2>
         </div>
+        {% set ct_puede_editar = has_permission('cuentas_t', 'edit') or has_permission('cuentas_t', 'update') %}
         <div class="toolbar">
-            <button type="button" class="btn btn-amber" id="btnSyncAll" {% if not configurado or corriendo %}disabled{% endif %}>
+            <button type="button" class="btn btn-amber" id="btnSyncAll" {% if not configurado or corriendo or not ct_puede_editar %}disabled{% endif %}>
                 {% if corriendo %}Sincronizando…{% else %}⟳ Sincronizar todos{% endif %}
             </button>
         </div>
@@ -111,7 +112,7 @@
                         {% if c.synced_at %}<div class="ok-time">{{ c.synced_at.strftime('%d/%m/%Y %H:%M') }}</div>{% else %}<div class="ok-time">Nunca</div>{% endif %}
                         {% if c.last_error %}<div class="err" title="{{ c.last_error }}">⚠ Error {{ c.last_error_at.strftime('%d/%m %H:%M') if c.last_error_at else '' }}</div>{% endif %}
                     </td>
-                    <td><button type="button" class="btn btn-sm" data-actualizar="{{ c.cliente_id }}" {% if not configurado %}disabled{% endif %}>Actualizar</button></td>
+                    <td><button type="button" class="btn btn-sm" data-actualizar="{{ c.cliente_id }}" {% if not configurado or not ct_puede_editar %}disabled{% endif %}>Actualizar</button></td>
                 </tr>
             {% else %}
                 <tr><td colspan="8" class="muted" style="text-align:center; padding:22px;">

@@ -30,7 +30,7 @@
                 Última sincronización buena:
                 <b>{{ cuenta.synced_at.strftime('%d/%m/%Y %H:%M') if cuenta.synced_at else 'nunca' }}</b>
             </span>
-            <button type="button" class="btn" id="btnActualizar" {% if not configurado %}disabled title="Falta configurar Odoo"{% endif %}>⟳ Actualizar</button>
+            <button type="button" class="btn" id="btnActualizar" {% if not configurado %}disabled title="Falta configurar Odoo"{% elif not (has_permission('cuentas_t', 'edit') or has_permission('cuentas_t', 'update')) %}disabled title="Sin permiso para actualizar"{% endif %}>⟳ Actualizar</button>
         </div>
     </div>
 
